@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "createcityexpansioncore:block/city_pylon"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "createcityexpansioncore:block/mine_controller"
+    },
+    "facing=south": {
+      "model": "createcityexpansioncore:block/mine_controller",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createcityexpansioncore:block/mine_controller",
+      "y": 270
+    },
+    "facing=east": {
+      "model": "createcityexpansioncore:block/mine_controller",
+      "y": 90
+    }
+  }
+}

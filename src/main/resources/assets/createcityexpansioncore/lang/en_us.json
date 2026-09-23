@@ -1,0 +1,86 @@
+{
+  "itemGroup.createcityexpansioncore": "Example Mod Tab",
+  "block.createcityexpansioncore.example_block": "Example Block",
+  "item.createcityexpansioncore.example_item": "Example Item",
+
+  "createcityexpansioncore.configuration.title": "CreateCityExpansionCore Configs",
+  "createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml": "CreateCityExpansionCore Configs",
+  "createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml.title": "CreateCityExpansionCore Configs",
+  "createcityexpansioncore.configuration.items": "Item List",
+  "createcityexpansioncore.configuration.logDirtBlock": "Log Dirt Block",
+  "createcityexpansioncore.configuration.magicNumberIntroduction": "Magic Number Text",
+  "createcityexpansioncore.configuration.magicNumber": "Magic Number",
+  "block.createcityexpansioncore.city_pylon": "City Pylon",
+  "item.createcityexpansioncore.magnetic_analyzer": "Magnetic Analyzer",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.title": "MAGNETIC ANALYZER",
+  "gui.createcityexpansioncore.magnetic_analyzer.subtitle": "GEOLOGICAL SURVEY UNIT",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.initializing": "INITIALIZING",
+  "gui.createcityexpansioncore.magnetic_analyzer.scanning": "SCANNING",
+  "gui.createcityexpansioncore.magnetic_analyzer.analyzing": "ANALYZING",
+  "gui.createcityexpansioncore.magnetic_analyzer.complete": "ANALYSIS COMPLETE",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.field": "GEOLOGICAL FIELD",
+  "gui.createcityexpansioncore.magnetic_analyzer.resources": "RESOURCE ANALYSIS",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.charge": "CHARGE",
+  "gui.createcityexpansioncore.magnetic_analyzer.uses_remaining": "USES REMAINING",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.calibrating": "CALIBRATING SENSOR...",
+  "gui.createcityexpansioncore.magnetic_analyzer.scanning_field": "SCANNING SUBTERRANEAN FIELD",
+  "gui.createcityexpansioncore.magnetic_analyzer.processing": "PROCESSING GEOLOGICAL DATA...",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.excellent": "SIGNAL: EXCELLENT",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.stable": "SIGNAL: STABLE",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.weak": "SIGNAL: WEAK",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.none": "SIGNAL: NONE",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.rich": "RICH",
+  "gui.createcityexpansioncore.magnetic_analyzer.good": "GOOD",
+  "gui.createcityexpansioncore.magnetic_analyzer.low": "LOW",
+  "gui.createcityexpansioncore.magnetic_analyzer.trace": "TRACE",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.high": "HIGH GEOLOGICAL POTENTIAL",
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.promising": "PROMISING REGION",
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.low": "LOW RESOURCE POTENTIAL",
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.empty": "LAND UNSUITABLE FOR EXTRACTION",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.searching": "SEARCHING...",
+  "gui.createcityexpansioncore.magnetic_analyzer.copper": "COPPER",
+  "gui.createcityexpansioncore.magnetic_analyzer.iron": "IRON",
+  "gui.createcityexpansioncore.magnetic_analyzer.coal": "COAL",
+  "gui.createcityexpansioncore.magnetic_analyzer.zinc": "ZINC",
+
+  "block.createcityexpansioncore.mine_power_port": "Mine Power Port",
+
+  "block.createcityexpansioncore.mine_controller": "Mine Controller",
+
+  "gui.createcityexpansioncore.mine_controller.title": "MINE CONTROLLER",
+  "gui.createcityexpansioncore.mine_controller.subtitle": "EXTRACTION CONTROL SYSTEM",
+
+  "gui.createcityexpansioncore.mine_controller.online": "ONLINE",
+
+  "gui.createcityexpansioncore.mine_controller.status": "SYSTEM STATUS",
+  "gui.createcityexpansioncore.mine_controller.not_assembled": "MULTIBLOCK NOT ASSEMBLED",
+  "gui.createcityexpansioncore.mine_controller.level": "LEVEL",
+
+  "gui.createcityexpansioncore.mine_controller.power": "POWER",
+
+  "gui.createcityexpansioncore.mine_controller.extraction": "EXTRACTION",
+  "gui.createcityexpansioncore.mine_controller.resource": "RESOURCE",
+  "gui.createcityexpansioncore.mine_controller.production": "PRODUCTION",
+  "gui.createcityexpansioncore.mine_controller.energy_consumption": "ENERGY CONSUMPTION",
+
+  "gui.createcityexpansioncore.mine_controller.waiting": "WAITING FOR MULTIBLOCK ASSEMBLY",
+  "gui.createcityexpansioncore.mine_controller.powered": "POWER: NOMINAL",
+
+  "block.createcityexpansioncore.mine_frame": "Mine Frame",
+  "block.createcityexpansioncore.drill_unit": "Drill Unit",
+
+  "block.createcityexpansioncore.technical_block": "Technical Block",
+
+  "block.createcityexpansioncore.control_block": "Control Block",
+
+  "block.createcityexpansioncore.mine_gateway": "Mine Gateway"
+}

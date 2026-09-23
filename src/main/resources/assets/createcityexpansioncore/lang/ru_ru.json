@@ -1,0 +1,76 @@
+{
+  "block.createcityexpansioncore.city_pylon": "Городской пилон",
+  "item.createcityexpansioncore.magnetic_analyzer": "Магнитный анализатор",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.title": "МАГНИТНЫЙ АНАЛИЗАТОР",
+  "gui.createcityexpansioncore.magnetic_analyzer.subtitle": "ГЕОЛОГИЧЕСКИЙ СКАНЕР",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.initializing": "ИНИЦИАЛИЗАЦИЯ",
+  "gui.createcityexpansioncore.magnetic_analyzer.scanning": "СКАНИРОВАНИЕ",
+  "gui.createcityexpansioncore.magnetic_analyzer.analyzing": "АНАЛИЗ",
+  "gui.createcityexpansioncore.magnetic_analyzer.complete": "АНАЛИЗ ЗАВЕРШЁН",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.field": "ГЕОЛОГИЧЕСКОЕ ПОЛЕ",
+  "gui.createcityexpansioncore.magnetic_analyzer.resources": "АНАЛИЗ РЕСУРСОВ",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.charge": "ЗАРЯД",
+  "gui.createcityexpansioncore.magnetic_analyzer.uses_remaining": "ИСПОЛЬЗОВАНИЙ ОСТАЛОСЬ",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.calibrating": "КАЛИБРОВКА ДАТЧИКА...",
+  "gui.createcityexpansioncore.magnetic_analyzer.scanning_field": "СКАНИРОВАНИЕ ПОДЗЕМНОГО ПЛАСТА",
+  "gui.createcityexpansioncore.magnetic_analyzer.processing": "ОБРАБОТКА ГЕОЛОГИЧЕСКИХ ДАННЫХ...",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.excellent": "СИГНАЛ: ОТЛИЧНЫЙ",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.stable": "СИГНАЛ: СТАБИЛЬНЫЙ",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.weak": "СИГНАЛ: СЛАБЫЙ",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal.none": "СИГНАЛ: ОТСУТСТВУЕТ",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.rich": "БОГАТО",
+  "gui.createcityexpansioncore.magnetic_analyzer.good": "ХОРОШО",
+  "gui.createcityexpansioncore.magnetic_analyzer.low": "МАЛО",
+  "gui.createcityexpansioncore.magnetic_analyzer.trace": "СЛЕДЫ",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.high": "ВЫСОКИЙ ГЕОЛОГИЧЕСКИЙ ПОТЕНЦИАЛ",
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.promising": "ПЕРСПЕКТИВНЫЙ РАЙОН",
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.low": "НИЗКИЙ РЕСУРСНЫЙ ПОТЕНЦИАЛ",
+  "gui.createcityexpansioncore.magnetic_analyzer.verdict.empty": "ЗЕМЛЯ НЕПРИГОДНА ДЛЯ ДОБЫЧИ",
+
+  "gui.createcityexpansioncore.magnetic_analyzer.searching": "ПОИСК...",
+  "gui.createcityexpansioncore.magnetic_analyzer.copper": "МЕДЬ",
+  "gui.createcityexpansioncore.magnetic_analyzer.iron": "ЖЕЛЕЗО",
+  "gui.createcityexpansioncore.magnetic_analyzer.coal": "УГОЛЬ",
+  "gui.createcityexpansioncore.magnetic_analyzer.zinc": "ЦИНК",
+
+  "block.createcityexpansioncore.mine_power_port": "Энергетический порт шахты",
+
+  "block.createcityexpansioncore.mine_controller": "Контроллер шахты",
+
+  "gui.createcityexpansioncore.mine_controller.title": "КОНТРОЛЛЕР ШАХТЫ",
+  "gui.createcityexpansioncore.mine_controller.subtitle": "СИСТЕМА УПРАВЛЕНИЯ ДОБЫЧЕЙ",
+
+  "gui.createcityexpansioncore.mine_controller.online": "ОНЛАЙН",
+
+  "gui.createcityexpansioncore.mine_controller.status": "СОСТОЯНИЕ СИСТЕМЫ",
+  "gui.createcityexpansioncore.mine_controller.not_assembled": "МУЛЬТИБЛОК НЕ СОБРАН",
+  "gui.createcityexpansioncore.mine_controller.level": "УРОВЕНЬ",
+
+  "gui.createcityexpansioncore.mine_controller.power": "ЭЛЕКТРОПИТАНИЕ",
+
+  "gui.createcityexpansioncore.mine_controller.extraction": "ДОБЫЧА",
+  "gui.createcityexpansioncore.mine_controller.resource": "РЕСУРС",
+  "gui.createcityexpansioncore.mine_controller.production": "ПРОИЗВОДСТВО",
+  "gui.createcityexpansioncore.mine_controller.energy_consumption": "ПОТРЕБЛЕНИЕ",
+
+  "gui.createcityexpansioncore.mine_controller.waiting": "ОЖИДАНИЕ СБОРКИ МУЛЬТИБЛОКА",
+  "gui.createcityexpansioncore.mine_controller.powered": "ПИТАНИЕ: НОРМА",
+
+  "block.createcityexpansioncore.mine_frame": "Рама механизма",
+
+  "block.createcityexpansioncore.technical_block": "Технический блок",
+
+  "block.createcityexpansioncore.control_block": "Блок управления",
+
+  "block.createcityexpansioncore.drill_unit": "Буровой блок",
+
+  "block.createcityexpansioncore.mine_gateway": "Шлюз шахты"
+}
