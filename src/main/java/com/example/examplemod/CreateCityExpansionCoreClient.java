@@ -9,13 +9,12 @@ import com.example.examplemod.multiblock.MultiblockPreviewRenderer;
 import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.network.MineControllerSnapshotPayload;
+import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.network.SyncCityMemberRemovalPayload;
-import com.example.examplemod.electrical.MineControllerBlock;
 import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent.RightClickBlock;
 
 import net.minecraft.client.Minecraft;
 
@@ -76,43 +75,6 @@ public class CreateCityExpansionCoreClient {
         NeoForge.EVENT_BUS.register(
                 CityBoundaryRenderer.class
         );
-        NeoForge.EVENT_BUS.addListener(
-                this::onMineControllerClick
-        );
-    }
-
-    private void onMineControllerClick(RightClickBlock event) {
-
-        if (event.getHand() != InteractionHand.MAIN_HAND) {
-            return;
-        }
-
-        if (!(event.getLevel().getBlockState(event.getPos()).getBlock()
-                instanceof MineControllerBlock)) {
-            return;
-        }
-
-        if (!event.getLevel().isClientSide()) {
-            return;
-        }
-
-        BlockState state =
-                event.getLevel().getBlockState(event.getPos());
-
-        Direction facing =
-                state.getValue(
-                        BlockStateProperties.HORIZONTAL_FACING
-                );
-
-        MultiblockPreviewRenderer.show(
-                event.getPos(),
-                facing
-        );
-
-        Minecraft.getInstance().setScreen(
-                new MineControllerScreen()
-        );
-
     }
     /*
      * =========================================
@@ -127,6 +89,10 @@ public class CreateCityExpansionCoreClient {
         event.register(
                 CreateCityExpansionCore.CITY_PYLON_MENU.get(),
                 CityPylonScreen::new
+        );
+        event.register(
+                CreateCityExpansionCore.ECONOMY_INFRASTRUCTURE_MENU.get(),
+                com.example.examplemod.client.screen.EconomyInfrastructureScreen::new
         );
     }
 
@@ -143,7 +109,6 @@ public class CreateCityExpansionCoreClient {
 
         PayloadRegistrar registrar =
                 event.registrar("1");
-
 
         /*
          * =========================================
@@ -165,6 +130,22 @@ public class CreateCityExpansionCoreClient {
                     });
 
                 }
+        );
+
+        registrar.playToClient(
+                MineControllerSnapshotPayload.TYPE,
+                MineControllerSnapshotPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        handleMineSnapshot(payload)
+                )
+        );
+
+        registrar.playToClient(
+                MineCommissionContextPayload.TYPE,
+                MineCommissionContextPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        MineControllerScreen.receiveCommissionContext(payload)
+                )
         );
 
 
@@ -244,5 +225,46 @@ public class CreateCityExpansionCoreClient {
 
                 }
         );
+    }
+
+    private void handleMineSnapshot(MineControllerSnapshotPayload payload) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (!payload.openScreen()) {
+            MineControllerScreen.updateIfOpen(
+                    payload.snapshot(), payload.railwayStationName(), payload.railwayStationAvailable());
+            return;
+        }
+        if (payload.snapshot().structureValid()) {
+            MultiblockPreviewRenderer.hide();
+            MineControllerScreen.openOrUpdate(
+                    payload.snapshot(), payload.railwayStationName(), payload.railwayStationAvailable());
+            return;
+        }
+
+        if (minecraft.level == null) {
+            return;
+        }
+        if (minecraft.screen instanceof MineControllerScreen) {
+            minecraft.setScreen(null);
+        }
+        BlockState state = minecraft.level.getBlockState(
+                payload.snapshot().controllerPos()
+        );
+        if (!state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return;
+        }
+        Direction facing = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
+        MultiblockPreviewRenderer.show(
+                payload.snapshot().controllerPos(),
+                facing
+        );
+        if (minecraft.player != null) {
+            minecraft.player.displayClientMessage(
+                    net.minecraft.network.chat.Component.literal(
+                            payload.snapshot().structureMessage()
+                    ),
+                    false
+            );
+        }
     }
 }

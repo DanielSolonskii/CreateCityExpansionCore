@@ -123,21 +123,7 @@ public class MineMultiblock {
                                     z
                             );
 
-                    /*
-                     * Сначала специальные
-                     * сервисные клетки Power Port.
-                     *
-                     * Они должны быть пустыми.
-                     */
-                    if (isServiceSpace(
-                            level,
-                            origin,
-                            facing,
-                            x,
-                            y,
-                            z
-                    )) {
-
+                    if (isServiceSpace(level, origin, facing, x, y, z)) {
                         continue;
                     }
 
@@ -162,14 +148,11 @@ public class MineMultiblock {
                      * проверяем отдельно.
                      */
                     if (expected == ExpectedBlock.INTERFACE) {
-
-                        /*
-                         * Любой интерфейс здесь пока
-                         * не считается автоматически.
-                         *
-                         * Проверка Power Port/Gateway
-                         * будет ниже.
-                         */
+                        if (isCorrectInterfaceBlock(actual)) {
+                            correctBlocks++;
+                        } else {
+                            incorrectBlocks.add(pos);
+                        }
                         continue;
                     }
 
@@ -214,18 +197,9 @@ public class MineMultiblock {
         BlockPos powerPort =
                 powerPorts.get(0);
 
-        /*
-         * Проверяем сервисную зону.
-         */
-        if (!isPowerPortServiceSpaceFree(
-                level,
-                origin,
-                facing,
-                powerPort
-        )) {
-
+        if (!isPowerPortServiceSpaceFree(level, origin, facing, powerPort)) {
             return ValidationResult.failed(
-                    "Рядом с Power Port должно быть свободное пространство.",
+                    "Рядом с Power Port нужны две свободные клетки для проводов.",
                     correctBlocks,
                     requiredBlocks,
                     incorrectBlocks
@@ -447,6 +421,12 @@ public class MineMultiblock {
         };
     }
 
+    private static boolean isCorrectInterfaceBlock(BlockState state) {
+        return state.is(CreateCityExpansionCore.MINE_FRAME.get())
+                || state.is(CreateCityExpansionCore.MINE_POWER_PORT.get())
+                || state.is(CreateCityExpansionCore.MINE_GATEWAY.get());
+    }
+
     /*
      * =========================================================
      * POWER PORT
@@ -584,12 +564,6 @@ public class MineMultiblock {
                 || z == DEPTH - 1;
     }
 
-    /*
-     * =========================================================
-     * POWER PORT SERVICE SPACE
-     * =========================================================
-     */
-
     private static boolean isServiceSpace(
             ServerLevel level,
             BlockPos origin,
@@ -598,97 +572,24 @@ public class MineMultiblock {
             int y,
             int z
     ) {
-
-        /*
-         * Только средний слой.
-         */
         if (y != 1) {
             return false;
         }
-
-        /*
-         * Ищем Power Port.
-         */
-        List<BlockPos> powerPorts =
-                findAllPowerPorts(
-                        level,
-                        origin,
-                        facing
-                );
-
-        /*
-         * Если Power Port ещё не поставлен,
-         * сервисных клеток нет.
-         */
-        if (powerPorts.size() != 1) {
+        List<BlockPos> ports = findAllPowerPorts(level, origin, facing);
+        if (ports.size() != 1) {
             return false;
         }
-
-        BlockPos powerPort =
-                powerPorts.get(0);
-
-        /*
-         * Переводим Power Port
-         * в локальные координаты.
-         */
-        int portX = -1;
-        int portZ = -1;
-
-        for (int px = 0; px < WIDTH; px++) {
-
-            for (int pz = 0; pz < DEPTH; pz++) {
-
-                BlockPos test =
-                        getWorldPosition(
-                                origin,
-                                facing,
-                                px,
-                                1,
-                                pz
-                        );
-
-                if (test.equals(powerPort)) {
-
-                    portX = px;
-                    portZ = pz;
-                }
-            }
+        int[] local = findLocalInterfacePosition(origin, facing, ports.get(0));
+        int portX = local[0];
+        int portZ = local[1];
+        if (portZ == 0 || portZ == DEPTH - 1) {
+            return z == portZ && Math.abs(x - portX) == 1;
         }
-
-        if (portX == -1
-                || portZ == -1) {
-
-            return false;
+        if (portX == 0 || portX == WIDTH - 1) {
+            return x == portX && Math.abs(z - portZ) == 1;
         }
-
-        /*
-         * Передняя / задняя стенка.
-         */
-        if (portZ == 0
-                || portZ == DEPTH - 1) {
-
-            return z == portZ
-                    && Math.abs(x - portX) == 1;
-        }
-
-        /*
-         * Левая / правая стенка.
-         */
-        if (portX == 0
-                || portX == WIDTH - 1) {
-
-            return x == portX
-                    && Math.abs(z - portZ) == 1;
-        }
-
         return false;
     }
-
-    /*
-     * =========================================================
-     * ПРОВЕРКА СЕРВИСНОЙ ЗОНЫ
-     * =========================================================
-     */
 
     private static boolean isPowerPortServiceSpaceFree(
             ServerLevel level,
@@ -696,115 +597,50 @@ public class MineMultiblock {
             Direction facing,
             BlockPos powerPort
     ) {
-
-        int portX = -1;
-        int portZ = -1;
-
-        /*
-         * Ищем локальные координаты.
-         */
-        for (int x = 0; x < WIDTH; x++) {
-
-            for (int z = 0; z < DEPTH; z++) {
-
-                BlockPos test =
-                        getWorldPosition(
-                                origin,
-                                facing,
-                                x,
-                                1,
-                                z
-                        );
-
-                if (test.equals(powerPort)) {
-
-                    portX = x;
-                    portZ = z;
-                }
-            }
-        }
-
-        if (portX == -1
-                || portZ == -1) {
-
+        int[] local = findLocalInterfacePosition(origin, facing, powerPort);
+        int portX = local[0];
+        int portZ = local[1];
+        if (portX < 0 || portZ < 0) {
             return false;
         }
-
-        /*
-         * Передняя / задняя стена.
-         */
-        if (portZ == 0
-                || portZ == DEPTH - 1) {
-
+        if (portZ == 0 || portZ == DEPTH - 1) {
             for (int offset : new int[]{-1, 1}) {
-
-                int x =
-                        portX + offset;
-
-                if (x < 0
-                        || x >= WIDTH) {
-
-                    return false;
-                }
-
-                BlockPos service =
-                        getWorldPosition(
-                                origin,
-                                facing,
-                                x,
-                                1,
-                                portZ
-                        );
-
-                if (!level.getBlockState(
-                        service
+                int x = portX + offset;
+                if (x < 0 || x >= WIDTH || !level.getBlockState(
+                        getWorldPosition(origin, facing, x, 1, portZ)
                 ).isAir()) {
-
                     return false;
                 }
             }
-
             return true;
         }
-
-        /*
-         * Боковая стена.
-         */
-        if (portX == 0
-                || portX == WIDTH - 1) {
-
+        if (portX == 0 || portX == WIDTH - 1) {
             for (int offset : new int[]{-1, 1}) {
-
-                int z =
-                        portZ + offset;
-
-                if (z < 0
-                        || z >= DEPTH) {
-
-                    return false;
-                }
-
-                BlockPos service =
-                        getWorldPosition(
-                                origin,
-                                facing,
-                                portX,
-                                1,
-                                z
-                        );
-
-                if (!level.getBlockState(
-                        service
+                int z = portZ + offset;
+                if (z < 0 || z >= DEPTH || !level.getBlockState(
+                        getWorldPosition(origin, facing, portX, 1, z)
                 ).isAir()) {
-
                     return false;
                 }
             }
-
             return true;
         }
-
         return false;
+    }
+
+    private static int[] findLocalInterfacePosition(
+            BlockPos origin,
+            Direction facing,
+            BlockPos target
+    ) {
+        for (int x = 0; x < WIDTH; x++) {
+            for (int z = 0; z < DEPTH; z++) {
+                if (getWorldPosition(origin, facing, x, 1, z).equals(target)) {
+                    return new int[]{x, z};
+                }
+            }
+        }
+        return new int[]{-1, -1};
     }
 
     /*
@@ -912,15 +748,7 @@ public class MineMultiblock {
 
                 for (int z = 0; z < DEPTH; z++) {
 
-                    if (isServiceSpace(
-                            level,
-                            origin,
-                            facing,
-                            x,
-                            y,
-                            z
-                    )) {
-
+                    if (isServiceSpace(level, origin, facing, x, y, z)) {
                         continue;
                     }
 
@@ -931,10 +759,7 @@ public class MineMultiblock {
                                     z
                             );
 
-                    if (expected
-                            == ExpectedBlock.INTERFACE
-                            || expected
-                            == ExpectedBlock.NONE) {
+                    if (expected == ExpectedBlock.NONE) {
 
                         continue;
                     }
@@ -950,39 +775,16 @@ public class MineMultiblock {
                                     z
                             );
 
-                    if (isCorrectBlock(
-                            level.getBlockState(pos),
-                            expected
-                    )) {
+                    BlockState actual = level.getBlockState(pos);
+                    if (expected == ExpectedBlock.INTERFACE
+                            ? isCorrectInterfaceBlock(actual)
+                            : isCorrectBlock(actual, expected)) {
 
                         correct++;
                     }
                 }
             }
         }
-
-        /*
-         * Интерфейсы учитываем отдельно.
-         */
-        if (findAllPowerPorts(
-                level,
-                origin,
-                facing
-        ).size() == 1) {
-
-            correct++;
-        }
-
-        if (findAllGateways(
-                level,
-                origin,
-                facing
-        ).size() == 1) {
-
-            correct++;
-        }
-
-        total += 2;
 
         return total == 0
                 ? 0.0F

@@ -1,0 +1,31 @@
+package com.example.examplemod.network;
+
+import com.example.examplemod.CreateCityExpansionCore;
+import com.example.examplemod.railway.*;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+public record RailwayStatePayload(BlockPos pylonPos, List<RailwayStationSnapshot> stations,
+                                  List<RailwayTrainSnapshot> trains, List<RailwayLineSnapshot> lines)
+        implements CustomPacketPayload {
+    public static final Type<RailwayStatePayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(
+            CreateCityExpansionCore.MODID, "railway_state"));
+    public static final StreamCodec<RegistryFriendlyByteBuf, RailwayStatePayload> STREAM_CODEC =
+            StreamCodec.of(RailwayStatePayload::encode, RailwayStatePayload::decode);
+    public RailwayStatePayload { stations=List.copyOf(stations); trains=List.copyOf(trains); lines=List.copyOf(lines); }
+    private static void encode(RegistryFriendlyByteBuf b, RailwayStatePayload p) {
+        BlockPos.STREAM_CODEC.encode(b,p.pylonPos); b.writeVarInt(p.stations.size());
+        for (var s:p.stations) { b.writeUUID(s.registrationId());b.writeUtf(s.name(),128);b.writeEnum(s.type());b.writeBoolean(s.available());b.writeBoolean(s.cityOwned());b.writeResourceLocation(s.dimension());BlockPos.STREAM_CODEC.encode(b,s.pos());b.writeBoolean(s.linkedProjectId()!=null);if(s.linkedProjectId()!=null)b.writeUUID(s.linkedProjectId()); }
+        b.writeVarInt(p.trains.size()); for(var t:p.trains){b.writeUUID(t.fleetTrainId());b.writeUtf(t.name(),128);b.writeEnum(t.type());b.writeBoolean(t.activeLineId()!=null);if(t.activeLineId()!=null)b.writeUUID(t.activeLineId());b.writeUtf(t.lineName(),64);b.writeUtf(t.statusKey(),40);b.writeBoolean(t.cityOwned());b.writeBoolean(t.automationSuspended());b.writeBoolean(t.dimension()!=null);if(t.dimension()!=null)b.writeResourceLocation(t.dimension());b.writeDouble(t.x());b.writeDouble(t.z());b.writeUtf(t.nextStation(),128);b.writeDouble(t.speed());}
+        b.writeVarInt(p.lines.size());for(var l:p.lines){b.writeUUID(l.lineId());b.writeUtf(l.name(),64);b.writeEnum(l.type());b.writeBoolean(l.cyclic());b.writeVarInt(l.revision());b.writeUtf(l.statusKey(),40);b.writeVarInt(l.assignedTrains());b.writeVarInt(l.stops().size());for(var s:l.stops()){b.writeUUID(s.stationRegistrationId());b.writeEnum(s.mode());b.writeVarInt(s.waitSeconds());}}
+    }
+    private static RailwayStatePayload decode(RegistryFriendlyByteBuf b){BlockPos pos=BlockPos.STREAM_CODEC.decode(b);int sc=Math.min(256,b.readVarInt());List<RailwayStationSnapshot> ss=new ArrayList<>();for(int i=0;i<sc;i++){UUID id=b.readUUID();String name=b.readUtf(128);var type=b.readEnum(RailwayTypes.StationType.class);boolean available=b.readBoolean(),cityOwned=b.readBoolean();ResourceLocation dimension=b.readResourceLocation();BlockPos stationPos=BlockPos.STREAM_CODEC.decode(b);UUID project=b.readBoolean()?b.readUUID():null;ss.add(new RailwayStationSnapshot(id,name,type,available,cityOwned,dimension,stationPos,project));}int tc=Math.min(256,b.readVarInt());List<RailwayTrainSnapshot> ts=new ArrayList<>();for(int i=0;i<tc;i++){UUID id=b.readUUID();String n=b.readUtf(128);var ty=b.readEnum(RailwayTypes.TrainType.class);UUID li=b.readBoolean()?b.readUUID():null;String ln=b.readUtf(64),st=b.readUtf(40);boolean co=b.readBoolean(),su=b.readBoolean();ResourceLocation d=b.readBoolean()?b.readResourceLocation():null;ts.add(new RailwayTrainSnapshot(id,n,ty,li,ln,st,co,su,d,b.readDouble(),b.readDouble(),b.readUtf(128),b.readDouble()));}int lc=Math.min(256,b.readVarInt());List<RailwayLineSnapshot> ls=new ArrayList<>();for(int i=0;i<lc;i++){UUID id=b.readUUID();String n=b.readUtf(64);var ty=b.readEnum(RailwayTypes.LineType.class);boolean cy=b.readBoolean();int rev=b.readVarInt();String st=b.readUtf(40);int at=b.readVarInt(),count=Math.min(64,b.readVarInt());List<RailLineStop> stops=new ArrayList<>();for(int j=0;j<count;j++)stops.add(new RailLineStop(b.readUUID(),b.readEnum(RailwayTypes.StopMode.class),b.readVarInt()));ls.add(new RailwayLineSnapshot(id,n,ty,cy,rev,stops,st,at));}return new RailwayStatePayload(pos,ss,ts,ls);}
+    @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+}

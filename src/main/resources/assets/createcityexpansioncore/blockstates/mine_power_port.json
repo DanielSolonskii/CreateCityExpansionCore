@@ -1,7 +1,19 @@
 {
   "variants": {
-    "": {
+    "facing=north": {
       "model": "createcityexpansioncore:block/mine_power_port"
+    },
+    "facing=east": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "y": 270
     }
   }
 }

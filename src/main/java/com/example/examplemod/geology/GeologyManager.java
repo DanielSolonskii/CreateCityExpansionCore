@@ -1,242 +1,251 @@
 package com.example.examplemod.geology;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.saveddata.SavedData;
 
-import java.util.HashMap;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
-public class GeologyManager {
+public final class GeologyManager extends SavedData {
 
-    /*
-     * Масштабы геологического поля.
-     *
-     * Большой масштаб определяет крупные залежи.
-     * Средний добавляет локальные изменения.
-     * Малый создаёт небольшие переходы между зонами.
-     */
-    private static final double LARGE_SCALE = 100.0;
-    private static final double MEDIUM_SCALE = 45.0;
-    private static final double SMALL_SCALE = 20.0;
+    static final int CURRENT_FORMAT_VERSION =
+            GeologySavedDataCodec.CURRENT_FORMAT_VERSION;
 
-    private static final String MOD_ID = "createcityexpansioncore";
+    private static final String DATA_NAME =
+            "createcityexpansioncore_geology";
 
-    public static GeologicalRegion getRegion(ServerLevel level, BlockPos pos) {
+    private final ResourceLocation dimensionId;
+    private final Map<ResourceLocation, GeologicalRegion> regions =
+            new LinkedHashMap<>();
+    private final boolean storageAvailable;
+    private final CompoundTag preservedFallbackData;
 
-        long seed = level.getSeed();
-
-        Map<ResourceLocation, Integer> resources = new HashMap<>();
-
-        resources.put(
-                resource("copper"),
-                calculateResource(seed, pos, 17L, 0.0)
-        );
-
-        resources.put(
-                resource("iron"),
-                calculateResource(seed, pos, 31L, 1.7)
-        );
-
-        resources.put(
-                resource("coal"),
-                calculateResource(seed, pos, 47L, 3.4)
-        );
-
-        resources.put(
-                resource("zinc"),
-                calculateResource(seed, pos, 73L, 5.1)
-        );
-
-        /*
-         * Поле идентифицируется координатами,
-         * чтобы соседние точки относились к одной
-         * крупной геологической области.
-         */
-        int fieldX = Math.floorDiv(pos.getX(), 100);
-        int fieldZ = Math.floorDiv(pos.getZ(), 100);
-
-        ResourceLocation fieldId =
-                ResourceLocation.fromNamespaceAndPath(
-                        MOD_ID,
-                        "field_" + fieldX + "_" + fieldZ
-                );
-
-        return new GeologicalRegion(
-                fieldId,
-                resources
-        );
+    GeologyManager(ResourceLocation dimensionId) {
+        this(dimensionId, true, null);
     }
 
-    /**
-     * Рассчитывает концентрацию конкретного ресурса
-     * в указанной точке мира.
-     *
-     * Значение находится в диапазоне 0-100.
-     */
-    private static int calculateResource(
-            long worldSeed,
-            BlockPos pos,
-            long resourceSeed,
-            double phase
+    private GeologyManager(
+            ResourceLocation dimensionId,
+            boolean storageAvailable,
+            CompoundTag preservedFallbackData
     ) {
+        this.dimensionId = Objects.requireNonNull(dimensionId, "dimensionId");
+        this.storageAvailable = storageAvailable;
+        this.preservedFallbackData = preservedFallbackData;
+    }
 
-        long hash = mixSeed(worldSeed, resourceSeed);
+    static GeologyManager load(
+            CompoundTag tag,
+            HolderLookup.Provider registries,
+            ResourceLocation dimensionId
+    ) {
+        Objects.requireNonNull(tag, "tag");
+        Objects.requireNonNull(dimensionId, "dimensionId");
 
-        /*
-         * Для каждого ресурса создаётся собственное
-         * смещение поля.
-         *
-         * Благодаря этому медь, железо, уголь и цинк
-         * имеют разные геологические распределения.
-         */
-        double offsetX =
-                ((hash & 0xFFFFL) / 65535.0) * 1000.0;
+        GeologySavedDataCodec.LoadResult result =
+                GeologySavedDataCodec.load(tag, dimensionId);
+        GeologyManager manager = new GeologyManager(
+                dimensionId,
+                result.storageAvailable(),
+                result.preservedFallbackData()
+        );
+        manager.regions.putAll(result.regions());
 
-        double offsetZ =
-                (((hash >>> 16) & 0xFFFFL) / 65535.0) * 1000.0;
-
-        double x = pos.getX() + offsetX;
-        double z = pos.getZ() + offsetZ;
-
-        /*
-         * Крупная геологическая структура.
-         */
-        double large =
-                Math.sin(
-                        x / LARGE_SCALE + phase
-                )
-                        *
-                        Math.cos(
-                                z / LARGE_SCALE + phase * 0.7
-                        );
-
-        /*
-         * Средние изменения.
-         */
-        double medium =
-                Math.sin(
-                        (x + z * 0.7)
-                                / MEDIUM_SCALE
-                                + phase * 1.3
-                );
-
-        /*
-         * Небольшие локальные изменения.
-         */
-        double small =
-                Math.sin(
-                        (x - z * 0.45)
-                                / SMALL_SCALE
-                                + phase * 2.1
-                );
-
-        /*
-         * Общий геологический потенциал.
-         *
-         * Большие структуры имеют наибольшее влияние,
-         * средние — вторичное,
-         * маленькие — небольшое.
-         */
-        double geologicalPotential =
-                large * 0.65
-                        + medium * 0.25
-                        + small * 0.10;
-
-        /*
-         * Переводим диапазон примерно [-1; 1]
-         * в [0; 1].
-         */
-        double normalized =
-                (geologicalPotential + 1.0) / 2.0;
-
-        /*
-         * Немного усиливаем разницу между
-         * бедными и богатыми участками.
-         */
-        double shaped =
-                Math.pow(
-                        normalized,
-                        1.35
-                );
-
-        /*
-         * Получаем значение 0-100.
-         */
-        double value =
-                shaped * 100.0;
-
-        /*
-         * БЕСПЛОДНАЯ ЗОНА
-         *
-         * Если геологический потенциал очень низкий,
-         * эта территория практически лишена
-         * полезных ресурсов.
-         */
-        if (geologicalPotential < -0.55) {
-            value *= 0.05;
+        if (result.migrated()) {
+            manager.setDirty();
         }
 
-        /*
-         * Защита от выхода за пределы диапазона.
-         */
-        value = Math.max(
-                0.0,
-                Math.min(
-                        100.0,
-                        value
-                )
+        return manager;
+    }
+
+    @Override
+    public CompoundTag save(
+            CompoundTag tag,
+            HolderLookup.Provider registries
+    ) {
+        if (!storageAvailable) {
+            return preservedFallbackData.copy();
+        }
+
+        return GeologySavedDataCodec.save(
+                tag,
+                dimensionId,
+                regions.values()
+        );
+    }
+
+    public static GeologyManager get(ServerLevel level) {
+        ResourceLocation dimensionId = level.dimension().location();
+        return level.getDataStorage().computeIfAbsent(
+                new SavedData.Factory<>(
+                        () -> new GeologyManager(dimensionId),
+                        (tag, registries) -> load(
+                                tag,
+                                registries,
+                                dimensionId
+                        ),
+                        null
+                ),
+                DATA_NAME
+        );
+    }
+
+    public static GeologicalRegion getRegion(
+            ServerLevel level,
+            BlockPos pos
+    ) {
+        return get(level).getOrCreateRegion(level.getSeed(), pos);
+    }
+
+    public static Collection<GeologicalDeposit> getDeposits(
+            ServerLevel level,
+            BlockPos pos
+    ) {
+        return getRegion(level, pos).getDeposits();
+    }
+
+    public static Optional<GeologicalDeposit> getDeposit(
+            ServerLevel level,
+            ResourceLocation depositId
+    ) {
+        return get(level).findDeposit(depositId);
+    }
+
+    public static DepositExtractionResult extractDeposit(
+            ServerLevel level,
+            ResourceLocation depositId,
+            long requestedAmount
+    ) {
+        return get(level).extract(depositId, requestedAmount);
+    }
+
+    GeologicalRegion getOrCreateRegion(long worldSeed, BlockPos pos) {
+        int fieldX = Math.floorDiv(
+                pos.getX(),
+                GeologyGenerator.REGION_SIZE
+        );
+        int fieldZ = Math.floorDiv(
+                pos.getZ(),
+                GeologyGenerator.REGION_SIZE
+        );
+        ResourceLocation regionId = GeologyGenerator.regionId(
+                dimensionId,
+                fieldX,
+                fieldZ
         );
 
-        return (int) Math.round(value);
+        GeologicalRegion existing = regions.get(regionId);
+        if (existing != null) {
+            return existing;
+        }
+
+        if (!storageAvailable) {
+            GeologicalRegion unavailableRegion = new GeologicalRegion(
+                    regionId,
+                    fieldX,
+                    fieldZ,
+                    List.of()
+            );
+            regions.put(regionId, unavailableRegion);
+            return unavailableRegion;
+        }
+
+        GeologicalRegion created = GeologyGenerator.createRegion(
+                dimensionId,
+                worldSeed,
+                fieldX,
+                fieldZ
+        );
+        regions.put(regionId, created);
+        setDirty();
+        return created;
     }
 
-    /**
-     * Создаёт стабильное число из seed мира
-     * и идентификатора ресурса.
-     *
-     * Одинаковый мир + одинаковый ресурс =
-     * одинаковое геологическое поле.
-     */
-    private static long mixSeed(
-            long worldSeed,
-            long resourceSeed
-    ) {
+    Optional<GeologicalDeposit> findDeposit(ResourceLocation depositId) {
+        Objects.requireNonNull(depositId, "depositId");
 
-        long value =
-                worldSeed
-                        ^ (
-                        resourceSeed
-                                * 0x9E3779B97F4A7C15L
-                );
+        for (GeologicalRegion region : regions.values()) {
+            Optional<GeologicalDeposit> deposit = region.getDeposit(depositId);
+            if (deposit.isPresent()) {
+                return deposit;
+            }
+        }
 
-        value =
-                (
-                        value
-                                ^ (value >>> 30)
-                )
-                        * 0xBF58476D1CE4E5B9L;
-
-        value =
-                (
-                        value
-                                ^ (value >>> 27)
-                )
-                        * 0x94D049BB133111EBL;
-
-        return value ^ (value >>> 31);
+        return Optional.empty();
     }
 
-    /**
-     * Создаёт ResourceLocation нашего ресурса.
-     */
-    private static ResourceLocation resource(
-            String name
+    DepositExtractionResult extract(
+            ResourceLocation depositId,
+            long requestedAmount
     ) {
+        Objects.requireNonNull(depositId, "depositId");
 
-        return ResourceLocation.fromNamespaceAndPath(
-                MOD_ID,
-                name
+        if (!storageAvailable) {
+            return DepositExtractionResult.storageUnavailable();
+        }
+
+        Optional<GeologicalDeposit> depositResult = findDeposit(depositId);
+        if (depositResult.isEmpty()) {
+            return DepositExtractionResult.notFound();
+        }
+
+        GeologicalDeposit deposit = depositResult.get();
+        if (requestedAmount < 0) {
+            return DepositExtractionResult.forDeposit(
+                    DepositExtractionResult.Status.INVALID_REQUEST,
+                    0L,
+                    deposit
+            );
+        }
+        if (requestedAmount == 0) {
+            return DepositExtractionResult.forDeposit(
+                    DepositExtractionResult.Status.ZERO_REQUEST,
+                    0L,
+                    deposit
+            );
+        }
+        if (deposit.isDepleted()) {
+            return DepositExtractionResult.forDeposit(
+                    DepositExtractionResult.Status.DEPLETED,
+                    0L,
+                    deposit
+            );
+        }
+
+        long extracted = deposit.extract(requestedAmount);
+        setDirty();
+        return DepositExtractionResult.forDeposit(
+                DepositExtractionResult.Status.EXTRACTED,
+                extracted,
+                deposit
+        );
+    }
+
+    public boolean isStorageAvailable() {
+        return storageAvailable;
+    }
+
+    static ResourceLocation depositId(
+            ResourceLocation dimensionId,
+            int fieldX,
+            int fieldZ,
+            ResourceLocation resourceId,
+            int depositIndex
+    ) {
+        return GeologyGenerator.depositId(
+                dimensionId,
+                fieldX,
+                fieldZ,
+                resourceId,
+                depositIndex
         );
     }
 }

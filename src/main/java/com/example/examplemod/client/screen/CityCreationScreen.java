@@ -13,7 +13,7 @@ public class CityCreationScreen extends Screen {
     private EditBox cityName;
     private final BlockPos pylonPos;
     public CityCreationScreen(BlockPos pylonPos) {
-        super(Component.literal("Создание города"));
+        super(Component.translatable("gui.createcityexpansioncore.city.creation.title"));
         this.pylonPos = pylonPos;
     }
 
@@ -31,12 +31,12 @@ public class CityCreationScreen extends Screen {
                 this.height / 2 - 45,
                 panelWidth - 40,
                 24,
-                Component.literal("Название города")
+                Component.translatable("gui.createcityexpansioncore.city.creation.name")
         );
 
         this.cityName.setMaxLength(32);
         this.cityName.setHint(
-                Component.literal("Введите название...")
+                Component.translatable("gui.createcityexpansioncore.city.creation.name_hint")
         );
 
         this.addRenderableWidget(this.cityName);
@@ -44,7 +44,7 @@ public class CityCreationScreen extends Screen {
         // Кнопка "Назад"
         this.addRenderableWidget(
                 Button.builder(
-                        Component.literal("НАЗАД"),
+                        Component.translatable("gui.createcityexpansioncore.common.back"),
                         button -> {
                             this.onClose();
                         }
@@ -60,7 +60,7 @@ public class CityCreationScreen extends Screen {
         // Кнопка "Создать"
         this.addRenderableWidget(
                 Button.builder(
-                        Component.literal("СОЗДАТЬ"),
+                        Component.translatable("gui.createcityexpansioncore.city.creation.create"),
                         button -> {
                             String name = this.cityName.getValue().trim();
 
@@ -136,7 +136,7 @@ public class CityCreationScreen extends Screen {
         // Заголовок
         guiGraphics.drawString(
                 this.font,
-                Component.literal("СОЗДАНИЕ ГОРОДА"),
+                Component.translatable("gui.createcityexpansioncore.city.creation.heading"),
                 left + 14,
                 top + 13,
                 0xFFFFFF
@@ -145,7 +145,7 @@ public class CityCreationScreen extends Screen {
         // Подпись
         guiGraphics.drawString(
                 this.font,
-                Component.literal("Название города"),
+                Component.translatable("gui.createcityexpansioncore.city.creation.name"),
                 left + 20,
                 top + 58,
                 0xD0D0D0
@@ -154,7 +154,7 @@ public class CityCreationScreen extends Screen {
         // Информация
         guiGraphics.drawString(
                 this.font,
-                Component.literal("Территория: 100 × 100"),
+                Component.translatable("gui.createcityexpansioncore.city.creation.territory", 100, 100),
                 left + 20,
                 top + 105,
                 0x909090
@@ -162,7 +162,7 @@ public class CityCreationScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal("Стоимость создания: уточняется"),
+                Component.translatable("gui.createcityexpansioncore.city.creation.cost_pending"),
                 left + 20,
                 top + 122,
                 0x909090

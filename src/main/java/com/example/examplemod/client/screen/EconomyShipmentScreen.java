@@ -1,0 +1,37 @@
+package com.example.examplemod.client.screen;
+
+import com.example.examplemod.economy.EconomyTypes;
+import com.example.examplemod.client.gui.CityButton;
+import com.example.examplemod.network.EconomyCommandPayload;
+import com.example.examplemod.network.EconomyStatePayload;
+import com.example.examplemod.railway.RailwayTrainSnapshot;
+import com.example.examplemod.railway.RailwayStationSnapshot;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.List;
+
+public final class EconomyShipmentScreen extends Screen {
+    private final Screen parent;private final BlockPos pylonPos;private final EconomyStatePayload.ContractView contract;
+    private final List<RailwayTrainSnapshot> trains;private final List<EconomyStatePayload.ShipmentView> activeShipments;private final long availableAmount;private final Component destination;private final boolean destinationReady;private int trainIndex;private EditBox amount;private Component error=Component.empty();
+    public EconomyShipmentScreen(Screen parent,BlockPos pylonPos,EconomyStatePayload.ContractView contract,EconomyStatePayload state,List<RailwayTrainSnapshot> allTrains,List<RailwayStationSnapshot> stations){
+        super(Component.translatable("gui.createcityexpansioncore.economy.shipment.create"));this.parent=parent;this.pylonPos=pylonPos;this.contract=contract;
+        this.activeShipments=state.shipments().stream().filter(value->value.contractId().equals(contract.id())).filter(value->value.status()==EconomyTypes.ShipmentStatus.PREPARING||value.status()==EconomyTypes.ShipmentStatus.IN_TRANSIT||value.status()==EconomyTypes.ShipmentStatus.UNLOADING).toList();
+        var occupied=state.shipments().stream().filter(value->value.status()==EconomyTypes.ShipmentStatus.PREPARING||value.status()==EconomyTypes.ShipmentStatus.IN_TRANSIT||value.status()==EconomyTypes.ShipmentStatus.UNLOADING).map(EconomyStatePayload.ShipmentView::trainId).collect(java.util.stream.Collectors.toSet());
+        this.trains=allTrains.stream().filter(RailwayTrainSnapshot::cityOwned).filter(value->!"missing".equals(value.statusKey())&&!occupied.contains(value.fleetTrainId())).toList();
+        long reserved=state.shipments().stream().filter(value->value.contractId().equals(contract.id())).filter(value->value.status()==EconomyTypes.ShipmentStatus.PREPARING||value.status()==EconomyTypes.ShipmentStatus.IN_TRANSIT||value.status()==EconomyTypes.ShipmentStatus.UNLOADING).mapToLong(value->Math.max(0L,value.declared()-value.verified())).reduce(0L,(left,right)->left>Long.MAX_VALUE-right?Long.MAX_VALUE:left+right);
+        this.availableAmount=Math.max(0L,contract.amount()-contract.delivered()-Math.min(contract.amount()-contract.delivered(),reserved));
+        var intake=state.infrastructure().stream().filter(value->value.id().equals(contract.destinationId())).findFirst().orElse(null);
+        RailwayStationSnapshot station=intake==null||intake.stationId()==null?null:stations.stream().filter(value->value.registrationId().equals(intake.stationId())).findFirst().orElse(null);
+        this.destinationReady=station!=null;
+        this.destination=station==null?Component.translatable("gui.createcityexpansioncore.economy.infrastructure.station_missing"):Component.literal(station.name());
+    }
+    @Override protected void init(){int l=width/2-175,t=height/2-120;amount=new EditBox(font,l+20,t+130,310,20,Component.translatable("gui.createcityexpansioncore.economy.field.amount"));amount.setValue(Long.toString(availableAmount));addRenderableWidget(amount);addRenderableWidget(new CityButton(l+20,t+86,310,20,Component.translatable("gui.createcityexpansioncore.economy.shipment.select_train"),b->{if(!trains.isEmpty())trainIndex=(trainIndex+1)%trains.size();},CityButton.Style.CITY));if(!activeShipments.isEmpty())addRenderableWidget(new CityButton(l+20,t+153,310,20,Component.translatable("gui.createcityexpansioncore.economy.shipment.cancel_active",activeShipments.getFirst().trainName()),b->{PacketDistributor.sendToServer(EconomyCommandPayload.simple(pylonPos,EconomyCommandPayload.Action.CANCEL_SHIPMENT,activeShipments.getFirst().id()));onClose();},CityButton.Style.DANGER));CityButton submit=new CityButton(l+180,t+177,150,22,Component.translatable("gui.createcityexpansioncore.economy.shipment.confirm"),b->submit(),CityButton.Style.CITY);submit.active=!trains.isEmpty()&&availableAmount>0L&&destinationReady;addRenderableWidget(submit);addRenderableWidget(new CityButton(l+20,t+177,150,22,Component.translatable("gui.createcityexpansioncore.common.back"),b->onClose(),CityButton.Style.CITY));}
+    private void submit(){long value;try{value=Long.parseLong(amount.getValue().trim());}catch(NumberFormatException ex){value=-1L;}if(value<=0L||trains.isEmpty()){error=Component.translatable(trains.isEmpty()?"gui.createcityexpansioncore.economy.shipment.no_trains":"gui.createcityexpansioncore.economy.invalid_input");return;}PacketDistributor.sendToServer(new EconomyCommandPayload(pylonPos,EconomyCommandPayload.Action.CREATE_SHIPMENT,contract.id(),trains.get(Math.floorMod(trainIndex,trains.size())).fleetTrainId(),null,null,value,0L,0L,0,"","",""));onClose();}
+    @Override public void render(GuiGraphics g,int mx,int my,float pt){renderBackground(g,mx,my,pt);int l=width/2-175,t=height/2-120;g.fill(l,t,l+350,t+224,0xEE151B1E);g.fill(l,t,l+350,t+3,0xFFD09A3A);g.drawCenteredString(font,title,l+175,t+15,0xFFFFFFFF);g.drawString(font,Component.translatable("gui.createcityexpansioncore.economy.shipment.contract",contract.title().isBlank()?contract.itemId().toString():contract.title()),l+20,t+38,0xFFE2E6E7,false);g.drawString(font,Component.translatable("gui.createcityexpansioncore.economy.shipment.remaining",availableAmount),l+20,t+52,0xFFAEB8BB,false);g.drawString(font,Component.translatable("gui.createcityexpansioncore.economy.shipment.destination",destination),l+20,t+66,destinationReady?0xFFB7C0C3:0xFFD07872,false);Component train=trains.isEmpty()?Component.translatable("gui.createcityexpansioncore.economy.shipment.no_trains_short"):Component.literal(trains.get(Math.floorMod(trainIndex,trains.size())).name());g.drawString(font,train,l+30,t+92,trains.isEmpty()?0xFFD07872:0xFF77B992,false);if(trains.isEmpty())g.drawWordWrap(font,Component.translatable("gui.createcityexpansioncore.economy.shipment.no_trains"),l+20,t+112,310,0xFFD07872);else g.drawString(font,Component.translatable("gui.createcityexpansioncore.economy.shipment.amount_hint"),l+20,t+116,0xFF8F9A9E,false);if(!error.getString().isEmpty())g.drawCenteredString(font,error,l+175,t+207,0xFFD07872);super.render(g,mx,my,pt);if(mx>=l+180&&mx<l+330&&my>=t+177&&my<t+199&&(!destinationReady||trains.isEmpty()||availableAmount<=0L)){Component tooltip=Component.translatable(!destinationReady?"gui.createcityexpansioncore.economy.shipment.disabled_station":trains.isEmpty()?"gui.createcityexpansioncore.economy.shipment.no_trains":"gui.createcityexpansioncore.economy.shipment.disabled_amount");g.renderTooltip(font,font.split(tooltip,Math.min(240,width-24)),net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner.INSTANCE,mx,my);}}
+    @Override public void onClose(){if(minecraft!=null)minecraft.setScreen(parent);}
+}

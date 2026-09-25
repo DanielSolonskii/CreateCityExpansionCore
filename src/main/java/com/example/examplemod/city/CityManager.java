@@ -6,6 +6,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -73,8 +74,22 @@ public class CityManager extends SavedData {
                             name,
                             owner,
                             pylonPos,
-                            level
+                            level,
+                            java.util.List.of(),
+                            true,
+                            java.util.List.of(),
+                            null,
+                            java.util.Map.of(),
+                            cityTag.contains("PylonDimension", Tag.TAG_STRING)
+                                    ? java.util.Objects.requireNonNullElse(
+                                    ResourceLocation.tryParse(cityTag.getString("PylonDimension")),
+                                    net.minecraft.world.level.Level.OVERWORLD.location())
+                                    : net.minecraft.world.level.Level.OVERWORLD.location()
                     );
+
+            city.setPylonActive(
+                    !cityTag.contains("PylonActive") || cityTag.getBoolean("PylonActive")
+            );
 
             // =================================================
             // MEMBERS
@@ -162,6 +177,57 @@ public class CityManager extends SavedData {
                 );
             }
 
+            ListTag projects = cityTag.getList("Projects", Tag.TAG_COMPOUND);
+            for (Tag projectRaw : projects) {
+                CompoundTag projectTag = (CompoundTag) projectRaw;
+                try {
+                    ResourceLocation dimensionId = ResourceLocation.tryParse(
+                            projectTag.getString("Dimension")
+                    );
+                    ResourceLocation depositId = ResourceLocation.tryParse(
+                            projectTag.getString("Deposit")
+                    );
+                    ResourceLocation resourceId = ResourceLocation.tryParse(
+                            projectTag.getString("Resource")
+                    );
+                    int typeId = projectTag.getInt("Type");
+                    if (dimensionId == null || depositId == null || resourceId == null
+                            || typeId < 0 || typeId >= CityProjectType.values().length) {
+                        continue;
+                    }
+                    city.addProject(new CityProject(
+                            projectTag.getUUID("ProjectId"),
+                            id,
+                            CityProjectType.values()[typeId],
+                            dimensionId,
+                            NbtUtils.readBlockPos(projectTag, "ControllerPos")
+                                    .orElse(BlockPos.ZERO),
+                            projectTag.getUUID("Creator"),
+                            depositId,
+                            resourceId,
+                            projectTag.getDouble("Richness")
+                    ));
+                } catch (RuntimeException ignored) {
+                    // Preserve the city even if one project entry is damaged.
+                }
+            }
+
+            if (cityTag.contains("DevelopmentPrimaryResource", Tag.TAG_STRING)) {
+                city.restoreDevelopmentPrimaryResource(ResourceLocation.tryParse(
+                        cityTag.getString("DevelopmentPrimaryResource")
+                ));
+            }
+
+            ListTag development = cityTag.getList("Development", Tag.TAG_COMPOUND);
+            for (Tag progressRaw : development) {
+                CompoundTag progressTag = (CompoundTag) progressRaw;
+                ResourceLocation itemId = ResourceLocation.tryParse(progressTag.getString("Item"));
+                long amount = progressTag.getLong("Amount");
+                if (itemId != null && amount > 0L) {
+                    city.contribute(itemId, amount, Long.MAX_VALUE);
+                }
+            }
+
             manager.cities.put(
                     id,
                     city
@@ -219,6 +285,39 @@ public class CityManager extends SavedData {
                     "Level",
                     city.getLevel()
             );
+            cityTag.putString("PylonDimension", city.getPylonDimension().toString());
+
+            cityTag.putBoolean("PylonActive", city.isPylonActive());
+
+            ListTag projects = new ListTag();
+            for (CityProject project : city.getProjects()) {
+                CompoundTag projectTag = new CompoundTag();
+                projectTag.putUUID("ProjectId", project.projectId());
+                projectTag.putInt("Type", project.projectType().ordinal());
+                projectTag.putString("Dimension", project.dimensionId().toString());
+                projectTag.put("ControllerPos", NbtUtils.writeBlockPos(project.controllerPos()));
+                projectTag.putUUID("Creator", project.creatorId());
+                projectTag.putString("Deposit", project.depositId().toString());
+                projectTag.putString("Resource", project.resourceId().toString());
+                projectTag.putDouble("Richness", project.richness());
+                projects.add(projectTag);
+            }
+            cityTag.put("Projects", projects);
+
+            ListTag development = new ListTag();
+            city.getDevelopmentContributions().forEach((itemId, amount) -> {
+                CompoundTag progressTag = new CompoundTag();
+                progressTag.putString("Item", itemId.toString());
+                progressTag.putLong("Amount", amount);
+                development.add(progressTag);
+            });
+            cityTag.put("Development", development);
+            if (city.getDevelopmentPrimaryResource() != null) {
+                cityTag.putString(
+                        "DevelopmentPrimaryResource",
+                        city.getDevelopmentPrimaryResource().toString()
+                );
+            }
 
             // -------------------------------------------------
             // MEMBERS
@@ -328,16 +427,22 @@ public class CityManager extends SavedData {
             BlockPos pylonPos
     ) {
 
+        return createCity(name, owner, net.minecraft.world.level.Level.OVERWORLD.location(), pylonPos);
+    }
+
+    public City createCity(
+            String name,
+            UUID owner,
+            ResourceLocation pylonDimension,
+            BlockPos pylonPos
+    ) {
+
         UUID id =
                 UUID.randomUUID();
 
         City city =
-                new City(
-                        id,
-                        name,
-                        owner,
-                        pylonPos
-                );
+                new City(id, name, owner, pylonPos, 1, java.util.List.of(), true,
+                        java.util.List.of(), null, java.util.Map.of(), pylonDimension);
 
         cities.put(
                 id,
@@ -358,6 +463,103 @@ public class CityManager extends SavedData {
     ) {
 
         return cities.get(id);
+    }
+
+    public List<City> getCities() {
+        return List.copyOf(cities.values());
+    }
+
+    public City getCityByName(String name) {
+        if (name == null) {
+            return null;
+        }
+        for (City city : cities.values()) {
+            if (city.getName().equalsIgnoreCase(name.trim())) {
+                return city;
+            }
+        }
+        return null;
+    }
+
+    public CityProject getProject(UUID projectId) {
+        for (City city : cities.values()) {
+            CityProject project = city.getProject(projectId);
+            if (project != null) {
+                return project;
+            }
+        }
+        return null;
+    }
+
+    public boolean addProject(City city, CityProject project) {
+        if (city == null || project == null || cities.get(city.getId()) != city) {
+            return false;
+        }
+        boolean added = city.addProject(project);
+        if (added) {
+            setDirty();
+        }
+        return added;
+    }
+
+    public CityProject removeProject(City city, UUID projectId) {
+        if (city == null || cities.get(city.getId()) != city) {
+            return null;
+        }
+        CityProject removed = city.removeProject(projectId);
+        if (removed != null) {
+            setDirty();
+        }
+        return removed;
+    }
+
+    public boolean relocateProject(
+            CityProject project,
+            ResourceLocation dimensionId,
+            BlockPos controllerPos
+    ) {
+        City city = project == null ? null : cities.get(project.cityId());
+        if (city == null || city.getProject(project.projectId()) != project) {
+            return false;
+        }
+        CityProject replacement = new CityProject(
+                project.projectId(), project.cityId(), project.projectType(), dimensionId,
+                controllerPos, project.creatorId(), project.depositId(),
+                project.resourceId(), project.richness()
+        );
+        if (!city.replaceProject(replacement)) {
+            return false;
+        }
+        setDirty();
+        return true;
+    }
+
+    public void markPylonRelocating(City city) {
+        if (city != null && city.isPylonActive()) {
+            city.setPylonActive(false);
+            setDirty();
+        }
+    }
+
+    public void markPylonActive(City city) {
+        if (city != null && !city.isPylonActive()) {
+            city.setPylonActive(true);
+            setDirty();
+        }
+    }
+
+    public boolean rebindPylon(City city, ResourceLocation dimension, BlockPos pos) {
+        if (city == null || dimension == null || pos == null
+                || cities.get(city.getId()) != city || city.isPylonActive()) {
+            return false;
+        }
+        city.rebindPylon(dimension, pos);
+        setDirty();
+        return true;
+    }
+
+    public void markChanged() {
+        setDirty();
     }
 
     // =========================================================
@@ -382,6 +584,16 @@ public class CityManager extends SavedData {
             }
         }
 
+        return null;
+    }
+
+    public City getCityByPylon(ResourceLocation dimension, BlockPos pylonPos) {
+        for (City city : cities.values()) {
+            if (city.getPylonDimension().equals(dimension)
+                    && city.getPylonPos().equals(pylonPos)) {
+                return city;
+            }
+        }
         return null;
     }
     public City removeCityByOwner(UUID player) {

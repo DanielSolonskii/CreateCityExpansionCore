@@ -1,9 +1,12 @@
 package com.example.examplemod.city;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class City {
@@ -11,12 +14,17 @@ public class City {
     private final UUID id;
     private final String name;
     private final UUID owner;
-    private final BlockPos pylonPos;
+    private BlockPos pylonPos;
+    private ResourceLocation pylonDimension;
+    private boolean pylonActive;
 
     private int level;
 
     private final List<CityMember> members;
     private final List<CityInvite> invites;
+    private final List<CityProject> projects;
+    private final Map<ResourceLocation, Long> developmentContributions;
+    private ResourceLocation developmentPrimaryResource;
 
     /*
      * =========================================
@@ -36,7 +44,11 @@ public class City {
                 owner,
                 pylonPos,
                 1,
-                new ArrayList<>()
+                new ArrayList<>(),
+                true,
+                new ArrayList<>(),
+                null,
+                new HashMap<>()
         );
     }
 
@@ -53,7 +65,11 @@ public class City {
                 owner,
                 pylonPos,
                 level,
-                new ArrayList<>()
+                new ArrayList<>(),
+                true,
+                new ArrayList<>(),
+                null,
+                new HashMap<>()
         );
     }
 
@@ -71,15 +87,48 @@ public class City {
             int level,
             List<CityMember> members
     ) {
+        this(id, name, owner, pylonPos, level, members, true,
+                new ArrayList<>(), null, new HashMap<>());
+    }
+
+    public City(
+            UUID id,
+            String name,
+            UUID owner,
+            BlockPos pylonPos,
+            int level,
+            List<CityMember> members,
+            boolean pylonActive,
+            List<CityProject> projects,
+            ResourceLocation developmentPrimaryResource,
+            Map<ResourceLocation, Long> developmentContributions
+    ) {
+        this(id, name, owner, pylonPos, level, members, pylonActive, projects,
+                developmentPrimaryResource, developmentContributions,
+                net.minecraft.world.level.Level.OVERWORLD.location());
+    }
+
+    public City(
+            UUID id,
+            String name,
+            UUID owner,
+            BlockPos pylonPos,
+            int level,
+            List<CityMember> members,
+            boolean pylonActive,
+            List<CityProject> projects,
+            ResourceLocation developmentPrimaryResource,
+            Map<ResourceLocation, Long> developmentContributions,
+            ResourceLocation pylonDimension
+    ) {
         this.id = id;
         this.name = name;
         this.owner = owner;
-        this.pylonPos = pylonPos;
+        this.pylonPos = pylonPos.immutable();
+        this.pylonDimension = java.util.Objects.requireNonNull(pylonDimension, "pylonDimension");
 
-        this.level = Math.max(
-                1,
-                Math.min(level, 3)
-        );
+        this.level = Math.max(1, Math.min(level, 2));
+        this.pylonActive = pylonActive;
 
         this.members = new ArrayList<>(members);
 
@@ -88,6 +137,14 @@ public class City {
          * пока пустой.
          */
         this.invites = new ArrayList<>();
+        this.projects = new ArrayList<>(projects);
+        this.developmentPrimaryResource = developmentPrimaryResource;
+        this.developmentContributions = new HashMap<>();
+        developmentContributions.forEach((item, amount) -> {
+            if (item != null && amount != null && amount > 0L) {
+                this.developmentContributions.put(item, amount);
+            }
+        });
 
         /*
          * Владелец всегда должен быть
@@ -126,6 +183,16 @@ public class City {
         return pylonPos;
     }
 
+    public ResourceLocation getPylonDimension() {
+        return pylonDimension;
+    }
+
+    void rebindPylon(ResourceLocation dimension, BlockPos pos) {
+        this.pylonDimension = java.util.Objects.requireNonNull(dimension, "dimension");
+        this.pylonPos = java.util.Objects.requireNonNull(pos, "pos").immutable();
+        this.pylonActive = true;
+    }
+
     /*
      * =========================================
      * УРОВЕНЬ ГОРОДА
@@ -138,10 +205,7 @@ public class City {
 
     public void setLevel(int level) {
 
-        this.level = Math.max(
-                1,
-                Math.min(level, 3)
-        );
+        this.level = Math.max(1, Math.min(level, 2));
     }
 
     /*
@@ -155,10 +219,106 @@ public class City {
         return switch (level) {
 
             case 2 -> 150;
-            case 3 -> 250;
-
             default -> 100;
         };
+    }
+
+    public int getProjectCapacity() {
+        return level >= 2 ? 2 : 1;
+    }
+
+    public boolean isPylonActive() {
+        return pylonActive;
+    }
+
+    public void setPylonActive(boolean active) {
+        this.pylonActive = active;
+    }
+
+    public List<CityProject> getProjects() {
+        return projects;
+    }
+
+    public CityProject getProject(UUID projectId) {
+        return projects.stream()
+                .filter(project -> project.projectId().equals(projectId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public boolean addProject(CityProject project) {
+        if (!project.cityId().equals(id)
+                || projects.size() >= getProjectCapacity()
+                || getProject(project.projectId()) != null) {
+            return false;
+        }
+        projects.add(project);
+        if (developmentPrimaryResource == null) {
+            developmentPrimaryResource = project.resourceId();
+        }
+        return true;
+    }
+
+    public CityProject removeProject(UUID projectId) {
+        CityProject project = getProject(projectId);
+        if (project != null) {
+            projects.remove(project);
+        }
+        return project;
+    }
+
+    boolean replaceProject(CityProject replacement) {
+        for (int index = 0; index < projects.size(); index++) {
+            if (projects.get(index).projectId().equals(replacement.projectId())) {
+                projects.set(index, replacement);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public ResourceLocation getDevelopmentPrimaryResource() {
+        return developmentPrimaryResource;
+    }
+
+    void restoreDevelopmentPrimaryResource(ResourceLocation resourceId) {
+        if (resourceId != null) {
+            this.developmentPrimaryResource = resourceId;
+        }
+    }
+
+    public Map<ResourceLocation, Long> getDevelopmentContributions() {
+        return Map.copyOf(developmentContributions);
+    }
+
+    public long getDevelopmentContribution(ResourceLocation itemId) {
+        return developmentContributions.getOrDefault(itemId, 0L);
+    }
+
+    public long contribute(ResourceLocation itemId, long requested, long required) {
+        if (requested <= 0L || required <= 0L) {
+            return 0L;
+        }
+        long current = getDevelopmentContribution(itemId);
+        long accepted = Math.min(requested, Math.max(0L, required - current));
+        if (accepted > 0L) {
+            developmentContributions.put(itemId, current + accepted);
+        }
+        return accepted;
+    }
+
+    public boolean canCompleteLevelTwo() {
+        if (level != 1 || developmentPrimaryResource == null
+                || projects.stream().noneMatch(project ->
+                project.projectType() == CityProjectType.INDUSTRIAL_MINE
+                        && project.resourceId().equals(developmentPrimaryResource))) {
+            return false;
+        }
+        List<CityDevelopmentRequirements.Requirement> requirements =
+                CityDevelopmentRequirements.forLevelTwo(developmentPrimaryResource);
+        return !requirements.isEmpty() && requirements.stream().allMatch(
+                requirement -> getDevelopmentContribution(requirement.itemId()) >= requirement.amount()
+        );
     }
 
     /*

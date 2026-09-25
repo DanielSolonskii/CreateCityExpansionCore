@@ -2,10 +2,13 @@ package com.example.examplemod;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityInvite;
 import com.example.examplemod.city.CityManager;
+import com.example.examplemod.city.CityMapNetworkHandlers;
+import com.example.examplemod.city.CityProjectNetworkHandlers;
 import com.example.examplemod.electrical.*;
 import com.example.examplemod.event.CityProtectionEvents;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import com.example.examplemod.network.CityInviteNotificationPayload;
+import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.block.CityPylonBlock;
 import com.example.examplemod.client.screen.MineControllerScreen;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -17,6 +20,24 @@ import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.item.MagneticAnalyzerItem;
+import com.example.examplemod.item.CityPylonItem;
+import com.example.examplemod.item.MineControllerItem;
+import com.example.examplemod.item.DispatcherKeyItem;
+import com.example.examplemod.network.RailwayCommandPayload;
+import com.example.examplemod.network.RailwayMapPayload;
+import com.example.examplemod.network.RailwayStatePayload;
+import com.example.examplemod.railway.RailwayNetworkHandlers;
+import com.example.examplemod.railway.RailwayManager;
+import com.example.examplemod.mine.MineControllerBlockEntity;
+import com.example.examplemod.mine.MineGatewayBlockEntity;
+import com.example.examplemod.mine.MineNetworkHandlers;
+import com.example.examplemod.network.SelectMineDepositPayload;
+import com.example.examplemod.network.RequestCityMapTilePayload;
+import com.example.examplemod.network.CommissionMineProjectPayload;
+import com.example.examplemod.network.DecommissionCityProjectPayload;
+import com.example.examplemod.network.CityDevelopmentPayload;
+import com.example.examplemod.network.CityPylonStatePayload;
+import com.example.examplemod.network.MineControlPayload;
 import com.example.examplemod.network.SyncCityMemberRemovalPayload;
 import com.example.examplemod.city.CityMember;
 import com.example.examplemod.menu.CityPylonMenu;
@@ -50,6 +71,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -74,6 +96,8 @@ import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -147,6 +171,13 @@ public class CreateCityExpansionCore {
                     MODID
             );
 
+    public static final DeferredRegister<BlockEntityType<?>>
+            BLOCK_ENTITY_TYPES =
+            DeferredRegister.create(
+                    Registries.BLOCK_ENTITY_TYPE,
+                    MODID
+            );
+
     /*
      * =========================================
      * CITY PYLON MENU
@@ -164,6 +195,9 @@ public class CreateCityExpansionCore {
                                     CityPylonMenu::new
                             )
             );
+    public static final DeferredHolder<MenuType<?>, MenuType<com.example.examplemod.menu.EconomyInfrastructureMenu>>
+            ECONOMY_INFRASTRUCTURE_MENU = MENUS.register("economy_infrastructure",
+            () -> IMenuTypeExtension.create(com.example.examplemod.menu.EconomyInfrastructureMenu::new));
     public static final DeferredBlock<MinePowerPortBlock> MINE_POWER_PORT =
             BLOCKS.register(
                     "mine_power_port",
@@ -180,7 +214,20 @@ public class CreateCityExpansionCore {
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
                                     .mapColor(MapColor.METAL)
+                                    .noLootTable()
                     )
+            );
+
+    public static final DeferredHolder<
+            BlockEntityType<?>,
+            BlockEntityType<MineControllerBlockEntity>
+            > MINE_CONTROLLER_BLOCK_ENTITY =
+            BLOCK_ENTITY_TYPES.register(
+                    "mine_controller",
+                    () -> BlockEntityType.Builder.of(
+                            MineControllerBlockEntity::new,
+                            MINE_CONTROLLER.get()
+                    ).build(null)
             );
 
     /*
@@ -233,6 +280,12 @@ public class CreateCityExpansionCore {
                     new Item.Properties()
                             .durability(10)
             );
+    public static final DeferredItem<DispatcherKeyItem> DISPATCHER_KEY =
+            ITEMS.registerItem(
+                    "dispatcher_key",
+                    DispatcherKeyItem::new,
+                    new Item.Properties().stacksTo(1)
+            );
     public static final DeferredItem<Item> MINE_POWER_PORT_ITEM =
             ITEMS.registerItem(
                     "mine_power_port",
@@ -259,18 +312,20 @@ public class CreateCityExpansionCore {
                                     MapColor.METAL
                             )
                             .strength(3.0f)
+                            .noLootTable()
             );
 
-    public static final DeferredItem<BlockItem>
+    public static final DeferredItem<CityPylonItem>
             CITY_PYLON_ITEM =
-            ITEMS.registerSimpleBlockItem(
+            ITEMS.registerItem(
                     "city_pylon",
-                    CITY_PYLON
+                    properties -> new CityPylonItem(CITY_PYLON.get(), properties),
+                    new Item.Properties()
             );
-    public static final DeferredItem<Item> MINE_CONTROLLER_ITEM =
+    public static final DeferredItem<MineControllerItem> MINE_CONTROLLER_ITEM =
             ITEMS.registerItem(
                     "mine_controller",
-                    properties -> new BlockItem(
+                    properties -> new MineControllerItem(
                             MINE_CONTROLLER.get(),
                             properties
                     ),
@@ -321,6 +376,34 @@ public class CreateCityExpansionCore {
                                     .mapColor(MapColor.METAL)
                     )
             );
+
+    public static final DeferredHolder<
+            BlockEntityType<?>,
+            BlockEntityType<MineGatewayBlockEntity>
+            > MINE_GATEWAY_BLOCK_ENTITY =
+            BLOCK_ENTITY_TYPES.register(
+                    "mine_gateway",
+                    () -> BlockEntityType.Builder.of(
+                            MineGatewayBlockEntity::new,
+                            MINE_GATEWAY.get()
+                    ).build(null)
+            );
+
+    public static final DeferredBlock<com.example.examplemod.economy.block.ContractIntakeBlock> CONTRACT_INTAKE =
+            BLOCKS.register("contract_intake", () -> new com.example.examplemod.economy.block.ContractIntakeBlock(
+                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL).noLootTable()));
+    public static final DeferredBlock<com.example.examplemod.economy.block.WarehouseGatewayBlock> WAREHOUSE_GATEWAY =
+            BLOCKS.register("warehouse_gateway", () -> new com.example.examplemod.economy.block.WarehouseGatewayBlock(
+                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL).noLootTable()));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.economy.block.EconomyThroughputBlockEntity>>
+            ECONOMY_THROUGHPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "economy_throughput", () -> BlockEntityType.Builder.of(
+                    com.example.examplemod.economy.block.EconomyThroughputBlockEntity::new,
+                    CONTRACT_INTAKE.get(), WAREHOUSE_GATEWAY.get()).build(null));
+    public static final DeferredItem<BlockItem> CONTRACT_INTAKE_ITEM = ITEMS.registerSimpleBlockItem(
+            "contract_intake", CONTRACT_INTAKE);
+    public static final DeferredItem<BlockItem> WAREHOUSE_GATEWAY_ITEM = ITEMS.registerSimpleBlockItem(
+            "warehouse_gateway", WAREHOUSE_GATEWAY);
 
     /*
      * =========================================
@@ -399,6 +482,7 @@ public class CreateCityExpansionCore {
         modEventBus.addListener(
                 this::registerPayloads
         );
+        modEventBus.addListener(this::registerCapabilities);
 
         BLOCKS.register(
                 modEventBus
@@ -413,6 +497,10 @@ public class CreateCityExpansionCore {
         );
 
         MENUS.register(
+                modEventBus
+        );
+
+        BLOCK_ENTITY_TYPES.register(
                 modEventBus
         );
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
@@ -434,6 +522,7 @@ public class CreateCityExpansionCore {
 
     private void registerCommands(RegisterCommandsEvent event) {
         GeologyCommand.register(event.getDispatcher());
+        com.example.examplemod.economy.EconomyCommands.register(event.getDispatcher());
         /*
          * =========================================
          * CLEAR CITY
@@ -471,6 +560,8 @@ public class CreateCityExpansionCore {
 
                                 return 0;
                             }
+
+                            RailwayManager.get(overworld).removeCity(city.getId());
 
                             player.sendSystemMessage(
                                     Component.literal(
@@ -633,6 +724,12 @@ public class CreateCityExpansionCore {
             event.accept(
                     CITY_PYLON_ITEM
             );
+
+            event.accept(
+                    DISPATCHER_KEY
+            );
+            event.accept(CONTRACT_INTAKE_ITEM);
+            event.accept(WAREHOUSE_GATEWAY_ITEM);
         }
     }
 
@@ -648,6 +745,170 @@ public class CreateCityExpansionCore {
 
         PayloadRegistrar registrar =
                 event.registrar("1");
+
+        registrar.playToServer(
+                com.example.examplemod.network.EconomyCommandPayload.TYPE,
+                com.example.examplemod.network.EconomyCommandPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        com.example.examplemod.economy.EconomyNetworkHandlers.handle(player, payload);
+                    }
+                })
+        );
+        registrar.playToClient(
+                com.example.examplemod.network.EconomyStatePayload.TYPE,
+                com.example.examplemod.network.EconomyStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                        menu.applyEconomyState(payload);
+                    }
+                })
+        );
+        registrar.playToServer(
+                com.example.examplemod.network.InfrastructureCommandPayload.TYPE,
+                com.example.examplemod.network.InfrastructureCommandPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        com.example.examplemod.economy.InfrastructureNetworkHandlers.handle(player, payload);
+                    }
+                })
+        );
+        registrar.playToClient(
+                com.example.examplemod.network.InfrastructureStatePayload.TYPE,
+                com.example.examplemod.network.InfrastructureStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof com.example.examplemod.menu.EconomyInfrastructureMenu menu) {
+                        menu.applyState(payload);
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                RailwayCommandPayload.TYPE,
+                RailwayCommandPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        RailwayNetworkHandlers.handle(player, payload);
+                    }
+                })
+        );
+
+        registrar.playToClient(
+                RailwayStatePayload.TYPE,
+                RailwayStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                        menu.applyRailwayState(payload);
+                    }
+                })
+        );
+
+        registrar.playToClient(
+                RailwayMapPayload.TYPE,
+                RailwayMapPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                        menu.acceptRailwayMap(payload);
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                RequestCityMapTilePayload.TYPE,
+                RequestCityMapTilePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        CityMapNetworkHandlers.requestTile(player, payload);
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                CommissionMineProjectPayload.TYPE,
+                CommissionMineProjectPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        MineNetworkHandlers.commission(
+                                player,
+                                payload.controllerPos(),
+                                payload.cityId(),
+                                payload.depositId()
+                        );
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                DecommissionCityProjectPayload.TYPE,
+                DecommissionCityProjectPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        CityProjectNetworkHandlers.decommission(
+                                player, payload.pylonPos(), payload.projectId()
+                        );
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                CityDevelopmentPayload.TYPE,
+                CityDevelopmentPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        CityProjectNetworkHandlers.development(
+                                player, payload.pylonPos(), payload.action()
+                        );
+                    }
+                })
+        );
+
+        registrar.playToClient(
+                CityPylonStatePayload.TYPE,
+                CityPylonStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                        menu.applyState(payload);
+                    }
+                })
+        );
+
+        registrar.playToClient(
+                CityMapTilePayload.TYPE,
+                CityMapTilePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                        menu.acceptMapTile(payload);
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                SelectMineDepositPayload.TYPE,
+                SelectMineDepositPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        MineNetworkHandlers.selectDeposit(
+                                player,
+                                payload.controllerPos(),
+                                payload.depositId()
+                        );
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                MineControlPayload.TYPE,
+                MineControlPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        MineNetworkHandlers.control(
+                                player,
+                                payload.controllerPos(),
+                                payload.command()
+                        );
+                    }
+                })
+        );
         /*
          * =========================================
          * СИНХРОНИЗАЦИЯ РОЛИ НА КЛИЕНТ
@@ -757,18 +1018,15 @@ public class CreateCityExpansionCore {
                         BlockPos pylonPos =
                                 payload.pylonPos();
 
-                        ServerLevel overworld =
-                                serverPlayer
-                                        .serverLevel()
-                                        .getServer()
-                                        .overworld();
+                        ServerLevel pylonLevel = serverPlayer.serverLevel();
+                        ServerLevel overworld = pylonLevel.getServer().overworld();
 
                         /*
                          * Проверяем пилон
                          */
 
                         if (
-                                !overworld
+                                !pylonLevel
                                         .getBlockState(
                                                 pylonPos
                                         )
@@ -831,6 +1089,7 @@ public class CreateCityExpansionCore {
                                 cityManager.createCity(
                                         name.trim(),
                                         playerId,
+                                        pylonLevel.dimension().location(),
                                         pylonPos
                                 );
 
@@ -856,8 +1115,8 @@ public class CreateCityExpansionCore {
 
                         ServerLevel level = sender.serverLevel();
 
-                        City city = CityManager.get(level)
-                                .getCityByPylon(payload.pylonPos());
+                        City city = CityManager.get(level.getServer().overworld())
+                                .getCityByPylon(level.dimension().location(), payload.pylonPos());
 
                         if (city == null) {
                             return;
@@ -991,6 +1250,7 @@ public class CreateCityExpansionCore {
 
                         City city =
                                 cityManager.getCityByPylon(
+                                        serverPlayer.serverLevel().dimension().location(),
                                         payload.pylonPos()
                                 );
 
@@ -1200,6 +1460,7 @@ public class CreateCityExpansionCore {
 
                         City city =
                                 cityManager.getCityByPylon(
+                                        serverPlayer.serverLevel().dimension().location(),
                                         payload.pylonPos()
                                 );
 
@@ -1342,6 +1603,7 @@ public class CreateCityExpansionCore {
 
                         City city =
                                 cityManager.getCityByPylon(
+                                        player.serverLevel().dimension().location(),
                                         payload.pylonPos()
                                 );
 
@@ -1450,6 +1712,19 @@ public class CreateCityExpansionCore {
                         );
                     });
                 }
+        );
+    }
+
+    private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                MINE_GATEWAY_BLOCK_ENTITY.get(),
+                (gateway, side) -> gateway.itemHandler()
+        );
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                ECONOMY_THROUGHPUT_BLOCK_ENTITY.get(),
+                (gateway, side) -> gateway.itemHandler(side)
         );
     }
 

@@ -1,0 +1,80 @@
+package com.example.examplemod.network;
+
+import com.example.examplemod.CreateCityExpansionCore;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
+
+public record CityMapTilePayload(
+        BlockPos pylonPos,
+        ResourceLocation dimensionId,
+        int tileX,
+        int tileZ,
+        boolean complete,
+        int[] colors
+) implements CustomPacketPayload {
+
+    public static final int SAMPLE_COUNT = 32;
+    public static final int SAMPLE_STEP = 2;
+    public static final int WORLD_SIZE = SAMPLE_COUNT * SAMPLE_STEP;
+    public static final int COLOR_COUNT = SAMPLE_COUNT * SAMPLE_COUNT;
+
+    public static final Type<CityMapTilePayload> TYPE = new Type<>(
+            ResourceLocation.fromNamespaceAndPath(
+                    CreateCityExpansionCore.MODID,
+                    "city_map_tile"
+            )
+    );
+
+    public static final StreamCodec<RegistryFriendlyByteBuf, CityMapTilePayload>
+            STREAM_CODEC = StreamCodec.of(
+                    (buffer, payload) -> {
+                        BlockPos.STREAM_CODEC.encode(buffer, payload.pylonPos());
+                        buffer.writeResourceLocation(payload.dimensionId());
+                        buffer.writeInt(payload.tileX());
+                        buffer.writeInt(payload.tileZ());
+                        buffer.writeBoolean(payload.complete());
+                        for (int color : payload.colors()) {
+                            buffer.writeInt(color);
+                        }
+                    },
+                    buffer -> {
+                        BlockPos pylonPos = BlockPos.STREAM_CODEC.decode(buffer);
+                        ResourceLocation dimension = buffer.readResourceLocation();
+                        int tileX = buffer.readInt();
+                        int tileZ = buffer.readInt();
+                        boolean complete = buffer.readBoolean();
+                        int[] colors = new int[COLOR_COUNT];
+                        for (int index = 0; index < colors.length; index++) {
+                            colors[index] = buffer.readInt();
+                        }
+                        return new CityMapTilePayload(
+                                pylonPos,
+                                dimension,
+                                tileX,
+                                tileZ,
+                                complete,
+                                colors
+                        );
+                    }
+            );
+
+    public CityMapTilePayload {
+        if (colors.length != COLOR_COUNT) {
+            throw new IllegalArgumentException("Invalid city map tile color count");
+        }
+        colors = colors.clone();
+    }
+
+    @Override
+    public int[] colors() {
+        return colors.clone();
+    }
+
+    @Override
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
+    }
+}

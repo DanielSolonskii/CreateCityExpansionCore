@@ -136,14 +136,7 @@ public class MultiblockPreviewRenderer {
                                 4
                         );
 
-        /*
-         * Ищем установленный Power Port.
-         */
-        BlockPos powerPortPos =
-                findPowerPort(
-                        minecraft,
-                        origin
-                );
+        BlockPos powerPortPos = findPowerPort(minecraft, origin);
 
         /*
          * ========================================
@@ -229,21 +222,9 @@ public class MultiblockPreviewRenderer {
                                     z
                             );
 
-                    /*
-                     * Сервисное пространство
-                     * Power Port.
-                     *
-                     * Там вообще ничего
-                     * не должно быть.
-                     */
                     if (isPowerPortServiceSpace(
-                            x,
-                            y,
-                            z,
-                            powerPortPos,
-                            origin
+                            x, y, z, powerPortPos, origin
                     )) {
-
                         continue;
                     }
 
@@ -938,21 +919,7 @@ public class MultiblockPreviewRenderer {
 
                 if (test.equals(pos)) {
 
-                    /*
-                     * Проверяем, что оба
-                     * сервисных места могут
-                     * существовать.
-                     *
-                     * Если они заняты —
-                     * порт считается неправильным.
-                     */
-                    if (!serviceSpaceIsFree(
-                            minecraft,
-                            origin,
-                            x,
-                            z
-                    )) {
-
+                    if (!serviceSpaceIsFree(minecraft, origin, x, z)) {
                         return false;
                     }
 
@@ -1101,24 +1068,8 @@ public class MultiblockPreviewRenderer {
                     continue;
                 }
 
-                /*
-                 * Gateway не может занимать
-                 * сервисную клетку Power Port.
-                 */
-                BlockPos powerPort =
-                        findPowerPort(
-                                minecraft,
-                                origin
-                        );
-
-                if (isPowerPortServiceSpace(
-                        x,
-                        1,
-                        z,
-                        powerPort,
-                        origin
-                )) {
-
+                BlockPos powerPort = findPowerPort(minecraft, origin);
+                if (isPowerPortServiceSpace(x, 1, z, powerPort, origin)) {
                     continue;
                 }
 

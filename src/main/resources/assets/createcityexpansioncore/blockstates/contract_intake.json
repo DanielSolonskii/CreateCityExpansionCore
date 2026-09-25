@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"createcityexpansioncore:block/contract_intake"},"facing=east":{"model":"createcityexpansioncore:block/contract_intake","y":90},"facing=south":{"model":"createcityexpansioncore:block/contract_intake","y":180},"facing=west":{"model":"createcityexpansioncore:block/contract_intake","y":270}}}

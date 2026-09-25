@@ -24,7 +24,7 @@ public class CityRoleScreen extends Screen {
             UUID targetPlayer,
             String playerName
     ) {
-        super(Component.literal("Управление ролью"));
+        super(Component.translatable("gui.createcityexpansioncore.city.role.title"));
 
         this.parent = parent;
         this.pylonPos = pylonPos;
@@ -58,7 +58,7 @@ public class CityRoleScreen extends Screen {
                         top + 60,
                         250,
                         25,
-                        Component.literal("АДМИНИСТРАТОР"),
+                        Component.translatable("role.createcityexpansioncore.admin"),
                         button -> selectRole(
                                 CityMember.Role.ADMIN
                         )
@@ -77,7 +77,7 @@ public class CityRoleScreen extends Screen {
                         top + 90,
                         250,
                         25,
-                        Component.literal("СТРОИТЕЛЬ"),
+                        Component.translatable("role.createcityexpansioncore.builder"),
                         button -> selectRole(
                                 CityMember.Role.BUILDER
                         )
@@ -96,7 +96,7 @@ public class CityRoleScreen extends Screen {
                         top + 120,
                         250,
                         25,
-                        Component.literal("ЖИТЕЛЬ"),
+                        Component.translatable("role.createcityexpansioncore.resident"),
                         button -> selectRole(
                                 CityMember.Role.RESIDENT
                         )
@@ -114,7 +114,7 @@ public class CityRoleScreen extends Screen {
                         top + 160,
                         250,
                         25,
-                        Component.literal("ИСКЛЮЧИТЬ ИЗ ГОРОДА"),
+                        Component.translatable("gui.createcityexpansioncore.city.role.remove"),
                         button -> {
 
                             if (this.minecraft != null) {
@@ -143,7 +143,7 @@ public class CityRoleScreen extends Screen {
                         top + 195,
                         250,
                         25,
-                        Component.literal("ОТМЕНА"),
+                        Component.translatable("gui.createcityexpansioncore.common.cancel"),
                         button -> this.onClose()
                 )
         );
@@ -283,9 +283,7 @@ public class CityRoleScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "УПРАВЛЕНИЕ РОЛЬЮ"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.role.heading"),
                 left + 15,
                 top + 10,
                 0xFFFFFF
@@ -315,9 +313,7 @@ public class CityRoleScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "Выберите новую роль"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.role.select"),
                 left + 25,
                 top + 48,
                 0x777777

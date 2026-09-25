@@ -2,6 +2,7 @@ package com.example.examplemod.item;
 
 import com.example.examplemod.geology.GeologicalRegion;
 import com.example.examplemod.geology.GeologyManager;
+import com.example.examplemod.geology.GeologyRegionSnapshot;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 
 import net.minecraft.core.BlockPos;
@@ -57,33 +58,6 @@ public class MagneticAnalyzerItem extends Item {
 
         /*
          * =========================================
-         * ПОЛУЧАЕМ БОГАТСТВО РЕСУРСОВ
-         * =========================================
-         */
-
-        int copper = getResource(
-                region,
-                "copper"
-        );
-
-        int iron = getResource(
-                region,
-                "iron"
-        );
-
-        int coal = getResource(
-                region,
-                "coal"
-        );
-
-        int zinc = getResource(
-                region,
-                "zinc"
-        );
-
-
-        /*
-         * =========================================
          * ИСПОЛЬЗУЕМ ОДИН ЗАРЯД АНАЛИЗАТОРА
          * =========================================
          */
@@ -114,10 +88,7 @@ public class MagneticAnalyzerItem extends Item {
         GeologyAnalysisPayload payload =
                 new GeologyAnalysisPayload(
                         analyzedPos,
-                        copper,
-                        iron,
-                        coal,
-                        zinc,
+                        GeologyRegionSnapshot.from(region),
                         remainingUses
                 );
 
@@ -127,30 +98,5 @@ public class MagneticAnalyzerItem extends Item {
 
 
         return InteractionResult.SUCCESS;
-    }
-
-
-    /*
-     * =========================================
-     * ПОЛУЧЕНИЕ РЕСУРСА
-     * =========================================
-     */
-
-    private int getResource(
-            GeologicalRegion region,
-            String name
-    ) {
-
-        return region.getResources()
-                .entrySet()
-                .stream()
-                .filter(entry ->
-                        entry.getKey()
-                                .getPath()
-                                .equals(name)
-                )
-                .mapToInt(java.util.Map.Entry::getValue)
-                .findFirst()
-                .orElse(0);
     }
 }

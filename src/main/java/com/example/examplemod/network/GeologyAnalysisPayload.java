@@ -1,51 +1,60 @@
 package com.example.examplemod.network;
 
+import com.example.examplemod.CreateCityExpansionCore;
+import com.example.examplemod.geology.GeologyRegionSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.Objects;
+
 public record GeologyAnalysisPayload(
         BlockPos position,
-        int copper,
-        int iron,
-        int coal,
-        int zinc,
+        GeologyRegionSnapshot region,
         int remainingUses
 ) implements CustomPacketPayload {
 
-    public static final Type<GeologyAnalysisPayload> TYPE =
-            new Type<>(
-                    ResourceLocation.fromNamespaceAndPath(
-                            "createcityexpansioncore",
-                            "geology_analysis"
-                    )
-            );
+    public static final Type<GeologyAnalysisPayload> TYPE = new Type<>(
+            ResourceLocation.fromNamespaceAndPath(
+                    CreateCityExpansionCore.MODID,
+                    "geology_analysis"
+            )
+    );
 
     public static final StreamCodec<RegistryFriendlyByteBuf, GeologyAnalysisPayload>
-            STREAM_CODEC =
-            StreamCodec.composite(
-                    BlockPos.STREAM_CODEC,
-                    GeologyAnalysisPayload::position,
-
-                    net.minecraft.network.codec.ByteBufCodecs.INT,
-                    GeologyAnalysisPayload::copper,
-
-                    net.minecraft.network.codec.ByteBufCodecs.INT,
-                    GeologyAnalysisPayload::iron,
-
-                    net.minecraft.network.codec.ByteBufCodecs.INT,
-                    GeologyAnalysisPayload::coal,
-
-                    net.minecraft.network.codec.ByteBufCodecs.INT,
-                    GeologyAnalysisPayload::zinc,
-
-                    net.minecraft.network.codec.ByteBufCodecs.INT,
-                    GeologyAnalysisPayload::remainingUses,
-
-                    GeologyAnalysisPayload::new
+            STREAM_CODEC = StreamCodec.of(
+                    GeologyAnalysisPayload::encode,
+                    GeologyAnalysisPayload::decode
             );
+
+    public GeologyAnalysisPayload {
+        Objects.requireNonNull(position, "position");
+        Objects.requireNonNull(region, "region");
+        if (remainingUses < 0) {
+            throw new IllegalArgumentException("remainingUses cannot be negative");
+        }
+    }
+
+    private static void encode(
+            RegistryFriendlyByteBuf buffer,
+            GeologyAnalysisPayload payload
+    ) {
+        BlockPos.STREAM_CODEC.encode(buffer, payload.position());
+        GeologySnapshotCodecs.encodeRegion(buffer, payload.region());
+        buffer.writeVarInt(payload.remainingUses());
+    }
+
+    private static GeologyAnalysisPayload decode(
+            RegistryFriendlyByteBuf buffer
+    ) {
+        return new GeologyAnalysisPayload(
+                BlockPos.STREAM_CODEC.decode(buffer),
+                GeologySnapshotCodecs.decodeRegion(buffer),
+                buffer.readVarInt()
+        );
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

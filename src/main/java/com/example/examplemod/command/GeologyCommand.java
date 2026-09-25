@@ -10,10 +10,19 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.List;
+
 public class GeologyCommand {
 
     private static final String MOD_ID =
             "createcityexpansioncore";
+
+    private static final List<ResourceLocation> LEGACY_RESOURCES = List.of(
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "copper"),
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "iron"),
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "coal"),
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "zinc")
+    );
 
     public static void register(
             CommandDispatcher<CommandSourceStack> dispatcher
@@ -315,22 +324,13 @@ public class GeologyCommand {
             GeologicalRegion region
     ) {
 
-        if (region.getResources().isEmpty()) {
-            return 0;
-        }
-
         int total = 0;
 
-        for (
-                int value :
-                region.getResources().values()
-        ) {
-
-            total += value;
+        for (ResourceLocation resource : LEGACY_RESOURCES) {
+            total += region.getRichness(resource);
         }
 
-        return total /
-                region.getResources().size();
+        return total / LEGACY_RESOURCES.size();
     }
 
     /**

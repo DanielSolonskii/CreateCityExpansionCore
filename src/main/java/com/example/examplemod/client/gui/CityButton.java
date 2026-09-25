@@ -5,14 +5,17 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.Minecraft;
 public class CityButton extends Button {
-    private boolean active = false;
+    public enum Style { CITY, INDUSTRIAL, DANGER }
+
+    private boolean selected;
+    private final Style style;
 
     public void setActive(boolean active) {
-        this.active = active;
+        this.selected = active;
     }
 
     public boolean isActive() {
-        return this.active;
+        return this.selected;
     }
     public CityButton(
             int x,
@@ -22,6 +25,11 @@ public class CityButton extends Button {
             Component message,
             OnPress onPress
     ) {
+        this(x, y, width, height, message, onPress, Style.CITY);
+    }
+
+    public CityButton(int x, int y, int width, int height, Component message,
+                      OnPress onPress, Style style) {
         super(
                 x,
                 y,
@@ -31,6 +39,7 @@ public class CityButton extends Button {
                 onPress,
                 DEFAULT_NARRATION
         );
+        this.style = style;
     }
 
     @Override
@@ -45,17 +54,25 @@ public class CityButton extends Button {
 
         int backgroundColor;
         int borderColor;
-        int textColor = 0xFFE8E8E8;
+        int textColor = this.active ? 0xFFE8EEF2 : 0xFF68767C;
+        int accent = switch (style) {
+            case CITY -> 0xFFD09A3A;
+            case INDUSTRIAL -> 0xFF58D7FF;
+            case DANGER -> 0xFFFF5A4F;
+        };
 
-        if (active) {
-            backgroundColor = 0xFF303030;
-            borderColor = 0xFFD09A3A;
+        if (!this.active) {
+            backgroundColor = 0xFF171D20;
+            borderColor = 0xFF344148;
+        } else if (selected) {
+            backgroundColor = style == Style.INDUSTRIAL ? 0xFF17303A : 0xFF303030;
+            borderColor = accent;
         } else if (hovered) {
-            backgroundColor = 0xFF3A3A3A;
-            borderColor = 0xFFD09A3A;
+            backgroundColor = style == Style.INDUSTRIAL ? 0xFF16323D : 0xFF3A3A3A;
+            borderColor = accent;
         } else {
-            backgroundColor = 0xFF292929;
-            borderColor = 0xFF555555;
+            backgroundColor = style == Style.INDUSTRIAL ? 0xFF101E25 : 0xFF292929;
+            borderColor = style == Style.INDUSTRIAL ? 0xFF34515E : 0xFF555555;
         }
 
         /*
@@ -88,9 +105,7 @@ public class CityButton extends Button {
                 this.getY() + 2,
                 this.getX() + this.width - 2,
                 this.getY() + 3,
-                hovered
-                        ? 0xFF6A6A6A
-                        : 0xFF454545
+                this.active && hovered ? (accent & 0x66FFFFFF) : 0xFF27343A
         );
 
         /*
@@ -107,10 +122,14 @@ public class CityButton extends Button {
         /*
          * Текст
          */
-        int textWidth =
-                Minecraft.getInstance().font.width(
-                        this.getMessage()
-                );
+        Component label = this.getMessage();
+        int availableWidth = Math.max(1, this.width - 8);
+        String fitted = Minecraft.getInstance().font.plainSubstrByWidth(label.getString(), availableWidth);
+        if (!fitted.equals(label.getString()) && fitted.length() > 2) {
+            fitted = Minecraft.getInstance().font.plainSubstrByWidth(
+                    label.getString(), Math.max(1, availableWidth - 6)) + "…";
+        }
+        int textWidth = Minecraft.getInstance().font.width(fitted);
 
         int textX =
                 this.getX()
@@ -122,7 +141,7 @@ public class CityButton extends Button {
 
         guiGraphics.drawString(
                 Minecraft.getInstance().font,
-                this.getMessage(),
+                fitted,
                 textX,
                 textY,
                 textColor

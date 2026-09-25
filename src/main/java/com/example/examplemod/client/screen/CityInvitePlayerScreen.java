@@ -31,9 +31,7 @@ public class CityInvitePlayerScreen extends Screen {
     ) {
 
         super(
-                Component.literal(
-                        "Пригласить игрока"
-                )
+                Component.translatable("gui.createcityexpansioncore.city.invite_player")
         );
 
         this.parent = parent;
@@ -79,7 +77,7 @@ public class CityInvitePlayerScreen extends Screen {
 
         this.addRenderableWidget(
                 Button.builder(
-                        Component.literal("НАЗАД"),
+                        Component.translatable("gui.createcityexpansioncore.common.back"),
                         button -> closeScreen()
                 ).bounds(
                         this.width / 2 - 75,
@@ -208,9 +206,7 @@ public class CityInvitePlayerScreen extends Screen {
 
         guiGraphics.drawCenteredString(
                 this.font,
-                Component.literal(
-                        "ПРИГЛАСИТЬ В ГОРОД"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.invite_to_city"),
                 this.width / 2,
                 top + 14,
                 0xFFFFFF
@@ -218,9 +214,7 @@ public class CityInvitePlayerScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "ОНЛАЙН ИГРОКИ"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.online_players"),
                 left + 20,
                 top + 67,
                 0xAAAAAA
@@ -266,9 +260,7 @@ public class CityInvitePlayerScreen extends Screen {
 
             guiGraphics.drawCenteredString(
                     this.font,
-                    Component.literal(
-                            "Нет доступных игроков"
-                    ),
+                    Component.translatable("gui.createcityexpansioncore.city.no_players"),
                     this.width / 2,
                     top + 125,
                     0x888888
@@ -322,9 +314,7 @@ public class CityInvitePlayerScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "ПРИГЛАСИТЬ"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.invite"),
                 right - 80,
                 top + 9,
                 hovered

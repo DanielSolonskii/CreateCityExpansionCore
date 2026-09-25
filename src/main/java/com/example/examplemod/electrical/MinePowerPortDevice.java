@@ -7,21 +7,15 @@ import com.george_vi.electroenergetics.foundation.device.SimpleElectricalDevice;
 import com.george_vi.electroenergetics.simulation.BridgeCollector;
 import com.george_vi.electroenergetics.simulation.SimulationResults;
 
+import com.example.examplemod.mine.MinePowerAccess;
+import com.example.examplemod.mine.MinePowerDemand;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
 public class MinePowerPortDevice extends SimpleElectricalDevice {
 
-    /**
-     * Сопротивление нагрузки шахты.
-     *
-     * При 24 V:
-     *
-     * P = V² / R
-     * P = 24² / 4.8
-     * P = 120 W
-     */
-    private static final double RESISTANCE = 4.8;
+    private final Level level;
 
     private double voltage;
     private double current;
@@ -34,17 +28,18 @@ public class MinePowerPortDevice extends SimpleElectricalDevice {
             SimulatedDeviceType<?> type
     ) {
         super(level, pos, deviceSD, type);
+        this.level = level;
     }
 
     @Override
     public void preTick(BridgeCollector bridge) {
 
-        bridge.builder(pos)
-                .resistor(
-                        0,
-                        1,
-                        RESISTANCE
-                );
+        double requestedPower = MinePowerDemand.workingLoad(level, pos)
+                ? MinePowerAccess.NOMINAL_POWER_WATTS
+                : MinePowerAccess.STANDBY_POWER_WATTS;
+        double resistance = MinePowerAccess.NOMINAL_VOLTAGE
+                * MinePowerAccess.NOMINAL_VOLTAGE / requestedPower;
+        bridge.builder(pos).resistor(0, 1, resistance);
     }
 
     @Override

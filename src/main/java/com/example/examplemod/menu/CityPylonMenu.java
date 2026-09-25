@@ -2,8 +2,21 @@ package com.example.examplemod.menu;
 
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.CityMember;
+import com.example.examplemod.city.CityProjectSnapshot;
+import com.example.examplemod.city.CityProjectType;
+import com.example.examplemod.city.CityDevelopmentRequirementSnapshot;
+import com.example.examplemod.city.CityDevelopmentRequirements;
+import com.example.examplemod.network.CityMapTilePayload;
+import com.example.examplemod.network.CityPylonStatePayload;
+import com.example.examplemod.network.RailwayMapPayload;
+import com.example.examplemod.network.RailwayStatePayload;
+import com.example.examplemod.network.EconomyStatePayload;
+import com.example.examplemod.railway.RailwayLineSnapshot;
+import com.example.examplemod.railway.RailwayStationSnapshot;
+import com.example.examplemod.railway.RailwayTrainSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -16,12 +29,24 @@ import java.util.UUID;
 public class CityPylonMenu extends AbstractContainerMenu {
 
     private final BlockPos pylonPos;
+    private final ResourceLocation dimensionId;
     private final boolean hasCity;
     private final String cityName;
-    private final int cityLevel;
-    private final int territorySize;
+    private int cityLevel;
+    private int territorySize;
     private final UUID owner;
     private final List<CityMember> members;
+    private int projectCapacity;
+    private List<CityProjectSnapshot> projects;
+    private ResourceLocation developmentPrimaryResource;
+    private List<CityDevelopmentRequirementSnapshot> developmentRequirements;
+    private boolean pylonActive;
+    private final List<CityMapTilePayload> pendingMapTiles = new ArrayList<>();
+    private List<RailwayStationSnapshot> railwayStations = new ArrayList<>();
+    private List<RailwayTrainSnapshot> railwayTrains = new ArrayList<>();
+    private List<RailwayLineSnapshot> railwayLines = new ArrayList<>();
+    private RailwayMapPayload pendingRailwayMap;
+    private EconomyStatePayload economyState;
 
     public CityPylonMenu(
             int containerId,
@@ -32,13 +57,53 @@ public class CityPylonMenu extends AbstractContainerMenu {
                 containerId,
                 inventory,
                 data.readBlockPos(),
+                data.readResourceLocation(),
                 data.readBoolean(),
                 data.readUtf(),
                 data.readVarInt(),
                 data.readVarInt(),
                 data.readBoolean() ? data.readUUID() : null,
-                readMembers(data)
+                readMembers(data),
+                data.readVarInt(),
+                data.readBoolean(),
+                readProjects(data),
+                data.readBoolean() ? data.readResourceLocation() : null,
+                readDevelopmentRequirements(data)
         );
+    }
+
+    private static List<CityDevelopmentRequirementSnapshot> readDevelopmentRequirements(
+            RegistryFriendlyByteBuf data
+    ) {
+        int count = Math.min(16, Math.max(0, data.readVarInt()));
+        List<CityDevelopmentRequirementSnapshot> result = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            result.add(new CityDevelopmentRequirementSnapshot(
+                    data.readEnum(CityDevelopmentRequirements.RequirementGroup.class),
+                    data.readResourceLocation(),
+                    data.readVarLong(),
+                    data.readVarLong()
+            ));
+        }
+        return result;
+    }
+
+    private static List<CityProjectSnapshot> readProjects(RegistryFriendlyByteBuf data) {
+        int count = Math.min(64, Math.max(0, data.readVarInt()));
+        List<CityProjectSnapshot> result = new ArrayList<>(count);
+        for (int index = 0; index < count; index++) {
+            result.add(new CityProjectSnapshot(
+                    data.readUUID(),
+                    data.readEnum(CityProjectType.class),
+                    data.readResourceLocation(),
+                    data.readBlockPos(),
+                    data.readUUID(),
+                    data.readResourceLocation(),
+                    data.readDouble(),
+                    data.readUtf(128)
+            ));
+        }
+        return result;
     }
 
     private static List<CityMember> readMembers(
@@ -81,10 +146,16 @@ public class CityPylonMenu extends AbstractContainerMenu {
                 containerId,
                 inventory,
                 pylonPos,
+                inventory.player.level().dimension().location(),
                 false,
                 "",
                 1,
                 100,
+                null,
+                new ArrayList<>(),
+                1,
+                true,
+                new ArrayList<>(),
                 null,
                 new ArrayList<>()
         );
@@ -94,12 +165,18 @@ public class CityPylonMenu extends AbstractContainerMenu {
             int containerId,
             Inventory inventory,
             BlockPos pylonPos,
+            ResourceLocation dimensionId,
             boolean hasCity,
             String cityName,
             int cityLevel,
             int territorySize,
             UUID owner,
-            List<CityMember> members
+            List<CityMember> members,
+            int projectCapacity,
+            boolean pylonActive,
+            List<CityProjectSnapshot> projects,
+            ResourceLocation developmentPrimaryResource,
+            List<CityDevelopmentRequirementSnapshot> developmentRequirements
     ) {
         super(
                 CreateCityExpansionCore.CITY_PYLON_MENU.get(),
@@ -107,16 +184,26 @@ public class CityPylonMenu extends AbstractContainerMenu {
         );
 
         this.pylonPos = pylonPos;
+        this.dimensionId = dimensionId;
         this.hasCity = hasCity;
         this.cityName = cityName;
         this.cityLevel = cityLevel;
         this.territorySize = territorySize;
         this.owner = owner;
         this.members = new ArrayList<>(members);
+        this.projectCapacity = projectCapacity;
+        this.pylonActive = pylonActive;
+        this.projects = new ArrayList<>(projects);
+        this.developmentPrimaryResource = developmentPrimaryResource;
+        this.developmentRequirements = new ArrayList<>(developmentRequirements);
     }
 
     public BlockPos getPylonPos() {
         return pylonPos;
+    }
+
+    public ResourceLocation getDimensionId() {
+        return dimensionId;
     }
 
     public boolean hasCity() {
@@ -146,6 +233,87 @@ public class CityPylonMenu extends AbstractContainerMenu {
     public int getMemberCount() {
         return members.size();
     }
+
+    public int getProjectCapacity() { return projectCapacity; }
+    public List<CityProjectSnapshot> getProjects() { return List.copyOf(projects); }
+    public ResourceLocation getDevelopmentPrimaryResource() { return developmentPrimaryResource; }
+    public List<CityDevelopmentRequirementSnapshot> getDevelopmentRequirements() {
+        return List.copyOf(developmentRequirements);
+    }
+    public boolean areDevelopmentRequirementsComplete() {
+        return !developmentRequirements.isEmpty()
+                && developmentRequirements.stream().allMatch(
+                CityDevelopmentRequirementSnapshot::complete
+        );
+    }
+    public boolean isPylonActive() { return pylonActive; }
+
+    public void applyState(CityPylonStatePayload payload) {
+        if (!this.pylonPos.equals(payload.pylonPos())) {
+            return;
+        }
+        this.cityLevel = payload.cityLevel();
+        this.territorySize = payload.cityLevel() >= 2 ? 150 : 100;
+        this.projectCapacity = payload.projectCapacity();
+        this.projects = new ArrayList<>(payload.projects());
+        this.developmentPrimaryResource = payload.primaryResource();
+        this.developmentRequirements = new ArrayList<>(payload.developmentRequirements());
+    }
+
+    public void acceptMapTile(CityMapTilePayload payload) {
+        if (!this.pylonPos.equals(payload.pylonPos())
+                || !this.dimensionId.equals(payload.dimensionId())) {
+            return;
+        }
+        if (this.pendingMapTiles.size() >= 64) {
+            this.pendingMapTiles.remove(0);
+        }
+        this.pendingMapTiles.add(payload);
+    }
+
+    public List<CityMapTilePayload> drainMapTiles() {
+        List<CityMapTilePayload> result = new ArrayList<>(this.pendingMapTiles);
+        this.pendingMapTiles.clear();
+        return result;
+    }
+
+    public List<RailwayStationSnapshot> getRailwayStations() {
+        return List.copyOf(this.railwayStations);
+    }
+
+    public List<RailwayTrainSnapshot> getRailwayTrains() {
+        return List.copyOf(this.railwayTrains);
+    }
+
+    public List<RailwayLineSnapshot> getRailwayLines() {
+        return List.copyOf(this.railwayLines);
+    }
+
+    public void applyRailwayState(RailwayStatePayload payload) {
+        if (!this.pylonPos.equals(payload.pylonPos())) {
+            return;
+        }
+        this.railwayStations = new ArrayList<>(payload.stations());
+        this.railwayTrains = new ArrayList<>(payload.trains());
+        this.railwayLines = new ArrayList<>(payload.lines());
+    }
+
+    public void acceptRailwayMap(RailwayMapPayload payload) {
+        if (this.pylonPos.equals(payload.pylonPos())
+                && this.dimensionId.equals(payload.dimension())) {
+            this.pendingRailwayMap = payload;
+        }
+    }
+
+    public RailwayMapPayload drainRailwayMap() {
+        RailwayMapPayload result = this.pendingRailwayMap;
+        this.pendingRailwayMap = null;
+        return result;
+    }
+    public void applyEconomyState(EconomyStatePayload payload) {
+        if (this.pylonPos.equals(payload.pylonPos())) this.economyState = payload;
+    }
+    public EconomyStatePayload getEconomyState() { return economyState; }
     public void updateMemberRole(
             UUID playerId,
             CityMember.Role role

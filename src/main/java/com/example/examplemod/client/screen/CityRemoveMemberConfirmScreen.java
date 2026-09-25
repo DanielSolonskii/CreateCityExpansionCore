@@ -22,7 +22,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
             UUID targetPlayer,
             String playerName
     ) {
-        super(Component.literal("Исключение из города"));
+        super(Component.translatable("gui.createcityexpansioncore.city.remove_member.title"));
 
         this.parent = parent;
         this.pylonPos = pylonPos;
@@ -48,7 +48,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
 
         this.addRenderableWidget(
                 Button.builder(
-                        Component.literal("ОТМЕНА"),
+                        Component.translatable("gui.createcityexpansioncore.common.cancel"),
                         button -> {
 
                             this.minecraft.setScreen(
@@ -71,7 +71,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
 
         this.addRenderableWidget(
                 Button.builder(
-                        Component.literal("ИСКЛЮЧИТЬ"),
+                        Component.translatable("gui.createcityexpansioncore.city.remove_member.confirm"),
                         button -> {
 
                             if (this.minecraft
@@ -202,9 +202,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "ИСКЛЮЧЕНИЕ ИЗ ГОРОДА"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.remove_member.heading"),
                 left + 20,
                 top + 18,
                 0xFFFFFF
@@ -218,9 +216,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "Игрок будет исключён из города:"
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.remove_member.description"),
                 left + 20,
                 top + 75,
                 0xAAAAAA
@@ -250,9 +246,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        "Он потеряет доступ к территории города."
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.remove_member.warning"),
                 left + 20,
                 top + 122,
                 0xAAAAAA
