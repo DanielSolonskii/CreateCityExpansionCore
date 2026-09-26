@@ -11,7 +11,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import com.example.examplemod.client.screen.CityRemoveMemberConfirmScreen;
 import java.util.UUID;
 import com.example.examplemod.client.gui.CityButton;
-public class CityRoleScreen extends Screen {
+public class CityRoleScreen extends ModalOverlayScreen {
 
     private final Screen parent;
     private final BlockPos pylonPos;
@@ -24,7 +24,7 @@ public class CityRoleScreen extends Screen {
             UUID targetPlayer,
             String playerName
     ) {
-        super(Component.translatable("gui.createcityexpansioncore.city.role.title"));
+        super(parent, Component.translatable("gui.createcityexpansioncore.city.role.title"));
 
         this.parent = parent;
         this.pylonPos = pylonPos;
@@ -206,23 +206,12 @@ public class CityRoleScreen extends Screen {
      * =========================================
      */
     @Override
-    protected void renderBlurredBackground(float partialTick) {
-        // Отключаем стандартный blur Minecraft
-    }
-    @Override
-    public void render(
+    protected void renderModalContent(
             GuiGraphics guiGraphics,
             int mouseX,
             int mouseY,
             float partialTick
     ) {
-
-        this.renderBackground(
-                guiGraphics,
-                mouseX,
-                mouseY,
-                partialTick
-        );
 
         int panelWidth = 300;
         int panelHeight = 230;
@@ -325,12 +314,7 @@ public class CityRoleScreen extends Screen {
          * =========================================
          */
 
-        super.render(
-                guiGraphics,
-                mouseX,
-                mouseY,
-                partialTick
-        );
+        renderOwnWidgets(guiGraphics, mouseX, mouseY, partialTick);
     }
 
 }

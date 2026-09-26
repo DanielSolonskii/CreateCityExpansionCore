@@ -1,0 +1,38 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "B": {
+      "item": "create:brass_casing"
+    },
+    "S": {
+      "item": "createcityexpansioncore:steel_plate"
+    },
+    "C": {
+      "item": "electroenergetics:capacitor"
+    },
+    "R": {
+      "item": "electroenergetics:resistor"
+    }
+  },
+  "pattern": [
+    "SBS",
+    "RCI",
+    "IPH"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:mine_controller"
+  },
+  "show_notification": false
+}

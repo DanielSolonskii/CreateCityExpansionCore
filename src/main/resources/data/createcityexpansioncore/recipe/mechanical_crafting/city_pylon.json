@@ -1,0 +1,35 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "S": {
+      "item": "createcityexpansioncore:steel_plate"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "B": {
+      "item": "createcityexpansioncore:structural_beam"
+    },
+    "C": {
+      "item": "create:brass_casing"
+    },
+    "R": {
+      "item": "createcityexpansioncore:reinforced_concrete"
+    },
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    }
+  },
+  "pattern": [
+    "SBS",
+    "RHR",
+    "CIS"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:city_pylon"
+  },
+  "show_notification": false
+}

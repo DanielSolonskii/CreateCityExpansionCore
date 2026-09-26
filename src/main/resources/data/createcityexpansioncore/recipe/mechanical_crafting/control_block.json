@@ -1,0 +1,29 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "S": {
+      "item": "createcityexpansioncore:steel_plate"
+    },
+    "C": {
+      "item": "create:brass_casing"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "F": {
+      "item": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  },
+  "pattern": [
+    "SCS",
+    "PCP",
+    "SFS"
+  ],
+  "result": {
+    "count": 4,
+    "id": "createcityexpansioncore:control_block"
+  },
+  "show_notification": false
+}

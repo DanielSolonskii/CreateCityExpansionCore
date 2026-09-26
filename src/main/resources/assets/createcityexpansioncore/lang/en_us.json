@@ -1,5 +1,5 @@
 {
-  "itemGroup.createcityexpansioncore": "Example Mod Tab",
+  "itemGroup.createcityexpansioncore": "CreateCityExpansionCore",
   "block.createcityexpansioncore.example_block": "Example Block",
   "item.createcityexpansioncore.example_item": "Example Item",
 
@@ -653,5 +653,23 @@
 "gui.createcityexpansioncore.item_selector.scroll": "Mouse wheel to scroll",
 "gui.createcityexpansioncore.item_selector.search": "Search",
 "gui.createcityexpansioncore.item_selector.search_hint": "Search by name",
-"gui.createcityexpansioncore.item_selector.title": "Choose an item"
+"gui.createcityexpansioncore.item_selector.title": "Choose an item",
+  "item.createcityexpansioncore.industrial_coke": "Industrial Coke"
+  ,"item.createcityexpansioncore.steel_billet": "Steel Billet"
+  ,"item.createcityexpansioncore.steel_plate": "Steel Plate"
+  ,"item.createcityexpansioncore.structural_beam": "Structural Beam"
+  ,"item.createcityexpansioncore.industrial_fastener_pack": "Industrial Fastener Pack"
+  ,"item.createcityexpansioncore.reinforcement_bundle": "Reinforcement Bundle"
+  ,"item.createcityexpansioncore.rail_profile": "Rail Profile"
+  ,"item.createcityexpansioncore.sleeper_pack": "Sleeper Pack"
+  ,"item.createcityexpansioncore.dry_concrete_mix": "Dry Concrete Mix"
+  ,"item.createcityexpansioncore.ceramic_compound": "Ceramic Compound"
+  ,"item.createcityexpansioncore.technical_ceramic": "Technical Ceramic"
+  ,"item.createcityexpansioncore.copper_busbar": "Copper Busbar"
+  ,"item.createcityexpansioncore.heavy_machine_frame": "Heavy Machine Frame"
+  ,"item.createcityexpansioncore.industrial_control_unit": "Industrial Control Unit"
+  ,"item.createcityexpansioncore.power_distribution_module": "Power Distribution Module"
+  ,"block.createcityexpansioncore.reinforced_concrete": "Reinforced Concrete",
+  "item.createcityexpansioncore.incomplete_industrial_control_unit": "Incomplete Industrial Control Unit"
+  ,"item.createcityexpansioncore.incomplete_heavy_machine_frame": "Incomplete Heavy Machine Frame"
 }

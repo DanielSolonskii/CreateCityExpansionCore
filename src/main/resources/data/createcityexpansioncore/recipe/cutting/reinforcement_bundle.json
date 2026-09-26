@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:structural_beam"
+    }
+  ],
+  "results": [
+    {
+      "count": 2,
+      "id": "createcityexpansioncore:reinforcement_bundle"
+    }
+  ]
+}

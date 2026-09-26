@@ -1,1 +1,0 @@
-{"type":"minecraft:crafting_shaped","category":"redstone","pattern":["III","BEB","IAI"],"key":{"I":{"item":"create:iron_sheet"},"B":{"item":"create:brass_sheet"},"E":{"item":"create:electron_tube"},"A":{"item":"create:andesite_alloy"}},"result":{"id":"createcityexpansioncore:contract_intake","count":1}}

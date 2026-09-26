@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:steel_plate"
+    }
+  ],
+  "results": [
+    {
+      "count": 8,
+      "id": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  ]
+}

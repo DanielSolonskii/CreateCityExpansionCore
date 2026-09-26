@@ -1,5 +1,8 @@
 package com.example.examplemod.client.screen;
 
+import com.example.examplemod.client.sound.SoundHelper;
+import com.example.examplemod.sound.ModSounds;
+
 import com.example.examplemod.geology.GeologyDepositSnapshot;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import net.minecraft.client.Minecraft;
@@ -41,6 +44,19 @@ public final class MagneticAnalyzerScreen extends Screen {
     }
 
     public static void open(GeologyAnalysisPayload payload) {
+        /*
+         * Анализ геологии в этом проекте мгновенный: сервер считает
+         * регион и сразу присылает готовый снимок. Поэтому scan_loop
+         * НЕ используется — нечего поддерживать, и выдумывать
+         * искусственную длительность сканирования значило бы
+         * враньё игроку.
+         *
+         * Звучим только реальные события: открытие прибора,
+         * старт сканирования и результат.
+         */
+        SoundHelper.playUi(ModSounds.ANALYZER_OPEN.get());
+        SoundHelper.playUi(ModSounds.ANALYZER_SCAN_START.get());
+
         Minecraft.getInstance().setScreen(new MagneticAnalyzerScreen(payload));
     }
 
@@ -49,6 +65,18 @@ public final class MagneticAnalyzerScreen extends Screen {
         openedAt = System.currentTimeMillis();
         selectedIndex = 0;
         scrollOffset = 0;
+
+        /*
+         * Результат сканирования озвучивается один раз при открытии.
+         * Пинг намеренно не используется: анализ мгновенный, и
+         * имитировать его длительность значило бы вводить
+         * искусственную задержку ради эффекта.
+         */
+        if (analysis.region().deposits().isEmpty()) {
+            SoundHelper.playUi(ModSounds.ANALYZER_NO_DEPOSIT.get());
+        } else {
+            SoundHelper.playUi(ModSounds.ANALYZER_DEPOSIT_FOUND.get());
+        }
     }
 
     @Override
@@ -98,7 +126,19 @@ public final class MagneticAnalyzerScreen extends Screen {
         );
         drawFooter(graphics, left, right, bottom);
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+        /*
+         * Виджеты рисуются ДО фона.
+         *
+         * super.render() внутри вызывает renderBackground(), который
+         * применяет blur. Если вызвать его в конце, размытие ляжет на
+         * уже нарисованные панели, а виджеты, отрисованные после blur,
+         * останутся резкими. Поэтому сначала виджеты, потом фон —
+         * весь готовый слой обрабатывается одинаково.
+         */
+        for (var renderable : this.renderables) {
+            renderable.render(graphics, mouseX, mouseY, partialTick);
+        }
+        this.renderBackground(graphics, mouseX, mouseY, partialTick);
     }
 
     private void drawFrame(

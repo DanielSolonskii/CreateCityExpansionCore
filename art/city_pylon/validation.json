@@ -1,0 +1,17 @@
+{
+  "cube_count": 90,
+  "groups": 17,
+  "animated_groups": 8,
+  "checks": [
+    "unique UUIDs",
+    "nondegenerate cuboids",
+    "all UVs inside 64x64 atlas",
+    "static/dynamic partition without duplicates",
+    "rotated geometry inside block",
+    "ring rotation remains inside block (5 degree samples)"
+  ],
+  "limitations": [
+    "Not verified in Minecraft",
+    "Runtime renderer and city event binding are not implemented"
+  ]
+}

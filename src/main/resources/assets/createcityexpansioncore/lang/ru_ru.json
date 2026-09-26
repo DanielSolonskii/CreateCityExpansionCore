@@ -643,5 +643,24 @@
 "gui.createcityexpansioncore.item_selector.scroll": "Колесо мыши — прокрутка",
 "gui.createcityexpansioncore.item_selector.search": "Поиск",
 "gui.createcityexpansioncore.item_selector.search_hint": "Поиск по названию",
-"gui.createcityexpansioncore.item_selector.title": "Выбор предмета"
+"gui.createcityexpansioncore.item_selector.title": "Выбор предмета",
+  "item.createcityexpansioncore.industrial_coke": "Промышленный кокс"
+  ,"item.createcityexpansioncore.steel_billet": "Стальная заготовка"
+  ,"item.createcityexpansioncore.steel_plate": "Стальная плита"
+  ,"item.createcityexpansioncore.structural_beam": "Конструкционная балка"
+  ,"item.createcityexpansioncore.industrial_fastener_pack": "Комплект промышленного крепежа"
+  ,"item.createcityexpansioncore.reinforcement_bundle": "Арматурный пакет"
+  ,"item.createcityexpansioncore.rail_profile": "Рельсовый профиль"
+  ,"item.createcityexpansioncore.sleeper_pack": "Пакет железнодорожных шпал"
+  ,"item.createcityexpansioncore.dry_concrete_mix": "Сухая бетонная смесь"
+  ,"item.createcityexpansioncore.ceramic_compound": "Керамическая масса"
+  ,"item.createcityexpansioncore.technical_ceramic": "Техническая керамика"
+  ,"item.createcityexpansioncore.copper_busbar": "Медная силовая шина"
+  ,"item.createcityexpansioncore.heavy_machine_frame": "Рама тяжёлой машины"
+  ,"item.createcityexpansioncore.industrial_control_unit": "Промышленный блок управления"
+  ,"item.createcityexpansioncore.power_distribution_module": "Силовой распределительный модуль"
+  ,"block.createcityexpansioncore.reinforced_concrete": "Железобетон",
+  "itemGroup.createcityexpansioncore": "CreateCityExpansionCore",
+  "item.createcityexpansioncore.incomplete_industrial_control_unit": "Незавершённый промышленный блок управления"
+  ,"item.createcityexpansioncore.incomplete_heavy_machine_frame": "Незавершённая рама тяжёлой машины"
 }

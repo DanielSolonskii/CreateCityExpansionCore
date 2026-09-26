@@ -1,0 +1,422 @@
+{
+  "ui.button_press": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:ui/button_press_01",
+        "volume": 0.82
+      },
+      {
+        "name": "createcityexpansioncore:ui/button_press_02",
+        "volume": 0.82
+      },
+      {
+        "name": "createcityexpansioncore:ui/button_press_03",
+        "volume": 0.82
+      }
+    ]
+  },
+  "ui.button_confirm": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:ui/button_confirm",
+        "volume": 0.82
+      }
+    ]
+  },
+  "ui.button_deny": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:ui/button_deny",
+        "volume": 0.82
+      }
+    ]
+  },
+  "ui.tab_switch": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:ui/tab_switch",
+        "volume": 0.656
+      }
+    ]
+  },
+  "ui.modal_open": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:ui/modal_open",
+        "volume": 0.697
+      }
+    ]
+  },
+  "ui.modal_close": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:ui/modal_close",
+        "volume": 0.697
+      }
+    ]
+  },
+  "pylon.boot_start": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/boot_start",
+        "volume": 0.85
+      }
+    ]
+  },
+  "pylon.idle_hum": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/idle_hum_loop",
+        "volume": 0.21
+      }
+    ]
+  },
+  "pylon.mechanism": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/mechanism_loop",
+        "volume": 0.196
+      }
+    ]
+  },
+  "pylon.relay_tick": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/relay_tick_01",
+        "volume": 0.527
+      },
+      {
+        "name": "createcityexpansioncore:pylon/relay_tick_02",
+        "volume": 0.527
+      },
+      {
+        "name": "createcityexpansioncore:pylon/relay_tick_03",
+        "volume": 0.527
+      },
+      {
+        "name": "createcityexpansioncore:pylon/relay_tick_04",
+        "volume": 0.527
+      }
+    ]
+  },
+  "pylon.screen_wake": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/screen_wake",
+        "volume": 0.527
+      }
+    ]
+  },
+  "pylon.screen_sleep": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/screen_sleep",
+        "volume": 0.459
+      }
+    ]
+  },
+  "pylon.activity": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/activity",
+        "volume": 0.442
+      }
+    ]
+  },
+  "pylon.warning": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/warning_loop",
+        "volume": 0.442
+      }
+    ]
+  },
+  "pylon.level_up": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:pylon/level_up",
+        "volume": 0.85
+      }
+    ]
+  },
+  "analyzer.open": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:analyzer/open",
+        "volume": 0.612
+      }
+    ]
+  },
+  "analyzer.scan_start": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:analyzer/scan_start",
+        "volume": 0.612
+      }
+    ]
+  },
+  "analyzer.scan_loop": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:analyzer/scan_loop",
+        "volume": 0.306
+      }
+    ]
+  },
+  "analyzer.ping": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:analyzer/ping_01",
+        "volume": 0.578
+      },
+      {
+        "name": "createcityexpansioncore:analyzer/ping_02",
+        "volume": 0.578
+      },
+      {
+        "name": "createcityexpansioncore:analyzer/ping_03",
+        "volume": 0.578
+      },
+      {
+        "name": "createcityexpansioncore:analyzer/ping_04",
+        "volume": 0.578
+      }
+    ]
+  },
+  "analyzer.deposit_found": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:analyzer/deposit_found",
+        "volume": 0.697
+      }
+    ]
+  },
+  "analyzer.no_deposit": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:analyzer/no_deposit",
+        "volume": 0.578
+      }
+    ]
+  },
+  "mine.controller_boot": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/controller_boot",
+        "volume": 0.85
+      }
+    ]
+  },
+  "mine.drill_start": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/drill_start",
+        "volume": 0.748
+      }
+    ]
+  },
+  "mine.drill_loop": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/drill_loop",
+        "volume": 0.301
+      }
+    ]
+  },
+  "mine.drill_stop": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/drill_stop",
+        "volume": 0.697
+      }
+    ]
+  },
+  "mine.emergency_stop": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/emergency_stop",
+        "volume": 0.85
+      }
+    ]
+  },
+  "mine.power_connect": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/power_connect",
+        "volume": 0.612
+      }
+    ]
+  },
+  "mine.power_disconnect": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/power_disconnect",
+        "volume": 0.578
+      }
+    ]
+  },
+  "mine.power_unstable": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/power_unstable_loop",
+        "volume": 0.301
+      }
+    ]
+  },
+  "mine.gateway_item": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:mine/gateway_item",
+        "volume": 0.285
+      }
+    ]
+  },
+  "dispatcher.use": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:dispatcher/use",
+        "volume": 0.578
+      }
+    ]
+  },
+  "dispatcher.register_success": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:dispatcher/register_success",
+        "volume": 0.612
+      }
+    ]
+  },
+  "dispatcher.register_fail": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:dispatcher/register_fail",
+        "volume": 0.578
+      }
+    ]
+  },
+  "rail.station_bind": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:rail/station_bind",
+        "volume": 0.697
+      }
+    ]
+  },
+  "rail.shipment_complete": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:rail/shipment_complete",
+        "volume": 0.697
+      }
+    ]
+  },
+  "economy.listing_create": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:economy/listing_create",
+        "volume": 0.527
+      }
+    ]
+  },
+  "economy.trade_complete": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:economy/trade_complete",
+        "volume": 0.612
+      }
+    ]
+  },
+  "contract.accept": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:contract/accept",
+        "volume": 0.612
+      }
+    ]
+  },
+  "contract.delivery_tick": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:contract/delivery_tick_01",
+        "volume": 0.27
+      },
+      {
+        "name": "createcityexpansioncore:contract/delivery_tick_02",
+        "volume": 0.27
+      },
+      {
+        "name": "createcityexpansioncore:contract/delivery_tick_03",
+        "volume": 0.27
+      },
+      {
+        "name": "createcityexpansioncore:contract/delivery_tick_04",
+        "volume": 0.27
+      }
+    ]
+  },
+  "contract.confirmed": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:contract/confirmed",
+        "volume": 0.654
+      }
+    ]
+  },
+  "warehouse.input_tick": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:warehouse/input_tick_01",
+        "volume": 0.247
+      },
+      {
+        "name": "createcityexpansioncore:warehouse/input_tick_02",
+        "volume": 0.247
+      },
+      {
+        "name": "createcityexpansioncore:warehouse/input_tick_03",
+        "volume": 0.247
+      }
+    ]
+  },
+  "warehouse.batch": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:warehouse/batch",
+        "volume": 0.527
+      }
+    ]
+  },
+  "city.create": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:city/create",
+        "volume": 0.85
+      }
+    ]
+  },
+  "city.development_confirm": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:city/development_confirm",
+        "volume": 0.85
+      }
+    ]
+  },
+  "project.commission": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:project/commission",
+        "volume": 0.85
+      }
+    ]
+  },
+  "system.error": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:system/error",
+        "volume": 0.663
+      }
+    ]
+  }
+}

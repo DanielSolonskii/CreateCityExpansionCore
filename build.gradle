@@ -28,7 +28,11 @@ sourceSets.main.resources {
 
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
+    // This is also where Create: Ponder is published. Ponder is a hard requirement of
+    // Create; without it at runtime mod loading fails with
+    // "Missing or unsupported mandatory dependencies: Mod ID: 'ponder'".
     maven {
+        name = "createmod"
         url = "https://maven.createmod.net"
     }
 }
@@ -142,6 +146,14 @@ dependencies {
     }
     // Create: Electro Energetics
     implementation files("libs/electroenergetics-1.21.1-1.1.1.jar")
+
+    // NOTE: Create's own runtime companions (Ponder, Flywheel) must be present in the
+    // run directory's mods folder for `runClient` / `runServer` to boot.
+    // They are deliberately NOT declared as Gradle dependencies: adding a mod jar to
+    // the dev classpath breaks NeoForge's module layer
+    // ("ClassNotFoundException: com.tterrag.registrate.AbstractRegistrate").
+    // See README_DEV.md for the exact list and where to obtain them.
+
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html

@@ -1,0 +1,14 @@
+{
+  "type": "create:pressing",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:steel_billet"
+    }
+  ],
+  "results": [
+    {
+      "count": 1,
+      "id": "createcityexpansioncore:steel_plate"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    },
+    "C": {
+      "item": "createcityexpansioncore:copper_busbar"
+    },
+    "T": {
+      "item": "createcityexpansioncore:technical_ceramic"
+    },
+    "X": {
+      "item": "electroenergetics:transformer_core"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    }
+  },
+  "pattern": [
+    "CTC",
+    "TXT",
+    "IHI"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:power_distribution_module"
+  },
+  "show_notification": false
+}

@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "S": {
+      "tag": "minecraft:wooden_slabs"
+    },
+    "F": {
+      "item": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  },
+  "pattern": [
+    "SFS",
+    "SFS"
+  ],
+  "result": {
+    "count": 4,
+    "id": "createcityexpansioncore:sleeper_pack"
+  }
+}

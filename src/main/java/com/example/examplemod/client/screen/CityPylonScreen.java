@@ -1,10 +1,13 @@
 package com.example.examplemod.client.screen;
 
+import com.example.examplemod.network.CityMapPeersPayload;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.CityMember;
 import com.example.examplemod.client.CityBoundaryRenderer;
 import com.example.examplemod.client.gui.CityButton;
 import com.example.examplemod.client.map.CityMapPanel;
+import com.example.examplemod.client.sound.SoundHelper;
+import com.example.examplemod.sound.ModSounds;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.InvitePlayerPayload;
 import com.example.examplemod.network.CityDevelopmentPayload;
@@ -51,21 +54,21 @@ public class CityPylonScreen
     private int inviteScroll = 0;
 
     /*
-     * 0 = Обзор
-     * 1 = Территория
-     * 2 = Участники
-     * 3 = Проекты
-     * 4 = Карта
-     * 5 = Развитие
-     * 6 = Железная дорога
-     * 7 = Рынок
+     * 0 = ÐžÐ±Ð·Ð¾Ñ€
+     * 1 = Ð¢ÐµÑ€Ñ€Ð¸Ñ‚Ð¾Ñ€Ð¸Ñ
+     * 2 = Ð£Ñ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¸
+     * 3 = ÐŸÑ€Ð¾ÐµÐºÑ‚Ñ‹
+     * 4 = ÐšÐ°Ñ€Ñ‚Ð°
+     * 5 = Ð Ð°Ð·Ð²Ð¸Ñ‚Ð¸Ðµ
+     * 6 = Ð–ÐµÐ»ÐµÐ·Ð½Ð°Ñ Ð´Ð¾Ñ€Ð¾Ð³Ð°
+     * 7 = Ð Ñ‹Ð½Ð¾Ðº
      */
     private int activeTab = 0;
     private UUID decommissionConfirmation;
 
     /*
      * =========================================
-     * ОКНО ПРИГЛАШЕНИЯ
+     * ÐžÐšÐÐž ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
      * =========================================
      */
 
@@ -75,7 +78,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * КНОПКИ
+     * ÐšÐÐžÐŸÐšÐ˜
      * =========================================
      */
 
@@ -102,23 +105,23 @@ public class CityPylonScreen
     private float interfaceScale = 1.0F;
     private boolean marketplaceHintVisible;
     private boolean marketplaceHelpVisible;
-    /** Прокрутка текста справки рынка (длинный help не режем, а листаем). */
+    /** ÐŸÑ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ° Ñ‚ÐµÐºÑÑ‚Ð° ÑÐ¿Ñ€Ð°Ð²ÐºÐ¸ Ñ€Ñ‹Ð½ÐºÐ° (Ð´Ð»Ð¸Ð½Ð½Ñ‹Ð¹ help Ð½Ðµ Ñ€ÐµÐ¶ÐµÐ¼, Ð° Ð»Ð¸ÑÑ‚Ð°ÐµÐ¼). */
     private int marketplaceHelpScroll;
     private int helpContentHeight;
 
     /*
      * =========================================
-     * ОБЛАСТИ МАКЕТА CITY PYLON
+     * ÐžÐ‘Ð›ÐÐ¡Ð¢Ð˜ ÐœÐÐšÐ•Ð¢Ð CITY PYLON
      * =========================================
      *
-     * Все вкладки считают координаты относительно этих областей,
-     * а не от абсолютных чисел, оставшихся от старого маленького GUI.
+     * Ð’ÑÐµ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹ Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ ÑÑ‚Ð¸Ñ… Ð¾Ð±Ð»Ð°ÑÑ‚ÐµÐ¹,
+     * Ð° Ð½Ðµ Ð¾Ñ‚ Ð°Ð±ÑÐ¾Ð»ÑŽÑ‚Ð½Ñ‹Ñ… Ñ‡Ð¸ÑÐµÐ», Ð¾ÑÑ‚Ð°Ð²ÑˆÐ¸Ñ…ÑÑ Ð¾Ñ‚ ÑÑ‚Ð°Ñ€Ð¾Ð³Ð¾ Ð¼Ð°Ð»ÐµÐ½ÑŒÐºÐ¾Ð³Ð¾ GUI.
      *
-     * ROOT     = весь прямоугольник PANEL_WIDTH x PANEL_HEIGHT
-     * HEADER   = верхняя полоса (город, уровень, статус)
-     * SIDEBAR  = колонка вкладок слева
-     * CONTENT  = рабочая область справа от sidebar
-     * FOOTER   = нижняя полоса внутри sidebar (кнопка «Закрыть»)
+     * ROOT     = Ð²ÐµÑÑŒ Ð¿Ñ€ÑÐ¼Ð¾ÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸Ðº PANEL_WIDTH x PANEL_HEIGHT
+     * HEADER   = Ð²ÐµÑ€Ñ…Ð½ÑÑ Ð¿Ð¾Ð»Ð¾ÑÐ° (Ð³Ð¾Ñ€Ð¾Ð´, ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ, ÑÑ‚Ð°Ñ‚ÑƒÑ)
+     * SIDEBAR  = ÐºÐ¾Ð»Ð¾Ð½ÐºÐ° Ð²ÐºÐ»Ð°Ð´Ð¾Ðº ÑÐ»ÐµÐ²Ð°
+     * CONTENT  = Ñ€Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ ÑÐ¿Ñ€Ð°Ð²Ð° Ð¾Ñ‚ sidebar
+     * FOOTER   = Ð½Ð¸Ð¶Ð½ÑÑ Ð¿Ð¾Ð»Ð¾ÑÐ° Ð²Ð½ÑƒÑ‚Ñ€Ð¸ sidebar (ÐºÐ½Ð¾Ð¿ÐºÐ° Â«Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒÂ»)
      */
 
     private static final int PANEL_WIDTH = 620;
@@ -136,33 +139,33 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ОПОРЫ КОНТЕНТА
+     * ÐžÐŸÐžÐ Ð« ÐšÐžÐÐ¢Ð•ÐÐ¢Ð
      * =========================================
      *
-     * Панель выросла, поэтому вкладки больше не могут считать
-     * от «магических» 300 px: центр, колонка значений и половина
-     * кнопки считаются из CONTENT_WIDTH один раз здесь.
+     * ÐŸÐ°Ð½ÐµÐ»ÑŒ Ð²Ñ‹Ñ€Ð¾ÑÐ»Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ Ð±Ð¾Ð»ÑŒÑˆÐµ Ð½Ðµ Ð¼Ð¾Ð³ÑƒÑ‚ ÑÑ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ
+     * Ð¾Ñ‚ Â«Ð¼Ð°Ð³Ð¸Ñ‡ÐµÑÐºÐ¸Ñ…Â» 300 px: Ñ†ÐµÐ½Ñ‚Ñ€, ÐºÐ¾Ð»Ð¾Ð½ÐºÐ° Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ð¹ Ð¸ Ð¿Ð¾Ð»Ð¾Ð²Ð¸Ð½Ð°
+     * ÐºÐ½Ð¾Ð¿ÐºÐ¸ ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ÑÑ Ð¸Ð· CONTENT_WIDTH Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð·Ð´ÐµÑÑŒ.
      */
     private static final int CONTENT_CENTER = CONTENT_WIDTH / 2;
     private static final int CONTENT_VALUE_X = CONTENT_WIDTH - 96;
     private static final int HALF_W = (CONTENT_WIDTH - 10) / 2;
     private static final int HALF_W2 = HALF_W + 10;
-    /** Подсказки не шире экрана и не шире панели. */
+    /** ÐŸÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ Ð½Ðµ ÑˆÐ¸Ñ€Ðµ ÑÐºÑ€Ð°Ð½Ð° Ð¸ Ð½Ðµ ÑˆÐ¸Ñ€Ðµ Ð¿Ð°Ð½ÐµÐ»Ð¸. */
     private static final int MAX_TOOLTIP_WIDTH = 320;
 
     /*
      * =========================================
-     * БРЕНД В HEADER
+     * Ð‘Ð Ð•ÐÐ” Ð’ HEADER
      * =========================================
      *
-     * Небольшой знак проекта в правом верхнем углу шапки.
-     * Это branding element, а не декоративная картинка:
-     * он не трогает название города, уровень и статусы —
-     * заголовок просто обрезается по его левой границе.
+     * ÐÐµÐ±Ð¾Ð»ÑŒÑˆÐ¾Ð¹ Ð·Ð½Ð°Ðº Ð¿Ñ€Ð¾ÐµÐºÑ‚Ð° Ð² Ð¿Ñ€Ð°Ð²Ð¾Ð¼ Ð²ÐµÑ€Ñ…Ð½ÐµÐ¼ ÑƒÐ³Ð»Ñƒ ÑˆÐ°Ð¿ÐºÐ¸.
+     * Ð­Ñ‚Ð¾ branding element, Ð° Ð½Ðµ Ð´ÐµÐºÐ¾Ñ€Ð°Ñ‚Ð¸Ð²Ð½Ð°Ñ ÐºÐ°Ñ€Ñ‚Ð¸Ð½ÐºÐ°:
+     * Ð¾Ð½ Ð½Ðµ Ñ‚Ñ€Ð¾Ð³Ð°ÐµÑ‚ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ð³Ð¾Ñ€Ð¾Ð´Ð°, ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ Ð¸ ÑÑ‚Ð°Ñ‚ÑƒÑÑ‹ â€”
+     * Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº Ð¿Ñ€Ð¾ÑÑ‚Ð¾ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ ÐµÐ³Ð¾ Ð»ÐµÐ²Ð¾Ð¹ Ð³Ñ€Ð°Ð½Ð¸Ñ†Ðµ.
      *
-     * Текстура подготовлена из исходной эмблемы
-     * (textures/gui/city_emblem.png) и лежит отдельным
-     * ресурсом, чтобы каждый кадр не грузить большую PNG.
+     * Ð¢ÐµÐºÑÑ‚ÑƒÑ€Ð° Ð¿Ð¾Ð´Ð³Ð¾Ñ‚Ð¾Ð²Ð»ÐµÐ½Ð° Ð¸Ð· Ð¸ÑÑ…Ð¾Ð´Ð½Ð¾Ð¹ ÑÐ¼Ð±Ð»ÐµÐ¼Ñ‹
+     * (textures/gui/city_emblem.png) Ð¸ Ð»ÐµÐ¶Ð¸Ñ‚ Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¼
+     * Ñ€ÐµÑÑƒÑ€ÑÐ¾Ð¼, Ñ‡Ñ‚Ð¾Ð±Ñ‹ ÐºÐ°Ð¶Ð´Ñ‹Ð¹ ÐºÐ°Ð´Ñ€ Ð½Ðµ Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð±Ð¾Ð»ÑŒÑˆÑƒÑŽ PNG.
      */
     private static final ResourceLocation HEADER_EMBLEM =
             ResourceLocation.fromNamespaceAndPath(
@@ -174,7 +177,7 @@ public class CityPylonScreen
     private static final int HEADER_EMBLEM_Y = 9;
     private static final int HEADER_EMBLEM_GAP = 10;
 
-    /* Рынок: слева прокручиваемый список, справа панель деталей. */
+    /* Ð Ñ‹Ð½Ð¾Ðº: ÑÐ»ÐµÐ²Ð° Ð¿Ñ€Ð¾ÐºÑ€ÑƒÑ‡Ð¸Ð²Ð°ÐµÐ¼Ñ‹Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº, ÑÐ¿Ñ€Ð°Ð²Ð° Ð¿Ð°Ð½ÐµÐ»ÑŒ Ð´ÐµÑ‚Ð°Ð»ÐµÐ¹. */
     private static final int MARKET_LIST_W = 180;
     private static final int MARKET_DETAIL_W = CONTENT_WIDTH - MARKET_LIST_W - PANEL_GAP;
     private static final int MARKET_TOOLBAR_Y = 61;
@@ -185,7 +188,7 @@ public class CityPylonScreen
     private static final int MARKET_VISIBLE_ROWS =
             Math.max(1, (CONTENT_BODY_BOTTOM - MARKET_BODY_Y) / MARKET_ROW_PITCH);
 
-    /* Участники: карточка, её шаг и сколько помещается в списке. */
+    /* Ð£Ñ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¸: ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ°, ÐµÑ‘ ÑˆÐ°Ð³ Ð¸ ÑÐºÐ¾Ð»ÑŒÐºÐ¾ Ð¿Ð¾Ð¼ÐµÑ‰Ð°ÐµÑ‚ÑÑ Ð² ÑÐ¿Ð¸ÑÐºÐµ. */
     private static final int MEMBER_CARD_W = CONTENT_WIDTH - 30;
     private static final int MEMBER_CARD_H = 48;
     private static final int MEMBER_CARD_PITCH = MEMBER_CARD_H + 6;
@@ -193,14 +196,66 @@ public class CityPylonScreen
     private static final int MEMBER_ROWS = Math.max(2,
             (CONTENT_BODY_BOTTOM - MEMBER_LIST_OFFSET) / MEMBER_CARD_PITCH);
 
-    /* Инфраструктура: сколько строк помещается между заголовком и низом. */
+    /**
+     * Шестерёнка «управления ролями» на карточке участника.
+     *
+     * <p>Размер 18×18 — чуть крупнее для лучшей кликабельности и видимости
+     * при GUI Scale 2/3/4. Пиксель-арт не растягивается: рисуется целочисленно.
+     */
+    private static final int MEMBER_GEAR_SIZE = 18;
+
+    /** Отступ шестерёнки от правого края карточки. */
+    private static final int MEMBER_GEAR_RIGHT_MARGIN = 6;
+
+    /** Отступ шестерёнки от верхнего края карточки. */
+    private static final int MEMBER_GEAR_TOP_MARGIN = 6;
+
+    /**
+     * Ð•Ð´Ð¸Ð½Ñ‹Ð¹ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¿Ñ€Ð°Ð²Ð´Ñ‹ Ð¿Ð¾ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ð¸ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ°.
+     *
+     * <p>Ð Ð°Ð½ÑŒÑˆÐµ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ Ð²Ñ‹Ñ‡Ð¸ÑÐ»ÑÐ»Ð¸ÑÑŒ Ð´Ð²Ð°Ð¶Ð´Ñ‹ Ð¸ Ð¿Ð¾-Ñ€Ð°Ð·Ð½Ð¾Ð¼Ñƒ:
+     * Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð² renderMembers(), Ð´Ñ€ÑƒÐ³Ð¾Ð¹ â€” Ð² mouseClicked(). Ð˜Ð·-Ð·Ð°
+     * Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ñ ÑˆÐ¸Ñ€Ð¸Ð½Ñ‹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ (270 Ð¿Ñ€Ð¾Ñ‚Ð¸Ð² MEMBER_CARD_W) ÐºÐ½Ð¾Ð¿ÐºÐ°
+     * ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¸ ÑƒÐµÐ·Ð¶Ð°Ð»Ð° Ð½Ð° 120 Ð¿Ð¸ÐºÑÐµÐ»ÐµÐ¹ Ð²Ð¿Ñ€Ð°Ð²Ð¾ Ð¾Ñ‚ Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ð¹.
+     *
+     * <p>Ð¢ÐµÐ¿ÐµÑ€ÑŒ Ð¸ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐ°, Ð¸ hitbox Ð±ÐµÑ€ÑƒÑ‚ Ð¾Ð´Ð½Ð¸ Ð¸ Ñ‚Ðµ Ð¶Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ñ
+     * Ð¾Ñ‚ÑÑŽÐ´Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ Ñ€Ð°Ð·ÑŠÐµÑ…Ð°Ñ‚ÑŒÑÑ Ð¾Ð½Ð¸ ÑƒÐ¶Ðµ Ð½Ðµ Ð¼Ð¾Ð³ÑƒÑ‚.
+     *
+     * @param x Ð»ÐµÐ²Ñ‹Ð¹ ÐºÑ€Ð°Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸
+     * @param y Ð²ÐµÑ€Ñ…Ð½Ð¸Ð¹ ÐºÑ€Ð°Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸
+     */
+    private record MemberCardGeometry(int x, int y, int width, int height) {
+
+        int gearX() {
+            return this.x + this.width - MEMBER_GEAR_RIGHT_MARGIN - MEMBER_GEAR_SIZE;
+        }
+
+        int gearY() {
+            return this.y + MEMBER_GEAR_TOP_MARGIN;
+        }
+    }
+
+    /**
+     * Ð“ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ i-Ð¹ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ ÑÐ¿Ð¸ÑÐºÐ° ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð².
+     * Ð˜Ð½Ð´ÐµÐºÑ â€” Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ Ð½Ð°Ñ‡Ð°Ð»Ð° Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¾ÐºÐ½Ð°.
+     */
+    private MemberCardGeometry memberCard(int cardX, int cardY, int visibleIndex) {
+        return new MemberCardGeometry(
+                cardX,
+                cardY + visibleIndex * MEMBER_CARD_PITCH,
+                MEMBER_CARD_W,
+                MEMBER_CARD_H
+        );
+    }
+
+    /* Ð˜Ð½Ñ„Ñ€Ð°ÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ð°: ÑÐºÐ¾Ð»ÑŒÐºÐ¾ ÑÑ‚Ñ€Ð¾Ðº Ð¿Ð¾Ð¼ÐµÑ‰Ð°ÐµÑ‚ÑÑ Ð¼ÐµÐ¶Ð´Ñƒ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¾Ð¼ Ð¸ Ð½Ð¸Ð·Ð¾Ð¼. */
     private static final int INFRA_ROW_H = 42;
     private static final int INFRA_ROWS = Math.max(1,
             (CONTENT_BODY_BOTTOM - 72) / INFRA_ROW_H);
 
     /*
-     * Железная дорога: список сверху, панель действий прижата к низу
-     * контента, поэтому строки списков считаются от свободной высоты.
+     * Ð–ÐµÐ»ÐµÐ·Ð½Ð°Ñ Ð´Ð¾Ñ€Ð¾Ð³Ð°: ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ²ÐµÑ€Ñ…Ñƒ, Ð¿Ð°Ð½ÐµÐ»ÑŒ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ð¹ Ð¿Ñ€Ð¸Ð¶Ð°Ñ‚Ð° Ðº Ð½Ð¸Ð·Ñƒ
+     * ÐºÐ¾Ð½Ñ‚ÐµÐ½Ñ‚Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ ÑÑ‚Ñ€Ð¾ÐºÐ¸ ÑÐ¿Ð¸ÑÐºÐ¾Ð² ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ÑÑ Ð¾Ñ‚ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½Ð¾Ð¹ Ð²Ñ‹ÑÐ¾Ñ‚Ñ‹.
      */
     private static final int RAIL_LIST_TOP = 48;
     private static final int RAIL_ACTION_H = 22;
@@ -215,7 +270,7 @@ public class CityPylonScreen
         return Math.max(1, (RAIL_LIST_BOTTOM - 51) / pitch);
     }
 
-    /* Начало содержимого — один источник истины для всех вкладок. */
+    /* ÐÐ°Ñ‡Ð°Ð»Ð¾ ÑÐ¾Ð´ÐµÑ€Ð¶Ð¸Ð¼Ð¾Ð³Ð¾ â€” Ð¾Ð´Ð¸Ð½ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¸ÑÑ‚Ð¸Ð½Ñ‹ Ð´Ð»Ñ Ð²ÑÐµÑ… Ð²ÐºÐ»Ð°Ð´Ð¾Ðº. */
     private int contentLeft() {
         return this.leftPos + CONTENT_OFFSET_X;
     }
@@ -225,8 +280,8 @@ public class CityPylonScreen
     }
 
     /**
-     * Обрезка по границам области.
-     * GuiGraphics ждёт координаты экрана, поэтому учитываем interfaceScale.
+     * ÐžÐ±Ñ€ÐµÐ·ÐºÐ° Ð¿Ð¾ Ð³Ñ€Ð°Ð½Ð¸Ñ†Ð°Ð¼ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸.
+     * GuiGraphics Ð¶Ð´Ñ‘Ñ‚ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹ ÑÐºÑ€Ð°Ð½Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ ÑƒÑ‡Ð¸Ñ‚Ñ‹Ð²Ð°ÐµÐ¼ interfaceScale.
      */
     private void beginClip(GuiGraphics graphics, int x1, int y1, int x2, int y2) {
         graphics.enableScissor(
@@ -245,16 +300,16 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ОТЛОЖЕННЫЕ ПОДСКАЗКИ
+     * ÐžÐ¢Ð›ÐžÐ–Ð•ÐÐÐ«Ð• ÐŸÐžÐ”Ð¡ÐšÐÐ—ÐšÐ˜
      * =========================================
      *
-     * Подсказка запоминается в момент отрисовки вкладки и выводится
-     * уже после popPose(). Это решает три проблемы сразу:
+     * ÐŸÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ° Ð·Ð°Ð¿Ð¾Ð¼Ð¸Ð½Ð°ÐµÑ‚ÑÑ Ð² Ð¼Ð¾Ð¼ÐµÐ½Ñ‚ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐ¸ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ Ð¸ Ð²Ñ‹Ð²Ð¾Ð´Ð¸Ñ‚ÑÑ
+     * ÑƒÐ¶Ðµ Ð¿Ð¾ÑÐ»Ðµ popPose(). Ð­Ñ‚Ð¾ Ñ€ÐµÑˆÐ°ÐµÑ‚ Ñ‚Ñ€Ð¸ Ð¿Ñ€Ð¾Ð±Ð»ÐµÐ¼Ñ‹ ÑÑ€Ð°Ð·Ñƒ:
      *
-     *  1) её не режет scissor списка/карты;
-     *  2) GuiGraphics клампит её по реальному экрану, а не по
-     *     координатам, пересчитанным под interfaceScale;
-     *  3) шрифт подсказки не мылится от дробного масштаба интерфейса.
+     *  1) ÐµÑ‘ Ð½Ðµ Ñ€ÐµÐ¶ÐµÑ‚ scissor ÑÐ¿Ð¸ÑÐºÐ°/ÐºÐ°Ñ€Ñ‚Ñ‹;
+     *  2) GuiGraphics ÐºÐ»Ð°Ð¼Ð¿Ð¸Ñ‚ ÐµÑ‘ Ð¿Ð¾ Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾Ð¼Ñƒ ÑÐºÑ€Ð°Ð½Ñƒ, Ð° Ð½Ðµ Ð¿Ð¾
+     *     ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ð°Ð¼, Ð¿ÐµÑ€ÐµÑÑ‡Ð¸Ñ‚Ð°Ð½Ð½Ñ‹Ð¼ Ð¿Ð¾Ð´ interfaceScale;
+     *  3) ÑˆÑ€Ð¸Ñ„Ñ‚ Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ Ð½Ðµ Ð¼Ñ‹Ð»Ð¸Ñ‚ÑÑ Ð¾Ñ‚ Ð´Ñ€Ð¾Ð±Ð½Ð¾Ð³Ð¾ Ð¼Ð°ÑÑˆÑ‚Ð°Ð±Ð° Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹ÑÐ°.
      */
     private List<FormattedCharSequence> deferredTooltipLines;
     private ItemStack deferredTooltipStack;
@@ -293,6 +348,13 @@ public class CityPylonScreen
 
     private final CityMapPanel mapPanel;
 
+    /**
+     * Ð”Ð¾ÑÑ‚ÑƒÐ¿ Ðº Ð¿Ð°Ð½ÐµÐ»Ð¸ ÐºÐ°Ñ€Ñ‚Ñ‹ Ð´Ð»Ñ ÑÐµÑ‚ÐµÐ²Ð¾Ð³Ð¾ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ñ‡Ð¸ÐºÐ° ÑÐ¾ÑÐµÐ´Ð½Ð¸Ñ… Ð³Ð¾Ñ€Ð¾Ð´Ð¾Ð².
+     */
+    public CityMapPanel getMapPanel() {
+        return this.mapPanel;
+    }
+
     public CityPylonScreen(
             CityPylonMenu menu,
             Inventory inventory,
@@ -309,6 +371,13 @@ public class CityPylonScreen
                 menu.getProjects()
         );
         this.lastObservedCityLevel = menu.getCityLevel();
+
+        /*
+         * ÐžÐ´Ð½Ð¾ÐºÑ€Ð°Ñ‚Ð½Ñ‹Ð¹ Ð·Ð²ÑƒÐº Ð¿Ñ€Ð¾Ð±ÑƒÐ¶Ð´ÐµÐ½Ð¸Ñ ÑÐºÑ€Ð°Ð½Ð° Ð¿Ñ€Ð¸ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ð¸Ð¸.
+         * Ð˜Ð³Ñ€Ð°ÐµÑ‚ÑÑ Ð² ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€Ðµ, Ð° Ð½Ðµ Ð² render(), Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ
+         * Ð½Ðµ Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€ÑÐµÑ‚ÑÑ ÐºÐ°Ð¶Ð´Ñ‹Ð¹ ÐºÐ°Ð´Ñ€.
+         */
+        SoundHelper.playUi(ModSounds.PYLON_SCREEN_WAKE.get());
     }
 
     @Override
@@ -324,9 +393,9 @@ public class CityPylonScreen
         }
 
         /*
-         * GuiGraphics.enableScissor работает в экранных координатах,
-         * а сам панель рисуется внутри pose().scale(interfaceScale).
-         * Передаём масштаб внутрь, чтобы обрезка карты была точной.
+         * GuiGraphics.enableScissor Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ Ð² ÑÐºÑ€Ð°Ð½Ð½Ñ‹Ñ… ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ð°Ñ…,
+         * Ð° ÑÐ°Ð¼ Ð¿Ð°Ð½ÐµÐ»ÑŒ Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ð²Ð½ÑƒÑ‚Ñ€Ð¸ pose().scale(interfaceScale).
+         * ÐŸÐµÑ€ÐµÐ´Ð°Ñ‘Ð¼ Ð¼Ð°ÑÑˆÑ‚Ð°Ð± Ð²Ð½ÑƒÑ‚Ñ€ÑŒ, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð¾Ð±Ñ€ÐµÐ·ÐºÐ° ÐºÐ°Ñ€Ñ‚Ñ‹ Ð±Ñ‹Ð»Ð° Ñ‚Ð¾Ñ‡Ð½Ð¾Ð¹.
          */
         this.mapPanel.setGuiScale(this.interfaceScale);
 
@@ -335,7 +404,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ЕСЛИ ГОРОДА НЕТ
+         * Ð•Ð¡Ð›Ð˜ Ð“ÐžÐ ÐžÐ”Ð ÐÐ•Ð¢
          * =====================================
          */
 
@@ -369,7 +438,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ЗАКРЫТЬ
+         * Ð—ÐÐšÐ Ð«Ð¢Ð¬
          * =====================================
          */
 
@@ -389,7 +458,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ВКЛАДКИ
+         * Ð’ÐšÐ›ÐÐ”ÐšÐ˜
          * =====================================
          */
 
@@ -405,8 +474,8 @@ public class CityPylonScreen
         };
 
         /*
-         * Вкладки заполняют сайдбар целиком: 8 кнопок с шагом 30 px
-         * от шапки и до отступа над «Закрыть».
+         * Ð’ÐºÐ»Ð°Ð´ÐºÐ¸ Ð·Ð°Ð¿Ð¾Ð»Ð½ÑÑŽÑ‚ ÑÐ°Ð¹Ð´Ð±Ð°Ñ€ Ñ†ÐµÐ»Ð¸ÐºÐ¾Ð¼: 8 ÐºÐ½Ð¾Ð¿Ð¾Ðº Ñ ÑˆÐ°Ð³Ð¾Ð¼ 30 px
+         * Ð¾Ñ‚ ÑˆÐ°Ð¿ÐºÐ¸ Ð¸ Ð´Ð¾ Ð¾Ñ‚ÑÑ‚ÑƒÐ¿Ð° Ð½Ð°Ð´ Â«Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒÂ».
          */
         for (int i = 0; i < this.tabButtons.length; i++) {
 
@@ -420,6 +489,17 @@ public class CityPylonScreen
                             24,
                             tabNames[i],
                             button -> {
+
+                                /*
+                                 * Ð¢Ð¸Ñ…Ð¸Ð¹ Ð·Ð²ÑƒÐº Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ñ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸.
+                                 * ÐŸÐ¾Ð¼Ð¾Ð³Ð°ÐµÑ‚ Ð¾Ñ€Ð¸ÐµÐ½Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒÑÑ Ð² Ð¿Ð°Ð½ÐµÐ»Ð¸
+                                 * Ñ Ð²Ð¾ÑÐµÐ¼ÑŒÑŽ Ð²ÐºÐ»Ð°Ð´ÐºÐ°Ð¼Ð¸. ÐžÐ±Ñ‹Ñ‡Ð½Ñ‹Ðµ
+                                 * ÐºÐ½Ð¾Ð¿ÐºÐ¸ Ð¾ÑÑ‚Ð°Ð²Ð»ÑÑŽÑ‚ Ð²Ð°Ð½Ð¸Ð°Ð½ÑÐºÐ¸Ð¹
+                                 * Ñ‰ÐµÐ»Ñ‡Ð¾Ðº, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð½Ð°ÑÐ»Ð°Ð¸Ð²Ð°Ñ‚ÑŒ Ð·Ð²ÑƒÐºÐ¸.
+                                 */
+                                SoundHelper.playUi(
+                                        ModSounds.UI_TAB_SWITCH.get()
+                                );
 
                                 this.activeTab =
                                         tabIndex;
@@ -478,7 +558,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ПРИГЛАСИТЬ
+         * ÐŸÐ Ð˜Ð“Ð›ÐÐ¡Ð˜Ð¢Ð¬
          * =====================================
          */
 
@@ -518,7 +598,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ОБНОВЛЕНИЕ ВКЛАДОК
+     * ÐžÐ‘ÐÐžÐ’Ð›Ð•ÐÐ˜Ð• Ð’ÐšÐ›ÐÐ”ÐžÐš
      * =========================================
      */
 
@@ -541,7 +621,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ВИДИМОСТЬ ВКЛАДОК
+     * Ð’Ð˜Ð”Ð˜ÐœÐžÐ¡Ð¢Ð¬ Ð’ÐšÐ›ÐÐ”ÐžÐš
      * =========================================
      */
 
@@ -576,7 +656,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ВИДИМОСТЬ КНОПКИ ПРИГЛАСИТЬ
+     * Ð’Ð˜Ð”Ð˜ÐœÐžÐ¡Ð¢Ð¬ ÐšÐÐžÐŸÐšÐ˜ ÐŸÐ Ð˜Ð“Ð›ÐÐ¡Ð˜Ð¢Ð¬
      * =========================================
      */
 
@@ -594,6 +674,12 @@ public class CityPylonScreen
 
     @Override
     public void onClose() {
+
+        /*
+         * Ð—Ð²ÑƒÐº Ð·Ð°ÑÑ‹Ð¿Ð°Ð½Ð¸Ñ ÑÐºÑ€Ð°Ð½Ð°, Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð·Ð° Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ.
+         * onClose Ð²Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð·, Ð° Ð½Ðµ ÐºÐ°Ð¶Ð´Ñ‹Ð¹ ÐºÐ°Ð´Ñ€.
+         */
+        SoundHelper.playUi(ModSounds.PYLON_SCREEN_SLEEP.get());
 
         super.onClose();
     }
@@ -615,8 +701,8 @@ public class CityPylonScreen
         mouseY /= this.interfaceScale;
 
         /*
-         * Если открыто приглашение,
-         * скроллим список игроков.
+         * Ð•ÑÐ»Ð¸ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ð¾ Ð¿Ñ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¸Ðµ,
+         * ÑÐºÑ€Ð¾Ð»Ð»Ð¸Ð¼ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð².
          */
 
         if (this.showInvitePlayers) {
@@ -720,7 +806,7 @@ public class CityPylonScreen
         }
 
         /*
-         * Справка рынка — модальный блок: колесо листает именно её.
+         * Ð¡Ð¿Ñ€Ð°Ð²ÐºÐ° Ñ€Ñ‹Ð½ÐºÐ° â€” Ð¼Ð¾Ð´Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð»Ð¾Ðº: ÐºÐ¾Ð»ÐµÑÐ¾ Ð»Ð¸ÑÑ‚Ð°ÐµÑ‚ Ð¸Ð¼ÐµÐ½Ð½Ð¾ ÐµÑ‘.
          */
         if (this.activeTab == 7 && this.menu.hasCity()
                 && (this.marketplaceHintVisible || this.marketplaceHelpVisible)) {
@@ -749,7 +835,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * КЛИКИ
+     * ÐšÐ›Ð˜ÐšÐ˜
      * =========================================
      */
 
@@ -764,7 +850,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ОКНО ПРИГЛАШЕНИЯ
+         * ÐžÐšÐÐž ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
          * =====================================
          */
 
@@ -772,11 +858,11 @@ public class CityPylonScreen
                 && button == 0) {
 
             /*
-             * Кнопка НАЗАД
+             * ÐšÐ½Ð¾Ð¿ÐºÐ° ÐÐÐ—ÐÐ”
              *
-             * Она пока рисуется вручную,
-             * потому что существует только
-             * внутри экрана приглашения.
+             * ÐžÐ½Ð° Ð¿Ð¾ÐºÐ° Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ð²Ñ€ÑƒÑ‡Ð½ÑƒÑŽ,
+             * Ð¿Ð¾Ñ‚Ð¾Ð¼Ñƒ Ñ‡Ñ‚Ð¾ ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚ Ñ‚Ð¾Ð»ÑŒÐºÐ¾
+             * Ð²Ð½ÑƒÑ‚Ñ€Ð¸ ÑÐºÑ€Ð°Ð½Ð° Ð¿Ñ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¸Ñ.
              */
 
             int backX =
@@ -806,17 +892,17 @@ public class CityPylonScreen
             }
 
             /*
-             * Список игроков
+             * Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð²
              */
 
             List<PlayerInfo> players =
                     getInvitePlayers();
 
             int listX =
-                    this.leftPos + 180;
+                    this.contentLeft();
 
             int listY =
-                    this.topPos + 75 + 78;
+                    this.contentTop() + 78;
 
             int rowHeight = 38;
 
@@ -854,7 +940,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ГРАНИЦЫ
+         * Ð“Ð ÐÐÐ˜Ð¦Ð«
          * =====================================
          */
 
@@ -863,13 +949,10 @@ public class CityPylonScreen
                 && this.activeTab == 1) {
 
             int checkboxX =
-                    this.leftPos + 180;
+                    this.contentLeft();
 
             int checkboxY =
-                    this.topPos
-                            + 75
-                            + 45
-                            + 110;
+                    this.contentTop() + 45 + 110;
 
             int boxSize = 14;
 
@@ -898,7 +981,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ЕСЛИ ГОРОДА НЕТ
+         * Ð•Ð¡Ð›Ð˜ Ð“ÐžÐ ÐžÐ”Ð ÐÐ•Ð¢
          * =====================================
          */
 
@@ -926,10 +1009,11 @@ public class CityPylonScreen
         }
 
         if (this.activeTab == 3 && button == 0) {
-            int contentLeft = this.leftPos + 180;
-            int contentTop = this.topPos + 75;
+            int contentLeft = this.contentLeft();
+            int contentTop = this.contentTop();
             List<CityProjectSnapshot> projects = this.menu.getProjects();
             for (int index = 0; index < Math.min(2, projects.size()); index++) {
+                // Ð¢Ð° Ð¶Ðµ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ, Ñ‡Ñ‚Ð¾ Ð¸ Ð² renderProjects(): ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ° 34 Ð¿Ð¸ÐºÑÐµÐ»Ñ.
                 int cardY = contentTop + 44 + index * 36;
                 if (mouseX >= contentLeft + CONTENT_WIDTH - 54 && mouseX <= contentLeft + CONTENT_WIDTH - 4
                         && mouseY >= cardY + 3 && mouseY <= cardY + 31) {
@@ -974,7 +1058,7 @@ public class CityPylonScreen
 
         /*
          * =========================================
-         * УПРАВЛЕНИЕ УЧАСТНИКОМ
+         * Ð£ÐŸÐ ÐÐ’Ð›Ð•ÐÐ˜Ð• Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐžÐœ
          * =========================================
          */
 
@@ -987,10 +1071,6 @@ public class CityPylonScreen
 
             int cardY =
                     this.contentTop() + MEMBER_LIST_OFFSET;
-
-            int cardWidth = MEMBER_CARD_W;
-            int cardHeight = MEMBER_CARD_H;
-            int spacing = 6;
 
             int visibleCount = MEMBER_ROWS;
 
@@ -1013,22 +1093,27 @@ public class CityPylonScreen
                 int visibleIndex =
                         i - start;
 
-                int currentY =
-                        cardY
-                                + visibleIndex
-                                * (cardHeight + spacing);
+                /*
+                 * Ð¢Ð° Ð¶Ðµ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ, Ñ‡Ñ‚Ð¾ Ð¸ Ð¿Ñ€Ð¸ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐµ.
+                 * Ð Ð°Ð½ÑŒÑˆÐµ Ð·Ð´ÐµÑÑŒ ÑÑ‚Ð¾ÑÐ»Ð¸ ÑÐ¾Ð±ÑÑ‚Ð²ÐµÐ½Ð½Ñ‹Ðµ cardWidth/spacing
+                 * Ð¸ ÑÐ¾Ð±ÑÑ‚Ð²ÐµÐ½Ð½Ñ‹Ð¹ Ð¿Ñ€ÑÐ¼Ð¾ÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸Ðº Ð´Ð»Ñ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¸,
+                 * Ð¸Ð·-Ð·Ð° Ñ‡ÐµÐ³Ð¾ ÐºÐ½Ð¾Ð¿ÐºÐ° ÑƒÐµÐ·Ð¶Ð°Ð»Ð° Ð¾Ñ‚ Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ð¹.
+                 */
+                MemberCardGeometry card =
+                        memberCard(cardX, cardY, visibleIndex);
 
-                int gearX =
-                        cardX + cardWidth - 30;
+                int gearX = card.gearX();
+                int gearY = card.gearY();
 
-                int gearY =
-                        currentY + 8;
-
+                /*
+                 * Hitbox Ñ€Ð¾Ð²Ð½Ð¾ Ð¿Ð¾ Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ð¹ Ð¸ÐºÐ¾Ð½ÐºÐµ:
+                 * Ñ€Ð°Ð½ÑŒÑˆÐµ Ð¾Ð½ Ð±Ñ‹Ð» ÑˆÐ¸Ñ€Ðµ Ð¸ Ð½Ð¸Ð¶Ðµ, Ñ‡ÐµÐ¼ ÑÐ°Ð¼Ð° ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ°.
+                 */
                 boolean clicked =
                         mouseX >= gearX
-                                && mouseX <= cardX + cardWidth
+                                && mouseX < gearX + MEMBER_GEAR_SIZE
                                 && mouseY >= gearY
-                                && mouseY <= currentY + 35;
+                                && mouseY < gearY + MEMBER_GEAR_SIZE;
 
                 if (clicked
                         && canManageMember(member)) {
@@ -1089,7 +1174,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ПОЛУЧЕНИЕ ИГРОКОВ ДЛЯ ПРИГЛАШЕНИЯ
+     * ÐŸÐžÐ›Ð£Ð§Ð•ÐÐ˜Ð• Ð˜Ð“Ð ÐžÐšÐžÐ’ Ð”Ð›Ð¯ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
      * =========================================
      */
 
@@ -1119,7 +1204,7 @@ public class CityPylonScreen
                             .getId();
 
             /*
-             * Не показываем самого себя.
+             * ÐÐµ Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ ÑÐ°Ð¼Ð¾Ð³Ð¾ ÑÐµÐ±Ñ.
              */
 
             if (playerId.equals(currentPlayer)) {
@@ -1127,8 +1212,8 @@ public class CityPylonScreen
             }
 
             /*
-             * Не показываем игроков,
-             * которые уже состоят в этом городе.
+             * ÐÐµ Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð²,
+             * ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ðµ ÑƒÐ¶Ðµ ÑÐ¾ÑÑ‚Ð¾ÑÑ‚ Ð² ÑÑ‚Ð¾Ð¼ Ð³Ð¾Ñ€Ð¾Ð´Ðµ.
              */
 
             boolean alreadyMember =
@@ -1155,7 +1240,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ПРИГЛАСИТЬ ИГРОКА
+     * ÐŸÐ Ð˜Ð“Ð›ÐÐ¡Ð˜Ð¢Ð¬ Ð˜Ð“Ð ÐžÐšÐ
      * =========================================
      */
 
@@ -1191,7 +1276,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * МОЖЕТ ПРИГЛАШАТЬ
+     * ÐœÐžÐ–Ð•Ð¢ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨ÐÐ¢Ð¬
      * =========================================
      */
 
@@ -1231,7 +1316,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ИМЯ УЧАСТНИКА
+     * Ð˜ÐœÐ¯ Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐ
      * =========================================
      */
 
@@ -1265,7 +1350,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ФОН
+     * Ð¤ÐžÐ
      * =========================================
      */
 
@@ -1284,7 +1369,7 @@ public class CityPylonScreen
                 this.topPos;
 
         /*
-         * Основная панель
+         * ÐžÑÐ½Ð¾Ð²Ð½Ð°Ñ Ð¿Ð°Ð½ÐµÐ»ÑŒ
          */
 
         guiGraphics.fill(
@@ -1296,7 +1381,7 @@ public class CityPylonScreen
         );
 
         /*
-         * Верхняя панель
+         * Ð’ÐµÑ€Ñ…Ð½ÑÑ Ð¿Ð°Ð½ÐµÐ»ÑŒ
          */
 
         guiGraphics.fill(
@@ -1308,7 +1393,7 @@ public class CityPylonScreen
         );
 
         /*
-         * Золотая линия
+         * Ð—Ð¾Ð»Ð¾Ñ‚Ð°Ñ Ð»Ð¸Ð½Ð¸Ñ
 
          */
 
@@ -1325,7 +1410,7 @@ public class CityPylonScreen
         }
 
         /*
-         * Левая панель
+         * Ð›ÐµÐ²Ð°Ñ Ð¿Ð°Ð½ÐµÐ»ÑŒ
          */
 
         guiGraphics.fill(
@@ -1337,7 +1422,7 @@ public class CityPylonScreen
         );
 
         /*
-         * Разделитель
+         * Ð Ð°Ð·Ð´ÐµÐ»Ð¸Ñ‚ÐµÐ»ÑŒ
          */
 
         guiGraphics.fill(
@@ -1406,18 +1491,18 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ЗАГОЛОВОК
+         * Ð—ÐÐ“ÐžÐ›ÐžÐ’ÐžÐš
          * =====================================
          */
 
         /*
          * =====================================
-         * ЭМБЛЕМА (BRANDING)
+         * Ð­ÐœÐ‘Ð›Ð•ÐœÐ (BRANDING)
          * =====================================
          *
-         * Знак рисуется первым и занимает фиксированный угол HEADER,
-         * поэтому он не может наехать на название города или уровень:
-         * заголовок ниже обрезается по левой границе знака.
+         * Ð—Ð½Ð°Ðº Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ð¿ÐµÑ€Ð²Ñ‹Ð¼ Ð¸ Ð·Ð°Ð½Ð¸Ð¼Ð°ÐµÑ‚ Ñ„Ð¸ÐºÑÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ ÑƒÐ³Ð¾Ð» HEADER,
+         * Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ Ð¾Ð½ Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ð½Ð°ÐµÑ…Ð°Ñ‚ÑŒ Ð½Ð° Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ð³Ð¾Ñ€Ð¾Ð´Ð° Ð¸Ð»Ð¸ ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ:
+         * Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº Ð½Ð¸Ð¶Ðµ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ Ð»ÐµÐ²Ð¾Ð¹ Ð³Ñ€Ð°Ð½Ð¸Ñ†Ðµ Ð·Ð½Ð°ÐºÐ°.
          */
         int emblemX =
                 left + PANEL_WIDTH - OUTER_PADDING - HEADER_EMBLEM_SIZE;
@@ -1451,7 +1536,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ЕСЛИ ГОРОДА НЕТ
+         * Ð•Ð¡Ð›Ð˜ Ð“ÐžÐ ÐžÐ”Ð ÐÐ•Ð¢
          * =====================================
          */
 
@@ -1479,7 +1564,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ПОДЗАГОЛОВОК
+         * ÐŸÐžÐ”Ð—ÐÐ“ÐžÐ›ÐžÐ’ÐžÐš
          * =====================================
          */
 
@@ -1493,7 +1578,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ЭКРАН ПРИГЛАШЕНИЯ
+         * Ð­ÐšÐ ÐÐ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
          * =====================================
          */
 
@@ -1513,7 +1598,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * КОНТЕНТ
+         * ÐšÐžÐÐ¢Ð•ÐÐ¢
          * =====================================
          */
 
@@ -1638,7 +1723,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ЭКРАН ВЫБОРА ИГРОКА
+     * Ð­ÐšÐ ÐÐ Ð’Ð«Ð‘ÐžÐ Ð Ð˜Ð“Ð ÐžÐšÐ
      * =========================================
      */
 
@@ -1678,12 +1763,12 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * КНОПКА НАЗАД
+         * ÐšÐÐžÐŸÐšÐ ÐÐÐ—ÐÐ”
          * =====================================
          *
-         * Пока остаётся ручной,
-         * потому что она существует только
-         * внутри экрана приглашения.
+         * ÐŸÐ¾ÐºÐ° Ð¾ÑÑ‚Ð°Ñ‘Ñ‚ÑÑ Ñ€ÑƒÑ‡Ð½Ð¾Ð¹,
+         * Ð¿Ð¾Ñ‚Ð¾Ð¼Ñƒ Ñ‡Ñ‚Ð¾ Ð¾Ð½Ð° ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚ Ñ‚Ð¾Ð»ÑŒÐºÐ¾
+         * Ð²Ð½ÑƒÑ‚Ñ€Ð¸ ÑÐºÑ€Ð°Ð½Ð° Ð¿Ñ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¸Ñ.
          */
 
         int backX =
@@ -1733,7 +1818,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * СТАТУС
+         * Ð¡Ð¢ÐÐ¢Ð£Ð¡
          * =====================================
          */
 
@@ -1752,7 +1837,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ИГРОКИ
+         * Ð˜Ð“Ð ÐžÐšÐ˜
          * =====================================
          */
 
@@ -1805,7 +1890,7 @@ public class CityPylonScreen
                             && mouseY <= currentY + 32;
 
             /*
-             * Фон строки
+             * Ð¤Ð¾Ð½ ÑÑ‚Ñ€Ð¾ÐºÐ¸
              */
 
             guiGraphics.fill(
@@ -1829,7 +1914,7 @@ public class CityPylonScreen
             );
 
             /*
-             * Скин
+             * Ð¡ÐºÐ¸Ð½
              */
 
             PlayerSkin skin =
@@ -1853,7 +1938,7 @@ public class CityPylonScreen
             );
 
             /*
-             * Имя
+             * Ð˜Ð¼Ñ
              */
 
             String playerName =
@@ -1886,7 +1971,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ОБЗОР
+     * ÐžÐ‘Ð—ÐžÐ 
      * =========================================
      */
 
@@ -1987,7 +2072,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ТЕРРИТОРИЯ
+     * Ð¢Ð•Ð Ð Ð˜Ð¢ÐžÐ Ð˜Ð¯
      * =========================================
      */
 
@@ -2109,7 +2194,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * УЧАСТНИКИ
+     * Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐ˜
      * =========================================
      */
 
@@ -2125,7 +2210,7 @@ public class CityPylonScreen
                 top + 45;
 
         /*
-         * Заголовок
+         * Ð—Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº
          */
 
         String residentsLabel = tr("gui.createcityexpansioncore.city.residents_title");
@@ -2161,10 +2246,14 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * СПИСОК
+         * Ð¡ÐŸÐ˜Ð¡ÐžÐš
          * =====================================
          */
 
+        /*
+         * Ð•Ð´Ð¸Ð½Ð°Ñ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ: Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ÑÑ Ð¸ Ð·Ð´ÐµÑÑŒ, Ð¸ Ð² mouseClicked().
+         * hardcoded 270 Ñ€Ð°Ð½ÑŒÑˆÐµ Ð½Ðµ ÑÐ¾Ð²Ð¿Ð°Ð´Ð°Ð» Ñ MEMBER_CARD_W.
+         */
         int cardX =
                 left;
 
@@ -2172,16 +2261,16 @@ public class CityPylonScreen
                 row + 28;
 
         int cardWidth =
-                270;
+                MEMBER_CARD_W;
 
         int cardHeight =
-                48;
+                MEMBER_CARD_H;
 
         int spacing =
-                6;
+                MEMBER_CARD_PITCH - MEMBER_CARD_H;
 
         int visibleCount =
-                2;
+                MEMBER_ROWS;
 
         int maxScroll =
                 Math.max(
@@ -2216,18 +2305,13 @@ public class CityPylonScreen
             int visibleIndex =
                     i - start;
 
-            int currentY =
-                    cardY
-                            + visibleIndex
-                            * (cardHeight + spacing);
+            MemberCardGeometry card =
+                    memberCard(cardX, cardY, visibleIndex);
 
             renderMemberCard(
                     guiGraphics,
                     member,
-                    cardX,
-                    currentY,
-                    cardWidth,
-                    cardHeight
+                    card
             );
         }
 
@@ -2299,18 +2383,20 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * КАРТОЧКА
+     * ÐšÐÐ Ð¢ÐžÐ§ÐšÐ
      * =========================================
      */
 
     private void renderMemberCard(
             GuiGraphics guiGraphics,
             CityMember member,
-            int cardX,
-            int cardY,
-            int cardWidth,
-            int cardHeight
+            MemberCardGeometry card
     ) {
+
+        final int cardX = card.x();
+        final int cardY = card.y();
+        final int cardWidth = card.width();
+        final int cardHeight = card.height();
 
         guiGraphics.fill(
                 cardX,
@@ -2475,19 +2561,108 @@ public class CityPylonScreen
 
         if (canManageMember(member)) {
 
-            guiGraphics.drawString(
-                    this.font,
-                    Component.literal("⚙"),
-                    cardX + cardWidth - 18,
-                    cardY + 18,
-                    0xFFD09A3A
+            drawGear(
+                    guiGraphics,
+                    card.gearX(),
+                    card.gearY(),
+                    MEMBER_GEAR_SIZE,
+                    this.mouseOverGear(card)
+                            ? 0xFFFFC978
+                            : 0xFFD09A3A
             );
         }
     }
 
+    /**
+     * Ð Ð¸ÑÑƒÐµÑ‚ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÑƒ Ñ†ÐµÐ»Ð¾Ñ‡Ð¸ÑÐ»ÐµÐ½Ð½Ñ‹Ð¼Ð¸ Ð¿Ñ€ÑÐ¼Ð¾ÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸ÐºÐ°Ð¼Ð¸.
+     *
+     * <p>Ð Ð°Ð½ÑŒÑˆÐµ Ð·Ð´ÐµÑÑŒ Ð±Ñ‹Ð» Unicode-Ð³Ð»Ð¸Ñ„ Â«âš™Â» Ñ€Ð°Ð·Ð¼ÐµÑ€Ð¾Ð¼ ÑÐ¾ ÑˆÑ€Ð¸Ñ„Ñ‚
+     * (Ð¾ÐºÐ¾Ð»Ð¾ 8×8 Ð¸ Ð·Ð°Ð¼ÐµÑ‚Ð½Ð¾ Ð¼ÐµÐ½ÑŒÑˆÐµ Ð¾ÑÑ‚Ð°Ð»ÑŒÐ½Ñ‹Ñ… ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð² ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸).
+     * Ð¢ÐµÐ¿ÐµÑ€ÑŒ ÑÑ‚Ð¾ Ð½Ð°ÑÑ‚Ð¾ÑÑ‰Ð°Ñ Ð¸ÐºÐ¾Ð½ÐºÐ° 16×16, Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð°Ñ Ð¿Ð¸ÐºÑÐµÐ»ÑŒ-Ð°Ñ€Ñ‚Ð¾Ð¼
+     * Ð² ÑÑ‚Ð¸Ð»Ðµ Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹ÑÐ°: Ð±ÐµÐ· ÑÐ³Ð»Ð°Ð¶Ð¸Ð²Ð°Ð½Ð¸Ñ, Ð±ÐµÐ· Ñ€Ð°ÑÑ‚ÑÐ³Ð¸Ð²Ð°Ð½Ð¸Ñ Ñ‚ÐµÐºÑÑ‚ÑƒÑ€Ñ‹.
+     *
+     * @param size ÑÑ‚Ð¾Ñ€Ð¾Ð½Ð° Ð¸ÐºÐ¾Ð½ÐºÐ¸ Ð² Ð»Ð¾Ð³Ð¸Ñ‡ÐµÑÐºÐ¸Ñ… Ð¿Ð¸ÐºÑÐµÐ»ÑÑ… GUI
+     */
+    private void drawGear(
+            GuiGraphics guiGraphics,
+            int x,
+            int y,
+            int size,
+            int color
+    ) {
+        /*
+         * Ð¡Ñ…ÐµÐ¼Ð° 16×16. '#' â€” Ð¿Ð¸ÐºÑÐµÐ»ÑŒ Ð¸ÐºÐ¾Ð½ÐºÐ¸, '.' â€” Ð¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ñ‹Ð¹.
+         * Ð£Ð³Ð»Ñ‹ Ð¸ Ñ†ÐµÐ½Ñ‚Ñ€ Ð¾ÑÑ‚Ð°Ð²Ð»ÐµÐ½Ñ‹ Ð¿ÑƒÑÑ‚Ñ‹Ð¼Ð¸, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð¸ÐºÐ¾Ð½ÐºÐ° Ñ‡Ð¸Ñ‚Ð°Ð»Ð°ÑÑŒ
+         * ÐºÐ°Ðº ÑˆÐµÑÑ‚ÐµÑ€Ð½Ñ, Ð° Ð½Ðµ ÐºÐ°Ðº ÑÐ¿Ð»Ð¾ÑˆÐ½Ð¾Ð¹ ÐºÐ²Ð°Ð´Ñ€Ð°Ñ‚.
+         */
+                final String[] GEAR = {
+                "..................",
+                "....##........##....",
+                "...####......####...",
+                "..##############..",
+                "...############....",
+                "..###.######.###....",
+                ".####..####..####...",
+                "#####..#..#..#####..",
+                "#####..#..#..#####..",
+                ".####..####..####...",
+                "..###.######.###....",
+                "...############....",
+                "..##############..",
+                "...####......####...",
+                "....##........##....",
+                "..................",
+                "..................",
+                ".................."
+        };
+
+        final int dark = 0xFF8A6320;
+        guiGraphics.fill(x, y, x + size, y + size, 0x00000000);
+
+        for (int row = 0; row < GEAR.length; row++) {
+            String line = GEAR[row];
+            for (int column = 0; column < line.length(); column++) {
+                if (line.charAt(column) != '#') {
+                    continue;
+                }
+                int px = x + column;
+                int py = y + row;
+                /*
+                 * ÐÐ¸Ð¶Ð½Ð¸Ð¹ Ñ€ÑÐ´ Ð¿Ð¸ÐºÑÐµÐ»Ñ Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ñ‚ÐµÐ¼Ð½ÐµÐµ â€” ÑÑ‚Ð¾ Ð´Ð°Ñ‘Ñ‚
+                 * Ð¾Ð±ÑŠÑ‘Ð¼ Ð±ÐµÐ· ÐµÐ´Ð¸Ð½Ð¾Ð³Ð¾ ÑÐ³Ð»Ð°Ð¶ÐµÐ½Ð½Ð¾Ð³Ð¾ Ð¿Ð¸ÐºÑÐµÐ»Ñ.
+                 */
+                guiGraphics.fill(px, py, px + 1, py + 1,
+                        (row >= GEAR.length / 2) ? dark : color);
+            }
+        }
+    }
+
+    /**
+     * ÐÐ°Ñ…Ð¾Ð´Ð¸Ñ‚ÑÑ Ð»Ð¸ ÐºÑƒÑ€ÑÐ¾Ñ€ Ð½Ð°Ð´ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¾Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸.
+     * Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ Ñ‚Ñƒ Ð¶Ðµ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸ÑŽ, Ñ‡Ñ‚Ð¾ Ð¸ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐ°.
+     */
+    private boolean mouseOverGear(MemberCardGeometry card) {
+        double mouseX =
+                this.minecraft.mouseHandler.xpos()
+                        / (this.minecraft.getWindow()
+                        .getGuiScaledWidth()
+                                / (double) this.width);
+        double mouseY =
+                this.minecraft.mouseHandler.ypos()
+                        / (this.minecraft.getWindow()
+                        .getGuiScaledHeight()
+                                / (double) this.height);
+        int gx = card.gearX();
+        int gy = card.gearY();
+        return mouseX >= gx
+                && mouseX < gx + MEMBER_GEAR_SIZE
+                && mouseY >= gy
+                && mouseY < gy + MEMBER_GEAR_SIZE;
+    }
+
     /*
      * =========================================
-     * ПРОЕКТЫ
+     * ÐŸÐ ÐžÐ•ÐšÐ¢Ð«
      * =========================================
      */
 
@@ -2674,7 +2849,7 @@ public class CityPylonScreen
                 x + 23, y + 4, requirement.complete() ? 0xFFB8D8C4 : 0xFFFFFFFF);
         graphics.drawString(this.font, Component.literal(
                         formatCount(requirement.current()) + " / " + formatCount(requirement.required())
-                                + (requirement.complete() ? " ✓" : "")),
+                                + (requirement.complete() ? " âœ“" : "")),
                 x + width - 88, y + 4, requirement.complete() ? 0xFF77C98D : 0xFFD09A3A);
         if (prominent) {
             int barX = x + 23;
@@ -3209,7 +3384,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * РЫНОК: СПИСОК СЛЕВА + ДЕТАЛИ СПРАВА
+     * Ð Ð«ÐÐžÐš: Ð¡ÐŸÐ˜Ð¡ÐžÐš Ð¡Ð›Ð•Ð’Ð + Ð”Ð•Ð¢ÐÐ›Ð˜ Ð¡ÐŸÐ ÐÐ’Ð
      * =========================================
      */
 
@@ -3242,7 +3417,7 @@ public class CityPylonScreen
         else renderEconomyDetailPlaceholder(g,detailX,top+MARKET_TOOLBAR_Y);
     }
 
-    /** Карточка объявления/контракта в левой колонке. */
+    /** ÐšÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ° Ð¾Ð±ÑŠÑÐ²Ð»ÐµÐ½Ð¸Ñ/ÐºÐ¾Ð½Ñ‚Ñ€Ð°ÐºÑ‚Ð° Ð² Ð»ÐµÐ²Ð¾Ð¹ ÐºÐ¾Ð»Ð¾Ð½ÐºÐµ. */
     private void renderEconomyCard(GuiGraphics g,int x,int y,int width,EconomyEntry entry,boolean selected,int mouseX,int mouseY){
         boolean hover=inside(mouseX,mouseY,x,y,width,MARKET_ROW_H);
         g.fill(x,y,x+width,y+MARKET_ROW_H,selected?0xFF26323A:(hover?0xFF242C31:0xFF20272B));
@@ -3314,16 +3489,16 @@ public class CityPylonScreen
     }
 
     /*
-     * Панель деталей справа.
-     * Контент обрезается по своей области, чтобы текст не лез на кнопки.
+     * ÐŸÐ°Ð½ÐµÐ»ÑŒ Ð´ÐµÑ‚Ð°Ð»ÐµÐ¹ ÑÐ¿Ñ€Ð°Ð²Ð°.
+     * ÐšÐ¾Ð½Ñ‚ÐµÐ½Ñ‚ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ ÑÐ²Ð¾ÐµÐ¹ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ñ‚ÐµÐºÑÑ‚ Ð½Ðµ Ð»ÐµÐ· Ð½Ð° ÐºÐ½Ð¾Ð¿ÐºÐ¸.
      */
     private void renderEconomyDetailPanel(GuiGraphics g,int x,int y,EconomyEntry entry,EconomyStatePayload state,int mouseX,int mouseY){
         boolean isContract=entry.contract()!=null;
         int width=MARKET_DETAIL_W;
         int height=CONTENT_BODY_BOTTOM-MARKET_TOOLBAR_Y;
         /*
-         * Низ обрезки отступает под строку бартера (иначе она резалась),
-         * а кнопки прижаты к низу панели — мёртвая полоса исчезает.
+         * ÐÐ¸Ð· Ð¾Ð±Ñ€ÐµÐ·ÐºÐ¸ Ð¾Ñ‚ÑÑ‚ÑƒÐ¿Ð°ÐµÑ‚ Ð¿Ð¾Ð´ ÑÑ‚Ñ€Ð¾ÐºÑƒ Ð±Ð°Ñ€Ñ‚ÐµÑ€Ð° (Ð¸Ð½Ð°Ñ‡Ðµ Ð¾Ð½Ð° Ñ€ÐµÐ·Ð°Ð»Ð°ÑÑŒ),
+         * Ð° ÐºÐ½Ð¾Ð¿ÐºÐ¸ Ð¿Ñ€Ð¸Ð¶Ð°Ñ‚Ñ‹ Ðº Ð½Ð¸Ð·Ñƒ Ð¿Ð°Ð½ÐµÐ»Ð¸ â€” Ð¼Ñ‘Ñ€Ñ‚Ð²Ð°Ñ Ð¿Ð¾Ð»Ð¾ÑÐ° Ð¸ÑÑ‡ÐµÐ·Ð°ÐµÑ‚.
          */
         int contentBottom=y+139;
         int actionY=y+height-26;
@@ -3387,7 +3562,7 @@ public class CityPylonScreen
                 x+4,cursor,0xFF657177,false);
     }
 
-    /** Строка «[иконка] 64 Медный лист» или «Валюта 800» в панели деталей. */
+    /** Ð¡Ñ‚Ñ€Ð¾ÐºÐ° Â«[Ð¸ÐºÐ¾Ð½ÐºÐ°] 64 ÐœÐµÐ´Ð½Ñ‹Ð¹ Ð»Ð¸ÑÑ‚Â» Ð¸Ð»Ð¸ Â«Ð’Ð°Ð»ÑŽÑ‚Ð° 800Â» Ð² Ð¿Ð°Ð½ÐµÐ»Ð¸ Ð´ÐµÑ‚Ð°Ð»ÐµÐ¹. */
     private int detailExchangeRow(GuiGraphics g,int x,int y,int width,ResourceLocation id,long amount,String prefix){
         if(id==null){
             g.drawString(this.font,ellipsize(Component.literal(prefix+Component.translatable("gui.createcityexpansioncore.economy.card.money_line",formatCount(amount)).getString()),width),
@@ -3408,7 +3583,7 @@ public class CityPylonScreen
                 x+4,y+3,0xFFFFD59A,false);
         g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.issuer",c.issuerName()),inner),
                 x+4,y+14,0xFFAEB8BB,false);
-        g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.contractor",c.contractorName().isBlank()?"—":c.contractorName()),inner),
+        g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.contractor",c.contractorName().isBlank()?"â€”":c.contractorName()),inner),
                 x+4,y+25,0xFFAEB8BB,false);
         g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.reward",formatCount(c.reward())),inner),
                 x+4,y+36,0xFFFFD59A,false);
@@ -3425,8 +3600,8 @@ public class CityPylonScreen
     private void renderEconomyHeaderTooltip(GuiGraphics graphics,int left,int top,int mouseX,int mouseY){deferEconomyHeaderTooltip(left,top,mouseX,mouseY);}
 
     /**
-     * Подсказки шапки экономики: «?» и строка с эскроу.
-     * Запоминаем, а не рисуем — см. flushDeferredTooltip().
+     * ÐŸÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ ÑˆÐ°Ð¿ÐºÐ¸ ÑÐºÐ¾Ð½Ð¾Ð¼Ð¸ÐºÐ¸: Â«?Â» Ð¸ ÑÑ‚Ñ€Ð¾ÐºÐ° Ñ ÑÑÐºÑ€Ð¾Ñƒ.
+     * Ð—Ð°Ð¿Ð¾Ð¼Ð¸Ð½Ð°ÐµÐ¼, Ð° Ð½Ðµ Ñ€Ð¸ÑÑƒÐµÐ¼ â€” ÑÐ¼. flushDeferredTooltip().
      */
     private void deferEconomyHeaderTooltip(int left,int top,int mouseX,int mouseY){
         EconomyStatePayload state=this.menu.getEconomyState();
@@ -3446,8 +3621,8 @@ public class CityPylonScreen
         g.renderOutline(left+3,overlayTop,CONTENT_WIDTH-6,overlayBottom-overlayTop,0xFFD09A3A);
 
         /*
-         * Справка не обрезается: если текст не влез — он прокручивается
-         * колесом, а снизу видна стрелка «ещё есть».
+         * Ð¡Ð¿Ñ€Ð°Ð²ÐºÐ° Ð½Ðµ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ: ÐµÑÐ»Ð¸ Ñ‚ÐµÐºÑÑ‚ Ð½Ðµ Ð²Ð»ÐµÐ· â€” Ð¾Ð½ Ð¿Ñ€Ð¾ÐºÑ€ÑƒÑ‡Ð¸Ð²Ð°ÐµÑ‚ÑÑ
+         * ÐºÐ¾Ð»ÐµÑÐ¾Ð¼, Ð° ÑÐ½Ð¸Ð·Ñƒ Ð²Ð¸Ð´Ð½Ð° ÑÑ‚Ñ€ÐµÐ»ÐºÐ° Â«ÐµÑ‰Ñ‘ ÐµÑÑ‚ÑŒÂ».
          */
         int maxScroll=Math.max(0,helpContentHeight-(contentBottom-overlayTop-14));
         marketplaceHelpScroll=Math.clamp(marketplaceHelpScroll,0,maxScroll);
@@ -3471,20 +3646,20 @@ public class CityPylonScreen
         g.disableScissor();
         helpContentHeight=cursor-overlayTop;
         if(marketplaceHelpScroll>0||marketplaceHelpScroll<maxScroll)
-            g.drawString(this.font,marketplaceHelpScroll>0?"▲":"▼",left+CONTENT_WIDTH-18,contentBottom-11,0xFFFFD59A,false);
+            g.drawString(this.font,marketplaceHelpScroll>0?"â–²":"â–¼",left+CONTENT_WIDTH-18,contentBottom-11,0xFFFFD59A,false);
         if(marketplaceHintVisible)
             renderEconomyButton(g,left+CONTENT_CENTER-58,buttonY,116,Component.translatable("gui.createcityexpansioncore.economy.understood"),mouseX,mouseY);
         else
             renderEconomyButton(g,left+CONTENT_CENTER-45,buttonY,90,Component.translatable("gui.createcityexpansioncore.common.close"),mouseX,mouseY);
     }
 
-    /** Заголовок секции + переносимый текст; возвращает Y следующей строки. */
+    /** Ð—Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº ÑÐµÐºÑ†Ð¸Ð¸ + Ð¿ÐµÑ€ÐµÐ½Ð¾ÑÐ¸Ð¼Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚; Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Y ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÐµÐ¹ ÑÑ‚Ñ€Ð¾ÐºÐ¸. */
     private int drawHelpSection(GuiGraphics g,Component title,Component body,int x,int y,int width){
         g.drawString(this.font,title,x,y,0xFFFFFFFF,false);
         return drawWrapped(g,body,x,y+this.font.lineHeight,width,0xFFB7C0C3);
     }
 
-    /** Перенос без «...»: полный текст и сразу высота занятых строк. */
+    /** ÐŸÐµÑ€ÐµÐ½Ð¾Ñ Ð±ÐµÐ· Â«...Â»: Ð¿Ð¾Ð»Ð½Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚ Ð¸ ÑÑ€Ð°Ð·Ñƒ Ð²Ñ‹ÑÐ¾Ñ‚Ð° Ð·Ð°Ð½ÑÑ‚Ñ‹Ñ… ÑÑ‚Ñ€Ð¾Ðº. */
     private int drawWrapped(GuiGraphics g,Component text,int x,int y,int width,int color){
         for(FormattedCharSequence line:this.font.split(text,width)){
             g.drawString(this.font,line,x,y,color,false);
@@ -3545,8 +3720,8 @@ public class CityPylonScreen
         if(inside(mouseX,mouseY,left+104,top+MARKET_TOOLBAR_Y,64,22)){economySort=(economySort+1)%3;economyScroll=0;return true;}
         int detailX=left+MARKET_LIST_W+PANEL_GAP;
         if(selected!=null){
-            if(economyAction(selected)!=null&&inside(mouseX,mouseY,detailX+4,top+MARKET_TOOLBAR_Y+130,MARKET_DETAIL_W-8,22)){performEconomyAction(selected);return true;}
-            if(selected.contract()!=null&&inside(mouseX,mouseY,detailX+4,top+MARKET_TOOLBAR_Y+106,MARKET_DETAIL_W-8,22)){state.infrastructure().stream().filter(v->v.id().equals(selected.contract().destinationId())).findFirst().ifPresent(v->{mapPanel.centerOn(v.pos());activeTab=4;updateTabButtons();requestRailwayMap();});return true;}
+            if(economyAction(selected)!=null&&inside(mouseX,mouseY,detailX+4,top+CONTENT_BODY_BOTTOM-26,MARKET_DETAIL_W-8,22)){performEconomyAction(selected);return true;}
+            if(selected.contract()!=null&&inside(mouseX,mouseY,detailX+4,top+CONTENT_BODY_BOTTOM-54,MARKET_DETAIL_W-8,22)){state.infrastructure().stream().filter(v->v.id().equals(selected.contract().destinationId())).findFirst().ifPresent(v->{mapPanel.centerOn(v.pos());activeTab=4;updateTabButtons();requestRailwayMap();});return true;}
         }
         int end=Math.min(entries.size(),economyScroll+MARKET_VISIBLE_ROWS);
         for(int i=economyScroll;i<end;i++){int y=top+MARKET_BODY_Y+(i-economyScroll)*MARKET_ROW_PITCH;if(inside(mouseX,mouseY,left,y,MARKET_LIST_W,MARKET_ROW_H)){EconomyEntry e=entries.get(i);economySelection=e.id();economySelectionListing=e.listing();updateTabButtonsVisibility();return true;}}
@@ -3646,7 +3821,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * УПРАВЛЕНИЕ УЧАСТНИКОМ
+     * Ð£ÐŸÐ ÐÐ’Ð›Ð•ÐÐ˜Ð• Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐžÐœ
      * =========================================
      */
 
@@ -3698,7 +3873,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * СЛЕДУЮЩИЙ УРОВЕНЬ
+     * Ð¡Ð›Ð•Ð”Ð£Ð®Ð©Ð˜Ð™ Ð£Ð ÐžÐ’Ð•ÐÐ¬
      * =========================================
      */
 
@@ -3728,13 +3903,13 @@ public class CityPylonScreen
     ) {
 
         /*
-         * Ничего не рисуем.
+         * ÐÐ¸Ñ‡ÐµÐ³Ð¾ Ð½Ðµ Ñ€Ð¸ÑÑƒÐµÐ¼.
          */
     }
 
     /*
      * =========================================
-     * ПОЛЮС ПРИГЛАШЕНИЯ
+     * ÐŸÐžÐ›Ð®Ð¡ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
      * =========================================
      */
 

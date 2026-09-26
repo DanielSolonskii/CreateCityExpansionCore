@@ -1,0 +1,35 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    },
+    "F": {
+      "item": "create:brass_funnel"
+    },
+    "C": {
+      "item": "create:smart_chute"
+    },
+    "O": {
+      "item": "create:content_observer"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "S": {
+      "item": "createcityexpansioncore:steel_plate"
+    }
+  },
+  "pattern": [
+    "HFO",
+    "CIS",
+    "   "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:contract_intake"
+  },
+  "show_notification": false
+}

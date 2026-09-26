@@ -1,5 +1,8 @@
 package com.example.examplemod.city;
 
+import com.example.examplemod.sound.ModSounds;
+import com.example.examplemod.sound.WorldSoundHelper;
+
 import com.example.examplemod.block.CityPylonBlock;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.mine.MineControllerBlockEntity;
@@ -132,6 +135,14 @@ public final class CityProjectNetworkHandlers {
             player.sendSystemMessage(Component.translatable(
                     "message.createcityexpansioncore.development.level_two_complete"
             ));
+            // Редкое значимое событие: уровень города повышен.
+            WorldSoundHelper.playAt(
+                    player.serverLevel(),
+                    pylonPos,
+                    ModSounds.PYLON_LEVEL_UP.get(),
+                    1.0F,
+                    1.0F
+            );
         }
         sync(player, city);
     }

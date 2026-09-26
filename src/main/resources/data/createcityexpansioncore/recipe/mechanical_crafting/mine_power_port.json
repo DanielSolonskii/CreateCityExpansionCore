@@ -1,0 +1,35 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    },
+    "C": {
+      "item": "createcityexpansioncore:copper_busbar"
+    },
+    "T": {
+      "item": "createcityexpansioncore:technical_ceramic"
+    },
+    "N": {
+      "item": "electroenergetics:connector"
+    },
+    "I": {
+      "item": "electroenergetics:insulator"
+    },
+    "P": {
+      "item": "createcityexpansioncore:power_distribution_module"
+    }
+  },
+  "pattern": [
+    "HCH",
+    "TNT",
+    "IPI"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:mine_power_port"
+  },
+  "show_notification": false
+}

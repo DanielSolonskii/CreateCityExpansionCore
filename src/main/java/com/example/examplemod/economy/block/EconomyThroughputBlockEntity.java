@@ -3,6 +3,8 @@ package com.example.examplemod.economy.block;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.economy.EconomyManager;
 import com.example.examplemod.economy.EconomyTypes;
+import com.example.examplemod.sound.ModSounds;
+import com.example.examplemod.sound.WorldSoundHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -93,8 +95,16 @@ public final class EconomyThroughputBlockEntity extends BlockEntity {
         EconomyManager manager = EconomyManager.get(serverLevel);
         if (getBlockState().getBlock() instanceof ContractIntakeBlock) {
             manager.recordIntakeFlow(registrationId, itemId, moved, serverLevel);
+            // Тихий щелчок перемещения. Строго ограничен по времени,
+            // иначе поезд с тысячами предметов даст пулемёт.
+            WorldSoundHelper.playFlowTick(serverLevel, worldPosition,
+                    ModSounds.CONTRACT_DELIVERY_TICK.get(), 0.8F);
         } else if (getBlockState().getBlock() instanceof WarehouseGatewayBlock) {
             manager.recordGatewayFlow(registrationId, WarehouseGatewayBlock.mode(getBlockState()), itemId, moved);
+            // Склад работает в обе стороны, но звук один и тот же:
+            // различать вход и выход незачем, это создаёт шум.
+            WorldSoundHelper.playFlowTick(serverLevel, worldPosition,
+                    ModSounds.WAREHOUSE_INPUT_TICK.get(), 0.8F);
         }
     }
 

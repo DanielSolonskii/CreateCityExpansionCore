@@ -1,0 +1,33 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "D": {
+      "item": "create:mechanical_drill"
+    },
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    },
+    "S": {
+      "item": "createcityexpansioncore:steel_plate"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "M": {
+      "item": "electroenergetics:magnet"
+    }
+  },
+  "pattern": [
+    "DHD",
+    "SMS",
+    "DID",
+    "MHM"
+  ],
+  "result": {
+    "count": 2,
+    "id": "createcityexpansioncore:drill_unit"
+  },
+  "show_notification": false
+}

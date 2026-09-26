@@ -1,5 +1,7 @@
 package com.example.examplemod.client.map;
 
+import com.example.examplemod.network.CityMapPeersPayload;
+
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.network.RequestCityMapTilePayload;
 import com.example.examplemod.city.CityProjectSnapshot;
@@ -45,6 +47,20 @@ public final class CityMapPanel {
     private static final int TERRITORY_FILL = 0x2437A6D1;
     private static final int TERRITORY_BORDER = 0xFF6EC5E8;
 
+    /*
+     * Соседние города.
+     *
+     * Свой город — основной акцентный цвет, чужие — приглушённый
+     * и заметно менее насыщенный, чтобы территории не сливались
+     * в одну пеструю пятнистую массу. Это инфраструктурная карта,
+     * а не политическая: чужие города показываются как факт
+     * существования, без какой-либо детализации.
+     */
+    private static final int PEER_TERRITORY_FILL = 0x1A8E9BA6;
+    private static final int PEER_TERRITORY_BORDER = 0xFF6E8A94;
+    private static final int PEER_MARKER_COLOR = 0xFF8E9BA6;
+    private static final int PEER_MARKER_OUTLINE = 0xFF10171A;
+
     private final BlockPos pylonPos;
     private final ResourceLocation dimensionId;
     private int territorySize;
@@ -53,6 +69,12 @@ public final class CityMapPanel {
     private List<RailwayStationSnapshot> railwayStations = List.of();
     private List<RailwayTrainSnapshot> railwayTrains = List.of();
     private List<EconomyStatePayload.InfrastructureView> economyInfrastructure = List.of();
+    /**
+     * Соседние города, полученные с сервера один раз при открытии пилона.
+     * Хранятся как есть и переиспользуются каждый кадр — никаких
+     * вычислений и обходов мира в цикле отрисовки.
+     */
+    private List<CityMapPeersPayload.Peer> peers = List.of();
     private final Map<UUID, TrainPosition> previousTrainPositions = new HashMap<>();
     private long railwaySnapshotAtMillis;
     private boolean showTracks = true;
@@ -109,6 +131,16 @@ public final class CityMapPanel {
 
     public void setTerritorySize(int territorySize) {
         this.territorySize = territorySize;
+    }
+
+    /**
+     * Принимает список соседних городов с сервера.
+     *
+     * <p>Список неизменяемый и копируется один раз, поэтому в цикле
+     * отрисовки нет ни аллокаций, ни работы со словарём.
+     */
+    public void receivePeers(List<CityMapPeersPayload.Peer> peers) {
+        this.peers = List.copyOf(peers);
     }
 
     public void centerOn(BlockPos pos) {
@@ -201,6 +233,9 @@ public final class CityMapPanel {
             guiGraphics.drawManaged(() -> {
                 renderTerrain(guiGraphics);
                 renderGrid(guiGraphics);
+                // Соседи рисуются ДО своей территории: собственный город
+                // остаётся главным акцентом, чужие — фоном.
+                if (this.showTerritory) renderPeers(guiGraphics);
                 if (this.showTerritory) renderTerritory(guiGraphics);
                 renderRailway(guiGraphics, mouseX, mouseY);
                 renderMarkers(guiGraphics, mouseX, mouseY);
@@ -436,6 +471,96 @@ public final class CityMapPanel {
         for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += 32) {
             int screenY = worldToScreenY(worldZ);
             guiGraphics.hLine(viewportX, viewportX + viewportWidth, screenY, 0x243F565D);
+        }
+    }
+
+    /**
+     * Рисует соседние города: территорию, метку пилона и название.
+     *
+     * <p>Использует тот же world→screen transform, что и остальная
+     * карта: второго координатного пространства не заводится.
+     *
+     * <p>Каждый город проверяется на попадание в текущий вьюпорт
+     * и пропускается, если он целиком за кадром. Это и есть
+     * clipping: за кадром не рисуется ничего, а данные уже отфильтрованы
+     * сервером по дистанции, поэтому ни обхода мира, ни выборки
+     * чанков в цикле кадра не происходит.
+     */
+    private void renderPeers(GuiGraphics guiGraphics) {
+        for (CityMapPeersPayload.Peer peer : this.peers) {
+            // Свой город рисуется отдельно и ярче.
+            if (peer.own()) {
+                continue;
+            }
+
+            int viewportX = this.viewportX;
+            int viewportY = this.viewportY;
+            int viewportW = this.viewportWidth;
+            int viewportH = this.viewportHeight;
+
+            int markerX = worldToScreenX(peer.pylonX() + 0.5);
+            int markerY = worldToScreenY(peer.pylonZ() + 0.5);
+
+            // Метка целиком за вьюпортом — ничего не рисуем.
+            if (markerX < viewportX - 16
+                    || markerX > viewportX + viewportW + 16
+                    || markerY < viewportY - 8
+                    || markerY > viewportY + viewportH + 8) {
+                continue;
+            }
+
+            double half = peer.territorySize() / 2.0;
+            int left = worldToScreenX(peer.pylonX() - half);
+            int top = worldToScreenY(peer.pylonZ() - half);
+            int right = worldToScreenX(peer.pylonX() + half);
+            int bottom = worldToScreenY(peer.pylonZ() + half);
+
+            // Территория рисуется, только если хоть часть её в кадре.
+            if (right >= viewportX
+                    && left <= viewportX + viewportW
+                    && bottom >= viewportY
+                    && top <= viewportY + viewportH) {
+                guiGraphics.fill(left, top, right, bottom, PEER_TERRITORY_FILL);
+                guiGraphics.hLine(left, right, top, PEER_TERRITORY_BORDER);
+                guiGraphics.hLine(left, right, bottom, PEER_TERRITORY_BORDER);
+                guiGraphics.vLine(left, top, bottom, PEER_TERRITORY_BORDER);
+                guiGraphics.vLine(right, top, bottom, PEER_TERRITORY_BORDER);
+            }
+
+            // Компактная метка пилона: контур + заливка, как у своего,
+            // но приглушённая.
+            guiGraphics.fill(markerX - 3, markerY - 3, markerX + 4, markerY + 4, PEER_MARKER_OUTLINE);
+            guiGraphics.fill(markerX - 2, markerY - 2, markerX + 3, markerY + 3, PEER_MARKER_COLOR);
+
+            // Название — только если рядом, чтобы не превращать карту
+            // в россыпь текста при множестве городов.
+            String name = peer.name();
+            if (name != null && !name.isEmpty()) {
+                int textX = markerX + 7;
+                int textY = markerY - 4;
+                var font = Minecraft.getInstance().font;
+                if (textX + font.width(name) < viewportX + viewportW
+                        && textX > viewportX
+                        && textY > viewportY
+                        && textY < viewportY + viewportH) {
+                    guiGraphics.drawString(
+                            font,
+                            name,
+                            textX + 1,
+                            textY + 1,
+                            0x80000000,
+                            false
+                    );
+                    guiGraphics.drawString(
+                            font,
+                            name,
+                            textX,
+                            textY,
+                            0xFFC4CDD2,
+                            false
+                    );
+                }
+            }
         }
     }
 

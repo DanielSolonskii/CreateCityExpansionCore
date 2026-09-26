@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "createcityexpansioncore:item/incomplete_heavy_machine_frame"
+  }
+}

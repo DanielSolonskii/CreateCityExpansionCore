@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "R": {
+      "item": "create:railway_casing"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "T": {
+      "item": "createcityexpansioncore:technical_ceramic"
+    },
+    "E": {
+      "item": "create:electron_tube"
+    }
+  },
+  "pattern": [
+    "ETE",
+    "TIT",
+    " R "
+  ],
+  "result": {
+    "count": 4,
+    "id": "create:track_signal"
+  }
+}

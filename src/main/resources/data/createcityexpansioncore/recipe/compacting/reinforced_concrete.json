@@ -1,0 +1,46 @@
+{
+  "type": "create:compacting",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:dry_concrete_mix"
+    },
+    {
+      "item": "createcityexpansioncore:reinforcement_bundle"
+    },
+    {
+      "item": "createcityexpansioncore:reinforcement_bundle"
+    },
+    {
+      "type": "neoforge:single",
+      "amount": 1000,
+      "fluid": "minecraft:water"
+    }
+  ],
+  "results": [
+    {
+      "count": 8,
+      "id": "createcityexpansioncore:reinforced_concrete"
+    }
+  ]
+}

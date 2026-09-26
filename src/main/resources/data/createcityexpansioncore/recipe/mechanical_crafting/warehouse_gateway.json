@@ -1,0 +1,35 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "H": {
+      "item": "createcityexpansioncore:heavy_machine_frame"
+    },
+    "V": {
+      "item": "create:item_vault"
+    },
+    "P": {
+      "item": "create:packager"
+    },
+    "L": {
+      "item": "create:stock_link"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "B": {
+      "item": "create:brass_sheet"
+    }
+  },
+  "pattern": [
+    "VPL",
+    "HIB",
+    "B  "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:warehouse_gateway"
+  },
+  "show_notification": false
+}

@@ -1,0 +1,93 @@
+{
+  "type": "create:sequenced_assembly",
+  "ingredient": {
+    "item": "create:precision_mechanism"
+  },
+  "results": [
+    {
+      "id": "createcityexpansioncore:industrial_control_unit"
+    }
+  ],
+  "sequence": [
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_industrial_control_unit"
+        },
+        {
+          "item": "create:electron_tube"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_industrial_control_unit"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_industrial_control_unit"
+        },
+        {
+          "item": "electroenergetics:capacitor"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_industrial_control_unit"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_industrial_control_unit"
+        },
+        {
+          "item": "electroenergetics:resistor"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_industrial_control_unit"
+        }
+      ]
+    },
+    {
+      "type": "create:pressing",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_industrial_control_unit"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_industrial_control_unit"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_industrial_control_unit"
+        },
+        {
+          "item": "createcityexpansioncore:copper_busbar"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_industrial_control_unit"
+        }
+      ]
+    }
+  ],
+  "transitional_item": {
+    "id": "createcityexpansioncore:incomplete_industrial_control_unit"
+  }
+}

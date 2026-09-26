@@ -1,0 +1,186 @@
+{
+  "units": "1/16 block",
+  "front": "north (-Z)",
+  "bounds": [
+    [
+      1,
+      0,
+      1
+    ],
+    [
+      15,
+      15.9,
+      15
+    ]
+  ],
+  "atlas_size": [
+    64,
+    64
+  ],
+  "animated_groups": [
+    "screen_surface",
+    "status_lamp_green",
+    "status_lamp_amber",
+    "status_lamp_red",
+    "top_ring",
+    "top_indicator",
+    "small_gear",
+    "selector_knob"
+  ],
+  "groups": {
+    "city_pylon_root": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 0
+    },
+    "base": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 7
+    },
+    "main_body": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 11
+    },
+    "front_panel": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 13
+    },
+    "top_module": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 5
+    },
+    "mechanical_section": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 7
+    },
+    "side_details": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 14
+    },
+    "back_panel": {
+      "pivot": [
+        8,
+        0,
+        8
+      ],
+      "cube_count": 7
+    },
+    "screen_frame": {
+      "pivot": [
+        8,
+        9.5,
+        2.5
+      ],
+      "cube_count": 5
+    },
+    "screen_surface": {
+      "pivot": [
+        8,
+        9.5,
+        2.5
+      ],
+      "cube_count": 1
+    },
+    "status_lamp_green": {
+      "pivot": [
+        8,
+        9.5,
+        2.5
+      ],
+      "cube_count": 1
+    },
+    "status_lamp_amber": {
+      "pivot": [
+        8,
+        9.5,
+        2.5
+      ],
+      "cube_count": 1
+    },
+    "status_lamp_red": {
+      "pivot": [
+        8,
+        9.5,
+        2.5
+      ],
+      "cube_count": 1
+    },
+    "selector_knob": {
+      "pivot": [
+        6.1,
+        7.25,
+        2.6
+      ],
+      "cube_count": 1
+    },
+    "top_ring": {
+      "pivot": [
+        8,
+        14.3,
+        9
+      ],
+      "cube_count": 9
+    },
+    "top_indicator": {
+      "pivot": [
+        8,
+        14.3,
+        9
+      ],
+      "cube_count": 1
+    },
+    "small_gear": {
+      "pivot": [
+        10.6,
+        4.8,
+        3.6
+      ],
+      "cube_count": 6
+    }
+  },
+  "static_model": "createcityexpansioncore:block/city_pylon/static_body",
+  "runtime_parts": {
+    "screen_surface": "createcityexpansioncore:block/city_pylon/screen_surface",
+    "status_lamp_green": "createcityexpansioncore:block/city_pylon/status_lamp_green",
+    "status_lamp_amber": "createcityexpansioncore:block/city_pylon/status_lamp_amber",
+    "status_lamp_red": "createcityexpansioncore:block/city_pylon/status_lamp_red",
+    "top_ring": "createcityexpansioncore:block/city_pylon/top_ring",
+    "top_indicator": "createcityexpansioncore:block/city_pylon/top_indicator",
+    "small_gear": "createcityexpansioncore:block/city_pylon/small_gear",
+    "selector_knob": "createcityexpansioncore:block/city_pylon/selector_knob"
+  },
+  "emissive_groups": [
+    "screen_surface",
+    "status_lamp_green",
+    "status_lamp_amber",
+    "status_lamp_red",
+    "top_indicator"
+  ]
+}

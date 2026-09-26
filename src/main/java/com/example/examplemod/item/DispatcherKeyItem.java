@@ -10,6 +10,8 @@ import com.example.examplemod.economy.block.ContractIntakeBlock;
 import com.example.examplemod.economy.block.EconomyThroughputBlockEntity;
 import com.example.examplemod.economy.block.WarehouseGatewayBlock;
 import com.example.examplemod.railway.CreateRailwayAdapter;
+import com.example.examplemod.sound.ModSounds;
+import com.example.examplemod.sound.WorldSoundHelper;
 import com.example.examplemod.railway.RailwayManager;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.station.GlobalStation;
@@ -73,11 +75,15 @@ public final class DispatcherKeyItem extends Item {
         if (!registration.registeredBy().equals(player.getUUID())) {
             player.displayClientMessage(Component.translatable("message.createcityexpansioncore.economy.already_registered")
                     .withStyle(ChatFormatting.RED), true);
+            WorldSoundHelper.playAt(level, blockEntity.getBlockPos(),
+                    ModSounds.DISPATCHER_REGISTER_FAIL.get(), 0.8F, 1.0F);
             return InteractionResult.CONSUME;
         }
         blockEntity.setRegistrationId(registration.registrationId());
         writeEconomySelection(key, registration.registrationId());
         player.displayClientMessage(Component.translatable("message.createcityexpansioncore.economy.infrastructure_registered"), true);
+        WorldSoundHelper.playAt(level, blockEntity.getBlockPos(),
+                ModSounds.DISPATCHER_REGISTER_SUCCESS.get(), 0.8F, 1.0F);
         return InteractionResult.CONSUME;
     }
 
@@ -145,10 +151,14 @@ public final class DispatcherKeyItem extends Item {
             if (existing != null && !existing.registeredBy().equals(player.getUUID())) {
                 player.displayClientMessage(Component.translatable("message.createcityexpansioncore.railway.already_registered")
                         .withStyle(ChatFormatting.RED), true);
+                WorldSoundHelper.playAt(level, stationPos,
+                        ModSounds.DISPATCHER_REGISTER_FAIL.get(), 0.8F, 1.0F);
                 return InteractionResult.CONSUME;
             }
             manager.registerTrain(train.id, player.getUUID(), train.name.getString());
             player.displayClientMessage(Component.translatable("message.createcityexpansioncore.railway.train_registered", train.name), true);
+            WorldSoundHelper.playAt(level, stationPos,
+                    ModSounds.DISPATCHER_REGISTER_SUCCESS.get(), 0.8F, 1.1F);
             return InteractionResult.CONSUME;
         }
 
@@ -156,11 +166,15 @@ public final class DispatcherKeyItem extends Item {
         if (existing != null && !existing.registeredBy().equals(player.getUUID())) {
             player.displayClientMessage(Component.translatable("message.createcityexpansioncore.railway.already_registered")
                     .withStyle(ChatFormatting.RED), true);
+            WorldSoundHelper.playAt(level, stationPos,
+                    ModSounds.DISPATCHER_REGISTER_FAIL.get(), 0.8F, 1.0F);
             return InteractionResult.CONSUME;
         }
         manager.registerStation(station.id, player.getUUID(), station.name,
                 station.getBlockEntityDimension().location(), station.getBlockEntityPos());
         player.displayClientMessage(Component.translatable("message.createcityexpansioncore.railway.station_registered", station.name), true);
+        WorldSoundHelper.playAt(level, stationPos,
+                ModSounds.DISPATCHER_REGISTER_SUCCESS.get(), 0.8F, 1.0F);
         return InteractionResult.CONSUME;
     }
 }

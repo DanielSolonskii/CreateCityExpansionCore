@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "R": {
+      "item": "create:railway_casing"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "I": {
+      "item": "createcityexpansioncore:industrial_control_unit"
+    },
+    "B": {
+      "item": "createcityexpansioncore:copper_busbar"
+    },
+    "L": {
+      "item": "minecraft:lever"
+    }
+  },
+  "pattern": [
+    "PIP",
+    "RLB",
+    "RRR"
+  ],
+  "result": {
+    "count": 4,
+    "id": "create:controller_rail"
+  }
+}

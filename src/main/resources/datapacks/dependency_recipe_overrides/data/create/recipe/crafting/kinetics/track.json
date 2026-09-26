@@ -1,0 +1,25 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "S": {
+      "item": "createcityexpansioncore:sleeper_pack"
+    },
+    "R": {
+      "item": "createcityexpansioncore:rail_profile"
+    },
+    "F": {
+      "item": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  },
+  "pattern": [
+    "SFR",
+    " RR"
+  ],
+  "result": {
+    "count": 24,
+    "id": "create:track"
+  },
+  "show_notification": false
+}

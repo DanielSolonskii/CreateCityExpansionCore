@@ -1,0 +1,33 @@
+{
+  "type": "create:mixing",
+  "heat_requirement": "heated",
+  "ingredients": [
+    {
+      "tag": "c:ingots/iron"
+    },
+    {
+      "tag": "c:ingots/iron"
+    },
+    {
+      "tag": "c:ingots/iron"
+    },
+    {
+      "tag": "c:ingots/iron"
+    },
+    {
+      "item": "createcityexpansioncore:industrial_coke"
+    },
+    {
+      "item": "createcityexpansioncore:industrial_coke"
+    },
+    {
+      "item": "minecraft:calcite"
+    }
+  ],
+  "results": [
+    {
+      "count": 4,
+      "id": "createcityexpansioncore:steel_billet"
+    }
+  ]
+}

@@ -8,6 +8,8 @@ import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityProject;
+import com.example.examplemod.sound.ModSounds;
+import com.example.examplemod.sound.WorldSoundHelper;
 import com.example.examplemod.city.CityProjectType;
 import com.example.examplemod.geology.GeologicalDeposit;
 import com.example.examplemod.geology.GeologicalRegion;
@@ -127,6 +129,14 @@ public final class MineNetworkHandlers {
             player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
                     "message.createcityexpansioncore.mine.commission.complete", city.getName()
             ));
+            // Редкое значимое событие: проект промышленной шахты введён.
+            WorldSoundHelper.playAt(
+                    context.level(),
+                    controllerPos,
+                    ModSounds.PROJECT_COMMISSION.get(),
+                    1.0F,
+                    1.0F
+            );
         }
         send(player, IndustrialMineService.inspectSnapshot(
                 context.level(), controllerPos, controller

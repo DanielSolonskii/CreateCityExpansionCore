@@ -1,0 +1,27 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "B": {
+      "item": "createcityexpansioncore:structural_beam"
+    },
+    "R": {
+      "item": "createcityexpansioncore:reinforced_concrete"
+    },
+    "F": {
+      "item": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  },
+  "pattern": [
+    "BFB",
+    "BFB",
+    "RBR",
+    "RBR"
+  ],
+  "result": {
+    "count": 24,
+    "id": "createcityexpansioncore:mine_frame"
+  },
+  "show_notification": false
+}

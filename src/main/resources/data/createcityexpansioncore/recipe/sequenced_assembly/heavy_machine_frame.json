@@ -1,0 +1,81 @@
+{
+  "type": "create:sequenced_assembly",
+  "ingredient": {
+    "item": "create:andesite_casing"
+  },
+  "loops": 2,
+  "results": [
+    {
+      "id": "createcityexpansioncore:heavy_machine_frame"
+    }
+  ],
+  "sequence": [
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        },
+        {
+          "item": "createcityexpansioncore:steel_plate"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        },
+        {
+          "item": "createcityexpansioncore:structural_beam"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        },
+        {
+          "item": "createcityexpansioncore:industrial_fastener_pack"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        },
+        {
+          "item": "create:andesite_alloy"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_heavy_machine_frame"
+        }
+      ]
+    }
+  ],
+  "transitional_item": {
+    "id": "createcityexpansioncore:incomplete_heavy_machine_frame"
+  }
+}

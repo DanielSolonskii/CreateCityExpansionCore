@@ -1,7 +1,20 @@
 {
   "variants": {
-    "": {
-      "model": "createcityexpansioncore:block/city_pylon"
+    "facing=north": {
+      "model": "createcityexpansioncore:block/city_pylon/static_body",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "createcityexpansioncore:block/city_pylon/static_body",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "createcityexpansioncore:block/city_pylon/static_body",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createcityexpansioncore:block/city_pylon/static_body",
+      "y": 270
     }
   }
 }

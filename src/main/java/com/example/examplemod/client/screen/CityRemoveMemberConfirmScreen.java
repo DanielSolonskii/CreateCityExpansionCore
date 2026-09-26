@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.UUID;
 
-public class CityRemoveMemberConfirmScreen extends Screen {
+public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
 
     private final Screen parent;
     private final BlockPos pylonPos;
@@ -22,7 +22,7 @@ public class CityRemoveMemberConfirmScreen extends Screen {
             UUID targetPlayer,
             String playerName
     ) {
-        super(Component.translatable("gui.createcityexpansioncore.city.remove_member.title"));
+        super(parent, Component.translatable("gui.createcityexpansioncore.city.remove_member.title"));
 
         this.parent = parent;
         this.pylonPos = pylonPos;
@@ -123,27 +123,13 @@ public class CityRemoveMemberConfirmScreen extends Screen {
      * =========================================
      */
 
-    @Override
-    protected void renderBlurredBackground(
-            float partialTick
-    ) {
-        // Убираем blur Minecraft.
-    }
-
-    @Override
-    public void render(
+        @Override
+    protected void renderModalContent(
             GuiGraphics guiGraphics,
             int mouseX,
             int mouseY,
             float partialTick
     ) {
-
-        this.renderBackground(
-                guiGraphics,
-                mouseX,
-                mouseY,
-                partialTick
-        );
 
         int panelWidth = 420;
         int panelHeight = 180;
@@ -252,11 +238,6 @@ public class CityRemoveMemberConfirmScreen extends Screen {
                 0xAAAAAA
         );
 
-        super.render(
-                guiGraphics,
-                mouseX,
-                mouseY,
-                partialTick
-        );
+        renderOwnWidgets(guiGraphics, mouseX, mouseY, partialTick);
     }
 }

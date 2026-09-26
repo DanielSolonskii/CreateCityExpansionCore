@@ -2,11 +2,14 @@ package com.example.examplemod;
 
 import com.example.examplemod.client.CityBoundaryRenderer;
 import com.example.examplemod.client.CityInviteClientHandler;
+import com.example.examplemod.client.render.CityPylonModels;
+import com.example.examplemod.client.render.CityPylonRenderer;
 import com.example.examplemod.client.screen.CityPylonScreen;
 import com.example.examplemod.client.screen.MagneticAnalyzerScreen;
 import com.example.examplemod.client.screen.MineControllerScreen;
 import com.example.examplemod.multiblock.MultiblockPreviewRenderer;
 import com.example.examplemod.network.CityInviteNotificationPayload;
+import com.example.examplemod.network.CityMapPeersPayload;
 import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
@@ -24,6 +27,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
@@ -52,6 +56,24 @@ public class CreateCityExpansionCoreClient {
                 this::registerScreens
         );
 
+        /*
+         * =========================================
+         * CITY PYLON: RENDERER И МОДЕЛИ
+         * =========================================
+         */
+
+        modEventBus.addListener(
+                this::registerRenderers
+        );
+
+        modEventBus.addListener(
+                CityPylonModels::registerAdditional
+        );
+
+        modEventBus.addListener(
+                CityPylonModels::onBakingCompleted
+        );
+
 
         /*
          * =========================================
@@ -76,6 +98,15 @@ public class CreateCityExpansionCoreClient {
                 CityBoundaryRenderer.class
         );
     }
+    private void registerRenderers(
+            EntityRenderersEvent.RegisterRenderers event
+    ) {
+        event.registerBlockEntityRenderer(
+                CreateCityExpansionCore.CITY_PYLON_BLOCK_ENTITY.get(),
+                CityPylonRenderer::new
+        );
+    }
+
     /*
      * =========================================
      * SCREENS
@@ -177,6 +208,17 @@ public class CreateCityExpansionCoreClient {
          * СИНХРОНИЗАЦИЯ УДАЛЕНИЯ УЧАСТНИКА
          * =========================================
          */
+
+        registrar.playToClient(
+                CityMapPeersPayload.TYPE,
+                CityMapPeersPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (Minecraft.getInstance().screen instanceof CityPylonScreen screen
+                            && screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
+                        screen.getMapPanel().receivePeers(payload.peers());
+                    }
+                })
+        );
 
         registrar.playToClient(
                 SyncCityMemberRemovalPayload.TYPE,

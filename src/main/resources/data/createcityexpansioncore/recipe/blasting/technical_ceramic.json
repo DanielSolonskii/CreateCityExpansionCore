@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:blasting",
+  "category": "misc",
+  "ingredient": {
+    "item": "createcityexpansioncore:ceramic_compound"
+  },
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:technical_ceramic"
+  },
+  "experience": 0.35,
+  "cookingtime": 100
+}

@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.block.CityPylonBlock;
+import com.example.examplemod.block.CityPylonBlockEntity;
 import com.example.examplemod.client.screen.MineControllerScreen;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -46,6 +47,9 @@ import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.command.GeologyCommand;
 import com.example.examplemod.item.ModItems;
+import com.example.examplemod.item.IndustrialMaterials;
+import com.example.examplemod.sound.ModSounds;
+import com.example.examplemod.sound.WorldSoundHelper;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.CreateCityPayload;
@@ -245,6 +249,40 @@ public class CreateCityExpansionCore {
 
     /*
      * =========================================
+     * CREATIVE TAB МОДА
+     * =========================================
+     *
+     * Порядок содержимого соответствует
+     * производственной иерархии:
+     *
+     *   Tier 1-derived (инструменты анализа)
+     *   -> Tier 2 (промышленные полуфабрикаты)
+     *   -> Tier 3 (инженерная продукция)
+     *   -> машины и инфраструктура
+     */
+
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab>
+            INDUSTRIAL_TAB =
+            CREATIVE_MODE_TABS.register(
+                    "industrial",
+                    () -> CreativeModeTab.builder()
+                            .title(Component.translatable(
+                                    "itemGroup." + MODID
+                            ))
+                            .icon(() -> IndustrialMaterials.STEEL_PLATE.get()
+                                    .getDefaultInstance())
+                            .displayItems(
+                                    (parameters, output) ->
+                                            IndustrialCreativeTab.populate(
+                                                    parameters,
+                                                    output
+                                            )
+                            )
+                            .build()
+            );
+
+    /*
+     * =========================================
      * EXAMPLE BLOCK
      * =========================================
      */
@@ -313,6 +351,26 @@ public class CreateCityExpansionCore {
                             )
                             .strength(3.0f)
                             .noLootTable()
+    );
+
+    /*
+     * =========================================
+     * BLOCK ENTITY ГОРОДСКОГО ПИЛОНА
+     * =========================================
+     *
+     * Нужен только для рендера восьми анимируемых частей модели
+     * и для синхронизации одного флага активности на клиент.
+     * Игровая логика остаётся в CityManager / City.
+     */
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CityPylonBlockEntity>>
+            CITY_PYLON_BLOCK_ENTITY =
+            BLOCK_ENTITY_TYPES.register(
+                    "city_pylon",
+                    () -> BlockEntityType.Builder.of(
+                            CityPylonBlockEntity::new,
+                            CITY_PYLON.get()
+                    ).build(null)
             );
 
     public static final DeferredItem<CityPylonItem>
@@ -366,6 +424,32 @@ public class CreateCityExpansionCore {
                                     .strength(3.0F)
                                     .mapColor(MapColor.METAL)
                     )
+            );
+
+    /*
+     * =========================================
+     * ЖЕЛЕЗОБЕТОН
+     * =========================================
+     *
+     * Массовый строительный материал.
+     * Предназначен для тысячного применения:
+     * инфраструктура, станции, мосты, заводы,
+     * City Projects, Public Works Master City.
+     */
+
+    public static final DeferredBlock<Block> REINFORCED_CONCRETE =
+            BLOCKS.registerSimpleBlock(
+                    "reinforced_concrete",
+                    BlockBehaviour.Properties.of()
+                            .mapColor(MapColor.STONE)
+                            .strength(2.0F)
+                            .requiresCorrectToolForDrops()
+                            .sound(net.minecraft.world.level.block.SoundType.STONE)
+            );
+    public static final DeferredItem<BlockItem> REINFORCED_CONCRETE_ITEM =
+            ITEMS.registerSimpleBlockItem(
+                    "reinforced_concrete",
+                    REINFORCED_CONCRETE
             );
     public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
             BLOCKS.register(
@@ -474,10 +558,26 @@ public class CreateCityExpansionCore {
             IEventBus modEventBus,
             ModContainer modContainer
     ) {
+        /*
+         * Принудительная инициализация класса промышленных
+         * материалов.
+         *
+         * IndustrialMaterials объявляет DeferredHolder'ы в
+         * статических полях, а обращается к нему только
+         * отложенные supplier'ы (creative tab, рецепты).
+         * Без явного касания класса JVM не выполнит его
+         * <clinit>, регистрация предметов не произойдёт,
+         * и рецепты упадут с «Unknown registry key».
+         */
+        IndustrialMaterials.INDUSTRIAL_COKE.getClass();
+
         ModElectricalDevices.register(modEventBus);
         modEventBus.addListener(
                 this::commonSetup
         );
+
+        ModSounds.SOUNDS.register(modEventBus);
+
 
         modEventBus.addListener(
                 this::registerPayloads
@@ -711,26 +811,15 @@ public class CreateCityExpansionCore {
             BuildCreativeModeTabContentsEvent event
     ) {
 
-        if (
-                event.getTabKey()
-                        == CreativeModeTabs
-                        .BUILDING_BLOCKS
-        ) {
-
-            event.accept(
-                    EXAMPLE_BLOCK_ITEM
-            );
-
-            event.accept(
-                    CITY_PYLON_ITEM
-            );
-
-            event.accept(
-                    DISPATCHER_KEY
-            );
-            event.accept(CONTRACT_INTAKE_ITEM);
-            event.accept(WAREHOUSE_GATEWAY_ITEM);
-        }
+        /*
+         * Все предметы мода вынесены в собственный
+         * creative tab «createcityexpansioncore:industrial»
+         * (см. IndustrialCreativeTab).
+         *
+         * В ванильные вкладки они намеренно не добавляются,
+         * чтобы не было дублей и чтобы порядок
+         * соответствовал производственной иерархии.
+         */
     }
 
     /*
@@ -1093,12 +1182,36 @@ public class CreateCityExpansionCore {
                                         pylonPos
                                 );
 
+                        /*
+                         * createCity выставляет pylonActive = true прямо в
+                         * модели города, поэтому визуальный флаг на
+                         * BlockEntity нужно обновить отдельно — иначе лампы
+                         * пилона останутся тёмными до перезагрузки чанка.
+                         */
+                        CityPylonBlock.refreshActive(
+                                pylonLevel,
+                                pylonPos
+                        );
+
                         LOGGER.info(
                                 "Created city '{}' for player {}",
                                 city.getName(),
                                 serverPlayer
                                         .getName()
                                         .getString()
+                        );
+
+                        /*
+                         * Редкое значимое событие: основан город.
+                         * Раздаётся сервером nearby-игрокам,
+                         * отдельный пакет не нужен.
+                         */
+                        WorldSoundHelper.playAt(
+                                pylonLevel,
+                                pylonPos,
+                                ModSounds.CITY_CREATE.get(),
+                                1.0F,
+                                1.0F
                         );
                     });
                 }

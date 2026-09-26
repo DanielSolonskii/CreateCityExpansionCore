@@ -1,0 +1,77 @@
+{
+  "ambientocclusion": false,
+  "textures": {
+    "atlas": "createcityexpansioncore:block/city_pylon_emissive",
+    "particle": "createcityexpansioncore:block/city_pylon"
+  },
+  "elements": [
+    {
+      "from": [
+        11.15,
+        9.55,
+        2.15
+      ],
+      "to": [
+        12.05,
+        10.35,
+        2.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            8.0,
+            1.0,
+            9.0
+          ],
+          "texture": "#atlas"
+        },
+        "east": {
+          "uv": [
+            0.0,
+            8.0,
+            1.0,
+            9.0
+          ],
+          "texture": "#atlas"
+        },
+        "south": {
+          "uv": [
+            0.0,
+            8.0,
+            1.0,
+            9.0
+          ],
+          "texture": "#atlas"
+        },
+        "west": {
+          "uv": [
+            0.0,
+            8.0,
+            1.0,
+            9.0
+          ],
+          "texture": "#atlas"
+        },
+        "up": {
+          "uv": [
+            0.0,
+            8.0,
+            1.0,
+            9.0
+          ],
+          "texture": "#atlas"
+        },
+        "down": {
+          "uv": [
+            0.0,
+            8.0,
+            1.0,
+            9.0
+          ],
+          "texture": "#atlas"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "key": {
+    "S": {
+      "item": "create:brass_sheet"
+    },
+    "M": {
+      "item": "minecraft:compass"
+    },
+    "E": {
+      "item": "create:electron_tube"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "A": {
+      "item": "create:andesite_alloy"
+    }
+  },
+  "pattern": [
+    " R ",
+    "EA ",
+    "SM "
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:dispatcher_key"
+  }
+}

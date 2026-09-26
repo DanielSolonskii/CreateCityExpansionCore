@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:steel_billet"
+    }
+  ],
+  "results": [
+    {
+      "count": 2,
+      "id": "createcityexpansioncore:structural_beam"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Compact server-authoritative editor for a Create schedule-backed city rail line. */
-public final class RailwayLineEditorScreen extends Screen {
+public final class RailwayLineEditorScreen extends ModalOverlayScreen {
     private final Screen parent;
     private final BlockPos pylonPos;
     private final RailwayLineSnapshot existing;
@@ -33,7 +33,7 @@ public final class RailwayLineEditorScreen extends Screen {
     public RailwayLineEditorScreen(Screen parent, BlockPos pylonPos,
                                    RailwayLineSnapshot existing,
                                    List<RailwayStationSnapshot> stations) {
-        super(Component.translatable("gui.createcityexpansioncore.railway.line_editor"));
+        super(parent, Component.translatable("gui.createcityexpansioncore.railway.line_editor"));
         this.parent = parent;
         this.pylonPos = pylonPos.immutable();
         this.existing = existing;
@@ -170,8 +170,7 @@ public final class RailwayLineEditorScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(graphics, mouseX, mouseY, partialTick);
+    protected void renderModalContent(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         int left = (this.width - 430) / 2;
         int top = (this.height - 300) / 2;
         graphics.fill(left, top, left + 430, top + 300, 0xFF202426);
@@ -215,7 +214,7 @@ public final class RailwayLineEditorScreen extends Screen {
                     "gui.createcityexpansioncore.railway.error." + this.errorKey),
                     left + 215, top + 250, 0xFFD07872);
         }
-        super.render(graphics, mouseX, mouseY, partialTick);
+        renderOwnWidgets(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override
@@ -223,7 +222,4 @@ public final class RailwayLineEditorScreen extends Screen {
         if (this.minecraft != null) this.minecraft.setScreen(this.parent);
     }
 
-    @Override
-    protected void renderBlurredBackground(float partialTick) {
     }
-}

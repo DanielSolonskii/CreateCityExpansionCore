@@ -1,0 +1,41 @@
+{
+  "type": "create:mixing",
+  "ingredients": [
+    {
+      "tag": "c:sands"
+    },
+    {
+      "tag": "c:sands"
+    },
+    {
+      "tag": "c:sands"
+    },
+    {
+      "tag": "c:sands"
+    },
+    {
+      "tag": "c:gravels"
+    },
+    {
+      "tag": "c:gravels"
+    },
+    {
+      "tag": "c:gravels"
+    },
+    {
+      "tag": "c:gravels"
+    },
+    {
+      "item": "minecraft:calcite"
+    },
+    {
+      "item": "minecraft:calcite"
+    }
+  ],
+  "results": [
+    {
+      "count": 8,
+      "id": "createcityexpansioncore:dry_concrete_mix"
+    }
+  ]
+}

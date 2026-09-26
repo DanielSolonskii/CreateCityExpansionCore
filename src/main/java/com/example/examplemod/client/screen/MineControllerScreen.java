@@ -4,6 +4,7 @@ import com.example.examplemod.geology.GeologyDepositSnapshot;
 import com.example.examplemod.geology.GeologyRegionSnapshot;
 import com.example.examplemod.mine.MineControlCommand;
 import com.example.examplemod.mine.IndustrialMineState;
+import com.example.examplemod.client.sound.MineSoundController;
 import com.example.examplemod.mine.MineControllerSnapshot;
 import com.example.examplemod.mine.MineElectricalState;
 import com.example.examplemod.multiblock.MultiblockPreviewRenderer;
@@ -116,10 +117,27 @@ public final class MineControllerScreen extends Screen {
         }
     }
 
+    @Override
+    public void onClose() {
+        /*
+         * Петли шахты останавливаются при закрытии интерфейса,
+         * иначе бурение продолжало бы звучать за закрытым экраном.
+         */
+        if (snapshot != null) {
+            MineSoundController.stopAll(snapshot.controllerPos());
+        }
+        super.onClose();
+    }
+
     private void applySnapshot(MineControllerSnapshot updated) {
         snapshot = updated;
         snapshotReceivedNanos = System.nanoTime();
         updateButtonState();
+        // Звук выводится из фактической смены состояния шахты.
+        MineSoundController.onState(
+                updated.controllerPos(),
+                updated.state()
+        );
     }
 
     @Override
@@ -304,7 +322,23 @@ public final class MineControllerScreen extends Screen {
                     0x28FF0000);
         }
         drawScanlines(graphics);
-        super.render(graphics, scaledMouseX, scaledMouseY, partialTick);
+
+        /*
+         * Виджеты рисуются ДО вызова super.render().
+         *
+         * Раньше порядок был обратным: super.render() вызывался в конце,
+         * а он внутри вызывает renderBackground() -> renderBlurredBackground().
+         * В итоге blur применялся уже ПОСЛЕ отрисовки панелей, из-за чего
+         * весь интерфейс размывался, а кнопки, нарисованные следом,
+         * оставались резкими поверх него.
+         *
+         * Теперь сначала рисуем виджеты, затем фон/размытие — весь
+         * готовый слой ретушируется единообразно.
+         */
+        for (var renderable : this.renderables) {
+            renderable.render(graphics, scaledMouseX, scaledMouseY, partialTick);
+        }
+        this.renderBackground(graphics, mouseX, mouseY, partialTick);
         graphics.pose().popPose();
     }
 
