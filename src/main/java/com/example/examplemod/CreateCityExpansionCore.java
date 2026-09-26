@@ -52,6 +52,10 @@ import com.example.examplemod.sound.ModSounds;
 import com.example.examplemod.sound.WorldSoundHelper;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import com.example.examplemod.network.CityNotificationPayload;
+import com.example.examplemod.network.CityMapPeersPayload;
+import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.network.MineControllerSnapshotPayload;
+import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.network.CreateCityPayload;
 import com.example.examplemod.network.InvitePlayerPayload;
 import com.example.examplemod.network.RespondCityInvitePayload;
@@ -111,6 +115,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
 
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 
 /*
@@ -139,6 +144,49 @@ public class CreateCityExpansionCore {
 
     public static final Logger LOGGER =
             LogUtils.getLogger();
+
+    /*
+     * =========================================
+     * S2C PAYLOAD HANDLERS (Client-side delegates)
+     * =========================================
+     *
+     * Эти статические поля хранят делегаты для обработки S2C пейлоадов на клиенте.
+     * В common коде они инициализированы no-op; CreateCityExpansionCoreClient
+     * переопределяет их реальными обработчиками в своём конструкторе.
+     * Это позволяет зарегистрировать каждый S2C TYPE ровно один раз в common коде.
+     */
+
+    /**
+     * Функциональный интерфейс для S2C обработчиков.
+     * Контекст использует Object, чтобы избежать зависимости от внутренних классов NeoForge,
+     * которых может не быть на compile classpath. На клиенте приводим к реальному типу
+     * через рефлексию или небезопасное приведение.
+     */
+    @FunctionalInterface
+    public interface PayloadHandler<P> {
+        void handle(P payload, Object context);
+    }
+
+    public static PayloadHandler<GeologyAnalysisPayload> GEOLOGY_ANALYSIS_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<MineControllerSnapshotPayload> MINE_CONTROLLER_SNAPSHOT_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<MineCommissionContextPayload> MINE_COMMISSION_CONTEXT_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICATION_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CityMapPeersPayload> CITY_MAP_PEERS_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<SyncCityMemberRemovalPayload> SYNC_CITY_MEMBER_REMOVAL_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CityNotificationPayload> CITY_NOTIFICATION_HANDLER =
+            (payload, context) -> {};
 
     /*
      * =========================================
@@ -1825,6 +1873,58 @@ public class CreateCityExpansionCore {
                         );
                     });
                 }
+        );
+        /*
+         * =========================================
+         * S2C PAYLOADS (Server -> Client)
+         * =========================================
+         *
+         * Эти пейлоиды отправляются сервером клиенту.
+         * На клиенте обработчики заменяются на реальные в CreateCityExpansionCoreClient.
+         * На сервере регистрируем no-op handler, чтобы тип пейлоада был известен
+         * при NeoForge handshake (dedicated server должен знать о каналах).
+         */
+
+        registrar.playToClient(
+                GeologyAnalysisPayload.TYPE,
+                GeologyAnalysisPayload.STREAM_CODEC,
+                (payload, context) -> GEOLOGY_ANALYSIS_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                MineControllerSnapshotPayload.TYPE,
+                MineControllerSnapshotPayload.STREAM_CODEC,
+                (payload, context) -> MINE_CONTROLLER_SNAPSHOT_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                MineCommissionContextPayload.TYPE,
+                MineCommissionContextPayload.STREAM_CODEC,
+                (payload, context) -> MINE_COMMISSION_CONTEXT_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                CityInviteNotificationPayload.TYPE,
+                CityInviteNotificationPayload.STREAM_CODEC,
+                (payload, context) -> CITY_INVITE_NOTIFICATION_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                CityMapPeersPayload.TYPE,
+                CityMapPeersPayload.STREAM_CODEC,
+                (payload, context) -> CITY_MAP_PEERS_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                SyncCityMemberRemovalPayload.TYPE,
+                SyncCityMemberRemovalPayload.STREAM_CODEC,
+                (payload, context) -> SYNC_CITY_MEMBER_REMOVAL_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                CityNotificationPayload.TYPE,
+                CityNotificationPayload.STREAM_CODEC,
+                (payload, context) -> CITY_NOTIFICATION_HANDLER.handle(payload, context)
         );
     }
 

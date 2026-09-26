@@ -32,7 +32,6 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 
 @Mod(
@@ -130,143 +129,70 @@ public class CreateCityExpansionCoreClient {
 
     /*
      * =========================================
-     * CLIENT PAYLOADS
+     * CLIENT PAYLOAD HANDLERS
      * =========================================
+     *
+     * Устанавливаем статические делегаты в common классе.
+     * Регистрация самих TYPE происходит в common классе (CreateCityExpansionCore).
+     * Здесь только предоставляем реальные client-side реализации.
+     * Контекст приходит как Object; вызываем enqueueWork через рефлексию,
+     * чтобы не зависеть от внутренних классов NeoForge на compile-time.
      */
 
     private void registerClientPayloads(
             RegisterPayloadHandlersEvent event
     ) {
+        CreateCityExpansionCore.GEOLOGY_ANALYSIS_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> MagneticAnalyzerScreen.open(payload));
+        };
 
-        PayloadRegistrar registrar =
-                event.registrar("1");
+        CreateCityExpansionCore.MINE_CONTROLLER_SNAPSHOT_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> handleMineSnapshot(payload));
+        };
 
-        /*
-         * =========================================
-         * ГЕОЛОГИЧЕСКИЙ АНАЛИЗАТОР
-         * =========================================
-         */
+        CreateCityExpansionCore.MINE_COMMISSION_CONTEXT_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> MineControllerScreen.receiveCommissionContext(payload));
+        };
 
-        registrar.playToClient(
-                GeologyAnalysisPayload.TYPE,
-                GeologyAnalysisPayload.STREAM_CODEC,
-                (payload, context) -> {
+        CreateCityExpansionCore.CITY_INVITE_NOTIFICATION_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveInvite(payload));
+        };
 
-                    context.enqueueWork(() -> {
-
-                        MagneticAnalyzerScreen.open(
-                                payload
-                        );
-
-                    });
-
+        CreateCityExpansionCore.CITY_MAP_PEERS_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> {
+                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen
+                        && screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
+                    screen.getMapPanel().receivePeers(payload.peers());
                 }
-        );
+            });
+        };
 
-        registrar.playToClient(
-                MineControllerSnapshotPayload.TYPE,
-                MineControllerSnapshotPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() ->
-                        handleMineSnapshot(payload)
-                )
-        );
-
-        registrar.playToClient(
-                MineCommissionContextPayload.TYPE,
-                MineCommissionContextPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() ->
-                        MineControllerScreen.receiveCommissionContext(payload)
-                )
-        );
-
-
-        /*
-         * =========================================
-         * ПРИГЛАШЕНИЕ В ГОРОД
-         * =========================================
-         */
-
-        registrar.playToClient(
-                CityInviteNotificationPayload.TYPE,
-                CityInviteNotificationPayload.STREAM_CODEC,
-                (payload, context) -> {
-
-                    context.enqueueWork(() -> {
-
-                        CityInviteClientHandler.receiveInvite(
-                                payload
-                        );
-
-                    });
-
-                }
-        );
-
-
-        /*
-         * =========================================
-         * СИНХРОНИЗАЦИЯ УДАЛЕНИЯ УЧАСТНИКА
-         * =========================================
-         */
-
-        registrar.playToClient(
-                CityMapPeersPayload.TYPE,
-                CityMapPeersPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> {
-                    if (Minecraft.getInstance().screen instanceof CityPylonScreen screen
-                            && screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
-                        screen.getMapPanel().receivePeers(payload.peers());
+        CreateCityExpansionCore.SYNC_CITY_MEMBER_REMOVAL_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> {
+                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen) {
+                    if (screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
+                        screen.getMenu().removeMember(payload.playerId());
                     }
-                })
-        );
-
-        registrar.playToClient(
-                SyncCityMemberRemovalPayload.TYPE,
-                SyncCityMemberRemovalPayload.STREAM_CODEC,
-                (payload, context) -> {
-
-                    context.enqueueWork(() -> {
-
-                        if (Minecraft.getInstance().screen
-                                instanceof CityPylonScreen screen) {
-
-                            if (screen.getMenu()
-                                    .getPylonPos()
-                                    .equals(payload.pylonPos())) {
-
-                                screen.getMenu().removeMember(
-                                        payload.playerId()
-                                );
-                            }
-                        }
-
-                    });
-
                 }
-        );
+            });
+        };
 
+        CreateCityExpansionCore.CITY_NOTIFICATION_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveNotification(payload));
+        };
+    }
 
-        /*
-         * =========================================
-         * ОБЩЕЕ УВЕДОМЛЕНИЕ
-         * =========================================
-         */
-
-        registrar.playToClient(
-                CityNotificationPayload.TYPE,
-                CityNotificationPayload.STREAM_CODEC,
-                (payload, context) -> {
-
-                    context.enqueueWork(() -> {
-
-                        CityInviteClientHandler.receiveNotification(
-                                payload
-                        );
-
-                    });
-
-                }
-        );
+    /**
+     * Вызывает enqueueWork(Runnable) на объекте контекста через рефлексию.
+     * Это позволяет не зависеть от класса PacketContext на compile-time,
+     * так как его может не быть на compile classpath.
+     */
+    private static void invokeEnqueueWork(Object context, Runnable runnable) {
+        try {
+            context.getClass().getMethod("enqueueWork", Runnable.class).invoke(context, runnable);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to invoke enqueueWork on packet context", e);
+        }
     }
 
     private void handleMineSnapshot(MineControllerSnapshotPayload payload) {
