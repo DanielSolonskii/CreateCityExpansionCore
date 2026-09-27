@@ -1,0 +1,11 @@
+{
+  "type":"create:mechanical_crafting","accept_mirrored":true,"category":"misc",
+  "key":{
+    "H":{"item":"createcityexpansioncore:heavy_machine_frame"},
+    "F":{"item":"create:brass_funnel"},
+    "S":{"item":"createcityexpansioncore:steel_plate"},
+    "R":{"item":"createcityexpansioncore:refractory_block"}
+  },
+  "pattern":["SFS","RHR","SSS"],
+  "result":{"count":1,"id":"createcityexpansioncore:coke_battery_input_port"},"show_notification":false
+}

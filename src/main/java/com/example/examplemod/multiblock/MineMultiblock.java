@@ -4,6 +4,7 @@ import com.example.examplemod.CreateCityExpansionCore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
@@ -57,7 +58,7 @@ public class MineMultiblock {
      */
 
     public static ValidationResult validate(
-            ServerLevel level,
+            Level level,
             BlockPos controllerPos
     ) {
 
@@ -104,6 +105,19 @@ public class MineMultiblock {
         List<BlockPos> incorrectBlocks =
                 new ArrayList<>();
 
+        // Shared by server validation and the client visual guard. Never load chunks.
+        for (int x : new int[]{0, WIDTH - 1}) {
+            for (int z : new int[]{0, DEPTH - 1}) {
+                if (!level.hasChunkAt(getWorldPosition(origin, facing, x, 0, z))) {
+                    return ValidationResult.failed("Часть структуры не загружена.");
+                }
+            }
+        }
+        List<BlockPos> detectedPowerPorts = findAllPowerPorts(level, origin, facing);
+        int[] powerLocal = detectedPowerPorts.size() == 1
+                ? findLocalInterfacePosition(origin, facing, detectedPowerPorts.getFirst())
+                : new int[]{-1, -1};
+
         for (int y = 0; y < HEIGHT; y++) {
 
             for (int x = 0; x < WIDTH; x++) {
@@ -123,7 +137,7 @@ public class MineMultiblock {
                                     z
                             );
 
-                    if (isServiceSpace(level, origin, facing, x, y, z)) {
+                    if (isPowerServicePosition(x, y, z, powerLocal[0], powerLocal[1])) {
                         continue;
                     }
 
@@ -177,12 +191,7 @@ public class MineMultiblock {
          * =====================================================
          */
 
-        List<BlockPos> powerPorts =
-                findAllPowerPorts(
-                        level,
-                        origin,
-                        facing
-                );
+        List<BlockPos> powerPorts = detectedPowerPorts;
 
         if (powerPorts.size() != 1) {
 
@@ -434,7 +443,7 @@ public class MineMultiblock {
      */
 
     private static List<BlockPos> findAllPowerPorts(
-            ServerLevel level,
+            Level level,
             BlockPos origin,
             Direction facing
     ) {
@@ -494,7 +503,7 @@ public class MineMultiblock {
      */
 
     private static List<BlockPos> findAllGateways(
-            ServerLevel level,
+            Level level,
             BlockPos origin,
             Direction facing
     ) {
@@ -580,8 +589,13 @@ public class MineMultiblock {
             return false;
         }
         int[] local = findLocalInterfacePosition(origin, facing, ports.get(0));
-        int portX = local[0];
-        int portZ = local[1];
+        return isPowerServicePosition(x, y, z, local[0], local[1]);
+    }
+
+    private static boolean isPowerServicePosition(int x, int y, int z, int portX, int portZ) {
+        if (y != 1 || portX < 0 || portZ < 0) {
+            return false;
+        }
         if (portZ == 0 || portZ == DEPTH - 1) {
             return z == portZ && Math.abs(x - portX) == 1;
         }
@@ -592,7 +606,7 @@ public class MineMultiblock {
     }
 
     private static boolean isPowerPortServiceSpaceFree(
-            ServerLevel level,
+            Level level,
             BlockPos origin,
             Direction facing,
             BlockPos powerPort
@@ -641,6 +655,33 @@ public class MineMultiblock {
             }
         }
         return new int[]{-1, -1};
+    }
+
+    /** Canonical member positions; wire service cells are deliberately excluded. */
+    public static List<BlockPos> visualMembers(BlockPos controller, Direction facing, BlockPos powerPort) {
+        BlockPos origin = getOrigin(controller, facing);
+        int[] power = findLocalInterfacePosition(origin, facing, powerPort);
+        List<BlockPos> members = new ArrayList<>();
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                for (int z = 0; z < DEPTH; z++) {
+                    if (!isPowerServicePosition(x, y, z, power[0], power[1])) {
+                        members.add(getWorldPosition(origin, facing, x, y, z));
+                    }
+                }
+            }
+        }
+        return List.copyOf(members);
+    }
+
+    /** Corner gateway priority matches the validator's north/south service convention. */
+    public static Direction interfaceOutward(BlockPos controller, Direction facing, BlockPos port) {
+        int[] local = findLocalInterfacePosition(getOrigin(controller, facing), facing, port);
+        if (local[1] == 0) return facing;
+        if (local[1] == DEPTH - 1) return facing.getOpposite();
+        if (local[0] == 0) return facing.getCounterClockWise();
+        if (local[0] == WIDTH - 1) return facing.getClockWise();
+        throw new IllegalArgumentException("Interface is not on the canonical perimeter: " + port);
     }
 
     /*

@@ -34,9 +34,7 @@ public class MinePowerPortDevice extends SimpleElectricalDevice {
     @Override
     public void preTick(BridgeCollector bridge) {
 
-        double requestedPower = MinePowerDemand.workingLoad(level, pos)
-                ? MinePowerAccess.NOMINAL_POWER_WATTS
-                : MinePowerAccess.STANDBY_POWER_WATTS;
+        double requestedPower = MinePowerDemand.requestedPowerWatts(level, pos);
         double resistance = MinePowerAccess.NOMINAL_VOLTAGE
                 * MinePowerAccess.NOMINAL_VOLTAGE / requestedPower;
         bridge.builder(pos).resistor(0, 1, resistance);

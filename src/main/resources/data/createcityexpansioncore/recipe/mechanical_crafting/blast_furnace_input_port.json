@@ -1,0 +1,12 @@
+{
+  "type":"create:mechanical_crafting","accept_mirrored":true,"category":"misc",
+  "key":{
+    "H":{"item":"createcityexpansioncore:heavy_machine_frame"},
+    "C":{"item":"create:smart_chute"},
+    "F":{"item":"create:brass_funnel"},
+    "S":{"item":"createcityexpansioncore:steel_plate"},
+    "R":{"item":"createcityexpansioncore:refractory_block"}
+  },
+  "pattern":["SFS","RCR","SHS"],
+  "result":{"count":1,"id":"createcityexpansioncore:blast_furnace_input_port"},"show_notification":false
+}

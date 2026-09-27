@@ -1,0 +1,14 @@
+{
+  "cube_count": 539,
+  "runtime_part_count": 10,
+  "machine_projected_footprint_percent": 67.7,
+  "coverage_method": "5cm grid union, excludes base at/below zero and service deck",
+  "checks": [
+    "unique cube identifiers",
+    "16 separate drill shaft groups",
+    "all Java geometry inside -16..32",
+    "rotor swept envelopes clear stationary guards",
+    "machine footprint 65..75 percent"
+  ],
+  "preview_is_game_screenshot": false
+}

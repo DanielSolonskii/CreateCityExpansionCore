@@ -1,0 +1,164 @@
+{
+  "runtime_geometry_scale": 8,
+  "controller": [
+    0,
+    0,
+    0
+  ],
+  "footprint": [
+    [
+      -4,
+      -1,
+      0
+    ],
+    [
+      6,
+      2,
+      10
+    ]
+  ],
+  "visual_bounds": [
+    [
+      -4.25,
+      -1,
+      -0.25
+    ],
+    [
+      6.25,
+      3.5,
+      10.25
+    ]
+  ],
+  "main_drive": [
+    1,
+    2.88,
+    5
+  ],
+  "gearboxes": [
+    [
+      0,
+      1.72,
+      4
+    ],
+    [
+      2,
+      1.72,
+      4
+    ],
+    [
+      0,
+      1.72,
+      6
+    ],
+    [
+      2,
+      1.72,
+      6
+    ]
+  ],
+  "drills": [
+    [
+      -0.5,
+      0,
+      3.5
+    ],
+    [
+      0.5,
+      0,
+      3.5
+    ],
+    [
+      1.5,
+      0,
+      3.5
+    ],
+    [
+      2.5,
+      0,
+      3.5
+    ],
+    [
+      -0.5,
+      0,
+      4.5
+    ],
+    [
+      0.5,
+      0,
+      4.5
+    ],
+    [
+      1.5,
+      0,
+      4.5
+    ],
+    [
+      2.5,
+      0,
+      4.5
+    ],
+    [
+      -0.5,
+      0,
+      5.5
+    ],
+    [
+      0.5,
+      0,
+      5.5
+    ],
+    [
+      1.5,
+      0,
+      5.5
+    ],
+    [
+      2.5,
+      0,
+      5.5
+    ],
+    [
+      -0.5,
+      0,
+      6.5
+    ],
+    [
+      0.5,
+      0,
+      6.5
+    ],
+    [
+      1.5,
+      0,
+      6.5
+    ],
+    [
+      2.5,
+      0,
+      6.5
+    ]
+  ],
+  "dynamic_attachments": [
+    "power_module",
+    "power_contacts",
+    "output_module"
+  ],
+  "attachment_rotation_pivot": [
+    0.5,
+    0,
+    0.5
+  ],
+  "parts": {
+    "fixed_core": 323,
+    "main_drive": 11,
+    "gearbox": 11,
+    "drill_shaft": 10,
+    "indicator_green": 1,
+    "indicator_amber": 1,
+    "indicator_red": 1,
+    "power_module": 5,
+    "power_contacts": 4,
+    "output_module": 6
+  },
+  "core_cube_count": 539
+}

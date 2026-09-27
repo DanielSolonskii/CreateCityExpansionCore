@@ -1,0 +1,10 @@
+{
+  "type": "create:compacting",
+  "ingredients": [
+    {"item":"minecraft:brick"},{"item":"minecraft:brick"},
+    {"item":"minecraft:brick"},{"item":"minecraft:brick"},
+    {"tag":"c:sands"},{"tag":"c:sands"},
+    {"item":"minecraft:calcite"},{"item":"minecraft:calcite"}
+  ],
+  "results": [{"count":8,"id":"createcityexpansioncore:refractory_block"}]
+}

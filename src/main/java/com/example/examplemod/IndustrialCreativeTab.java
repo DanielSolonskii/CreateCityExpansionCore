@@ -106,7 +106,16 @@ public final class IndustrialCreativeTab {
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(
-            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get()
+            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get(),
+            CreateCityExpansionCore.REFRACTORY_BLOCK_ITEM.get(),
+            CreateCityExpansionCore.COKE_OVEN_CHAMBER_ITEM.get(),
+            CreateCityExpansionCore.COKE_BATTERY_CONTROLLER_ITEM.get(),
+            CreateCityExpansionCore.COKE_BATTERY_INPUT_PORT_ITEM.get(),
+            CreateCityExpansionCore.COKE_BATTERY_OUTPUT_PORT_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_CORE_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_CONTROLLER_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_INPUT_PORT_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_OUTPUT_PORT_ITEM.get()
     );
 
     public static void populate(

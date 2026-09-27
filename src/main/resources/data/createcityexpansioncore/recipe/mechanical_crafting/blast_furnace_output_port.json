@@ -1,0 +1,12 @@
+{
+  "type":"create:mechanical_crafting","accept_mirrored":true,"category":"misc",
+  "key":{
+    "H":{"item":"createcityexpansioncore:heavy_machine_frame"},
+    "P":{"item":"create:fluid_pipe"},
+    "M":{"item":"create:mechanical_pump"},
+    "S":{"item":"createcityexpansioncore:steel_plate"},
+    "R":{"item":"createcityexpansioncore:refractory_block"}
+  },
+  "pattern":["SPS","RMR","SHS"],
+  "result":{"count":1,"id":"createcityexpansioncore:blast_furnace_output_port"},"show_notification":false
+}

@@ -50,6 +50,8 @@ public final class IndustrialMineService {
             }
         }
 
+        controller.syncVisualState(validation);
+
         boolean importantChange = previousState != controller.getRuntimeState()
                 || previousElectrical != controller.getElectricalState();
         if (importantChange || Math.floorMod(syncPhase, 10L) == 0L) {

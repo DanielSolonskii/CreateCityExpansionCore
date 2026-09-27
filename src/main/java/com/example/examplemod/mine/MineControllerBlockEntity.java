@@ -4,6 +4,9 @@ import com.example.examplemod.CreateCityExpansionCore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -35,6 +38,16 @@ public final class MineControllerBlockEntity extends BlockEntity {
     private int miningTicks;
     private MineOperationResult lastResult;
     private String statusMessage = "Шахта остановлена.";
+    private boolean visualAssembled;
+    private BlockPos visualPowerPort;
+    private BlockPos visualGateway;
+    private boolean visualClientLoaded;
+    /** Client installs a listener; the dedicated server never links client classes. */
+    public static java.util.function.Consumer<MineControllerBlockEntity> CLIENT_VISUAL_UPDATE = ignored -> {};
+    private IndustrialMineState lastSyncedVisualState;
+    private MineElectricalState lastSyncedElectricalState;
+    private boolean lastSyncedAssembled;
+    private long clientLastVisualParticleTick = Long.MIN_VALUE;
 
     public MineControllerBlockEntity(BlockPos pos, BlockState state) {
         super(CreateCityExpansionCore.MINE_CONTROLLER_BLOCK_ENTITY.get(), pos, state);
@@ -179,6 +192,74 @@ public final class MineControllerBlockEntity extends BlockEntity {
         return runtimeState;
     }
 
+    public MineElectricalState getVisualElectricalState() {
+        return electricalState;
+    }
+
+    public boolean isVisualAssembled() {
+        return visualAssembled;
+    }
+
+    public boolean claimVisualParticleTick(long gameTime) {
+        if (clientLastVisualParticleTick == gameTime) {
+            return false;
+        }
+        clientLastVisualParticleTick = gameTime;
+        return true;
+    }
+
+    public BlockPos getVisualPowerPort() { return visualPowerPort; }
+    public BlockPos getVisualGateway() { return visualGateway; }
+    public boolean isVisualClientLoaded() { return visualClientLoaded; }
+
+    @Override
+    public void onLoad() {
+        super.onLoad();
+        visualClientLoaded = true;
+        notifyClientVisual();
+    }
+
+    @Override
+    public void setRemoved() {
+        super.setRemoved();
+        notifyClientVisual();
+    }
+
+    @Override
+    public void onChunkUnloaded() {
+        super.onChunkUnloaded();
+        visualClientLoaded = false;
+        visualAssembled = false;
+        notifyClientVisual();
+    }
+
+    private void notifyClientVisual() {
+        if (level != null && level.isClientSide()) CLIENT_VISUAL_UPDATE.accept(this);
+    }
+
+    void syncVisualState(com.example.examplemod.multiblock.MineMultiblock.ValidationResult validation) {
+        boolean assembled = validation.assembled();
+        BlockPos power = assembled ? validation.powerPort() : null;
+        BlockPos gateway = assembled ? validation.gateway() : null;
+        boolean interfacesChanged = !Objects.equals(power, visualPowerPort)
+                || !Objects.equals(gateway, visualGateway);
+        visualPowerPort = power;
+        visualGateway = gateway;
+        visualAssembled = assembled;
+        if (lastSyncedVisualState == runtimeState
+                && lastSyncedElectricalState == electricalState
+                && lastSyncedAssembled == assembled && !interfacesChanged) {
+            return;
+        }
+        lastSyncedVisualState = runtimeState;
+        lastSyncedElectricalState = electricalState;
+        lastSyncedAssembled = assembled;
+        setChanged();
+        if (level instanceof ServerLevel serverLevel) {
+            serverLevel.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+        }
+    }
+
     void setRuntimeState(IndustrialMineState state, String message) {
         runtimeState = Objects.requireNonNull(state, "state");
         statusMessage = Objects.requireNonNull(message, "message");
@@ -299,5 +380,44 @@ public final class MineControllerBlockEntity extends BlockEntity {
         shutdownTicks = 0;
         lastResult = null;
         statusMessage = "Шахта безопасно остановлена после загрузки мира.";
+        visualAssembled = false;
+        visualPowerPort = null;
+        visualGateway = null;
+        if (tag.contains("VisualRuntimeState")) {
+            runtimeState = readEnum(tag, "VisualRuntimeState", IndustrialMineState.class,
+                    IndustrialMineState.STOPPED);
+            electricalState = readEnum(tag, "VisualElectricalState", MineElectricalState.class,
+                    MineElectricalState.NO_POWER);
+            visualAssembled = tag.getBoolean("VisualAssembled");
+            visualPowerPort = tag.contains("VisualPowerPort") ? BlockPos.of(tag.getLong("VisualPowerPort")) : null;
+            visualGateway = tag.contains("VisualGateway") ? BlockPos.of(tag.getLong("VisualGateway")) : null;
+        }
+        notifyClientVisual();
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("VisualRuntimeState", runtimeState.name());
+        tag.putString("VisualElectricalState", electricalState.name());
+        tag.putBoolean("VisualAssembled", visualAssembled);
+        if (visualPowerPort != null) tag.putLong("VisualPowerPort", visualPowerPort.asLong());
+        if (visualGateway != null) tag.putLong("VisualGateway", visualGateway.asLong());
+        return tag;
+    }
+
+    @Override
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
+    }
+
+    private static <E extends Enum<E>> E readEnum(
+            CompoundTag tag, String key, Class<E> type, E fallback
+    ) {
+        try {
+            return Enum.valueOf(type, tag.getString(key));
+        } catch (IllegalArgumentException ignored) {
+            return fallback;
+        }
     }
 }

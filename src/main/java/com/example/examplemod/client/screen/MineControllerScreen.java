@@ -204,11 +204,9 @@ public final class MineControllerScreen extends Screen {
                 && !snapshot.commissioned() && depositCount > 1;
         nextDepositButton.active = stopped && !snapshot.specialized()
                 && !snapshot.commissioned() && depositCount > 1;
-        startButton.active = stopped
-                && snapshot.commissioned()
-                && snapshot.structureValid()
-                && snapshot.geologyAvailable()
-                && snapshot.selectedDeposit().filter(deposit -> !deposit.depleted()).isPresent();
+        // START is an intent. The server is the sole authority for all launch
+        // prerequisites and returns the concrete rejection in actionMessage.
+        startButton.active = stopped;
         stopButton.active = !stopped && snapshot.state() != IndustrialMineState.STOPPING;
         emergencyButton.active = !stopped;
         if (schematicButton != null && commissionButton != null) {
@@ -383,6 +381,8 @@ public final class MineControllerScreen extends Screen {
         graphics.drawString(font, tr("gui.createcityexpansioncore.mine.title"),
                 left + 25, top + 18, 0xFFE8EEF2, false);
         graphics.drawString(font, "CREATE CITY EXPANSION", left + 25, top + 33, TEXT_DIM, false);
+        drawFitted(graphics, snapshot.actionMessage(),
+                left + 190, top + 33, left + 590, TEXT_DIM);
 
         int stateColor = stateColor(snapshot.state());
         String state = displayState(snapshot.state());

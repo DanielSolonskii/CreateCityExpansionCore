@@ -11,6 +11,14 @@ import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.block.CityPylonBlock;
 import com.example.examplemod.block.CityPylonBlockEntity;
+import com.example.examplemod.coke.CokeBatteryControllerBlock;
+import com.example.examplemod.coke.CokeBatteryControllerBlockEntity;
+import com.example.examplemod.coke.CokeBatteryInputBlockEntity;
+import com.example.examplemod.coke.CokeBatteryInputPortBlock;
+import com.example.examplemod.coke.CokeBatteryOutputBlockEntity;
+import com.example.examplemod.coke.CokeBatteryOutputPortBlock;
+import com.example.examplemod.blast.*;
+import com.example.examplemod.fluid.ModFluids;
 import com.example.examplemod.client.screen.MineControllerScreen;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -56,6 +64,8 @@ import com.example.examplemod.network.CityMapPeersPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
+import com.example.examplemod.network.CokeBatteryGuidePayload;
+import com.example.examplemod.network.BlastFurnaceGuidePayload;
 import com.example.examplemod.network.CreateCityPayload;
 import com.example.examplemod.network.InvitePlayerPayload;
 import com.example.examplemod.network.RespondCityInvitePayload;
@@ -174,6 +184,12 @@ public class CreateCityExpansionCore {
             (payload, context) -> {};
 
     public static PayloadHandler<MineCommissionContextPayload> MINE_COMMISSION_CONTEXT_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CokeBatteryGuidePayload> COKE_BATTERY_GUIDE_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<BlastFurnaceGuidePayload> BLAST_FURNACE_GUIDE_HANDLER =
             (payload, context) -> {};
 
     public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICATION_HANDLER =
@@ -499,6 +515,90 @@ public class CreateCityExpansionCore {
                     "reinforced_concrete",
                     REINFORCED_CONCRETE
             );
+    public static final DeferredBlock<Block> REFRACTORY_BLOCK = BLOCKS.registerSimpleBlock(
+            "refractory_block",
+            BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BROWN).strength(3.5F)
+                    .requiresCorrectToolForDrops().sound(net.minecraft.world.level.block.SoundType.DEEPSLATE_TILES)
+    );
+    public static final DeferredItem<BlockItem> REFRACTORY_BLOCK_ITEM = ITEMS.registerSimpleBlockItem(
+            "refractory_block", REFRACTORY_BLOCK
+    );
+    public static final DeferredBlock<Block> COKE_OVEN_CHAMBER = BLOCKS.registerSimpleBlock(
+            "coke_oven_chamber",
+            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(4.0F)
+                    .requiresCorrectToolForDrops().sound(net.minecraft.world.level.block.SoundType.METAL)
+    );
+    public static final DeferredItem<BlockItem> COKE_OVEN_CHAMBER_ITEM = ITEMS.registerSimpleBlockItem(
+            "coke_oven_chamber", COKE_OVEN_CHAMBER
+    );
+    public static final DeferredBlock<CokeBatteryControllerBlock> COKE_BATTERY_CONTROLLER = BLOCKS.register(
+            "coke_battery_controller",
+            () -> new CokeBatteryControllerBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL).strength(4.0F).requiresCorrectToolForDrops())
+    );
+    public static final DeferredItem<BlockItem> COKE_BATTERY_CONTROLLER_ITEM = ITEMS.registerSimpleBlockItem(
+            "coke_battery_controller", COKE_BATTERY_CONTROLLER
+    );
+    public static final DeferredBlock<CokeBatteryInputPortBlock> COKE_BATTERY_INPUT_PORT = BLOCKS.register(
+            "coke_battery_input_port",
+            () -> new CokeBatteryInputPortBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL).strength(4.0F).requiresCorrectToolForDrops())
+    );
+    public static final DeferredItem<BlockItem> COKE_BATTERY_INPUT_PORT_ITEM = ITEMS.registerSimpleBlockItem(
+            "coke_battery_input_port", COKE_BATTERY_INPUT_PORT
+    );
+    public static final DeferredBlock<CokeBatteryOutputPortBlock> COKE_BATTERY_OUTPUT_PORT = BLOCKS.register(
+            "coke_battery_output_port",
+            () -> new CokeBatteryOutputPortBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL).strength(4.0F).requiresCorrectToolForDrops())
+    );
+    public static final DeferredItem<BlockItem> COKE_BATTERY_OUTPUT_PORT_ITEM = ITEMS.registerSimpleBlockItem(
+            "coke_battery_output_port", COKE_BATTERY_OUTPUT_PORT
+    );
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CokeBatteryControllerBlockEntity>>
+            COKE_BATTERY_CONTROLLER_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "coke_battery_controller", () -> BlockEntityType.Builder.of(
+                    CokeBatteryControllerBlockEntity::new, COKE_BATTERY_CONTROLLER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CokeBatteryInputBlockEntity>>
+            COKE_BATTERY_INPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "coke_battery_input_port", () -> BlockEntityType.Builder.of(
+                    CokeBatteryInputBlockEntity::new, COKE_BATTERY_INPUT_PORT.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CokeBatteryOutputBlockEntity>>
+            COKE_BATTERY_OUTPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "coke_battery_output_port", () -> BlockEntityType.Builder.of(
+                    CokeBatteryOutputBlockEntity::new, COKE_BATTERY_OUTPUT_PORT.get()).build(null));
+    public static final DeferredBlock<Block> BLAST_FURNACE_CORE = BLOCKS.registerSimpleBlock(
+            "blast_furnace_core", BlockBehaviour.Properties.of().mapColor(MapColor.METAL)
+                    .strength(5.0F).requiresCorrectToolForDrops().sound(net.minecraft.world.level.block.SoundType.METAL));
+    public static final DeferredItem<BlockItem> BLAST_FURNACE_CORE_ITEM = ITEMS.registerSimpleBlockItem(
+            "blast_furnace_core", BLAST_FURNACE_CORE);
+    public static final DeferredBlock<BlastFurnaceControllerBlock> BLAST_FURNACE_CONTROLLER = BLOCKS.register(
+            "blast_furnace_controller", () -> new BlastFurnaceControllerBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL).strength(5.0F).requiresCorrectToolForDrops()));
+    public static final DeferredItem<BlockItem> BLAST_FURNACE_CONTROLLER_ITEM = ITEMS.registerSimpleBlockItem(
+            "blast_furnace_controller", BLAST_FURNACE_CONTROLLER);
+    public static final DeferredBlock<BlastFurnaceInputPortBlock> BLAST_FURNACE_INPUT_PORT = BLOCKS.register(
+            "blast_furnace_input_port", () -> new BlastFurnaceInputPortBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL).strength(5.0F).requiresCorrectToolForDrops()));
+    public static final DeferredItem<BlockItem> BLAST_FURNACE_INPUT_PORT_ITEM = ITEMS.registerSimpleBlockItem(
+            "blast_furnace_input_port", BLAST_FURNACE_INPUT_PORT);
+    public static final DeferredBlock<BlastFurnaceOutputPortBlock> BLAST_FURNACE_OUTPUT_PORT = BLOCKS.register(
+            "blast_furnace_output_port", () -> new BlastFurnaceOutputPortBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL).strength(5.0F).requiresCorrectToolForDrops().noLootTable()));
+    public static final DeferredItem<BlockItem> BLAST_FURNACE_OUTPUT_PORT_ITEM = ITEMS.registerSimpleBlockItem(
+            "blast_furnace_output_port", BLAST_FURNACE_OUTPUT_PORT);
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<BlastFurnaceControllerBlockEntity>>
+            BLAST_FURNACE_CONTROLLER_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "blast_furnace_controller", () -> BlockEntityType.Builder.of(
+                    BlastFurnaceControllerBlockEntity::new, BLAST_FURNACE_CONTROLLER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<BlastFurnaceInputBlockEntity>>
+            BLAST_FURNACE_INPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "blast_furnace_input_port", () -> BlockEntityType.Builder.of(
+                    BlastFurnaceInputBlockEntity::new, BLAST_FURNACE_INPUT_PORT.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<BlastFurnaceOutputBlockEntity>>
+            BLAST_FURNACE_OUTPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "blast_furnace_output_port", () -> BlockEntityType.Builder.of(
+                    BlastFurnaceOutputBlockEntity::new, BLAST_FURNACE_OUTPUT_PORT.get()).build(null));
     public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
             BLOCKS.register(
                     "mine_gateway",
@@ -620,6 +720,7 @@ public class CreateCityExpansionCore {
         IndustrialMaterials.INDUSTRIAL_COKE.getClass();
 
         ModElectricalDevices.register(modEventBus);
+        ModFluids.register(modEventBus);
         modEventBus.addListener(
                 this::commonSetup
         );
@@ -1904,6 +2005,18 @@ public class CreateCityExpansionCore {
         );
 
         registrar.playToClient(
+                CokeBatteryGuidePayload.TYPE,
+                CokeBatteryGuidePayload.STREAM_CODEC,
+                (payload, context) -> COKE_BATTERY_GUIDE_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                BlastFurnaceGuidePayload.TYPE,
+                BlastFurnaceGuidePayload.STREAM_CODEC,
+                (payload, context) -> BLAST_FURNACE_GUIDE_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
                 CityInviteNotificationPayload.TYPE,
                 CityInviteNotificationPayload.STREAM_CODEC,
                 (payload, context) -> CITY_INVITE_NOTIFICATION_HANDLER.handle(payload, context)
@@ -1938,6 +2051,27 @@ public class CreateCityExpansionCore {
                 Capabilities.ItemHandler.BLOCK,
                 ECONOMY_THROUGHPUT_BLOCK_ENTITY.get(),
                 (gateway, side) -> gateway.itemHandler(side)
+        );
+
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                COKE_BATTERY_INPUT_BLOCK_ENTITY.get(),
+                (input, side) -> input.itemHandler()
+        );
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                COKE_BATTERY_OUTPUT_BLOCK_ENTITY.get(),
+                (output, side) -> output.itemHandler()
+        );
+        event.registerBlockEntity(
+                Capabilities.ItemHandler.BLOCK,
+                BLAST_FURNACE_INPUT_BLOCK_ENTITY.get(),
+                (input, side) -> input.itemHandler()
+        );
+        event.registerBlockEntity(
+                Capabilities.FluidHandler.BLOCK,
+                BLAST_FURNACE_OUTPUT_BLOCK_ENTITY.get(),
+                (output, side) -> output.fluidHandler()
         );
     }
 
