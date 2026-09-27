@@ -31,7 +31,7 @@ classpath вместо mods-папки, module layer NeoForge собираетс
 | Файл | Источник |
 |---|---|
 | `create-1.21.1-6.0.10.jar` | полный (не slim) jar Create |
-| `electroenergetics-1.21.1-1.1.1.jar` | `libs/electroenergetics-1.21.1-1.1.1.jar` |
+| `electroenergetics-1.21.1-1.1.2.jar` | `libs/electroenergetics-1.21.1-1.1.2.jar` |
 | `ponder-neoforge-1.0.82+mc1.21.1.jar` | `https://maven.createmod.net/net/createmod/ponder/ponder-neoforge/1.0.82%2Bmc1.21.1/` |
 | `flywheel-neoforge-1.0.6+mc1.21.1.jar` | распространяется вместе с Create |
 

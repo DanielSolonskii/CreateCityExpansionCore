@@ -63,7 +63,7 @@ public final class DependencyRecipeOverride {
      *   create:crafting/kinetics/track_signal
      *   create:crafting/kinetics/controller_rail
      *
-     * Electro Energetics 1.1.1:
+     * Electro Energetics 1.1.2:
      *   electroenergetics:crafting/connector
      *   electroenergetics:crafting/insulator
      */

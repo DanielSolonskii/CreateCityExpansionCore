@@ -145,7 +145,7 @@ dependencies {
         transitive = false
     }
     // Create: Electro Energetics
-    implementation files("libs/electroenergetics-1.21.1-1.1.1.jar")
+    implementation files("libs/electroenergetics-1.21.1-1.1.2.jar")
 
     // NOTE: Create's own runtime companions (Ponder, Flywheel) must be present in the
     // run directory's mods folder for `runClient` / `runServer` to boot.

@@ -28,7 +28,7 @@
 | NeoForge | 21.1.251 |
 | Java | 21 |
 | Create | 6.0.10 (280) |
-| Create: Electro Energetics | 1.21.1-1.1.1 |
+| Create: Electro Energetics | 1.21.1-1.1.2 |
 | FTB Quests | (опционально, для гайдов) |
 
 **Mod ID:** `createcityexpansioncore`
@@ -114,7 +114,7 @@
 ## 🚀 Установка
 
 1. Установите **NeoForge 21.1.251** для Minecraft 1.21.1
-2. Установите **Create 6.0.10** и **Create: Electro Energetics 1.1.1**
+2. Установите **Create 6.0.10** и **Create: Electro Energetics 1.1.2**
 3. Положите `CreateCityExpansionCore-<version>.jar` в `mods/`
 4. (Опционально) FTB Quests для встроенных гайдов
 

@@ -10,7 +10,7 @@
 | NeoForge | 21.1.251 |
 | Java | 21 |
 | Create | 6.0.10-280 |
-| Create: Electro Energetics | 1.21.1-1.1.1 |
+| Create: Electro Energetics | 1.21.1-1.1.2 |
 
 Mod ID: `createcityexpansioncore`
 

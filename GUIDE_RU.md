@@ -12,7 +12,7 @@ CreateCityExpansionCore связывает в одну прогрессию го
 6. Подключить контрактные приёмники и складские шлюзы.
 7. Работать с частным рынком и промышленными контрактами.
 
-Мод рассчитан на Minecraft 1.21.1, NeoForge, Create 6.0.10 и Electroenergetics 1.1.1.
+Мод рассчитан на Minecraft 1.21.1, NeoForge, Create 6.0.10 и Electroenergetics 1.1.2.
 
 ## 2. Основные предметы и блоки
 
