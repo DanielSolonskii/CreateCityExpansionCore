@@ -31,6 +31,7 @@ public final class BlastFurnaceGuideRenderer {
 
     public static void toggle(BlockPos pos) {
         CokeBatteryGuideRenderer.hide(false);
+        SteelConverterGuideRenderer.hide(false);
         if (pos.equals(controllerPos)) { hide(true); return; }
         controllerPos = pos.immutable(); selectedLayer = 0; lastSingleLayer = 0; actionBarCooldown = 0;
         announceState(false);

@@ -1,0 +1,1 @@
+{"type":"create:mechanical_crafting","pattern":["RPR","PTP","RPR"],"key":{"R":{"item":"createcityexpansioncore:refractory_block"},"P":{"item":"create:fluid_pipe"},"T":{"item":"create:fluid_tank"}},"result":{"id":"createcityexpansioncore:steel_converter_fluid_input"},"accept_mirrored":true}

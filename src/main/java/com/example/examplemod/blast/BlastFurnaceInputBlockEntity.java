@@ -32,20 +32,20 @@ public final class BlastFurnaceInputBlockEntity extends BlockEntity {
     public IItemHandler itemHandler() { return external; }
     public int ironCount() { return count(Items.IRON_INGOT); }
     public int cokeCount() { return count(IndustrialMaterials.INDUSTRIAL_COKE.get()); }
-    public int calciteCount() { return count(Items.CALCITE); }
-    public boolean hasRecipe() { return ironCount() >= 8 && cokeCount() >= 4 && calciteCount() >= 2; }
+    public int quicklimeCount() { return count(CreateCityExpansionCore.QUICKLIME.get()); }
+    public boolean hasRecipe() { return ironCount() >= 8 && cokeCount() >= 4 && quicklimeCount() >= 2; }
 
     boolean consumeRecipe() {
         if (!hasRecipe()) return false;
         return consume(Items.IRON_INGOT, 8)
                 && consume(IndustrialMaterials.INDUSTRIAL_COKE.get(), 4)
-                && consume(Items.CALCITE, 2);
+                && consume(CreateCityExpansionCore.QUICKLIME.get(), 2);
     }
 
     void restoreRecipe() {
         restore(Items.IRON_INGOT, 8);
         restore(IndustrialMaterials.INDUSTRIAL_COKE.get(), 4);
-        restore(Items.CALCITE, 2);
+        restore(CreateCityExpansionCore.QUICKLIME.get(), 2);
     }
 
     private int count(Item item) {
@@ -71,7 +71,7 @@ public final class BlastFurnaceInputBlockEntity extends BlockEntity {
     }
 
     private static boolean accepts(ItemStack stack) {
-        return stack.is(Items.IRON_INGOT) || stack.is(Items.CALCITE)
+        return stack.is(Items.IRON_INGOT) || stack.is(CreateCityExpansionCore.QUICKLIME.get())
                 || stack.is(IndustrialMaterials.INDUSTRIAL_COKE.get());
     }
 

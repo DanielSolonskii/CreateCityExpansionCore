@@ -1,6 +1,1 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "createcityexpansioncore:block/control_block"
-  }
-}
+{"parent":"minecraft:block/cube","textures":{"down":"createcityexpansioncore:block/dark_machine_casing_side","up":"createcityexpansioncore:block/dark_machine_casing_top","north":"createcityexpansioncore:block/dark_machine_casing_front","south":"createcityexpansioncore:block/dark_machine_casing_side","west":"createcityexpansioncore:block/dark_machine_casing_side","east":"createcityexpansioncore:block/dark_machine_casing_side","particle":"createcityexpansioncore:block/dark_machine_casing_side"}}

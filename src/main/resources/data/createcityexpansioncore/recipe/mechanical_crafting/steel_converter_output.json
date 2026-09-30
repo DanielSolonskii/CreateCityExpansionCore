@@ -1,0 +1,1 @@
+{"type":"create:mechanical_crafting","pattern":["RPR","PBP","RPR"],"key":{"R":{"item":"createcityexpansioncore:refractory_block"},"P":{"item":"create:fluid_pipe"},"B":{"item":"create:brass_casing"}},"result":{"id":"createcityexpansioncore:steel_converter_output"},"accept_mirrored":true}

@@ -1,4 +1,163 @@
 {
+  "gui.createcityexpansioncore.freight.console.sales_empty": "Городских предложений пока нет",
+  "gui.createcityexpansioncore.freight.console.sales_empty_help": "Создайте предложение кнопкой внизу или вернитесь на рынок для других сделок.",
+  "gui.createcityexpansioncore.freight.console.select_sale": "Выберите предложение",
+  "gui.createcityexpansioncore.freight.console.list_count": "%s–%s из %s · Листайте колёсиком",
+  "gui.createcityexpansioncore.freight.console.loading_help": "Ожидаем данные города. Изменения не отправлены.",
+  "gui.createcityexpansioncore.freight.console.welcome": "Здесь начинается доставка вашего города",
+  "gui.createcityexpansioncore.freight.console.welcome_help": "Соедините станцию, Postbox и Packager. Зарегистрируйте их один раз — затем выбирайте эту точку при торговле.",
+  "gui.createcityexpansioncore.freight.console.first_point": "Настроить первую грузовую точку",
+  "gui.createcityexpansioncore.freight.console.step.station": "1. Создайте станцию на железной дороге",
+  "gui.createcityexpansioncore.freight.console.step.postbox": "2. Привяжите Postbox к станции через Create",
+  "gui.createcityexpansioncore.freight.console.step.packager": "3. Подключите Packager и хранилище товаров",
+  "gui.createcityexpansioncore.freight.console.dashboard": "Управление доставками",
+  "gui.createcityexpansioncore.freight.console.dashboard_help": "%s · Выберите точку или груз, чтобы увидеть доступные действия.",
+  "gui.createcityexpansioncore.freight.console.attention": "Требуют внимания",
+  "gui.createcityexpansioncore.freight.console.add_point": "Добавить грузовую точку",
+  "gui.createcityexpansioncore.freight.console.idle": "Активных доставок нет. Откройте рынок и выберите сделку; зарегистрированные точки доступны для выбора.",
+  "gui.createcityexpansioncore.freight.console.map.title": "ЖЕЛЕЗНОДОРОЖНАЯ ИНФРАСТРУКТУРА",
+  "gui.createcityexpansioncore.freight.console.map.legend": "Синие квадраты: зарегистрированные станции · С контуром: грузовые точки (цвет статуса) · Линии: реальные рельсы, не маршрут доставки. Наведите курсор для названия.",
+  "gui.createcityexpansioncore.freight.console.map.no_tracks": "В этой области нет данных о рельсах",
+  "gui.createcityexpansioncore.freight.console.map.waiting": "Ожидаем геометрию рельсов…",
+  "gui.createcityexpansioncore.freight.console.legacy_action": "Настроить старые заказы (%s)",
+  "gui.createcityexpansioncore.freight.console.points_help": "Управляйте терминалами города. В карточке — диагностика, настройки и действия.",
+  "gui.createcityexpansioncore.freight.console.outgoing_help": "Выберите груз, запустите отправку и подайте товар в Packager. Синий прогресс — груз в пути.",
+  "gui.createcityexpansioncore.freight.console.incoming_help": "Приём и выплаты обновляются автоматически после физической распаковки.",
+  "gui.createcityexpansioncore.freight.console.find_trade": "Открыть рынок",
+  "gui.createcityexpansioncore.freight.console.filter.0": "Показать: текущие",
+  "gui.createcityexpansioncore.freight.console.filter.1": "Показать: проблемы",
+  "gui.createcityexpansioncore.freight.console.filter.2": "Показать: все / история",
+  "gui.createcityexpansioncore.freight.console.ready": "Готова",
+  "gui.createcityexpansioncore.freight.console.off": "Отключена / в архиве",
+  "gui.createcityexpansioncore.freight.console.needs_attention": "Требует внимания",
+  "gui.createcityexpansioncore.freight.console.unlinked": "Не привязана",
+  "gui.createcityexpansioncore.freight.console.unassigned": "Ещё не назначена",
+  "gui.createcityexpansioncore.freight.console.details": "Подробнее",
+  "gui.createcityexpansioncore.freight.console.show_all": "Показать все",
+  "gui.createcityexpansioncore.freight.console.empty.points": "Здесь пока нет грузовых точек",
+  "gui.createcityexpansioncore.freight.console.empty.points_help": "Зарегистрируйте первую точку или измените фильтр, чтобы увидеть отключённые и архивные точки.",
+  "gui.createcityexpansioncore.freight.console.empty.outgoing": "В этом списке нет исходящих грузов",
+  "gui.createcityexpansioncore.freight.console.empty.outgoing_help": "Примите заказ на рынке и выберите отправочную точку. Груз появится здесь — останется запустить отправку.",
+  "gui.createcityexpansioncore.freight.console.empty.incoming": "В этом списке нет входящих поставок",
+  "gui.createcityexpansioncore.freight.console.empty.incoming_help": "Выберите точку приёма при покупке товара или создании городского заказа. Здесь появится состояние поставки.",
+  "gui.createcityexpansioncore.freight.console.received_count": "Принято %s / %s · В пути %s",
+  "gui.createcityexpansioncore.freight.console.setup.title": "Настройка грузовой точки",
+  "gui.createcityexpansioncore.freight.console.setup.step": "Шаг %s из %s",
+  "gui.createcityexpansioncore.freight.console.setup.infrastructure": "Выберите найденную пару Postbox + Packager. Для продолжения нужна привязка к станции.",
+  "gui.createcityexpansioncore.freight.console.setup.not_found": "Свободная пара не найдена в загруженной территории города. Поставьте обычный Packager в пределах 16 блоков от Postbox, привяжите Postbox к станции и обновите список. Соедините их транспортом коробок Create.",
+  "gui.createcityexpansioncore.freight.console.refresh": "Обновить список",
+  "gui.createcityexpansioncore.freight.console.selected": "Выбрано",
+  "gui.createcityexpansioncore.freight.console.select": "Выбрать",
+  "gui.createcityexpansioncore.freight.console.next": "Далее: имя и режим",
+  "gui.createcityexpansioncore.freight.console.setup.identity": "Дайте терминалу понятное имя и выберите его назначение.",
+  "gui.createcityexpansioncore.freight.console.name_hint": "Например: Центральный склад",
+  "gui.createcityexpansioncore.freight.console.setup.receiver": "Для приёма поставьте сундук, бочку или Contract Intake за Packager. Первая принимающая точка станет точкой по умолчанию.",
+  "gui.createcityexpansioncore.freight.console.review_setup": "Проверить настройки",
+  "gui.createcityexpansioncore.freight.console.setup.review": "Сервер проверит принадлежность и инфраструктуру, затем автоматически назначит адрес. Вводить его не нужно. Товары по-прежнему перевозятся физическим транспортом Create.",
+  "gui.createcityexpansioncore.freight.console.setup.waiting": "Регистрируем… ожидаем подтверждение сервера.",
+  "gui.createcityexpansioncore.freight.console.setup.failed": "Регистрация не подтверждена. Проверьте сообщение сервера в чате, станцию и принимающий контейнер, затем повторите.",
+  "gui.createcityexpansioncore.freight.console.save_name": "Сохранить имя",
+  "gui.createcityexpansioncore.freight.console.remove_warning": "Снять точку с регистрации? Новые отправки остановятся. Идентификатор и существующие коробки сохранятся; после восстановления инфраструктуры точку можно включить снова.",
+  "gui.createcityexpansioncore.freight.console.confirm_remove": "Подтвердить снятие",
+  "gui.createcityexpansioncore.freight.console.check.postbox": "Postbox",
+  "gui.createcityexpansioncore.freight.console.check.packager": "Packager",
+  "gui.createcityexpansioncore.freight.console.check.station": "Связь со станцией",
+  "gui.createcityexpansioncore.freight.console.check.ok": "Есть",
+  "gui.createcityexpansioncore.freight.console.check.missing": "Проверить",
+  "gui.createcityexpansioncore.freight.console.enable": "Включить / восстановить",
+  "gui.createcityexpansioncore.freight.console.disable": "Отключить точку",
+  "gui.createcityexpansioncore.freight.console.diagnostics": "Технические сведения",
+  "gui.createcityexpansioncore.freight.console.source_help": "Выберите свободную отправочную точку. Подтверждение сменит источник и приостановит отправку; адрес уже созданных коробок не изменится.",
+  "gui.createcityexpansioncore.freight.console.busy": "Занята другой отправкой",
+  "gui.createcityexpansioncore.freight.console.no_source": "Нет включённых отправочных точек. Добавьте или включите точку в разделе «Грузовые точки».",
+  "gui.createcityexpansioncore.freight.console.confirm_source": "Подтвердить смену точки",
+  "gui.createcityexpansioncore.freight.console.dispatch_help": "Запуск разрешает упаковку этого груза. Подайте товар в хранилище связанного Packager. Пауза не аннулирует уже отправленные коробки.",
+  "gui.createcityexpansioncore.freight.console.receipt_help": "Поддерживайте точку приёма в рабочем состоянии и освобождайте выходное хранилище. Физическая распаковка обновляет прогресс; завершённый заказ оплачивается автоматически.",
+  "gui.createcityexpansioncore.freight.console.legacy_title": "Настроить логистику старого заказа",
+  "gui.createcityexpansioncore.freight.console.legacy_help": "Выберите заказ и точку приёма, затем подтвердите. Существующие балансы и записи о грузах сохраняются.",
+  "gui.createcityexpansioncore.freight.console.legacy_order": "Старый заказ на импорт",
+  "gui.createcityexpansioncore.freight.console.confirm_setup": "Подтвердить точку приёма",
+  "gui.createcityexpansioncore.freight.registration_select": "Выберите инфраструктуру, режим и введите имя.",
+  "gui.createcityexpansioncore.freight.city_sales": "Продажи городов",
+  "gui.createcityexpansioncore.freight.create_sale": "Создать продажу",
+  "gui.createcityexpansioncore.freight.create_buy": "Создать закупку",
+  "gui.createcityexpansioncore.freight.after_buyer": "Точка отправки выбирается после появления покупателя.",
+  "gui.createcityexpansioncore.freight.sale_line": "%s • %s × %s • %s CR",
+  "gui.createcityexpansioncore.economy.create_mode.city_sell": "Городская продажа",
+  "gui.createcityexpansioncore.freight.title": "Логистика",
+  "gui.createcityexpansioncore.freight.overview": "Обзор",
+  "gui.createcityexpansioncore.freight.points": "Грузовые точки",
+  "gui.createcityexpansioncore.freight.outgoing": "Отправки",
+  "gui.createcityexpansioncore.freight.incoming": "Поставки",
+  "gui.createcityexpansioncore.freight.back": "Назад",
+  "gui.createcityexpansioncore.freight.market": "Рынок",
+  "gui.createcityexpansioncore.freight.name": "Название точки",
+  "gui.createcityexpansioncore.freight.add": "Добавить",
+  "gui.createcityexpansioncore.freight.rename": "Переименовать",
+  "gui.createcityexpansioncore.freight.toggle": "Вкл. / Выкл.",
+  "gui.createcityexpansioncore.freight.default": "Основная",
+  "gui.createcityexpansioncore.freight.remove": "Снять с учёта",
+  "gui.createcityexpansioncore.freight.remove_confirm": "Повторите «Снять с учёта». ID и грузы в пути сохранятся; включение восстановит точку.",
+  "gui.createcityexpansioncore.freight.start": "Начать отправку",
+  "gui.createcityexpansioncore.freight.pause": "Приостановить",
+  "gui.createcityexpansioncore.freight.change_source": "Сменить точку",
+  "gui.createcityexpansioncore.freight.loading": "Загрузка…",
+  "gui.createcityexpansioncore.freight.online_count": "Точки: %s / %s доступны",
+  "gui.createcityexpansioncore.freight.counts": "Отправки: %s • Поставки: %s • В пути: %s • Ошибки: %s",
+  "gui.createcityexpansioncore.freight.onboarding": "Чтобы отправлять и получать товары, создайте грузовую точку.\n1. Постройте станцию.\n2. Установите Postbox и привяжите его к станции в Create.\n3. Подключите Packager к сундуку или бочке.\n4. Откройте «Грузовые точки» → «Добавить».",
+  "gui.createcityexpansioncore.freight.setup_hint": "Начать настройку: Грузовые точки → Добавить",
+  "gui.createcityexpansioncore.freight.physical_help": "Запуск разрешает отправку по выбранному контракту. Подайте товар в инвентарь Packager и используйте штатную упаковку Create. Соедините транспортом коробок Packager и Postbox. Получение и расчёт выполняются автоматически.",
+  "gui.createcityexpansioncore.freight.registration_help": "Выберите найденную пару Postbox + Packager (не дальше 16 блоков). Postbox должен быть связан со станцией. Для приёма поставьте за Packager сундук, бочку или приёмный шлюз. Имя задаётся ниже; адрес создаст сервер.",
+  "gui.createcityexpansioncore.freight.no_candidates": "Подходящие блоки не найдены в загруженной территории города.",
+  "gui.createcityexpansioncore.freight.candidate_next": "Следующая пара Postbox / Packager →",
+  "gui.createcityexpansioncore.freight.station": "Станция: %s",
+  "gui.createcityexpansioncore.freight.register": "Зарегистрировать точку",
+  "gui.createcityexpansioncore.freight.mode.send": "Отправка",
+  "gui.createcityexpansioncore.freight.mode.receive": "Приём",
+  "gui.createcityexpansioncore.freight.mode.both": "Приём + отправка",
+  "gui.createcityexpansioncore.freight.checks": "Postbox %s • Packager %s • Station %s  %s",
+  "gui.createcityexpansioncore.freight.progress": "Получено %s / %s • В пути %s • К отправке %s",
+  "gui.createcityexpansioncore.freight.online": "Готово",
+  "gui.createcityexpansioncore.freight.unloaded": "Точка не загружена",
+  "gui.createcityexpansioncore.freight.removed": "Снята с учёта",
+  "gui.createcityexpansioncore.freight.disabled": "Отключена",
+  "gui.createcityexpansioncore.freight.postbox_missing": "Postbox отсутствует",
+  "gui.createcityexpansioncore.freight.packager_missing": "Packager отсутствует или слишком далеко",
+  "gui.createcityexpansioncore.freight.station_missing": "Станция не привязана / отсутствует",
+  "gui.createcityexpansioncore.freight.receiver_missing": "За Packager нужен сундук, бочка или приёмный шлюз",
+  "gui.createcityexpansioncore.freight.address_changed": "Адрес Postbox изменён; выключите и включите точку для восстановления",
+  "gui.createcityexpansioncore.freight.requires_setup": "Требует настройки логистики",
+  "gui.createcityexpansioncore.freight.destination_unavailable": "Точка назначения недоступна",
+  "gui.createcityexpansioncore.freight.source_unavailable": "Отправочная точка недоступна",
+  "gui.createcityexpansioncore.freight.route_error": "Ошибка маршрута",
+  "gui.createcityexpansioncore.freight.running": "Отправляется",
+  "gui.createcityexpansioncore.freight.paused": "Ожидает запуска / приостановлено",
+  "gui.createcityexpansioncore.freight.complete": "Выполнено",
+  "gui.createcityexpansioncore.freight.expired": "Контракт завершён / истёк",
+  "gui.createcityexpansioncore.freight.review": "Проверка условий доставки",
+  "gui.createcityexpansioncore.freight.choose": "Выберите грузовую точку",
+  "gui.createcityexpansioncore.freight.cancel": "Отмена",
+  "gui.createcityexpansioncore.freight.setup": "Настроить логистику",
+  "gui.createcityexpansioncore.freight.confirm": "Подтвердить",
+  "gui.createcityexpansioncore.freight.cargo": "Груз: %s × %s",
+  "gui.createcityexpansioncore.freight.reward": "Стоимость / награда: %s CR",
+  "gui.createcityexpansioncore.freight.deadline": "Осталось: %s мин.",
+  "gui.createcityexpansioncore.freight.bond": "Залог: %s CR",
+  "gui.createcityexpansioncore.freight.source": "Откуда: %s",
+  "gui.createcityexpansioncore.freight.destination": "Куда: %s",
+  "gui.createcityexpansioncore.freight.choose_receive": "Выбрать точку приёма",
+  "gui.createcityexpansioncore.freight.no_receive": "Сначала зарегистрируйте точку приёма в Логистике.",
+  "gui.createcityexpansioncore.freight.route.connected": "Станции соединены графом Create",
+  "gui.createcityexpansioncore.freight.route.disconnected": "Станции не соединены",
+  "gui.createcityexpansioncore.freight.route.unknown": "Связность маршрута неизвестна",
+  "gui.createcityexpansioncore.freight.tariffs": "Транспортные тарифы: пока недоступны",
+  "gui.createcityexpansioncore.freight.legacy": "Контракт #%s: требуется настройка. Нажмите, чтобы назначить основную точку приёма.",
+  "gui.createcityexpansioncore.freight.permission": "Нет права управлять городом.",
+  "gui.createcityexpansioncore.freight.invalid": "Проверьте название и режим точки.",
+  "gui.createcityexpansioncore.freight.wrong_city": "Инфраструктура должна находиться в территории вашего города.",
+  "gui.createcityexpansioncore.freight.duplicate": "Postbox или Packager уже зарегистрирован.",
+  "gui.createcityexpansioncore.freight.limit": "Достигнут лимит: 64 точки на город.",
+  "gui.createcityexpansioncore.freight.ok": "Грузовая точка зарегистрирована.",
   "block.createcityexpansioncore.city_pylon": "Городской пилон",
   "menu.createcityexpansioncore.city_pylon": "Городской пилон",
   "item.createcityexpansioncore.magnetic_analyzer": "Магнитный анализатор",
@@ -645,6 +804,7 @@
 "gui.createcityexpansioncore.item_selector.search_hint": "Поиск по названию",
 "gui.createcityexpansioncore.item_selector.title": "Выбор предмета",
   "item.createcityexpansioncore.industrial_coke": "Промышленный кокс"
+  ,"item.createcityexpansioncore.crushed_limestone": "Дроблёный известняк"
   ,"item.createcityexpansioncore.steel_billet": "Стальная заготовка"
   ,"item.createcityexpansioncore.steel_plate": "Стальная плита"
   ,"item.createcityexpansioncore.structural_beam": "Конструкционная балка"
@@ -701,11 +861,198 @@
   ,"message.createcityexpansioncore.blast_guide.disabled": "Гайд строительства доменной печи выключен"
   ,"message.createcityexpansioncore.blast_furnace.structure_complete": "Структура: собрана (%s/%s блоков; ошибок: %s)"
   ,"message.createcityexpansioncore.blast_furnace.structure_incomplete": "Структура: не собрана (%s/%s блоков; ошибок: %s)"
-  ,"message.createcityexpansioncore.blast_furnace.status": "Состояние: %s | Вход: %s железа, %s кокса, %s кальцита | Жидкий чугун: %s/%s mB"
+  ,"message.createcityexpansioncore.blast_furnace.status": "Состояние: %s | Вход: %s железа, %s кокса, %s негашёной извести | Жидкий чугун: %s/%s mB"
   ,"message.createcityexpansioncore.blast_furnace.power_progress": "Мощность: %.1f/%.1f кВт | Прогресс: %.0f%% | Партия: %s mB / %.0f с"
   ,"status.createcityexpansioncore.blast_furnace.structure_invalid": "Структура нарушена"
   ,"status.createcityexpansioncore.blast_furnace.no_input": "Нет полного набора сырья"
   ,"status.createcityexpansioncore.blast_furnace.no_power": "Нет питания"
   ,"status.createcityexpansioncore.blast_furnace.output_blocked": "Выход заполнен"
   ,"status.createcityexpansioncore.blast_furnace.running": "Работает"
+  ,"item.createcityexpansioncore.quicklime": "Негашёная известь"
+  ,"block.createcityexpansioncore.steel_converter_controller": "Контроллер сталеплавильного конвертера"
+  ,"block.createcityexpansioncore.steel_converter_fluid_input": "Ввод жидкого чугуна"
+  ,"block.createcityexpansioncore.steel_converter_item_input": "Ввод негашёной извести"
+  ,"block.createcityexpansioncore.steel_converter_output": "Вывод стальных заготовок"
+  ,"block.createcityexpansioncore.steelmaking_blower_port": "Привод воздуходувки конвертера"
+  ,"message.createcityexpansioncore.steel_converter.status": "Состояние: %s | Структура: %s/%s | Жидкий чугун: %s мБ | Стальные заготовки: %s/%s | Прогресс: %.0f%% | Мощность: %.1f/80.0 кВт"
+  ,"message.createcityexpansioncore.steel_guide.enabled": "Гайд сталеплавильного конвертера: %s | Правильно: %s/%s | Ошибок: %s"
+  ,"message.createcityexpansioncore.steel_guide.disabled": "Гайд строительства сталеплавильного конвертера выключен"
+  ,"gui.createcityexpansioncore.world_map.title": "Карта мира CCEC"
+  ,"gui.createcityexpansioncore.world_map.identity": "Атлас CCEC"
+  ,"gui.createcityexpansioncore.world_map.coordinates": "X %s  ·  Z %s  ·  %s%%"
+  ,"gui.createcityexpansioncore.world_map.open": "Открыть карту мира"
+  ,"gui.createcityexpansioncore.world_map.modes": "РЕЖИМ СЕТИ"
+  ,"gui.createcityexpansioncore.world_map.overlays": "СЛОИ"
+  ,"gui.createcityexpansioncore.world_map.mode.world": "Мир"
+  ,"gui.createcityexpansioncore.world_map.mode.railway": "Железные дороги"
+  ,"gui.createcityexpansioncore.world_map.mode.trade": "Торговля"
+  ,"gui.createcityexpansioncore.world_map.mode.energy": "Энергетика"
+  ,"gui.createcityexpansioncore.world_map.overlay.territories": "Города и территории"
+  ,"gui.createcityexpansioncore.world_map.overlay.projects": "Промышленность"
+  ,"gui.createcityexpansioncore.world_map.overlay.tracks": "Железные дороги"
+  ,"gui.createcityexpansioncore.world_map.overlay.stations": "Станции"
+  ,"gui.createcityexpansioncore.world_map.overlay.trains": "Поезда"
+  ,"gui.createcityexpansioncore.world_map.overlay.trade": "Торговые объекты"
+  ,"gui.createcityexpansioncore.world_map.context": "КОНТЕКСТ"
+  ,"gui.createcityexpansioncore.world_map.context.empty": "Выберите на карте город, станцию, поезд или торговый объект."
+  ,"gui.createcityexpansioncore.world_map.context.type": "Тип: %s"
+  ,"gui.createcityexpansioncore.world_map.context.coordinates": "Координаты: X %s  Z %s"
+  ,"gui.createcityexpansioncore.world_map.context.territory": "Размер территории: %s блоков"
+  ,"gui.createcityexpansioncore.world_map.context.own_detail": "Права вашего города открывают подробные эксплуатационные данные этого объекта."
+  ,"gui.createcityexpansioncore.world_map.selection.city": "Город"
+  ,"gui.createcityexpansioncore.world_map.selection.station": "Железнодорожная станция"
+  ,"gui.createcityexpansioncore.world_map.selection.train": "Поезд"
+  ,"gui.createcityexpansioncore.world_map.selection.trade_infrastructure": "Торговая инфраструктура"
+  ,"gui.createcityexpansioncore.world_map.footer": "Мой город: %s  •  Уровень %s  •  Жители %s  •  Проекты %s/%s"
+  ,"gui.createcityexpansioncore.world_map.energy_placeholder": "Данные энергетической сети пока недоступны"
+  ,"gui.createcityexpansioncore.world_map.center.city": "Центр: мой город"
+  ,"gui.createcityexpansioncore.world_map.center.player": "Центр: моя позиция"
+  ,"gui.createcityexpansioncore.world_map.overlay.cities": "Города"
+  ,"gui.createcityexpansioncore.world_map.layers": "Слои карты"
+  ,"gui.createcityexpansioncore.world_map.search": "Поиск"
+  ,"gui.createcityexpansioncore.world_map.search.hint": "Город, станция, поезд..."
+  ,"gui.createcityexpansioncore.world_map.search.empty": "Известные объекты не найдены"
+  ,"gui.createcityexpansioncore.world_map.close": "Закрыть карту"
+  ,"gui.createcityexpansioncore.world_map.hover.details": "ЛКМ • Подробнее"
+  ,"gui.createcityexpansioncore.world_map.tutorial": "Тянуть • Двигать   Колесо • Масштаб   Навести • Инфо   ЛКМ • Подробнее"
+  ,"gui.createcityexpansioncore.world_map.selection.industry": "Промышленная инфраструктура"
+  ,"gui.createcityexpansioncore.world_map.selection.player": "Позиция игрока"
+  ,"gui.createcityexpansioncore.world_map.my_position": "Моя позиция"
+  ,"gui.createcityexpansioncore.world_map.footer.compact": "%s  •  Уровень %s"
+  ,"gui.createcityexpansioncore.market.title": "Рынок Master City"
+  ,"gui.createcityexpansioncore.market.open": "Полный рынок"
+  ,"gui.createcityexpansioncore.market.balance": "Баланс: %s CR"
+  ,"gui.createcityexpansioncore.market.treasury": "Казна: %s CR"
+  ,"gui.createcityexpansioncore.market.reputation": "Торговая репутация: %s"
+  ,"gui.createcityexpansioncore.market.obligations": "Обязательства: %s"
+  ,"gui.createcityexpansioncore.market.search": "Поиск товаров"
+  ,"gui.createcityexpansioncore.market.quantity": "Количество"
+  ,"gui.createcityexpansioncore.market.tab.overview": "Обзор"
+  ,"gui.createcityexpansioncore.market.tab.external": "Внешний рынок"
+  ,"gui.createcityexpansioncore.market.tab.player": "Рынок игроков"
+  ,"gui.createcityexpansioncore.market.tab.contracts": "Контракты"
+  ,"gui.createcityexpansioncore.market.tab.activity": "Моя активность"
+  ,"gui.createcityexpansioncore.market.sell": "Продать Master City"
+  ,"gui.createcityexpansioncore.market.buy": "Купить у Master City"
+  ,"gui.createcityexpansioncore.market.accept": "Принять / резервировать"
+  ,"gui.createcityexpansioncore.market.create_listing": "Создать объявление"
+  ,"gui.createcityexpansioncore.market.offer_line": "%s CR за ед. • %s / %s"
+  ,"gui.createcityexpansioncore.market.unit_price": "Цена за единицу: %s CR"
+  ,"gui.createcityexpansioncore.market.remaining": "Осталось: %s"
+  ,"gui.createcityexpansioncore.market.bond": "Гарантийный залог: %s CR"
+  ,"gui.createcityexpansioncore.market.overview.active": "Активные обязательства: %s"
+  ,"gui.createcityexpansioncore.market.overview.opportunities": "Доступные внешние офферы: %s"
+  ,"gui.createcityexpansioncore.market.overview.contracts": "Активные контракты: %s"
+  ,"gui.createcityexpansioncore.market.subtitle": "Торговля, закупки и промышленные обязательства"
+  ,"gui.createcityexpansioncore.market.close": "Закрыть рынок"
+  ,"gui.createcityexpansioncore.market.card.wallet": "Кошелёк"
+  ,"gui.createcityexpansioncore.market.card.treasury": "Казна"
+  ,"gui.createcityexpansioncore.market.card.reputation": "Репутация"
+  ,"gui.createcityexpansioncore.market.card.obligations": "Обязательства"
+  ,"gui.createcityexpansioncore.market.filters": "Поиск и фильтры"
+  ,"gui.createcityexpansioncore.market.details": "Подробности"
+  ,"gui.createcityexpansioncore.market.external.count": "Внешние офферы · %s"
+  ,"gui.createcityexpansioncore.market.player.active": "Активные объявления · %s"
+  ,"gui.createcityexpansioncore.market.contracts.count": "Контракты · %s"
+  ,"gui.createcityexpansioncore.market.activity.count": "Мои записи · %s"
+  ,"gui.createcityexpansioncore.market.category.all": "Все источники"
+  ,"gui.createcityexpansioncore.market.category.ccec": "Промышленность CCEC"
+  ,"gui.createcityexpansioncore.market.category.vanilla": "Базовые материалы"
+  ,"gui.createcityexpansioncore.market.category.other": "Другие отрасли"
+  ,"gui.createcityexpansioncore.market.category.legacy": "Настроенные материалы"
+  ,"gui.createcityexpansioncore.market.category.resources": "Ресурсы"
+  ,"gui.createcityexpansioncore.market.category.basic_materials": "Базовые материалы"
+  ,"gui.createcityexpansioncore.market.category.industrial_materials": "Промышленные материалы"
+  ,"gui.createcityexpansioncore.market.category.components": "Компоненты"
+  ,"gui.createcityexpansioncore.market.category.energy": "Энергетика"
+  ,"gui.createcityexpansioncore.market.category": "Категория: %s"
+  ,"gui.createcityexpansioncore.market.reference_value": "Ориентир цены: %s CR"
+  ,"gui.createcityexpansioncore.market.market_volume": "Объём рынка: %s / %s"
+  ,"gui.createcityexpansioncore.market.offer_meta": "%s · %s CR · %s / %s"
+  ,"gui.createcityexpansioncore.market.empty.external": "Нет офферов для выбранных фильтров."
+  ,"gui.createcityexpansioncore.market.empty.player": "Нет подходящих активных объявлений игроков."
+  ,"gui.createcityexpansioncore.market.empty.contracts": "Доступных контрактов нет."
+  ,"gui.createcityexpansioncore.market.empty.activity": "Рыночной активности пока нет."
+  ,"gui.createcityexpansioncore.market.empty.selection": "Выберите строку для просмотра. Одиночный клик никогда не выполняет действие."
+  ,"gui.createcityexpansioncore.market.condition": "Состояние: %s"
+  ,"gui.createcityexpansioncore.market.expiration": "Истекает через: %s"
+  ,"gui.createcityexpansioncore.market.fulfillment": "Исполнение: %s"
+  ,"gui.createcityexpansioncore.market.fulfillment.intake": "Приёмник контрактов"
+  ,"gui.createcityexpansioncore.market.fulfillment.gateway": "Складской шлюз"
+  ,"gui.createcityexpansioncore.market.preview": "Итого %s CR · залог ~%s CR"
+  ,"gui.createcityexpansioncore.market.action.sell": "Зарезервировать продажу"
+  ,"gui.createcityexpansioncore.market.action.buy": "Зарезервировать покупку"
+  ,"gui.createcityexpansioncore.market.listing.line": "%s шт. · %s CR · %s"
+  ,"gui.createcityexpansioncore.market.listing.actor": "Автор: %s"
+  ,"gui.createcityexpansioncore.market.listing.type": "Направление: %s"
+  ,"gui.createcityexpansioncore.market.listing.offer": "Предлагает: %s"
+  ,"gui.createcityexpansioncore.market.listing.request": "Запрашивает: %s"
+  ,"gui.createcityexpansioncore.market.listing.status": "Статус: %s"
+  ,"gui.createcityexpansioncore.market.listing.meeting": "Встреча: %s"
+  ,"gui.createcityexpansioncore.market.listing_type.buy": "Хочет купить"
+  ,"gui.createcityexpansioncore.market.listing_type.sell": "Хочет продать"
+  ,"gui.createcityexpansioncore.market.contract.line": "%s / %s доставлено · %s CR"
+  ,"gui.createcityexpansioncore.market.contract.requester": "Заказчик: %s"
+  ,"gui.createcityexpansioncore.market.contract.cargo": "Груз: %s × %s"
+  ,"gui.createcityexpansioncore.market.contract.progress": "Прогресс: %s / %s"
+  ,"gui.createcityexpansioncore.market.contract.reward": "Награда: %s CR"
+  ,"gui.createcityexpansioncore.market.contract.deadline": "Срок: %s"
+  ,"gui.createcityexpansioncore.market.contract.location": "Доставка: %s"
+  ,"gui.createcityexpansioncore.market.contract.location_unknown": "недоступно"
+  ,"gui.createcityexpansioncore.market.contract.status": "Статус: %s"
+  ,"gui.createcityexpansioncore.market.activity.external": "Внешний рынок"
+  ,"gui.createcityexpansioncore.market.activity.listing": "Объявление игрока"
+  ,"gui.createcityexpansioncore.market.activity.contract": "Контракт"
+  ,"gui.createcityexpansioncore.market.activity.state": "Текущее состояние: %s"
+  ,"gui.createcityexpansioncore.market.activity.progress": "%s / %s выполнено"
+  ,"gui.createcityexpansioncore.market.currency": "%s CR"
+  ,"gui.createcityexpansioncore.market.item_amount": "%s × %s"
+  ,"gui.createcityexpansioncore.market.no_deadline": "без срока"
+  ,"gui.createcityexpansioncore.market.minutes": "%s мин."
+  ,"gui.createcityexpansioncore.market.confirm.title": "Подтвердите рыночное действие"
+  ,"gui.createcityexpansioncore.market.confirm.offer": "Зарезервировать %s × %s за %s CR? Сервер повторно проверит правила и доступность."
+  ,"gui.createcityexpansioncore.market.confirm.listing": "%s: %s?"
+  ,"gui.createcityexpansioncore.market.confirm.contract": "%s: %s?"
+  ,"gui.createcityexpansioncore.market.overview.opportunities_hint": "Спрос и предложение Master City"
+  ,"gui.createcityexpansioncore.market.overview.contracts_hint": "Обязательства с физической доставкой"
+  ,"gui.createcityexpansioncore.market.overview.active_hint": "Зарезервировано вашим городом"
+  ,"gui.createcityexpansioncore.market.overview.recent": "Недавняя активность"
+  ,"gui.createcityexpansioncore.market.overview.infrastructure": "Торговая инфраструктура"
+  ,"gui.createcityexpansioncore.market.overview.offer_activity": "%s · %s"
+  ,"gui.createcityexpansioncore.market.overview.contract_activity": "%s · %s"
+  ,"gui.createcityexpansioncore.market.overview.infrastructure_ready": "%s из %s точек готовы"
+  ,"gui.createcityexpansioncore.market.overview.warehouse": "Запас Master City: %s ед."
+  ,"gui.createcityexpansioncore.market.status.open": "Открыто"
+  ,"gui.createcityexpansioncore.market.status.reserved": "Зарезервировано"
+  ,"gui.createcityexpansioncore.market.status.in_progress": "В процессе"
+  ,"gui.createcityexpansioncore.market.status.handed_over": "Передано"
+  ,"gui.createcityexpansioncore.market.status.delivered": "Доставлено"
+  ,"gui.createcityexpansioncore.market.status.accepted": "Принято"
+  ,"gui.createcityexpansioncore.market.status.in_delivery": "Доставляется"
+  ,"gui.createcityexpansioncore.market.status.completed": "Завершено"
+  ,"gui.createcityexpansioncore.market.status.expired": "Истекло"
+  ,"gui.createcityexpansioncore.market.status.cancelled": "Отменено"
+  ,"gui.createcityexpansioncore.market.status.failed": "Провалено"
+  ,"gui.createcityexpansioncore.market.status.disputed": "Оспаривается"
+  ,"block.createcityexpansioncore.contract_dispatch_terminal": "Терминал контрактных отправлений"
+  ,"item.createcityexpansioncore.shipping_manifest": "Транспортная накладная"
+  ,"item.createcityexpansioncore.shipment_seal": "Пломба отправления"
+  ,"item.createcityexpansioncore.shipping_manifest.id": "Накладная: %s"
+  ,"item.createcityexpansioncore.shipping_manifest.invalid": "Недействительная накладная"
+  ,"item.createcityexpansioncore.shipping_manifest.server_authoritative": "Проверяется сервером в терминале отправлений"
+  ,"message.createcityexpansioncore.dispatch_terminal.invalid": "Недействительная накладная"
+  ,"message.createcityexpansioncore.dispatch_terminal.status": "Контракт %s | %s | разрешено %s | отправлено %s | принято %s | осталось %s | %s"
+  ,"gui.createcityexpansioncore.market.status.dispatched": "Отправлено"
+  ,"status.createcityexpansioncore.economy.intake_error.invalid_manifest": "Недействительная накладная"
+  ,"status.createcityexpansioncore.economy.intake_error.invalid_shipment": "Недействительное отправление"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_intake": "Неверный терминал приёмки"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_item": "Неверный груз"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_contractor": "Неверный поставщик"
+  ,"status.createcityexpansioncore.economy.intake_error.contract_invalid": "Контракт недействителен"
+  ,"status.createcityexpansioncore.economy.intake_error.contract_expired": "Срок контракта истёк"
+  ,"status.createcityexpansioncore.economy.intake_error.contract_completed": "Контракт завершён"
+  ,"status.createcityexpansioncore.economy.intake_error.excess_cargo": "Избыточный груз"
+  ,"status.createcityexpansioncore.economy.intake_error.shipment_already_used": "Отправление уже принято"
+  ,"status.createcityexpansioncore.economy.intake_error.import_order_invalid": "Заказ на импорт недействителен"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_receiving_city": "Неверный город-получатель"
 }

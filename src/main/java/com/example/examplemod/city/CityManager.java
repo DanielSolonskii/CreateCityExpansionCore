@@ -90,6 +90,7 @@ public class CityManager extends SavedData {
             city.setPylonActive(
                     !cityTag.contains("PylonActive") || cityTag.getBoolean("PylonActive")
             );
+            city.restoreTradeReputation(cityTag.getInt("TradeReputation"));
 
             // =================================================
             // MEMBERS
@@ -288,6 +289,7 @@ public class CityManager extends SavedData {
             cityTag.putString("PylonDimension", city.getPylonDimension().toString());
 
             cityTag.putBoolean("PylonActive", city.isPylonActive());
+            cityTag.putInt("TradeReputation", city.getTradeReputation());
 
             ListTag projects = new ListTag();
             for (CityProject project : city.getProjects()) {

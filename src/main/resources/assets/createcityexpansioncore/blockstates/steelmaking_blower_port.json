@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"createcityexpansioncore:block/steelmaking_blower_port"},"facing=east":{"model":"createcityexpansioncore:block/steelmaking_blower_port","y":90},"facing=south":{"model":"createcityexpansioncore:block/steelmaking_blower_port","y":180},"facing=west":{"model":"createcityexpansioncore:block/steelmaking_blower_port","y":270}}}

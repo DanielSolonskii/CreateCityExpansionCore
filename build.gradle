@@ -144,6 +144,10 @@ dependencies {
     implementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") {
         transitive = false
     }
+    // Create's KineticBlockEntity API exposes Ponder's VirtualBlockEntity in its
+    // type hierarchy. Compile against the already installed companion without
+    // adding the mod jar to the runtime/module layer.
+    compileOnly files("run/mods/ponder-neoforge-1.0.82+mc1.21.1.jar")
     // Create: Electro Energetics
     implementation files("libs/electroenergetics-1.21.1-1.1.2.jar")
 
@@ -216,6 +220,30 @@ tasks.register('checkMineVisualCoordinates', JavaExec) {
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
 }
 tasks.named('check') { dependsOn tasks.named('checkMineVisualCoordinates') }
+
+tasks.register('checkFreightLogistics', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.economy.FreightLogisticsCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkFreightLogistics') }
+
+tasks.register('checkLogisticsLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.LogisticsLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkLogisticsLayout') }
+
+// Each headless JVM owns its log directory even when Gradle runs checks in parallel.
+tasks.withType(JavaExec).configureEach {
+    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout']) {
+        workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
+        doFirst { workingDir.mkdirs() }
+    }
+}
 
 // IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.
 idea {

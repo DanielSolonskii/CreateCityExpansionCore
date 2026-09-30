@@ -35,7 +35,6 @@ public final class ModFluids {
         return new BaseFlowingFluid.Properties(HOT_METAL_TYPE, HOT_METAL, FLOWING_HOT_METAL)
                 .slopeFindDistance(2).levelDecreasePerBlock(2).tickRate(30);
     }
-
     public static void register(IEventBus bus) {
         FLUID_TYPES.register(bus);
         FLUIDS.register(bus);

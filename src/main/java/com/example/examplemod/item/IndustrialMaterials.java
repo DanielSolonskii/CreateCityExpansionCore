@@ -34,8 +34,20 @@ public final class IndustrialMaterials {
      */
 
     /**
+     * Дроблёный известняк.
+     * Промежуточный продукт Create Crushing для получения негашёной извести.
+     */
+    public static final DeferredItem<Item> CRUSHED_LIMESTONE =
+            CreateCityExpansionCore.ITEMS.registerItem(
+                    "crushed_limestone",
+                    properties -> new Item(properties),
+                    new Item.Properties()
+            );
+
+    /**
      * Промышленный кокс.
-     * Продукт угольной цепочки: 8 угля -> 8 кокса (Mixing, нагрев).
+     * Bootstrap-продукт угольной цепочки: 4 угля -> 2 кокса (Mixing, нагрев).
+     * Coke Oven Battery сохраняет промышленную эффективность 1:1.
      * Создаёт отдельную угольную промышленность вместо
      * прямого использования угля в металлургии.
      */
@@ -48,8 +60,8 @@ public final class IndustrialMaterials {
 
     /**
      * Стальная заготовка.
-     * Базовый steel commodity: 4 железа + 2 кокса + 1 кальцит
-     * -> 4 заготовки (Mixing, нагрев).
+     * Ранний steel commodity: 4 железа + 4 кокса + 1 негашёная известь
+     * -> 2 заготовки (Mixing, сверхнагрев).
      *
      * Будущий City Project «Metallurgical Works» сможет производить
      * её эффективнее и большими партиями, но не будет единственным

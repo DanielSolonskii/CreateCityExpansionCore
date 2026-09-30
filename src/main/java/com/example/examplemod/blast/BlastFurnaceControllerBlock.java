@@ -61,7 +61,7 @@ public final class BlastFurnaceControllerBlock extends Block implements EntityBl
         player.sendSystemMessage(Component.translatable(
                 "message.createcityexpansioncore.blast_furnace.status",
                 Component.translatable("status.createcityexpansioncore.blast_furnace."
-                        + controller.state().name().toLowerCase()), input.iron(), input.coke(), input.calcite(),
+                        + controller.state().name().toLowerCase()), input.iron(), input.coke(), input.quicklime(),
                 controller.outputAmount(serverLevel), BlastFurnaceOutputBlockEntity.CAPACITY_MB));
         player.sendSystemMessage(Component.translatable(
                 "message.createcityexpansioncore.blast_furnace.power_progress",

@@ -19,6 +19,7 @@ public class City {
     private boolean pylonActive;
 
     private int level;
+    private int tradeReputation;
 
     private final List<CityMember> members;
     private final List<CityInvite> invites;
@@ -206,6 +207,16 @@ public class City {
     public void setLevel(int level) {
 
         this.level = Math.max(1, Math.min(level, 2));
+    }
+
+    public int getTradeReputation() { return tradeReputation; }
+
+    public void adjustTradeReputation(int delta) {
+        tradeReputation = Math.max(0, Math.min(10_000, tradeReputation + delta));
+    }
+
+    void restoreTradeReputation(int value) {
+        tradeReputation = Math.max(0, Math.min(10_000, value));
     }
 
     /*

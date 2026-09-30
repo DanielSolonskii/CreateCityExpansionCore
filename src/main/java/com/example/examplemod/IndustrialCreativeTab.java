@@ -52,6 +52,8 @@ public final class IndustrialCreativeTab {
 
     private static final List<ItemLike> TIER2 = List.of(
             IndustrialMaterials.INDUSTRIAL_COKE.get(),
+            IndustrialMaterials.CRUSHED_LIMESTONE.get(),
+            CreateCityExpansionCore.QUICKLIME.get(),
             IndustrialMaterials.STEEL_BILLET.get(),
             IndustrialMaterials.STEEL_PLATE.get(),
             IndustrialMaterials.STRUCTURAL_BEAM.get(),
@@ -102,6 +104,7 @@ public final class IndustrialCreativeTab {
     private static final List<ItemLike> ECONOMY_INFRASTRUCTURE = List.of(
             CreateCityExpansionCore.CITY_PYLON_ITEM.get(),
             CreateCityExpansionCore.CONTRACT_INTAKE_ITEM.get(),
+            CreateCityExpansionCore.CONTRACT_DISPATCH_TERMINAL_ITEM.get(),
             CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get()
     );
 
@@ -116,6 +119,11 @@ public final class IndustrialCreativeTab {
             CreateCityExpansionCore.BLAST_FURNACE_CONTROLLER_ITEM.get(),
             CreateCityExpansionCore.BLAST_FURNACE_INPUT_PORT_ITEM.get(),
             CreateCityExpansionCore.BLAST_FURNACE_OUTPUT_PORT_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_CONTROLLER_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_FLUID_INPUT_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_ITEM_INPUT_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_OUTPUT_ITEM.get()
+            ,CreateCityExpansionCore.STEELMAKING_BLOWER_PORT_ITEM.get()
     );
 
     public static void populate(

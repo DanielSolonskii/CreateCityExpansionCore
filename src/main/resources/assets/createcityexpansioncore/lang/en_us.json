@@ -1,4 +1,163 @@
 {
+  "gui.createcityexpansioncore.freight.console.sales_empty": "No city sales yet",
+  "gui.createcityexpansioncore.freight.console.sales_empty_help": "Create a sale below, or return to the market to find other trades.",
+  "gui.createcityexpansioncore.freight.console.select_sale": "Select a sale to review",
+  "gui.createcityexpansioncore.freight.console.list_count": "%s–%s of %s · Scroll for more",
+  "gui.createcityexpansioncore.freight.console.loading_help": "Waiting for the city snapshot. No changes have been sent.",
+  "gui.createcityexpansioncore.freight.console.welcome": "Your city's next delivery starts here",
+  "gui.createcityexpansioncore.freight.console.welcome_help": "Connect a station, Postbox and Packager. Register them once — then choose this point when trading.",
+  "gui.createcityexpansioncore.freight.console.first_point": "Set up your first freight point",
+  "gui.createcityexpansioncore.freight.console.step.station": "1. Build a station on your railway",
+  "gui.createcityexpansioncore.freight.console.step.postbox": "2. Link a Postbox to the station in Create",
+  "gui.createcityexpansioncore.freight.console.step.packager": "3. Connect a Packager and cargo storage",
+  "gui.createcityexpansioncore.freight.console.dashboard": "Ready for the next shipment",
+  "gui.createcityexpansioncore.freight.console.dashboard_help": "%s · Select a point or shipment to see the next action.",
+  "gui.createcityexpansioncore.freight.console.attention": "Need attention",
+  "gui.createcityexpansioncore.freight.console.add_point": "Add freight point",
+  "gui.createcityexpansioncore.freight.console.idle": "No active deliveries. Open the market to choose a trade; your freight points are ready to use.",
+  "gui.createcityexpansioncore.freight.console.map.title": "RAIL INFRASTRUCTURE · CITY BLUEPRINT",
+  "gui.createcityexpansioncore.freight.console.map.legend": "Blue squares: registered stations · Outlined: freight points (status colour) · Lines: actual rails, not a delivery route. Hover for a name.",
+  "gui.createcityexpansioncore.freight.console.map.no_tracks": "No rail geometry in this area",
+  "gui.createcityexpansioncore.freight.console.map.waiting": "Waiting for rail geometry…",
+  "gui.createcityexpansioncore.freight.console.legacy_action": "Set up older orders (%s)",
+  "gui.createcityexpansioncore.freight.console.points_help": "Manage city terminals. Open a card for diagnostics, defaults and controls.",
+  "gui.createcityexpansioncore.freight.console.outgoing_help": "Choose a shipment, start dispatch, then feed its Packager. Blue progress means cargo in flight.",
+  "gui.createcityexpansioncore.freight.console.incoming_help": "Receipts and payments update automatically after physical unpacking.",
+  "gui.createcityexpansioncore.freight.console.find_trade": "Open market",
+  "gui.createcityexpansioncore.freight.console.filter.0": "View: current",
+  "gui.createcityexpansioncore.freight.console.filter.1": "View: need attention",
+  "gui.createcityexpansioncore.freight.console.filter.2": "View: all / history",
+  "gui.createcityexpansioncore.freight.console.ready": "Ready",
+  "gui.createcityexpansioncore.freight.console.off": "Disabled / archived",
+  "gui.createcityexpansioncore.freight.console.needs_attention": "Needs attention",
+  "gui.createcityexpansioncore.freight.console.unlinked": "Not linked",
+  "gui.createcityexpansioncore.freight.console.unassigned": "Not assigned yet",
+  "gui.createcityexpansioncore.freight.console.details": "Details",
+  "gui.createcityexpansioncore.freight.console.show_all": "Show all",
+  "gui.createcityexpansioncore.freight.console.empty.points": "No freight points here yet",
+  "gui.createcityexpansioncore.freight.console.empty.points_help": "Register your first point, or change the filter to see disabled and archived points.",
+  "gui.createcityexpansioncore.freight.console.empty.outgoing": "No outgoing shipments in this view",
+  "gui.createcityexpansioncore.freight.console.empty.outgoing_help": "Accept a delivery in the market and choose your sending point. It will appear here, ready to start.",
+  "gui.createcityexpansioncore.freight.console.empty.incoming": "No incoming deliveries in this view",
+  "gui.createcityexpansioncore.freight.console.empty.incoming_help": "Choose a receiving point when buying goods or creating a city order. Track the delivery here.",
+  "gui.createcityexpansioncore.freight.console.received_count": "Received %s / %s · In flight %s",
+  "gui.createcityexpansioncore.freight.console.setup.title": "Set up a freight point",
+  "gui.createcityexpansioncore.freight.console.setup.step": "Step %s of %s",
+  "gui.createcityexpansioncore.freight.console.setup.infrastructure": "Choose a detected Postbox + Packager pair. A station link is required before continuing.",
+  "gui.createcityexpansioncore.freight.console.setup.not_found": "No free pair found in loaded city territory. Place a regular Packager within 16 blocks of the Postbox, link the Postbox to a station, then refresh. Connect their package transport in Create.",
+  "gui.createcityexpansioncore.freight.console.refresh": "Scan again",
+  "gui.createcityexpansioncore.freight.console.selected": "Selected",
+  "gui.createcityexpansioncore.freight.console.select": "Select",
+  "gui.createcityexpansioncore.freight.console.next": "Next: name and mode",
+  "gui.createcityexpansioncore.freight.console.setup.identity": "Give this terminal a memorable name and choose what it does.",
+  "gui.createcityexpansioncore.freight.console.name_hint": "e.g. Central warehouse",
+  "gui.createcityexpansioncore.freight.console.setup.receiver": "For receiving, place a chest, barrel or Contract Intake behind the Packager. The first receiving point becomes the default.",
+  "gui.createcityexpansioncore.freight.console.review_setup": "Review freight point",
+  "gui.createcityexpansioncore.freight.console.setup.review": "The server checks ownership and infrastructure, then creates the routing address automatically. No address entry is needed. Goods still travel through your physical Create transport.",
+  "gui.createcityexpansioncore.freight.console.setup.waiting": "Registering… waiting for server confirmation.",
+  "gui.createcityexpansioncore.freight.console.setup.failed": "Registration was not confirmed. Check the server message in chat and the station/container setup, then retry.",
+  "gui.createcityexpansioncore.freight.console.save_name": "Save name",
+  "gui.createcityexpansioncore.freight.console.remove_warning": "Unregister this point? New dispatches stop. Its identity and existing packages are preserved; re-enable it after restoring the infrastructure.",
+  "gui.createcityexpansioncore.freight.console.confirm_remove": "Confirm unregister",
+  "gui.createcityexpansioncore.freight.console.check.postbox": "Postbox",
+  "gui.createcityexpansioncore.freight.console.check.packager": "Packager",
+  "gui.createcityexpansioncore.freight.console.check.station": "Station link",
+  "gui.createcityexpansioncore.freight.console.check.ok": "Found",
+  "gui.createcityexpansioncore.freight.console.check.missing": "Check",
+  "gui.createcityexpansioncore.freight.console.enable": "Enable / restore",
+  "gui.createcityexpansioncore.freight.console.disable": "Disable point",
+  "gui.createcityexpansioncore.freight.console.diagnostics": "Technical details",
+  "gui.createcityexpansioncore.freight.console.source_help": "Choose a free sending point. Confirming changes the source and pauses dispatch; existing packages keep their destination.",
+  "gui.createcityexpansioncore.freight.console.busy": "Assigned to another shipment",
+  "gui.createcityexpansioncore.freight.console.no_source": "No enabled sending points. Add or enable one in Freight points.",
+  "gui.createcityexpansioncore.freight.console.confirm_source": "Confirm source change",
+  "gui.createcityexpansioncore.freight.console.dispatch_help": "Start enables packaging for this shipment. Feed goods into the linked Packager inventory. A paused shipment keeps its existing packages valid.",
+  "gui.createcityexpansioncore.freight.console.receipt_help": "Keep the receiving infrastructure available and its output clear. Successful physical unpacking updates progress and settles the completed order automatically.",
+  "gui.createcityexpansioncore.freight.console.legacy_title": "Connect an older order",
+  "gui.createcityexpansioncore.freight.console.legacy_help": "Select an order and its receiving point, then confirm. Existing balances and shipment records are unchanged.",
+  "gui.createcityexpansioncore.freight.console.legacy_order": "Older import order",
+  "gui.createcityexpansioncore.freight.console.confirm_setup": "Confirm receiving point",
+  "gui.createcityexpansioncore.freight.registration_select": "Choose infrastructure, mode, and enter a name.",
+  "gui.createcityexpansioncore.freight.city_sales": "City sales",
+  "gui.createcityexpansioncore.freight.create_sale": "Create sale",
+  "gui.createcityexpansioncore.freight.create_buy": "Create buy",
+  "gui.createcityexpansioncore.freight.after_buyer": "Choose a sending point after a buyer accepts.",
+  "gui.createcityexpansioncore.freight.sale_line": "%s • %s × %s • %s CR",
+  "gui.createcityexpansioncore.economy.create_mode.city_sell": "City sale",
+  "gui.createcityexpansioncore.freight.title": "Logistics",
+  "gui.createcityexpansioncore.freight.overview": "Overview",
+  "gui.createcityexpansioncore.freight.points": "Freight points",
+  "gui.createcityexpansioncore.freight.outgoing": "Outgoing",
+  "gui.createcityexpansioncore.freight.incoming": "Incoming",
+  "gui.createcityexpansioncore.freight.back": "Back",
+  "gui.createcityexpansioncore.freight.market": "Market",
+  "gui.createcityexpansioncore.freight.name": "Point name",
+  "gui.createcityexpansioncore.freight.add": "Add",
+  "gui.createcityexpansioncore.freight.rename": "Rename",
+  "gui.createcityexpansioncore.freight.toggle": "Enable / Disable",
+  "gui.createcityexpansioncore.freight.default": "Default receive",
+  "gui.createcityexpansioncore.freight.remove": "Unregister",
+  "gui.createcityexpansioncore.freight.remove_confirm": "Click Unregister again. Identity and in-flight shipments are retained; enable to restore.",
+  "gui.createcityexpansioncore.freight.start": "Start shipping",
+  "gui.createcityexpansioncore.freight.pause": "Pause",
+  "gui.createcityexpansioncore.freight.change_source": "Change source",
+  "gui.createcityexpansioncore.freight.loading": "Loading…",
+  "gui.createcityexpansioncore.freight.online_count": "Points: %s / %s online",
+  "gui.createcityexpansioncore.freight.counts": "Outgoing: %s • Incoming: %s • In flight: %s • Errors: %s",
+  "gui.createcityexpansioncore.freight.onboarding": "To send and receive goods, register a freight point.\n1. Build a station.\n2. Place a Postbox and link it to the station in Create.\n3. Place a Packager against a chest or barrel.\n4. Open Freight points → Add.",
+  "gui.createcityexpansioncore.freight.setup_hint": "Start setup: Freight points → Add",
+  "gui.createcityexpansioncore.freight.physical_help": "Starting authorizes the selected trade. Feed goods into the Packager inventory and use Create packaging. Connect the Packager and Postbox with physical package transport. Receipt and settlement are automatic.",
+  "gui.createcityexpansioncore.freight.registration_help": "Select a detected Postbox + Packager pair (within 16 blocks). Link the Postbox to a station. For receiving, put a chest, barrel or intake behind the Packager. Enter a name below; the server creates the address.",
+  "gui.createcityexpansioncore.freight.no_candidates": "No candidate blocks found in the loaded city territory.",
+  "gui.createcityexpansioncore.freight.candidate_next": "Next Postbox / Packager pair →",
+  "gui.createcityexpansioncore.freight.station": "Station: %s",
+  "gui.createcityexpansioncore.freight.register": "Register freight point",
+  "gui.createcityexpansioncore.freight.mode.send": "Send",
+  "gui.createcityexpansioncore.freight.mode.receive": "Receive",
+  "gui.createcityexpansioncore.freight.mode.both": "Send + receive",
+  "gui.createcityexpansioncore.freight.checks": "Postbox %s • Packager %s • Station %s  %s",
+  "gui.createcityexpansioncore.freight.progress": "Received %s / %s • In flight %s • Available %s",
+  "gui.createcityexpansioncore.freight.online": "Online",
+  "gui.createcityexpansioncore.freight.unloaded": "Point unloaded",
+  "gui.createcityexpansioncore.freight.removed": "Unregistered",
+  "gui.createcityexpansioncore.freight.disabled": "Disabled",
+  "gui.createcityexpansioncore.freight.postbox_missing": "Postbox missing",
+  "gui.createcityexpansioncore.freight.packager_missing": "Packager missing or too far away",
+  "gui.createcityexpansioncore.freight.station_missing": "Station missing or not linked",
+  "gui.createcityexpansioncore.freight.receiver_missing": "A chest, barrel or intake is required behind the Packager",
+  "gui.createcityexpansioncore.freight.address_changed": "Postbox address changed; disable and enable the point to restore it",
+  "gui.createcityexpansioncore.freight.requires_setup": "Requires logistics setup",
+  "gui.createcityexpansioncore.freight.destination_unavailable": "Destination unavailable",
+  "gui.createcityexpansioncore.freight.source_unavailable": "Source unavailable",
+  "gui.createcityexpansioncore.freight.route_error": "Route error",
+  "gui.createcityexpansioncore.freight.running": "Shipping",
+  "gui.createcityexpansioncore.freight.paused": "Awaiting start / paused",
+  "gui.createcityexpansioncore.freight.complete": "Complete",
+  "gui.createcityexpansioncore.freight.expired": "Contract ended / expired",
+  "gui.createcityexpansioncore.freight.review": "Review delivery",
+  "gui.createcityexpansioncore.freight.choose": "Choose freight point",
+  "gui.createcityexpansioncore.freight.cancel": "Cancel",
+  "gui.createcityexpansioncore.freight.setup": "Set up logistics",
+  "gui.createcityexpansioncore.freight.confirm": "Confirm",
+  "gui.createcityexpansioncore.freight.cargo": "Cargo: %s × %s",
+  "gui.createcityexpansioncore.freight.reward": "Cost / reward: %s CR",
+  "gui.createcityexpansioncore.freight.deadline": "Remaining: %s min",
+  "gui.createcityexpansioncore.freight.bond": "Bond: %s CR",
+  "gui.createcityexpansioncore.freight.source": "Source: %s",
+  "gui.createcityexpansioncore.freight.destination": "Destination: %s",
+  "gui.createcityexpansioncore.freight.choose_receive": "Choose receiving point",
+  "gui.createcityexpansioncore.freight.no_receive": "Register a receiving point in Logistics first.",
+  "gui.createcityexpansioncore.freight.route.connected": "Stations connected in Create track graph",
+  "gui.createcityexpansioncore.freight.route.disconnected": "Stations disconnected",
+  "gui.createcityexpansioncore.freight.route.unknown": "Route connectivity unknown",
+  "gui.createcityexpansioncore.freight.tariffs": "Transport tariffs: not available yet",
+  "gui.createcityexpansioncore.freight.legacy": "Contract #%s requires setup. Click to assign your default receiving point.",
+  "gui.createcityexpansioncore.freight.permission": "You cannot manage this city.",
+  "gui.createcityexpansioncore.freight.invalid": "Check point name and mode.",
+  "gui.createcityexpansioncore.freight.wrong_city": "Infrastructure must be within your city territory.",
+  "gui.createcityexpansioncore.freight.duplicate": "Postbox or Packager is already registered.",
+  "gui.createcityexpansioncore.freight.limit": "Limit reached: 64 points per city.",
+  "gui.createcityexpansioncore.freight.ok": "Freight point registered.",
   "itemGroup.createcityexpansioncore": "CreateCityExpansionCore",
   "block.createcityexpansioncore.example_block": "Example Block",
   "item.createcityexpansioncore.example_item": "Example Item",
@@ -655,6 +814,7 @@
 "gui.createcityexpansioncore.item_selector.search_hint": "Search by name",
 "gui.createcityexpansioncore.item_selector.title": "Choose an item",
   "item.createcityexpansioncore.industrial_coke": "Industrial Coke"
+  ,"item.createcityexpansioncore.crushed_limestone": "Crushed Limestone"
   ,"item.createcityexpansioncore.steel_billet": "Steel Billet"
   ,"item.createcityexpansioncore.steel_plate": "Steel Plate"
   ,"item.createcityexpansioncore.structural_beam": "Structural Beam"
@@ -710,11 +870,198 @@
   ,"message.createcityexpansioncore.blast_guide.disabled": "Blast Furnace build guide disabled"
   ,"message.createcityexpansioncore.blast_furnace.structure_complete": "Structure: Complete (%s/%s blocks; %s errors)"
   ,"message.createcityexpansioncore.blast_furnace.structure_incomplete": "Structure: Incomplete (%s/%s blocks; %s errors)"
-  ,"message.createcityexpansioncore.blast_furnace.status": "State: %s | Input: %s iron, %s coke, %s calcite | Hot Metal: %s/%s mB"
+  ,"message.createcityexpansioncore.blast_furnace.status": "State: %s | Input: %s iron, %s coke, %s quicklime | Hot Metal: %s/%s mB"
   ,"message.createcityexpansioncore.blast_furnace.power_progress": "Power: %.1f/%.1f kW | Progress: %.0f%% | Batch: %s mB / %.0f s"
   ,"status.createcityexpansioncore.blast_furnace.structure_invalid": "Structure Invalid"
   ,"status.createcityexpansioncore.blast_furnace.no_input": "No Input"
   ,"status.createcityexpansioncore.blast_furnace.no_power": "No Power"
   ,"status.createcityexpansioncore.blast_furnace.output_blocked": "Output Blocked"
   ,"status.createcityexpansioncore.blast_furnace.running": "Running"
+  ,"item.createcityexpansioncore.quicklime": "Quicklime"
+  ,"block.createcityexpansioncore.steel_converter_controller": "Steelmaking Converter Controller"
+  ,"block.createcityexpansioncore.steel_converter_fluid_input": "Hot Metal Input"
+  ,"block.createcityexpansioncore.steel_converter_item_input": "Quicklime Input"
+  ,"block.createcityexpansioncore.steel_converter_output": "Steel Billet Output"
+  ,"block.createcityexpansioncore.steelmaking_blower_port": "Steelmaking Blower Port"
+  ,"message.createcityexpansioncore.steel_converter.status": "State: %s | Structure: %s/%s | Hot Metal: %s mB | Steel Billets: %s/%s | Progress: %.0f%% | Power: %.1f/80.0 kW"
+  ,"message.createcityexpansioncore.steel_guide.enabled": "Steelmaking Converter guide: %s | Correct: %s/%s | Errors: %s"
+  ,"message.createcityexpansioncore.steel_guide.disabled": "Steelmaking Converter build guide disabled"
+  ,"gui.createcityexpansioncore.world_map.title": "CCEC World Map"
+  ,"gui.createcityexpansioncore.world_map.identity": "CCEC Atlas"
+  ,"gui.createcityexpansioncore.world_map.coordinates": "X %s  ·  Z %s  ·  %s%%"
+  ,"gui.createcityexpansioncore.world_map.open": "Open World Map"
+  ,"gui.createcityexpansioncore.world_map.modes": "NETWORK MODE"
+  ,"gui.createcityexpansioncore.world_map.overlays": "OVERLAYS"
+  ,"gui.createcityexpansioncore.world_map.mode.world": "World"
+  ,"gui.createcityexpansioncore.world_map.mode.railway": "Railway"
+  ,"gui.createcityexpansioncore.world_map.mode.trade": "Trade"
+  ,"gui.createcityexpansioncore.world_map.mode.energy": "Energy"
+  ,"gui.createcityexpansioncore.world_map.overlay.territories": "Cities & territories"
+  ,"gui.createcityexpansioncore.world_map.overlay.projects": "Industry"
+  ,"gui.createcityexpansioncore.world_map.overlay.tracks": "Rail tracks"
+  ,"gui.createcityexpansioncore.world_map.overlay.stations": "Stations"
+  ,"gui.createcityexpansioncore.world_map.overlay.trains": "Trains"
+  ,"gui.createcityexpansioncore.world_map.overlay.trade": "Trade facilities"
+  ,"gui.createcityexpansioncore.world_map.context": "CONTEXT"
+  ,"gui.createcityexpansioncore.world_map.context.empty": "Select a city, station, train, or trade facility on the map."
+  ,"gui.createcityexpansioncore.world_map.context.type": "Type: %s"
+  ,"gui.createcityexpansioncore.world_map.context.coordinates": "Coordinates: X %s  Z %s"
+  ,"gui.createcityexpansioncore.world_map.context.territory": "Territory size: %s blocks"
+  ,"gui.createcityexpansioncore.world_map.context.own_detail": "Your city permissions allow detailed operational data for this object."
+  ,"gui.createcityexpansioncore.world_map.selection.city": "City"
+  ,"gui.createcityexpansioncore.world_map.selection.station": "Railway station"
+  ,"gui.createcityexpansioncore.world_map.selection.train": "Train"
+  ,"gui.createcityexpansioncore.world_map.selection.trade_infrastructure": "Trade infrastructure"
+  ,"gui.createcityexpansioncore.world_map.footer": "My city: %s  •  Level %s  •  Members %s  •  Projects %s/%s"
+  ,"gui.createcityexpansioncore.world_map.energy_placeholder": "Energy network data is not available yet"
+  ,"gui.createcityexpansioncore.world_map.center.city": "Center: My City"
+  ,"gui.createcityexpansioncore.world_map.center.player": "Center: My Position"
+  ,"gui.createcityexpansioncore.world_map.overlay.cities": "Cities"
+  ,"gui.createcityexpansioncore.world_map.layers": "Map Layers"
+  ,"gui.createcityexpansioncore.world_map.search": "Search"
+  ,"gui.createcityexpansioncore.world_map.search.hint": "City, station, train..."
+  ,"gui.createcityexpansioncore.world_map.search.empty": "No known objects found"
+  ,"gui.createcityexpansioncore.world_map.close": "Close Map"
+  ,"gui.createcityexpansioncore.world_map.hover.details": "LMB • Details"
+  ,"gui.createcityexpansioncore.world_map.tutorial": "Drag • Move   Scroll • Zoom   Hover • Quick info   LMB • Details"
+  ,"gui.createcityexpansioncore.world_map.selection.industry": "Industrial infrastructure"
+  ,"gui.createcityexpansioncore.world_map.selection.player": "Player position"
+  ,"gui.createcityexpansioncore.world_map.my_position": "My Position"
+  ,"gui.createcityexpansioncore.world_map.footer.compact": "%s  •  Level %s"
+  ,"gui.createcityexpansioncore.market.title": "Master City Market"
+  ,"gui.createcityexpansioncore.market.open": "Full market"
+  ,"gui.createcityexpansioncore.market.balance": "Balance: %s CR"
+  ,"gui.createcityexpansioncore.market.treasury": "Treasury: %s CR"
+  ,"gui.createcityexpansioncore.market.reputation": "Trade reputation: %s"
+  ,"gui.createcityexpansioncore.market.obligations": "Obligations: %s"
+  ,"gui.createcityexpansioncore.market.search": "Search items"
+  ,"gui.createcityexpansioncore.market.quantity": "Quantity"
+  ,"gui.createcityexpansioncore.market.tab.overview": "Overview"
+  ,"gui.createcityexpansioncore.market.tab.external": "External Market"
+  ,"gui.createcityexpansioncore.market.tab.player": "Player Market"
+  ,"gui.createcityexpansioncore.market.tab.contracts": "Contracts"
+  ,"gui.createcityexpansioncore.market.tab.activity": "My Activity"
+  ,"gui.createcityexpansioncore.market.sell": "Sell to Master City"
+  ,"gui.createcityexpansioncore.market.buy": "Buy from Master City"
+  ,"gui.createcityexpansioncore.market.accept": "Accept / Reserve"
+  ,"gui.createcityexpansioncore.market.create_listing": "Create listing"
+  ,"gui.createcityexpansioncore.market.offer_line": "%s CR each • %s / %s"
+  ,"gui.createcityexpansioncore.market.unit_price": "Unit price: %s CR"
+  ,"gui.createcityexpansioncore.market.remaining": "Remaining: %s"
+  ,"gui.createcityexpansioncore.market.bond": "Performance bond: %s CR"
+  ,"gui.createcityexpansioncore.market.overview.active": "Active obligations: %s"
+  ,"gui.createcityexpansioncore.market.overview.opportunities": "Open external opportunities: %s"
+  ,"gui.createcityexpansioncore.market.overview.contracts": "Active contracts: %s"
+  ,"gui.createcityexpansioncore.market.subtitle": "Trade, procurement and industrial obligations"
+  ,"gui.createcityexpansioncore.market.close": "Close market"
+  ,"gui.createcityexpansioncore.market.card.wallet": "Wallet"
+  ,"gui.createcityexpansioncore.market.card.treasury": "Treasury"
+  ,"gui.createcityexpansioncore.market.card.reputation": "Reputation"
+  ,"gui.createcityexpansioncore.market.card.obligations": "Obligations"
+  ,"gui.createcityexpansioncore.market.filters": "Search & filters"
+  ,"gui.createcityexpansioncore.market.details": "Details"
+  ,"gui.createcityexpansioncore.market.external.count": "External offers · %s"
+  ,"gui.createcityexpansioncore.market.player.active": "Active listings · %s"
+  ,"gui.createcityexpansioncore.market.contracts.count": "Contracts · %s"
+  ,"gui.createcityexpansioncore.market.activity.count": "My records · %s"
+  ,"gui.createcityexpansioncore.market.category.all": "All sources"
+  ,"gui.createcityexpansioncore.market.category.ccec": "CCEC industry"
+  ,"gui.createcityexpansioncore.market.category.vanilla": "Base materials"
+  ,"gui.createcityexpansioncore.market.category.other": "Other industries"
+  ,"gui.createcityexpansioncore.market.category.legacy": "Configured materials"
+  ,"gui.createcityexpansioncore.market.category.resources": "Resources"
+  ,"gui.createcityexpansioncore.market.category.basic_materials": "Basic materials"
+  ,"gui.createcityexpansioncore.market.category.industrial_materials": "Industrial materials"
+  ,"gui.createcityexpansioncore.market.category.components": "Components"
+  ,"gui.createcityexpansioncore.market.category.energy": "Energy"
+  ,"gui.createcityexpansioncore.market.category": "Category: %s"
+  ,"gui.createcityexpansioncore.market.reference_value": "Reference value: %s CR"
+  ,"gui.createcityexpansioncore.market.market_volume": "Market volume: %s / %s"
+  ,"gui.createcityexpansioncore.market.offer_meta": "%s · %s CR · %s / %s"
+  ,"gui.createcityexpansioncore.market.empty.external": "No offers match these filters."
+  ,"gui.createcityexpansioncore.market.empty.player": "No active player listings match the search."
+  ,"gui.createcityexpansioncore.market.empty.contracts": "No contracts are available."
+  ,"gui.createcityexpansioncore.market.empty.activity": "No market activity yet."
+  ,"gui.createcityexpansioncore.market.empty.selection": "Select a row to inspect it. A single click never performs an action."
+  ,"gui.createcityexpansioncore.market.condition": "Condition: %s"
+  ,"gui.createcityexpansioncore.market.expiration": "Expires in: %s"
+  ,"gui.createcityexpansioncore.market.fulfillment": "Fulfilment: %s"
+  ,"gui.createcityexpansioncore.market.fulfillment.intake": "Contract Intake"
+  ,"gui.createcityexpansioncore.market.fulfillment.gateway": "Warehouse Gateway"
+  ,"gui.createcityexpansioncore.market.preview": "Total %s CR · bond ~%s CR"
+  ,"gui.createcityexpansioncore.market.action.sell": "Reserve sale"
+  ,"gui.createcityexpansioncore.market.action.buy": "Reserve purchase"
+  ,"gui.createcityexpansioncore.market.listing.line": "%s units · %s CR · %s"
+  ,"gui.createcityexpansioncore.market.listing.actor": "Author: %s"
+  ,"gui.createcityexpansioncore.market.listing.type": "Direction: %s"
+  ,"gui.createcityexpansioncore.market.listing.offer": "Offers: %s"
+  ,"gui.createcityexpansioncore.market.listing.request": "Requests: %s"
+  ,"gui.createcityexpansioncore.market.listing.status": "Status: %s"
+  ,"gui.createcityexpansioncore.market.listing.meeting": "Meeting: %s"
+  ,"gui.createcityexpansioncore.market.listing_type.buy": "Wants to buy"
+  ,"gui.createcityexpansioncore.market.listing_type.sell": "Wants to sell"
+  ,"gui.createcityexpansioncore.market.contract.line": "%s / %s delivered · %s CR"
+  ,"gui.createcityexpansioncore.market.contract.requester": "Requester: %s"
+  ,"gui.createcityexpansioncore.market.contract.cargo": "Cargo: %s × %s"
+  ,"gui.createcityexpansioncore.market.contract.progress": "Progress: %s / %s"
+  ,"gui.createcityexpansioncore.market.contract.reward": "Reward: %s CR"
+  ,"gui.createcityexpansioncore.market.contract.deadline": "Deadline: %s"
+  ,"gui.createcityexpansioncore.market.contract.location": "Delivery: %s"
+  ,"gui.createcityexpansioncore.market.contract.location_unknown": "unavailable"
+  ,"gui.createcityexpansioncore.market.contract.status": "Status: %s"
+  ,"gui.createcityexpansioncore.market.activity.external": "External Market"
+  ,"gui.createcityexpansioncore.market.activity.listing": "Player listing"
+  ,"gui.createcityexpansioncore.market.activity.contract": "Contract"
+  ,"gui.createcityexpansioncore.market.activity.state": "Current state: %s"
+  ,"gui.createcityexpansioncore.market.activity.progress": "%s / %s fulfilled"
+  ,"gui.createcityexpansioncore.market.currency": "%s CR"
+  ,"gui.createcityexpansioncore.market.item_amount": "%s × %s"
+  ,"gui.createcityexpansioncore.market.no_deadline": "no deadline"
+  ,"gui.createcityexpansioncore.market.minutes": "%s min"
+  ,"gui.createcityexpansioncore.market.confirm.title": "Confirm market action"
+  ,"gui.createcityexpansioncore.market.confirm.offer": "Reserve %s × %s for %s CR? Server rules and availability are checked again."
+  ,"gui.createcityexpansioncore.market.confirm.listing": "%s: %s?"
+  ,"gui.createcityexpansioncore.market.confirm.contract": "%s: %s?"
+  ,"gui.createcityexpansioncore.market.overview.opportunities_hint": "Master City supply and demand"
+  ,"gui.createcityexpansioncore.market.overview.contracts_hint": "Physical delivery obligations"
+  ,"gui.createcityexpansioncore.market.overview.active_hint": "Reserved by your city"
+  ,"gui.createcityexpansioncore.market.overview.recent": "Recent activity"
+  ,"gui.createcityexpansioncore.market.overview.infrastructure": "Trade infrastructure"
+  ,"gui.createcityexpansioncore.market.overview.offer_activity": "%s · %s"
+  ,"gui.createcityexpansioncore.market.overview.contract_activity": "%s · %s"
+  ,"gui.createcityexpansioncore.market.overview.infrastructure_ready": "%s of %s endpoints ready"
+  ,"gui.createcityexpansioncore.market.overview.warehouse": "Master warehouse stock: %s units"
+  ,"gui.createcityexpansioncore.market.status.open": "Open"
+  ,"gui.createcityexpansioncore.market.status.reserved": "Reserved"
+  ,"gui.createcityexpansioncore.market.status.in_progress": "In progress"
+  ,"gui.createcityexpansioncore.market.status.handed_over": "Handed over"
+  ,"gui.createcityexpansioncore.market.status.delivered": "Delivered"
+  ,"gui.createcityexpansioncore.market.status.accepted": "Accepted"
+  ,"gui.createcityexpansioncore.market.status.in_delivery": "In delivery"
+  ,"gui.createcityexpansioncore.market.status.completed": "Completed"
+  ,"gui.createcityexpansioncore.market.status.expired": "Expired"
+  ,"gui.createcityexpansioncore.market.status.cancelled": "Cancelled"
+  ,"gui.createcityexpansioncore.market.status.failed": "Failed"
+  ,"gui.createcityexpansioncore.market.status.disputed": "Disputed"
+  ,"block.createcityexpansioncore.contract_dispatch_terminal": "Contract Dispatch Terminal"
+  ,"item.createcityexpansioncore.shipping_manifest": "Shipping Manifest"
+  ,"item.createcityexpansioncore.shipment_seal": "Shipment Seal"
+  ,"item.createcityexpansioncore.shipping_manifest.id": "Manifest: %s"
+  ,"item.createcityexpansioncore.shipping_manifest.invalid": "Invalid manifest"
+  ,"item.createcityexpansioncore.shipping_manifest.server_authoritative": "Validated by the server at a Dispatch Terminal"
+  ,"message.createcityexpansioncore.dispatch_terminal.invalid": "Invalid manifest"
+  ,"message.createcityexpansioncore.dispatch_terminal.status": "Contract %s | %s | authorized %s | dispatched %s | accepted %s | remaining %s | %s"
+  ,"gui.createcityexpansioncore.market.status.dispatched": "Dispatched"
+  ,"status.createcityexpansioncore.economy.intake_error.invalid_manifest": "Invalid manifest"
+  ,"status.createcityexpansioncore.economy.intake_error.invalid_shipment": "Invalid shipment"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_intake": "Wrong intake"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_item": "Wrong cargo"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_contractor": "Wrong contractor"
+  ,"status.createcityexpansioncore.economy.intake_error.contract_invalid": "Contract invalid"
+  ,"status.createcityexpansioncore.economy.intake_error.contract_expired": "Contract expired"
+  ,"status.createcityexpansioncore.economy.intake_error.contract_completed": "Contract completed"
+  ,"status.createcityexpansioncore.economy.intake_error.excess_cargo": "Excess cargo"
+  ,"status.createcityexpansioncore.economy.intake_error.shipment_already_used": "Shipment already used"
+  ,"status.createcityexpansioncore.economy.intake_error.import_order_invalid": "Import order invalid"
+  ,"status.createcityexpansioncore.economy.intake_error.wrong_receiving_city": "Wrong receiving city"
 }

@@ -1,6 +1,1 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "createcityexpansioncore:block/technical_block"
-  }
-}
+{"parent":"minecraft:block/cube","textures":{"down":"createcityexpansioncore:block/technical_block_side","up":"createcityexpansioncore:block/technical_block_top","north":"createcityexpansioncore:block/technical_block_front","south":"createcityexpansioncore:block/technical_block_side","west":"createcityexpansioncore:block/technical_block_side","east":"createcityexpansioncore:block/technical_block_side","particle":"createcityexpansioncore:block/technical_block_side"}}

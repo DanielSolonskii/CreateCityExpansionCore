@@ -3,6 +3,7 @@ import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityInvite;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityMapNetworkHandlers;
+import com.example.examplemod.city.CityMapSavedData;
 import com.example.examplemod.city.CityProjectNetworkHandlers;
 import com.example.examplemod.electrical.*;
 import com.example.examplemod.event.CityProtectionEvents;
@@ -18,6 +19,7 @@ import com.example.examplemod.coke.CokeBatteryInputPortBlock;
 import com.example.examplemod.coke.CokeBatteryOutputBlockEntity;
 import com.example.examplemod.coke.CokeBatteryOutputPortBlock;
 import com.example.examplemod.blast.*;
+import com.example.examplemod.steel.*;
 import com.example.examplemod.fluid.ModFluids;
 import com.example.examplemod.client.screen.MineControllerScreen;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -66,6 +68,7 @@ import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.network.CokeBatteryGuidePayload;
 import com.example.examplemod.network.BlastFurnaceGuidePayload;
+import com.example.examplemod.network.SteelConverterGuidePayload;
 import com.example.examplemod.network.CreateCityPayload;
 import com.example.examplemod.network.InvitePlayerPayload;
 import com.example.examplemod.network.RespondCityInvitePayload;
@@ -190,6 +193,8 @@ public class CreateCityExpansionCore {
             (payload, context) -> {};
 
     public static PayloadHandler<BlastFurnaceGuidePayload> BLAST_FURNACE_GUIDE_HANDLER =
+            (payload, context) -> {};
+    public static PayloadHandler<SteelConverterGuidePayload> STEEL_CONVERTER_GUIDE_HANDLER =
             (payload, context) -> {};
 
     public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICATION_HANDLER =
@@ -599,6 +604,27 @@ public class CreateCityExpansionCore {
             BLAST_FURNACE_OUTPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
             "blast_furnace_output_port", () -> BlockEntityType.Builder.of(
                     BlastFurnaceOutputBlockEntity::new, BLAST_FURNACE_OUTPUT_PORT.get()).build(null));
+    public static final DeferredItem<Item> QUICKLIME = ITEMS.registerSimpleItem("quicklime", new Item.Properties());
+    public static final DeferredBlock<SteelConverterControllerBlock> STEEL_CONVERTER_CONTROLLER = BLOCKS.register(
+            "steel_converter_controller", () -> new SteelConverterControllerBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(5).requiresCorrectToolForDrops()));
+    public static final DeferredItem<BlockItem> STEEL_CONVERTER_CONTROLLER_ITEM = ITEMS.registerSimpleBlockItem("steel_converter_controller", STEEL_CONVERTER_CONTROLLER);
+    public static final DeferredBlock<SteelConverterPortBlock> STEEL_CONVERTER_FLUID_INPUT = BLOCKS.register(
+            "steel_converter_fluid_input", () -> new SteelConverterPortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(5).requiresCorrectToolForDrops(), SteelConverterFluidInputBlockEntity::new));
+    public static final DeferredItem<BlockItem> STEEL_CONVERTER_FLUID_INPUT_ITEM = ITEMS.registerSimpleBlockItem("steel_converter_fluid_input", STEEL_CONVERTER_FLUID_INPUT);
+    public static final DeferredBlock<SteelConverterPortBlock> STEEL_CONVERTER_ITEM_INPUT = BLOCKS.register(
+            "steel_converter_item_input", () -> new SteelConverterPortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(5).requiresCorrectToolForDrops(), SteelConverterItemInputBlockEntity::new));
+    public static final DeferredItem<BlockItem> STEEL_CONVERTER_ITEM_INPUT_ITEM = ITEMS.registerSimpleBlockItem("steel_converter_item_input", STEEL_CONVERTER_ITEM_INPUT);
+    public static final DeferredBlock<SteelConverterPortBlock> STEEL_CONVERTER_OUTPUT = BLOCKS.register(
+            "steel_converter_output", () -> new SteelConverterPortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(5).requiresCorrectToolForDrops(), SteelConverterOutputBlockEntity::new));
+    public static final DeferredItem<BlockItem> STEEL_CONVERTER_OUTPUT_ITEM = ITEMS.registerSimpleBlockItem("steel_converter_output", STEEL_CONVERTER_OUTPUT);
+    public static final DeferredBlock<SteelmakingBlowerPortBlock> STEELMAKING_BLOWER_PORT = BLOCKS.register(
+            "steelmaking_blower_port", () -> new SteelmakingBlowerPortBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(5).requiresCorrectToolForDrops()));
+    public static final DeferredItem<BlockItem> STEELMAKING_BLOWER_PORT_ITEM = ITEMS.registerSimpleBlockItem("steelmaking_blower_port", STEELMAKING_BLOWER_PORT);
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteelConverterControllerBlockEntity>> STEEL_CONVERTER_CONTROLLER_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("steel_converter_controller", () -> BlockEntityType.Builder.of(SteelConverterControllerBlockEntity::new, STEEL_CONVERTER_CONTROLLER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteelConverterFluidInputBlockEntity>> STEEL_CONVERTER_FLUID_INPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("steel_converter_fluid_input", () -> BlockEntityType.Builder.of(SteelConverterFluidInputBlockEntity::new, STEEL_CONVERTER_FLUID_INPUT.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteelConverterItemInputBlockEntity>> STEEL_CONVERTER_ITEM_INPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("steel_converter_item_input", () -> BlockEntityType.Builder.of(SteelConverterItemInputBlockEntity::new, STEEL_CONVERTER_ITEM_INPUT.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteelConverterOutputBlockEntity>> STEEL_CONVERTER_OUTPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("steel_converter_output", () -> BlockEntityType.Builder.of(SteelConverterOutputBlockEntity::new, STEEL_CONVERTER_OUTPUT.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SteelmakingBlowerBlockEntity>> STEELMAKING_BLOWER_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("steelmaking_blower_port", () -> BlockEntityType.Builder.of(SteelmakingBlowerBlockEntity::new, STEELMAKING_BLOWER_PORT.get()).build(null));
     public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
             BLOCKS.register(
                     "mine_gateway",
@@ -627,15 +653,28 @@ public class CreateCityExpansionCore {
     public static final DeferredBlock<com.example.examplemod.economy.block.WarehouseGatewayBlock> WAREHOUSE_GATEWAY =
             BLOCKS.register("warehouse_gateway", () -> new com.example.examplemod.economy.block.WarehouseGatewayBlock(
                     BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL).noLootTable()));
+    public static final DeferredBlock<com.example.examplemod.economy.block.ContractDispatchTerminalBlock> CONTRACT_DISPATCH_TERMINAL =
+            BLOCKS.register("contract_dispatch_terminal", () -> new com.example.examplemod.economy.block.ContractDispatchTerminalBlock(
+                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL)));
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.economy.block.EconomyThroughputBlockEntity>>
             ECONOMY_THROUGHPUT_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
             "economy_throughput", () -> BlockEntityType.Builder.of(
                     com.example.examplemod.economy.block.EconomyThroughputBlockEntity::new,
                     CONTRACT_INTAKE.get(), WAREHOUSE_GATEWAY.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.economy.block.ContractDispatchTerminalBlockEntity>>
+            CONTRACT_DISPATCH_TERMINAL_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("contract_dispatch_terminal",
+            () -> BlockEntityType.Builder.of(com.example.examplemod.economy.block.ContractDispatchTerminalBlockEntity::new,
+                    CONTRACT_DISPATCH_TERMINAL.get()).build(null));
     public static final DeferredItem<BlockItem> CONTRACT_INTAKE_ITEM = ITEMS.registerSimpleBlockItem(
             "contract_intake", CONTRACT_INTAKE);
     public static final DeferredItem<BlockItem> WAREHOUSE_GATEWAY_ITEM = ITEMS.registerSimpleBlockItem(
             "warehouse_gateway", WAREHOUSE_GATEWAY);
+    public static final DeferredItem<BlockItem> CONTRACT_DISPATCH_TERMINAL_ITEM = ITEMS.registerSimpleBlockItem(
+            "contract_dispatch_terminal", CONTRACT_DISPATCH_TERMINAL);
+    public static final DeferredItem<Item> SHIPPING_MANIFEST = ITEMS.register("shipping_manifest",
+            () -> new com.example.examplemod.economy.ShippingManifestItem(new Item.Properties()));
+    public static final DeferredItem<Item> SHIPMENT_SEAL = ITEMS.registerSimpleItem("shipment_seal",
+            new Item.Properties().stacksTo(1));
 
     /*
      * =========================================
@@ -757,6 +796,7 @@ public class CreateCityExpansionCore {
                 CityProtectionEvents.class
 
         );
+        NeoForge.EVENT_BUS.register(CityMapSavedData.class);
 
         modEventBus.addListener(
                 this::addCreative
@@ -912,6 +952,13 @@ public class CreateCityExpansionCore {
     private void commonSetup(
             FMLCommonSetupEvent event
     ) {
+
+        event.enqueueWork(() -> com.simibubi.create.api.packager.unpacking.UnpackingHandler.REGISTRY.register(
+                CONTRACT_INTAKE.get(), com.example.examplemod.economy.ContractPackageUnpackingHandler.INSTANCE));
+        event.enqueueWork(() -> {
+            com.simibubi.create.api.packager.unpacking.UnpackingHandler.REGISTRY.register(net.minecraft.world.level.block.Blocks.CHEST, com.example.examplemod.economy.ContractPackageUnpackingHandler.INSTANCE);
+            com.simibubi.create.api.packager.unpacking.UnpackingHandler.REGISTRY.register(net.minecraft.world.level.block.Blocks.BARREL, com.example.examplemod.economy.ContractPackageUnpackingHandler.INSTANCE);
+        });
 
         LOGGER.info(
                 "HELLO FROM COMMON SETUP"
@@ -2015,6 +2062,8 @@ public class CreateCityExpansionCore {
                 BlastFurnaceGuidePayload.STREAM_CODEC,
                 (payload, context) -> BLAST_FURNACE_GUIDE_HANDLER.handle(payload, context)
         );
+        registrar.playToClient(SteelConverterGuidePayload.TYPE, SteelConverterGuidePayload.STREAM_CODEC,
+                (payload, context) -> STEEL_CONVERTER_GUIDE_HANDLER.handle(payload, context));
 
         registrar.playToClient(
                 CityInviteNotificationPayload.TYPE,
@@ -2052,6 +2101,8 @@ public class CreateCityExpansionCore {
                 ECONOMY_THROUGHPUT_BLOCK_ENTITY.get(),
                 (gateway, side) -> gateway.itemHandler(side)
         );
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK,CONTRACT_DISPATCH_TERMINAL_BLOCK_ENTITY.get(),
+                (terminal,side)->terminal.manifestSlot());
 
         event.registerBlockEntity(
                 Capabilities.ItemHandler.BLOCK,
@@ -2073,6 +2124,9 @@ public class CreateCityExpansionCore {
                 BLAST_FURNACE_OUTPUT_BLOCK_ENTITY.get(),
                 (output, side) -> output.fluidHandler()
         );
+        event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, STEEL_CONVERTER_FLUID_INPUT_BLOCK_ENTITY.get(), (input, side) -> input.fluidHandler());
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, STEEL_CONVERTER_ITEM_INPUT_BLOCK_ENTITY.get(), (input, side) -> input.itemHandler());
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, STEEL_CONVERTER_OUTPUT_BLOCK_ENTITY.get(), (output, side) -> output.itemHandler());
     }
 
     /*

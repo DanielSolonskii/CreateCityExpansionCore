@@ -1,6 +1,1 @@
-﻿{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "createcityexpansioncore:block/reinforced_concrete"
-  }
-}
+{"parent":"minecraft:block/cube","textures":{"down":"createcityexpansioncore:block/reinforced_concrete_side","up":"createcityexpansioncore:block/reinforced_concrete_top","north":"createcityexpansioncore:block/reinforced_concrete_full_face","south":"createcityexpansioncore:block/reinforced_concrete_side","west":"createcityexpansioncore:block/reinforced_concrete_side","east":"createcityexpansioncore:block/reinforced_concrete_side","particle":"createcityexpansioncore:block/reinforced_concrete_center"}}

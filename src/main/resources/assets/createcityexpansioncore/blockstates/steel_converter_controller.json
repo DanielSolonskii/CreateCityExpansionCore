@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"createcityexpansioncore:block/steel_converter_controller"},"facing=east":{"model":"createcityexpansioncore:block/steel_converter_controller","y":90},"facing=south":{"model":"createcityexpansioncore:block/steel_converter_controller","y":180},"facing=west":{"model":"createcityexpansioncore:block/steel_converter_controller","y":270}}}

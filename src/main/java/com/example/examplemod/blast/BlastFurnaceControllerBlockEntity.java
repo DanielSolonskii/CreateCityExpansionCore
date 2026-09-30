@@ -151,7 +151,7 @@ public final class BlastFurnaceControllerBlockEntity extends BlockEntity {
     public InputSummary inputSummary(ServerLevel level) {
         if (validation != null && level.getBlockEntity(validation.itemInput())
                 instanceof BlastFurnaceInputBlockEntity input)
-            return new InputSummary(input.ironCount(), input.cokeCount(), input.calciteCount());
+            return new InputSummary(input.ironCount(), input.cokeCount(), input.quicklimeCount());
         return new InputSummary(0, 0, 0);
     }
     public int outputAmount(ServerLevel level) {
@@ -171,5 +171,5 @@ public final class BlastFurnaceControllerBlockEntity extends BlockEntity {
         voltage = current = power = 0.0;
     }
 
-    public record InputSummary(int iron, int coke, int calcite) {}
+    public record InputSummary(int iron, int coke, int quicklime) {}
 }

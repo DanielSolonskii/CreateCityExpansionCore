@@ -1,6 +1,7 @@
 package com.example.examplemod.economy;
 
 import com.example.examplemod.Config;
+import com.example.examplemod.city.CityManager;
 import com.example.examplemod.railway.CityFleetTrain;
 import com.example.examplemod.railway.CityRailStation;
 import com.example.examplemod.railway.CreateRailwayAdapter;
@@ -23,7 +24,32 @@ import java.util.*;
 
 public final class EconomyManager extends SavedData {
     private static final String DATA_NAME = "createcityexpansioncore_economy";
-    private static final int FORMAT_VERSION = 3;
+    private static final int FORMAT_VERSION = 6;
+    private final FreightLogistics freight = new FreightLogistics(this);
+    public FreightLogistics freight() { return freight; }
+    public synchronized boolean createFreightSale(UUID city,UUID creator,ResourceLocation item,long amount,long price,long deadline,String title,String description){
+        if(!validContract(item,amount,price,deadline)||freight.sales.values().stream().filter(s->s.city().equals(city)&&s.contract()==null).count()>=64)return false;
+        FreightSellOffer offer=new FreightSellOffer(UUID.randomUUID(),city,creator,item,amount,price,deadline,title,description,null);
+        freight.sales.put(offer.id(),offer);setDirty();return true;
+    }
+    public synchronized boolean acceptFreightSale(UUID offerId,UUID buyer,UUID player,UUID destination,long now){
+        FreightSellOffer offer=freight.sales.get(offerId);
+        if(offer==null||offer.contract()!=null||offer.city().equals(buyer)||!freight.receiving(destination,buyer))return false;
+        IndustrialContract contract=createCityContract(buyer,player,offer.title(),offer.description(),offer.item(),offer.amount(),offer.reward(),destination,null,offer.deadline(),now);
+        if(contract==null)return false;
+        contract.accept(offer.city(),offer.creator(),now);issueManifest(contract,offer.city());
+        freight.sales.put(offerId,offer.accepted(contract.id()));setDirty();return true;
+    }
+    public synchronized boolean setupFreight(UUID subject,UUID city,UUID destination){
+        IndustrialContract c=contracts.get(subject);
+        MarketOffer imported=marketOffers.get(subject);
+        if(c==null&&imported!=null&&imported.direction()==EconomyTypes.MarketDirection.BUY_FROM_MASTER&&city.equals(imported.acceptedCity())&&!imported.status().terminal()&&!freight.assignments.containsKey(subject)&&freight.receiving(destination,city)){
+            FreightPoint source=freight.defaultSend(masterCityId);if(source==null)return false;
+            freight.bind(subject,source.id,freight.point(destination));freight.assignments.get(subject).running=true;return true;
+        }
+        if(c==null||!c.issuerCityId().equals(city)||c.state().terminal()||freight.assignments.containsKey(subject)||!freight.receiving(destination,city))return false;
+        freight.bind(subject,null,freight.point(destination));return true;
+    }
 
     private final Map<UUID, Long> wallets = new LinkedHashMap<>();
     private final Map<UUID, Long> treasuries = new LinkedHashMap<>();
@@ -34,6 +60,12 @@ public final class EconomyManager extends SavedData {
     private final Map<UUID, EconomyInfrastructureRegistration> infrastructure = new LinkedHashMap<>();
     private final Map<ResourceLocation, SmartOrderProfile> smartProfiles = new LinkedHashMap<>();
     private final Map<ResourceLocation, Long> warehouseStock = new LinkedHashMap<>();
+    private final Map<ResourceLocation, ExternalMarketState> marketStates = new LinkedHashMap<>();
+    private final Map<UUID, MarketOffer> marketOffers = new LinkedHashMap<>();
+    private final Map<UUID, UUID> offerByContract = new LinkedHashMap<>();
+    private final Map<UUID, ShippingManifest> manifests = new LinkedHashMap<>();
+    private final Map<UUID, ShipmentToken> shipmentTokens = new LinkedHashMap<>();
+    private final Set<UUID> reputationAppliedOffers = new LinkedHashSet<>();
     private UUID masterCityId;
     private long procurementAvailable;
     private long procurementReserved;
@@ -53,6 +85,7 @@ public final class EconomyManager extends SavedData {
                         (left,right)->EconomyMath.saturatingAdd(left,right,Long.MAX_VALUE));
     }
     public long warehouseStock(ResourceLocation itemId) { return warehouseStock.getOrDefault(itemId, 0L); }
+    public Map<ResourceLocation,Long> warehouseStocks() { return Map.copyOf(warehouseStock); }
     public UUID masterCityId() { return masterCityId; }
     public long procurementAvailable() { return procurementAvailable; }
     public long procurementReserved() { return procurementReserved; }
@@ -62,10 +95,16 @@ public final class EconomyManager extends SavedData {
     public List<IndustrialShipment> shipmentsForContract(UUID contractId){return shipments.values().stream().filter(value->value.contractId().equals(contractId)).toList();}
     public List<SmartOrderProfile> smartProfiles() { return List.copyOf(smartProfiles.values()); }
     public List<EconomyInfrastructureRegistration> infrastructure() { return List.copyOf(infrastructure.values()); }
+    public List<MarketOffer> marketOffers() { return List.copyOf(marketOffers.values()); }
+    public List<ShippingManifest> manifests() { return List.copyOf(manifests.values()); }
+    public List<ShipmentToken> shipmentTokens() { return List.copyOf(shipmentTokens.values()); }
+    @Nullable public MarketOffer marketOffer(UUID id) { return marketOffers.get(id); }
     @Nullable public IndustrialContract contract(UUID id) { return contracts.get(id); }
     @Nullable public PrivateListing listing(UUID id) { return listings.get(id); }
     @Nullable public IndustrialShipment shipment(UUID id){return shipments.get(id);}
     @Nullable public EconomyInfrastructureRegistration registration(UUID id) { return infrastructure.get(id); }
+    @Nullable public ShippingManifest manifest(UUID id) { return manifests.get(id); }
+    @Nullable public ShipmentToken shipmentToken(UUID id) { return shipmentTokens.get(id); }
 
     public boolean setMasterCity(@Nullable UUID cityId) {
         if (Objects.equals(masterCityId, cityId)) return false;
@@ -211,10 +250,8 @@ public final class EconomyManager extends SavedData {
                                                  ResourceLocation itemId, long amount, long reward,
                                                  UUID intakeRegistrationId, @Nullable UUID stationRegistrationId,
                                                  long deadlineTicks, long now) {
-        EconomyInfrastructureRegistration intake = infrastructure.get(intakeRegistrationId);
-        if (!validContract(itemId, amount, reward, deadlineTicks) || intake == null || !intake.available()
-                || intake.type() != EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                || !issuerCityId.equals(intake.cityId())) return null;
+        if (!validContract(itemId, amount, reward, deadlineTicks)
+                || !freight.receiving(intakeRegistrationId,issuerCityId)) return null;
         long fee = EconomyMath.applyBasisPoints(reward, Config.ECONOMY_CITY_FEE_BPS.get());
         long required;
         try { required = Math.addExact(reward, fee); } catch (ArithmeticException ex) { return null; }
@@ -222,7 +259,7 @@ public final class EconomyManager extends SavedData {
         IndustrialContract contract = new IndustrialContract(UUID.randomUUID(), EconomyTypes.ContractKind.ORDINARY,
                 EconomyTypes.ContractMode.EXCLUSIVE, issuerCityId, creator, title, description, itemId, amount,
                 reward, intakeRegistrationId, stationRegistrationId, now, deadlineTicks);
-        contracts.put(contract.id(), contract); setDirty(); return contract;
+        contracts.put(contract.id(), contract); freight.bind(contract.id(),null,freight.point(intakeRegistrationId)); setDirty(); return contract;
     }
 
     @Nullable
@@ -231,40 +268,111 @@ public final class EconomyManager extends SavedData {
                                                   UUID intakeRegistrationId, @Nullable UUID stationRegistrationId,
                                                   long deadlineTicks, EconomyTypes.ContractMode mode, long now) {
         if (masterCityId == null || !validContract(itemId, amount, reward, deadlineTicks)) return null;
-        EconomyInfrastructureRegistration intake = infrastructure.get(intakeRegistrationId);
-        if (intake == null || !masterCityId.equals(intake.cityId()) || !intake.available()
-                || intake.type() != EconomyTypes.InfrastructureType.CONTRACT_INTAKE
+        if (!freight.receiving(intakeRegistrationId,masterCityId)
                 || !debit(treasuries, masterCityId, reward)) return null;
         IndustrialContract contract = new IndustrialContract(UUID.randomUUID(), EconomyTypes.ContractKind.MASTER_SPECIAL,
                 mode, masterCityId, creator, title, description, itemId, amount, reward,
                 intakeRegistrationId, stationRegistrationId, now, deadlineTicks);
-        contracts.put(contract.id(), contract); setDirty(); return contract;
+        contracts.put(contract.id(), contract); freight.bind(contract.id(),null,freight.point(intakeRegistrationId)); setDirty(); return contract;
     }
 
     public boolean acceptContract(UUID contractId, UUID cityId, UUID playerId, long now) {
+        return false; // All interactive acceptance must select a sending freight point.
+    }
+
+    public synchronized boolean acceptFreightContract(UUID contractId, UUID cityId, UUID playerId, long now, UUID source) {
         IndustrialContract contract = contracts.get(contractId);
+        FreightAssignment assignment=freight.assignments.get(contractId);
+        if(contract==null||assignment==null||!freight.sending(source,cityId,contractId)||!freight.receiving(assignment.destination,contract.issuerCityId()))return false;
+        if(assignment.source!=null)return false;
         if (contract == null || !contract.accept(cityId, playerId, now)) return false;
+        assignment.source=source;
+        issueManifest(contract, cityId);
         setDirty(); return true;
+    }
+
+    @Nullable
+    public synchronized ShippingManifest manifestForContract(UUID contractId, UUID contractorCityId) {
+        return manifests.values().stream()
+                .filter(value -> value.contractId().equals(contractId)
+                        && value.contractorCityId().equals(contractorCityId))
+                .findFirst().orElse(null);
+    }
+
+    @Nullable
+    public synchronized ShippingManifest manifestForOffer(UUID offerId, UUID contractorCityId) {
+        return offerByContract.entrySet().stream().filter(entry -> entry.getValue().equals(offerId))
+                .map(entry -> manifestForContract(entry.getKey(), contractorCityId))
+                .filter(Objects::nonNull).findFirst().orElse(null);
+    }
+
+    private ShippingManifest issueManifest(IndustrialContract contract, UUID contractorCityId) {
+        ShippingManifest existing = manifestForContract(contract.id(), contractorCityId);
+        if (existing != null) return existing;
+        ShippingManifest created = new ShippingManifest(UUID.randomUUID(), contract.id(), contractorCityId,
+                contract.remainingAmount(), contract.deadlineAt());
+        manifests.put(created.manifestId(), created);
+        return created;
+    }
+
+    public synchronized EconomyTypes.IntakeAttributionError authorizeExportPackage(
+            UUID manifestId, ResourceLocation itemId, long amount, long now,
+            java.util.function.Consumer<UUID> packageMarker) {
+        ShippingManifest manifest = manifests.get(manifestId);
+        if (manifest == null || manifest.state() != EconomyTypes.ManifestState.ACTIVE)
+            return EconomyTypes.IntakeAttributionError.INVALID_MANIFEST;
+        IndustrialContract contract = contracts.get(manifest.contractId());
+        FreightAssignment dispatch=freight.assignments.get(manifest.contractId());
+        if(dispatch!=null&&(!dispatch.running||freight.point(dispatch.source)==null||!freight.point(dispatch.source).online()))
+            return EconomyTypes.IntakeAttributionError.INVALID_MANIFEST;
+        EconomyTypes.IntakeAttributionError error = validateExportAuthorization(manifest, contract, itemId, amount, now);
+        if (error != EconomyTypes.IntakeAttributionError.NONE) return error;
+        long outstanding = shipmentTokens.values().stream()
+                .filter(token -> token.kind() == EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT
+                        && token.subjectId().equals(contract.id())
+                        && token.state() == EconomyTypes.ShipmentTokenState.ACTIVE)
+                .mapToLong(ShipmentToken::amount).reduce(0L, EconomyMath::addExactNonNegative);
+        if (amount > Math.max(0L, contract.remainingAmount() - Math.min(contract.remainingAmount(), outstanding)))
+            return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;
+        UUID tokenId = UUID.randomUUID();
+        packageMarker.accept(tokenId);
+        ShipmentToken token = new ShipmentToken(tokenId, manifest.manifestId(), contract.id(),
+                EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT, manifest.contractorCityId(), contract.issuerCityId(),
+                itemId, amount, now, manifest.expiresAt());
+        shipmentTokens.put(tokenId, token);
+        freight.tokenCreated(tokenId,contract.id());
+        manifest.dispatched(amount);
+        contract.markShipment(manifest.contractorCityId());
+        setDirty();
+        return EconomyTypes.IntakeAttributionError.NONE;
+    }
+
+    private EconomyTypes.IntakeAttributionError validateExportAuthorization(
+            ShippingManifest manifest, @Nullable IndustrialContract contract,
+            ResourceLocation itemId, long amount, long now) {
+        if (contract == null || contract.state() == EconomyTypes.ContractState.CANCELLED
+                || contract.state() == EconomyTypes.ContractState.FAILED
+                || contract.state() == EconomyTypes.ContractState.DISPUTED)
+            return EconomyTypes.IntakeAttributionError.CONTRACT_INVALID;
+        if (contract.state() == EconomyTypes.ContractState.COMPLETED
+                || contract.state() == EconomyTypes.ContractState.DELIVERED)
+            return EconomyTypes.IntakeAttributionError.CONTRACT_COMPLETED;
+        if (contract.deadlineAt() > 0L && now > contract.deadlineAt())
+            return EconomyTypes.IntakeAttributionError.CONTRACT_EXPIRED;
+        if (!contract.itemId().equals(itemId)) return EconomyTypes.IntakeAttributionError.WRONG_ITEM;
+        boolean participant = contract.mode() == EconomyTypes.ContractMode.EXCLUSIVE
+                ? manifest.contractorCityId().equals(contract.contractorCityId())
+                : contract.participants().contains(manifest.contractorCityId());
+        if (!participant) return EconomyTypes.IntakeAttributionError.WRONG_CONTRACTOR;
+        if (amount <= 0L || amount > manifest.remainingToDispatch() || amount > contract.remainingAmount())
+            return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;
+        return EconomyTypes.IntakeAttributionError.NONE;
     }
 
     @Nullable
     public IndustrialShipment createShipment(UUID contractId,UUID cityId,UUID playerId,UUID fleetTrainId,
                                                long declaredAmount,long now,RailwayManager railway){
-        IndustrialContract contract=contracts.get(contractId);CityFleetTrain train=railway.train(fleetTrainId);
-        if(contract==null||train==null||!cityId.equals(train.cityId())||CreateRailwayAdapter.train(train.createTrainId())==null
-                || activeShipmentByTrain.containsKey(fleetTrainId)||declaredAmount<=0L||declaredAmount>Config.ECONOMY_MAX_CONTRACT_AMOUNT.get())return null;
-        boolean participant=contract.mode()==EconomyTypes.ContractMode.EXCLUSIVE?cityId.equals(contract.contractorCityId()):contract.participants().contains(cityId);
-        if(!participant||(contract.state()!=EconomyTypes.ContractState.ACCEPTED&&contract.state()!=EconomyTypes.ContractState.IN_DELIVERY))return null;
-        EconomyInfrastructureRegistration intake=infrastructure.get(contract.destinationRegistrationId());
-        if(intake==null||!intake.available()||intake.type()!=EconomyTypes.InfrastructureType.CONTRACT_INTAKE||intake.stationRegistrationId()==null)return null;
-        long reserved=shipments.values().stream().filter(value->value.contractId().equals(contractId)&&value.active())
-                .mapToLong(IndustrialShipment::remainingAmount).reduce(0L,(left,right)->EconomyMath.saturatingAdd(left,right,Long.MAX_VALUE));
-        long available=Math.max(0L,contract.remainingAmount()-Math.min(contract.remainingAmount(),reserved));
-        if(declaredAmount>available)return null;
-        IndustrialShipment shipment=new IndustrialShipment(UUID.randomUUID(),contractId,cityId,playerId,fleetTrainId,
-                intake.registrationId(),contract.itemId(),declaredAmount,now);
-        if(!shipment.depart(now)||!contract.markShipment(cityId))return null;
-        shipments.put(shipment.shipmentId(),shipment);activeShipmentByTrain.put(fleetTrainId,shipment.shipmentId());setDirty();return shipment;
+        return null;
     }
 
     public boolean cancelShipment(UUID shipmentId,UUID cityId){IndustrialShipment shipment=shipments.get(shipmentId);if(shipment==null||!shipment.contractorCityId().equals(cityId)||!shipment.cancel())return false;activeShipmentByTrain.remove(shipment.fleetTrainId(),shipment.shipmentId());setDirty();return true;}
@@ -285,7 +393,7 @@ public final class EconomyManager extends SavedData {
             procurementReserved = Math.max(0L, procurementReserved - refund);
             procurementAvailable = EconomyMath.saturatingAdd(procurementAvailable, refund, procurementCap());
         } else credit(treasuries, contract.issuerCityId(), refund);
-        setDirty(); return true;
+        invalidateContractLogistics(contract.id(), EconomyTypes.ManifestState.INVALID);setDirty(); return true;
     }
 
     public boolean disputeContract(UUID contractId, UUID issuerCityId) {
@@ -296,37 +404,119 @@ public final class EconomyManager extends SavedData {
 
     public long recordIntakeFlow(UUID registrationId, ResourceLocation itemId, long amount, ServerLevel level) {
         EconomyInfrastructureRegistration intake = infrastructure.get(registrationId);
-        if (intake == null || !intake.available() || intake.type() != EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                || amount <= 0L) return 0L;
-        long now=level.getGameTime();RailwayManager railway=RailwayManager.get(level);
-        if(intake.stationRegistrationId()==null)return attributionFailure(intake,EconomyTypes.IntakeAttributionError.STATION_NOT_ASSIGNED,now);
-        CityRailStation station=railway.station(intake.stationRegistrationId());
-        var actualStation=station==null?null:CreateRailwayAdapter.station(station.createStationId());
-        if(actualStation==null)return attributionFailure(intake,EconomyTypes.IntakeAttributionError.STATION_MISSING,now);
-        var actualTrain=actualStation.getPresentTrain();
-        if(actualTrain==null)return attributionFailure(intake,EconomyTypes.IntakeAttributionError.TRAIN_NOT_PRESENT,now);
-        CityFleetTrain fleetTrain=railway.trainByCreateId(actualTrain.id);
-        if(fleetTrain==null)return attributionFailure(intake,EconomyTypes.IntakeAttributionError.TRAIN_NOT_REGISTERED,now);
-        UUID shipmentId=activeShipmentByTrain.get(fleetTrain.fleetTrainId());IndustrialShipment shipment=shipmentId==null?null:shipments.get(shipmentId);
-        if(shipment==null||!shipment.active())return attributionFailure(intake,EconomyTypes.IntakeAttributionError.SHIPMENT_NOT_FOUND,now);
-        if(!shipment.destinationIntakeId().equals(registrationId))return attributionFailure(intake,EconomyTypes.IntakeAttributionError.WRONG_INTAKE,now);
-        if(!shipment.expectedItem().equals(itemId))return attributionFailure(intake,EconomyTypes.IntakeAttributionError.WRONG_ITEM,now);
-        IndustrialContract contract=contracts.get(shipment.contractId());
-        if(contract==null||contract.state().terminal()||contract.state()==EconomyTypes.ContractState.DISPUTED
-                || !contract.destinationRegistrationId().equals(registrationId))return attributionFailure(intake,EconomyTypes.IntakeAttributionError.CONTRACT_INVALID,now);
-        long limited=Math.min(amount,shipment.remainingAmount());long accepted=contract.recordDelivery(shipment.contractorCityId(),itemId,limited,now);
-        if(accepted<=0L)return attributionFailure(intake,EconomyTypes.IntakeAttributionError.CONTRACT_INVALID,now);
-        shipment.verify(itemId,accepted,now);intake.attributionError(EconomyTypes.IntakeAttributionError.NONE,now);
-        if(!shipment.active())activeShipmentByTrain.remove(shipment.fleetTrainId(),shipment.shipmentId());setDirty();return accepted;
+        if (intake == null || !intake.available() || intake.type() != EconomyTypes.InfrastructureType.CONTRACT_INTAKE)
+            return 0L;
+        return attributionFailure(intake, EconomyTypes.IntakeAttributionError.INVALID_SHIPMENT, level.getGameTime());
     }
 
     private long attributionFailure(EconomyInfrastructureRegistration intake,EconomyTypes.IntakeAttributionError error,long now){if(intake.lastAttributionError()!=error||now-intake.lastAttributionErrorAt()>100L){intake.attributionError(error,now);setDirty();}return 0L;}
 
+    public interface PhysicalTransaction {
+        boolean prepare();
+        boolean commit();
+        void rollback();
+    }
+
+    public synchronized EconomyTypes.IntakeAttributionError acceptShipmentPackage(
+            UUID registrationId, UUID tokenId, ResourceLocation itemId, long amount,
+            long now, boolean simulate, PhysicalTransaction physical) {
+        EconomyInfrastructureRegistration intake=infrastructure.get(registrationId);
+        ShipmentToken token=shipmentTokens.get(tokenId);
+        EconomyTypes.IntakeAttributionError error=validateShipmentPackage(registrationId,intake,token,itemId,amount,now);
+        if(error!=EconomyTypes.IntakeAttributionError.NONE)return error;
+        if(!physical.prepare())return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;
+        if(simulate)return EconomyTypes.IntakeAttributionError.NONE;
+        if(!physical.commit()){physical.rollback();return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;}
+        boolean applied;
+        if(token.kind()==EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT){
+            IndustrialContract contract=contracts.get(token.subjectId());
+            long accepted=contract.recordDelivery(token.senderCityId(),itemId,amount,now);
+            applied=accepted==amount;
+            if(applied&&token.manifestId()!=null){ShippingManifest manifest=manifests.get(token.manifestId());if(manifest!=null)manifest.accepted(amount);}
+            if(applied){
+                UUID linkedOfferId=offerByContract.get(contract.id());
+                MarketOffer linkedOffer=linkedOfferId==null?null:marketOffers.get(linkedOfferId);
+                if(linkedOffer!=null){
+                    linkedOffer.applyPhysical(amount);
+                    // Master warehouse is the accounting source for future physical imports.
+                    // Credit only after the destination transaction committed; token replay is
+                    // rejected before this point, so each physical stack is accounted once.
+                    if(linkedOffer.direction()==EconomyTypes.MarketDirection.SELL_TO_MASTER)
+                        putStock(warehouseStock,itemId,EconomyMath.saturatingAdd(warehouseStock(itemId),amount,Long.MAX_VALUE));
+                }
+                if(contract.state()==EconomyTypes.ContractState.DELIVERED)completeContract(contract);
+            }
+        }else{
+            MarketOffer offer=marketOffers.get(token.subjectId());applied=offer!=null&&offer.receiveImport(amount);
+            if(applied&&offer.status()==EconomyTypes.MarketOfferStatus.COMPLETED)finishMarketOffer(offer);
+        }
+        if(!applied){physical.rollback();return EconomyTypes.IntakeAttributionError.CONTRACT_INVALID;}
+        token.consume(now);
+        if(token.manifestId()!=null){ShippingManifest manifest=manifests.get(token.manifestId());if(manifest!=null&&manifest.acceptedAmount()>=manifest.authorizedAmount())manifest.complete();}
+        if(intake!=null)intake.attributionError(EconomyTypes.IntakeAttributionError.NONE,now);setDirty();
+        return EconomyTypes.IntakeAttributionError.NONE;
+    }
+
+    private EconomyTypes.IntakeAttributionError validateShipmentPackage(
+            UUID receiverId,@Nullable EconomyInfrastructureRegistration intake,@Nullable ShipmentToken token,
+            ResourceLocation itemId,long amount,long now){
+        if(token==null||token.state()==EconomyTypes.ShipmentTokenState.INVALID)return EconomyTypes.IntakeAttributionError.INVALID_SHIPMENT;
+        if(token.state()==EconomyTypes.ShipmentTokenState.CONSUMED)return EconomyTypes.IntakeAttributionError.SHIPMENT_ALREADY_USED;
+        FreightPoint receiver=freight.point(receiverId);
+        UUID receiverCity;
+        if(freight.isFreightToken(token.tokenId())){
+            if(receiver==null||!receiver.online()||!receiver.mode.receives()||!freight.tokenTargets(token.tokenId(),receiverId))return EconomyTypes.IntakeAttributionError.WRONG_INTAKE;
+            receiverCity=receiver.cityId;
+        }else{
+            if(intake==null||!intake.available()||intake.type()!=EconomyTypes.InfrastructureType.CONTRACT_INTAKE)return EconomyTypes.IntakeAttributionError.WRONG_INTAKE;
+            receiverCity=intake.cityId();
+        }
+        if(!Objects.equals(receiverCity,token.receiverCityId()))return EconomyTypes.IntakeAttributionError.WRONG_RECEIVING_CITY;
+        if(!token.itemId().equals(itemId))return EconomyTypes.IntakeAttributionError.WRONG_ITEM;
+        if(amount<=0L||amount!=token.amount())return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;
+        if(token.expiresAt()>0L&&now>token.expiresAt())return token.kind()==EconomyTypes.ShipmentTokenKind.IMPORT_ORDER?EconomyTypes.IntakeAttributionError.IMPORT_ORDER_INVALID:EconomyTypes.IntakeAttributionError.CONTRACT_EXPIRED;
+        if(token.kind()==EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT){
+            IndustrialContract contract=contracts.get(token.subjectId());ShippingManifest manifest=token.manifestId()==null?null:manifests.get(token.manifestId());
+            if(manifest==null||manifest.state()!=EconomyTypes.ManifestState.ACTIVE)return EconomyTypes.IntakeAttributionError.INVALID_MANIFEST;
+            if(!manifest.contractId().equals(token.subjectId())||!manifest.contractorCityId().equals(token.senderCityId()))return EconomyTypes.IntakeAttributionError.INVALID_SHIPMENT;
+            if(contract==null||contract.state()==EconomyTypes.ContractState.CANCELLED||contract.state()==EconomyTypes.ContractState.FAILED||contract.state()==EconomyTypes.ContractState.DISPUTED)return EconomyTypes.IntakeAttributionError.CONTRACT_INVALID;
+            if(contract.state()==EconomyTypes.ContractState.COMPLETED||contract.state()==EconomyTypes.ContractState.DELIVERED)return EconomyTypes.IntakeAttributionError.CONTRACT_COMPLETED;
+            if(contract.deadlineAt()>0L&&now>contract.deadlineAt())return EconomyTypes.IntakeAttributionError.CONTRACT_EXPIRED;
+            if(!freight.isFreightToken(token.tokenId())&&!contract.destinationRegistrationId().equals(receiverId))return EconomyTypes.IntakeAttributionError.WRONG_INTAKE;
+            boolean participant=contract.mode()==EconomyTypes.ContractMode.EXCLUSIVE?token.senderCityId().equals(contract.contractorCityId()):contract.participants().contains(token.senderCityId());
+            if(!participant)return EconomyTypes.IntakeAttributionError.WRONG_CONTRACTOR;
+            if(amount>contract.remainingAmount())return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;
+        }else{
+            MarketOffer offer=marketOffers.get(token.subjectId());
+            if(offer==null||offer.direction()!=EconomyTypes.MarketDirection.BUY_FROM_MASTER||offer.acceptedCity()==null||!offer.acceptedCity().equals(receiverCity)||(offer.status()!=EconomyTypes.MarketOfferStatus.DISPATCHED&&offer.status()!=EconomyTypes.MarketOfferStatus.IN_PROGRESS))return EconomyTypes.IntakeAttributionError.IMPORT_ORDER_INVALID;
+            if(amount>offer.remaining())return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;
+        }
+        return EconomyTypes.IntakeAttributionError.NONE;
+    }
+
+    public record ImportDispatch(UUID tokenId,ResourceLocation itemId,int amount){}
+
+    @FunctionalInterface public interface ImportPackageSink { void place(UUID token,ResourceLocation item,int count); }
+    public synchronized boolean dispatchFreightImport(UUID offerId,long now,ImportPackageSink sink){
+        MarketOffer offer=marketOffers.get(offerId);FreightAssignment assignment=freight.assignments.get(offerId);
+        if(offer==null||assignment==null||!assignment.running||offer.direction()!=EconomyTypes.MarketDirection.BUY_FROM_MASTER||offer.availableToDispatch()<=0||offer.status().terminal()||now>offer.expiresAt())return false;
+        int maximum=BuiltInRegistries.ITEM.get(offer.itemId()).getDefaultMaxStackSize();
+        int amount=(int)Math.min(maximum,Math.min(offer.availableToDispatch(),warehouseStock(offer.itemId())));if(amount<=0)return false;
+        UUID tokenId=UUID.randomUUID();
+        sink.place(tokenId,offer.itemId(),amount);
+        if(!offer.markDispatched(amount))throw new IllegalStateException("Validated import dispatch changed on server thread");
+        putStock(warehouseStock,offer.itemId(),warehouseStock(offer.itemId())-amount);
+        shipmentTokens.put(tokenId,new ShipmentToken(tokenId,null,offer.id(),EconomyTypes.ShipmentTokenKind.IMPORT_ORDER,masterCityId,offer.acceptedCity(),offer.itemId(),amount,now,offer.expiresAt()));
+        freight.tokenCreated(tokenId,offer.id());setDirty();return true;
+    }
+
+    @Nullable public synchronized ImportDispatch dispatchNextImport(UUID registrationId,int maximum,long now){
+        // v5 gateway API retained for save/block compatibility; dispatch is owned by FreightLogistics.
+        return null;
+    }
+
     public long maximumGatewayOutput(UUID registrationId, ResourceLocation itemId, long requested) {
-        EconomyInfrastructureRegistration gateway = infrastructure.get(registrationId);
-        if (gateway == null || !gateway.available() || gateway.type() != EconomyTypes.InfrastructureType.WAREHOUSE_GATEWAY
-                || masterCityId == null || !masterCityId.equals(gateway.cityId()) || requested <= 0L) return 0L;
-        return Math.min(requested, warehouseStock(itemId));
+        return 0L;
     }
 
     public long recordGatewayFlow(UUID registrationId, EconomyTypes.GatewayMode mode,
@@ -344,10 +534,7 @@ public final class EconomyManager extends SavedData {
                             && contract.state() == EconomyTypes.ContractState.DELIVERED
                             && contract.itemId().equals(itemId))
                     .findFirst().ifPresent(this::completeContract);
-        } else {
-            changed = Math.min(current, amount);
-            putStock(warehouseStock, itemId, current - changed);
-        }
+        } else changed = 0L;
         if (changed > 0L) setDirty();
         return changed;
     }
@@ -410,17 +597,146 @@ public final class EconomyManager extends SavedData {
         procurementAvailable = amount; setDirty(); return true;
     }
 
+    public synchronized boolean acceptMarketOffer(UUID offerId, UUID cityId, UUID playerId, long requested,
+                                                  int reputation, long now) {
+        return false;
+    }
+
+    public synchronized boolean acceptFreightMarketOffer(UUID offerId, UUID cityId, UUID playerId, long requested,
+                                                  int reputation, long now,UUID selectedPoint) {
+        MarketOffer offer=marketOffers.get(offerId);if(offer==null||offer.status()!=EconomyTypes.MarketOfferStatus.OPEN)return false;
+        boolean exporting=offer.direction()==EconomyTypes.MarketDirection.SELL_TO_MASTER;
+        FreightPoint destination=exporting?freight.defaultReceive(masterCityId):freight.point(selectedPoint);
+        FreightPoint source=exporting?freight.point(selectedPoint):freight.defaultSend(masterCityId);
+        if(destination==null||source==null||!destination.online()||!source.online()
+                ||!FreightLogistics.route(source,destination).equals("connected")
+                ||!freight.receiving(destination.id,exporting?masterCityId:cityId)
+                ||!freight.sending(source.id,exporting?cityId:masterCityId,null))return false;
+        MarketDefinition definition=marketDefinition(offer.definitionId());if(definition==null)return false;
+        long reputationLimit=Math.min(definition.maximumOffer(),64L+Math.max(0,reputation)*4L);
+        long quantity=Math.min(requested,reputationLimit);if(quantity<definition.minimumOffer()||quantity>offer.remaining())return false;
+        long active=marketOffers.values().stream().filter(v->cityId.equals(v.acceptedCity())&&!v.status().terminal()).count();
+        if(active>=1L+Math.max(0,reputation)/250)return false;
+        ExternalMarketState state=marketStates.computeIfAbsent(definition.id(),id->new ExternalMarketState(definition.targetDemand(),definition.targetSupply(),now));
+        long total,bond;try{total=EconomyMath.multiplyExactPositive(quantity,offer.unitPrice());bond=EconomyMath.applyBasisPoints(total,definition.bondBps());}catch(RuntimeException ex){return false;}
+        if(!state.reserve(offer.direction(),quantity))return false;
+        if(offer.direction()==EconomyTypes.MarketDirection.SELL_TO_MASTER){
+            if(total>procurementAvailable||!debit(treasuries,cityId,bond)){state.release(offer.direction(),quantity,definition);return false;}
+            IndustrialContract contract;
+            try{contract=new IndustrialContract(UUID.randomUUID(),EconomyTypes.ContractKind.MASTER_SMART,EconomyTypes.ContractMode.EXCLUSIVE,masterCityId,masterCityId,"","",offer.itemId(),quantity,total,destination.id,null,now,definition.deadlineTicks());}
+            catch(RuntimeException ex){credit(treasuries,cityId,bond);state.release(offer.direction(),quantity,definition);return false;}
+            if(!contract.accept(cityId,playerId,now)||!offer.reserve(cityId,playerId,quantity,bond)){credit(treasuries,cityId,bond);state.release(offer.direction(),quantity,definition);return false;}
+            procurementAvailable-=total;procurementReserved=EconomyMath.addExactNonNegative(procurementReserved,total);contracts.put(contract.id(),contract);offerByContract.put(contract.id(),offer.id());issueManifest(contract,cityId);
+            freight.bind(contract.id(),source.id,destination);
+        }else{
+            long required;try{required=Math.addExact(total,bond);}catch(ArithmeticException ex){state.release(offer.direction(),quantity,definition);return false;}
+            if(availableWarehouseStock(offer.itemId())<quantity||!debit(treasuries,cityId,required)||!offer.reserve(cityId,playerId,quantity,bond)){state.release(offer.direction(),quantity,definition);return false;}
+            freight.bind(offer.id(),source.id,destination);freight.assignments.get(offer.id()).running=true;
+        }
+        setDirty();return true;
+    }
+
+    private MarketDefinition marketDefinition(ResourceLocation id){
+        MarketDefinition loaded=currentDefinitions.get(id);if(loaded!=null)return loaded;
+        SmartOrderProfile p=smartProfiles.get(id);return p==null?null:legacyDefinition(p);
+    }
+
+    /** Read-only projection used by the market UI; it does not mutate market state or pricing. */
+    public MarketReadView marketReadView(MarketOffer offer,int reputation){
+        MarketDefinition definition=marketDefinition(offer.definitionId());
+        ExternalMarketState state=marketStates.get(offer.definitionId());
+        if(definition==null)return new MarketReadView("legacy",offer.unitPrice(),offer.remaining(),offer.quantity(),offer.remaining(),0);
+        long available;
+        if(state==null)available=offer.remaining();
+        else if(offer.direction()==EconomyTypes.MarketDirection.SELL_TO_MASTER){
+            long affordable=offer.unitPrice()<=0?0:procurementAvailable/offer.unitPrice();
+            available=Math.min(state.demand(),affordable);
+        }else available=Math.min(state.supply(),availableWarehouseStock(offer.itemId()));
+        long target=offer.direction()==EconomyTypes.MarketDirection.SELL_TO_MASTER?definition.targetDemand():definition.targetSupply();
+        long acceptLimit=Math.min(available,Math.min(offer.remaining(),Math.min(definition.maximumOffer(),64L+Math.max(0,reputation)*4L)));
+        return new MarketReadView(definition.category(),definition.referenceValue(),available,target,acceptLimit,definition.bondBps());
+    }
+
+    public record MarketReadView(String category,long referenceValue,long available,long target,long acceptLimit,int bondBps){}
+
+    private transient Map<ResourceLocation,MarketDefinition> currentDefinitions=Map.of();
+    private static MarketDefinition legacyDefinition(SmartOrderProfile p){return new MarketDefinition(p.itemId(),p.itemId().toString(),"legacy",true,true,p.baseUnitPrice(),p.targetStock(),p.targetStock(),Math.max(1,p.batchSize()),p.minimumMultiplierBasisPoints(),p.maximumMultiplierBasisPoints(),1500,1,p.batchSize(),Math.max(72_000,p.cooldownTicks()),500);}
+
+    private void refreshMarket(ServerLevel level,long now){
+        Map<ResourceLocation,MarketDefinition> definitions=new LinkedHashMap<>(MarketDefinitions.values(level));
+        smartProfiles.values().forEach(p->definitions.putIfAbsent(p.itemId(),legacyDefinition(p)));currentDefinitions=Map.copyOf(definitions);
+        for(MarketDefinition definition:definitions.values()){
+            ExternalMarketState state=marketStates.computeIfAbsent(definition.id(),id->new ExternalMarketState(definition.targetDemand(),definition.targetSupply(),now));state.recover(definition,now);
+            if(definition.sellToMaster())ensureOffer(definition,state,EconomyTypes.MarketDirection.SELL_TO_MASTER,now);
+            if(definition.buyFromMaster())ensureOffer(definition,state,EconomyTypes.MarketDirection.BUY_FROM_MASTER,now);
+        }
+        for(MarketOffer offer:marketOffers.values())if(offer.expiresAt()>0&&now>offer.expiresAt()){
+            if(offer.status()==EconomyTypes.MarketOfferStatus.OPEN)offer.restore(offer.remaining(),offer.acceptedCity(),offer.acceptedBy(),EconomyTypes.MarketOfferStatus.EXPIRED);
+            else if(offer.direction()==EconomyTypes.MarketDirection.BUY_FROM_MASTER&&(offer.status()==EconomyTypes.MarketOfferStatus.RESERVED||offer.status()==EconomyTypes.MarketOfferStatus.DISPATCHED||offer.status()==EconomyTypes.MarketOfferStatus.IN_PROGRESS)){
+                MarketDefinition definition=definitions.get(offer.definitionId());ExternalMarketState state=marketStates.get(offer.definitionId());
+                long cancelled=offer.remaining();
+                if(definition!=null&&state!=null&&cancelled>0L)state.release(offer.direction(),cancelled,definition);
+                if(offer.acceptedCity()!=null&&cancelled>0){
+                    long refund=EconomyMath.multiplyExactPositive(cancelled,offer.unitPrice());
+                    refund=EconomyMath.saturatingAdd(refund,offer.bond(),Long.MAX_VALUE);
+                    credit(treasuries,offer.acceptedCity(),refund);
+                }
+                offer.restore(offer.remaining(),offer.acceptedCity(),offer.acceptedBy(),EconomyTypes.MarketOfferStatus.FAILED,offer.acceptedQuantity(),offer.dispatchedAmount());
+                invalidateImportTokens(offer.id());
+            }
+        }
+        setDirty();
+    }
+
+    private void ensureOffer(MarketDefinition d,ExternalMarketState state,EconomyTypes.MarketDirection direction,long now){
+        if(marketOffers.values().stream().anyMatch(o->o.definitionId().equals(d.id())&&o.direction()==direction&&!o.status().terminal()))return;
+        if(masterCityId==null)return;
+        FreightPoint endpoint=direction==EconomyTypes.MarketDirection.SELL_TO_MASTER
+                ?freight.defaultReceive(masterCityId):freight.defaultSend(masterCityId);
+        if(endpoint==null||!endpoint.online())return;
+        ResourceLocation item=resolveItem(d.selector());if(item==null)return;
+        long unitPrice=marketPrice(d,state,direction);
+        long available=direction==EconomyTypes.MarketDirection.SELL_TO_MASTER
+                ?Math.min(state.demand(),unitPrice<=0?0:procurementAvailable/unitPrice)
+                :Math.min(state.supply(),availableWarehouseStock(item));
+        long quantity=Math.min(d.maximumOffer(),available);if(quantity<d.minimumOffer())return;
+        MarketOffer offer=new MarketOffer(UUID.randomUUID(),d.id(),item,direction,quantity,unitPrice,
+                now,now+d.deadlineTicks(),EconomyMath.applyBasisPoints(
+                        EconomyMath.multiplyExactPositive(quantity,unitPrice),d.bondBps()));
+        marketOffers.put(offer.id(),offer);
+    }
+
+    /** Stock not already promised to accepted, not-yet-packaged Master imports. */
+    public long availableWarehouseStock(ResourceLocation itemId){
+        long reserved=marketOffers.values().stream()
+                .filter(o->o.direction()==EconomyTypes.MarketDirection.BUY_FROM_MASTER
+                        &&o.itemId().equals(itemId)&&!o.status().terminal())
+                .mapToLong(MarketOffer::availableToDispatch)
+                .reduce(0L,(a,b)->EconomyMath.saturatingAdd(a,b,Long.MAX_VALUE));
+        return Math.max(0L,warehouseStock(itemId)-reserved);
+    }
+
+    private static ResourceLocation resolveItem(String selector){String raw=selector.startsWith("#")?selector.substring(1):selector;ResourceLocation id=ResourceLocation.tryParse(raw);if(id==null)return null;if(!selector.startsWith("#"))return validItem(id)?id:null;var tag=net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM,id);return BuiltInRegistries.ITEM.getTag(tag).flatMap(set->set.stream().findFirst()).map(h->BuiltInRegistries.ITEM.getKey(h.value())).orElse(null);}
+    private static long marketPrice(MarketDefinition d,ExternalMarketState s,EconomyTypes.MarketDirection direction){long bps;if(direction==EconomyTypes.MarketDirection.SELL_TO_MASTER){long ratio=d.targetDemand()==0?0:java.math.BigInteger.valueOf(s.demand()).multiply(java.math.BigInteger.valueOf(10_000-d.minimumPriceBps())).divide(java.math.BigInteger.valueOf(d.targetDemand())).longValue();bps=Math.min(10_000,d.minimumPriceBps()+ratio);}else{long scarcity=Math.max(0,d.targetSupply()-s.supply());long base=Math.min(d.maximumPriceBps(),10_000L+d.importSpreadBps());long span=Math.max(0,d.maximumPriceBps()-base);bps=d.targetSupply()==0?base:Math.min(d.maximumPriceBps(),base+java.math.BigInteger.valueOf(scarcity).multiply(java.math.BigInteger.valueOf(span)).divide(java.math.BigInteger.valueOf(d.targetSupply())).longValue());}return Math.max(1,EconomyMath.applyBasisPoints(d.referenceValue(),(int)bps));}
+
     public void tick(ServerLevel level) {
         long now = level.getGameTime();
         replenishProcurement(now);
         if (now % Math.max(200, Config.ECONOMY_SMART_ORDER_INTERVAL_TICKS.get()) == 0L) {
             reconcileInfrastructure(level);
             reconcileShipments(level);
-            generateSmartOrders(now);
+            refreshMarket(level,now);
             processTimeouts(now);
+            applyTradeReputation(level);
             pruneTerminalHistory();
         }
     }
+
+    private void applyTradeReputation(ServerLevel level){CityManager cities=CityManager.get(level.getServer().overworld());boolean changed=false;for(MarketOffer offer:marketOffers.values()){if(offer.acceptedCity()==null||reputationAppliedOffers.contains(offer.id())||(!offer.status().terminal()))continue;var city=cities.getCity(offer.acceptedCity());if(city!=null){city.adjustTradeReputation(offer.status()==EconomyTypes.MarketOfferStatus.COMPLETED?25:-10);changed=true;}reputationAppliedOffers.add(offer.id());setDirty();}for(IndustrialContract contract:contracts.values()){
+            if(contract.state()!=EconomyTypes.ContractState.COMPLETED||offerByContract.containsKey(contract.id())||reputationAppliedOffers.contains(contract.id()))continue;
+            for(UUID supplier:contract.contributions().keySet()){var city=cities.getCity(supplier);if(city!=null){city.adjustTradeReputation(25);changed=true;}}
+            reputationAppliedOffers.add(contract.id());setDirty();
+        }if(changed)cities.setDirty();}
 
     private void replenishProcurement(long now) {
         if (lastProcurementTick <= 0L) { lastProcurementTick = now; setDirty(); return; }
@@ -439,9 +755,7 @@ public final class EconomyManager extends SavedData {
 
     private void generateSmartOrders(long now) {
         if (masterCityId == null) return;
-        EconomyInfrastructureRegistration intake = infrastructure.values().stream()
-                .filter(value -> value.available() && value.type() == EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                        && masterCityId.equals(value.cityId())).findFirst().orElse(null);
+        FreightPoint intake = freight.defaultReceive(masterCityId);
         if (intake == null) return;
         for (SmartOrderProfile profile : List.copyOf(smartProfiles.values())) {
             long incoming = incomingMasterAmount(profile.itemId());
@@ -462,11 +776,12 @@ public final class EconomyManager extends SavedData {
                 contract = new IndustrialContract(UUID.randomUUID(), EconomyTypes.ContractKind.MASTER_SMART,
                         EconomyTypes.ContractMode.EXCLUSIVE, masterCityId, masterCityId,
                     "", "", profile.itemId(), quantity, reward,
-                        intake.registrationId(), null, now, 0L);
+                        intake.id, null, now, 0L);
             } catch (IllegalArgumentException ex) { continue; }
             procurementAvailable -= reward;
             procurementReserved = EconomyMath.addExactNonNegative(procurementReserved, reward);
             contracts.put(contract.id(), contract);
+            freight.bind(contract.id(),null,intake);
             smartProfiles.put(profile.itemId(), profile.generatedAt(now));
             setDirty();
         }
@@ -481,11 +796,12 @@ public final class EconomyManager extends SavedData {
                 completeContract(contract); setDirty(); continue;
             }
             long deadline = contract.deadlineAt();
-            if (deadline > 0L && now > deadline
-                    && canCredit(treasuries,contract.issuerCityId(),contract.escrow()) && contract.fail()) {
-                failActiveShipments(contract.id());
+            UUID linkedOfferId=offerByContract.get(contract.id());MarketOffer linkedOffer=linkedOfferId==null?null:marketOffers.get(linkedOfferId);
+            boolean canRefund=linkedOffer!=null||canCredit(treasuries,contract.issuerCityId(),contract.escrow());
+            if (deadline > 0L && now > deadline && canRefund && contract.fail()) {
+                failActiveShipments(contract.id());invalidateContractLogistics(contract.id(),EconomyTypes.ManifestState.EXPIRED);
                 long refund = contract.takeEscrow();
-                credit(treasuries, contract.issuerCityId(), refund);
+                if(linkedOffer!=null){procurementReserved=Math.max(0,procurementReserved-refund);procurementAvailable=EconomyMath.saturatingAdd(procurementAvailable,refund,procurementCap());MarketDefinition definition=marketDefinition(linkedOffer.definitionId());ExternalMarketState state=marketStates.get(linkedOffer.definitionId());if(definition!=null&&state!=null)state.release(linkedOffer.direction(),linkedOffer.remaining(),definition);linkedOffer.restore(linkedOffer.remaining(),linkedOffer.acceptedCity(),linkedOffer.acceptedBy(),EconomyTypes.MarketOfferStatus.FAILED);}else credit(treasuries, contract.issuerCityId(), refund);
                 setDirty();
             }
         }
@@ -502,11 +818,13 @@ public final class EconomyManager extends SavedData {
         if(oldContracts.isEmpty()&&oldListings.isEmpty())return;
         oldContracts.forEach(contracts::remove);oldListings.forEach(listings::remove);
         shipments.values().removeIf(value->{boolean remove=!contracts.containsKey(value.contractId());if(remove)activeShipmentByTrain.remove(value.fleetTrainId(),value.shipmentId());return remove;});setDirty();
+        manifests.values().removeIf(value->!contracts.containsKey(value.contractId()));
+        shipmentTokens.values().removeIf(value->value.kind()==EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT&&!contracts.containsKey(value.subjectId()));
     }
 
     private boolean failActiveShipments(UUID contractId){boolean changed=false;for(IndustrialShipment shipment:shipments.values())if(shipment.contractId().equals(contractId)&&shipment.fail()){activeShipmentByTrain.remove(shipment.fleetTrainId(),shipment.shipmentId());changed=true;}return changed;}
 
-    private void reconcileShipments(ServerLevel level){RailwayManager railway=RailwayManager.get(level);boolean changed=false;for(IndustrialShipment shipment:shipments.values())if(shipment.active()){IndustrialContract contract=contracts.get(shipment.contractId());CityFleetTrain train=railway.train(shipment.fleetTrainId());if(contract==null||contract.state().terminal()||contract.state()==EconomyTypes.ContractState.DELIVERED||contract.state()==EconomyTypes.ContractState.DISPUTED||train==null||CreateRailwayAdapter.train(train.createTrainId())==null){shipment.fail();activeShipmentByTrain.remove(shipment.fleetTrainId(),shipment.shipmentId());changed=true;}}if(changed)setDirty();}
+    private void reconcileShipments(ServerLevel level){boolean changed=false;for(IndustrialShipment shipment:shipments.values())if(shipment.active()){shipment.fail();activeShipmentByTrain.remove(shipment.fleetTrainId(),shipment.shipmentId());changed=true;}if(changed)setDirty();}
 
     private boolean completeContract(IndustrialContract contract) {
         long payout=contract.escrow();
@@ -533,8 +851,20 @@ public final class EconomyManager extends SavedData {
             procurementReserved = Math.max(0L, procurementReserved - payout);
         }
         payouts.forEach((city,share)->credit(treasuries,city,share));
+        UUID offerId=offerByContract.get(contract.id());MarketOffer offer=offerId==null?null:marketOffers.get(offerId);
+        if(offer!=null)finishMarketOffer(offer);
+        invalidateContractLogistics(contract.id(),EconomyTypes.ManifestState.COMPLETED);
         return true;
     }
+
+    private void invalidateContractLogistics(UUID contractId,EconomyTypes.ManifestState manifestState){
+        manifests.values().stream().filter(value->value.contractId().equals(contractId)).forEach(value->{if(manifestState==EconomyTypes.ManifestState.COMPLETED)value.complete();else if(manifestState==EconomyTypes.ManifestState.EXPIRED)value.expire();else value.invalidate();});
+        shipmentTokens.values().stream().filter(value->value.kind()==EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT&&value.subjectId().equals(contractId)).forEach(ShipmentToken::invalidate);
+    }
+
+    private void invalidateImportTokens(UUID offerId){shipmentTokens.values().stream().filter(value->value.kind()==EconomyTypes.ShipmentTokenKind.IMPORT_ORDER&&value.subjectId().equals(offerId)).forEach(ShipmentToken::invalidate);}
+
+    private void finishMarketOffer(MarketOffer offer){if(offer.acceptedCity()!=null&&offer.bond()>0)credit(treasuries,offer.acceptedCity(),offer.bond());}
 
     private long incomingMasterAmount(ResourceLocation itemId) {
         return contracts.values().stream().filter(c -> c.kind() == EconomyTypes.ContractKind.MASTER_SMART
@@ -561,7 +891,8 @@ public final class EconomyManager extends SavedData {
     private static EconomyManager load(CompoundTag root, HolderLookup.Provider registries) {
         EconomyManager manager = new EconomyManager();
         int version = root.getInt("FormatVersion");
-        if (version <= 0 || version > FORMAT_VERSION) return manager;
+        if(version<=0)version=1;
+        if(version>FORMAT_VERSION)throw new IllegalStateException("Economy save format "+version+" is newer than supported "+FORMAT_VERSION);
         manager.masterCityId = root.hasUUID("MasterCity") ? root.getUUID("MasterCity") : null;
         manager.procurementAvailable = Math.max(0L, root.getLong("ProcurementAvailable"));
         manager.procurementReserved = Math.max(0L, root.getLong("ProcurementReserved"));
@@ -611,7 +942,7 @@ public final class EconomyManager extends SavedData {
             try{CompoundTag tag=(CompoundTag)raw;ResourceLocation item=ResourceLocation.tryParse(tag.getString("Item"));if(item==null)continue;
                 IndustrialShipment shipment=new IndustrialShipment(tag.getUUID("Id"),tag.getUUID("Contract"),tag.getUUID("ContractorCity"),tag.getUUID("CreatedBy"),tag.getUUID("Train"),tag.getUUID("Destination"),item,tag.getLong("Declared"),tag.getLong("CreatedAt"));
                 shipment.restore(readEnum(tag,"Status",EconomyTypes.ShipmentStatus.class,EconomyTypes.ShipmentStatus.CANCELLED),tag.getLong("Verified"),tag.getLong("DepartedAt"),tag.getLong("ArrivedAt"),tag.getLong("CompletedAt"));
-                IndustrialContract shipmentContract=manager.contracts.get(shipment.contractId());if(shipmentContract!=null){manager.shipments.put(shipment.shipmentId(),shipment);if(shipment.active()&&(shipmentContract.state().terminal()||shipmentContract.state()==EconomyTypes.ContractState.DELIVERED||shipmentContract.state()==EconomyTypes.ContractState.DISPUTED))shipment.fail();if(shipment.active()){UUID conflict=manager.activeShipmentByTrain.putIfAbsent(shipment.fleetTrainId(),shipment.shipmentId());if(conflict!=null)shipment.fail();}}
+                IndustrialContract shipmentContract=manager.contracts.get(shipment.contractId());if(shipmentContract!=null){manager.shipments.put(shipment.shipmentId(),shipment);if(shipment.active())shipment.fail();}
             }catch(RuntimeException ignored){}
         }
         for(Tag raw:root.getList("SmartProfiles",Tag.TAG_COMPOUND)){
@@ -620,6 +951,17 @@ public final class EconomyManager extends SavedData {
                         tag.getInt("MinBps"),tag.getInt("MaxBps"),tag.getLong("Cooldown"),tag.getLong("LastGenerated"));manager.smartProfiles.put(item,profile);
             }catch(RuntimeException ignored){}
         }
+        if(version>=4){
+            for(Tag raw:root.getList("MarketStates",Tag.TAG_COMPOUND))try{CompoundTag tag=(CompoundTag)raw;ResourceLocation id=ResourceLocation.tryParse(tag.getString("Definition"));if(id!=null)manager.marketStates.put(id,new ExternalMarketState(tag.getLong("Demand"),tag.getLong("Supply"),tag.getLong("LastRecovery")));}catch(RuntimeException ignored){}
+            for(Tag raw:root.getList("MarketOffers",Tag.TAG_COMPOUND))try{CompoundTag tag=(CompoundTag)raw;ResourceLocation definition=ResourceLocation.tryParse(tag.getString("Definition")),item=ResourceLocation.tryParse(tag.getString("Item"));if(definition==null||item==null)continue;MarketOffer offer=new MarketOffer(tag.getUUID("Id"),definition,item,readEnum(tag,"Direction",EconomyTypes.MarketDirection.class,EconomyTypes.MarketDirection.SELL_TO_MASTER),tag.getLong("Quantity"),tag.getLong("UnitPrice"),tag.getLong("CreatedAt"),tag.getLong("ExpiresAt"),tag.getLong("Bond"));EconomyTypes.MarketOfferStatus status=readEnum(tag,"Status",EconomyTypes.MarketOfferStatus.class,EconomyTypes.MarketOfferStatus.CANCELLED);offer.restore(tag.getLong("Remaining"),tag.hasUUID("AcceptedCity")?tag.getUUID("AcceptedCity"):null,tag.hasUUID("AcceptedBy")?tag.getUUID("AcceptedBy"):null,status,tag.contains("AcceptedQuantity")?tag.getLong("AcceptedQuantity"):(status==EconomyTypes.MarketOfferStatus.OPEN?0L:tag.getLong("Remaining")),tag.getLong("Dispatched"));manager.marketOffers.put(offer.id(),offer);}catch(RuntimeException ignored){}
+            for(Tag raw:root.getList("OfferContracts",Tag.TAG_COMPOUND))try{CompoundTag tag=(CompoundTag)raw;if(tag.hasUUID("Contract")&&tag.hasUUID("Offer")&&manager.contracts.containsKey(tag.getUUID("Contract"))&&manager.marketOffers.containsKey(tag.getUUID("Offer")))manager.offerByContract.put(tag.getUUID("Contract"),tag.getUUID("Offer"));}catch(RuntimeException ignored){}
+            for(Tag raw:root.getList("ReputationAppliedOffers",Tag.TAG_COMPOUND))try{CompoundTag tag=(CompoundTag)raw;if(tag.hasUUID("Offer"))manager.reputationAppliedOffers.add(tag.getUUID("Offer"));}catch(RuntimeException ignored){}
+        }
+        if(version>=5){
+            for(Tag raw:root.getList("Manifests",Tag.TAG_COMPOUND))try{CompoundTag tag=(CompoundTag)raw;ShippingManifest manifest=new ShippingManifest(tag.getUUID("Id"),tag.getUUID("Contract"),tag.getUUID("ContractorCity"),tag.getLong("Authorized"),tag.getLong("ExpiresAt"));manifest.restore(tag.getLong("Dispatched"),tag.getLong("Accepted"),readEnum(tag,"State",EconomyTypes.ManifestState.class,EconomyTypes.ManifestState.INVALID));if(manager.contracts.containsKey(manifest.contractId()))manager.manifests.put(manifest.manifestId(),manifest);}catch(RuntimeException ignored){}
+            for(Tag raw:root.getList("ShipmentTokens",Tag.TAG_COMPOUND))try{CompoundTag tag=(CompoundTag)raw;ResourceLocation item=ResourceLocation.tryParse(tag.getString("Item"));if(item==null)continue;ShipmentToken token=new ShipmentToken(tag.getUUID("Id"),tag.hasUUID("Manifest")?tag.getUUID("Manifest"):null,tag.getUUID("Subject"),readEnum(tag,"Kind",EconomyTypes.ShipmentTokenKind.class,EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT),tag.getUUID("SenderCity"),tag.getUUID("ReceiverCity"),item,tag.getLong("Amount"),tag.getLong("CreatedAt"),tag.getLong("ExpiresAt"));token.restore(readEnum(tag,"State",EconomyTypes.ShipmentTokenState.class,EconomyTypes.ShipmentTokenState.INVALID),tag.getLong("ConsumedAt"));manager.shipmentTokens.put(token.tokenId(),token);}catch(RuntimeException ignored){}
+        }
+        if(version>=6)manager.freight.load(root.getCompound("FreightLogistics"));
         manager.procurementAvailable=Math.min(manager.procurementAvailable,manager.procurementCap());
         manager.procurementReserved=manager.contracts.values().stream()
                 .filter(value->value.kind()==EconomyTypes.ContractKind.MASTER_SMART&&!value.state().terminal())
@@ -629,6 +971,7 @@ public final class EconomyManager extends SavedData {
     }
 
     @Override public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+        root.put("FreightLogistics",freight.save());
         root.putInt("FormatVersion",FORMAT_VERSION);if(masterCityId!=null)root.putUUID("MasterCity",masterCityId);
         root.putLong("ProcurementAvailable",procurementAvailable);root.putLong("ProcurementReserved",procurementReserved);root.putLong("LastProcurementTick",lastProcurementTick);
         root.put("Wallets",writeUuidLongMap(wallets,"Player"));root.put("Treasuries",writeUuidLongMap(treasuries,"City"));root.put("Warehouse",writeResourceLongMap(warehouseStock));
@@ -637,6 +980,12 @@ public final class EconomyManager extends SavedData {
         ListTag listingTags=new ListTag();for(var value:listings.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.id());tag.putString("Type",value.type().name());tag.putUUID("Creator",value.creator());if(value.counterparty()!=null)tag.putUUID("Counterparty",value.counterparty());tag.putString("Item",value.itemId().toString());tag.putLong("Amount",value.amount());tag.putLong("Price",value.price());tag.putString("Meeting",value.meetingText());tag.putLong("CreatedAt",value.createdAt());tag.putString("State",value.state().name());tag.putLong("Escrow",value.escrow());if(value.requestedItemId()!=null)tag.putString("RequestedItem",value.requestedItemId().toString());listingTags.add(tag);}root.put("Listings",listingTags);
         ListTag shipmentTags=new ListTag();for(var value:shipments.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.shipmentId());tag.putUUID("Contract",value.contractId());tag.putUUID("ContractorCity",value.contractorCityId());tag.putUUID("CreatedBy",value.createdByPlayerId());tag.putUUID("Train",value.fleetTrainId());tag.putUUID("Destination",value.destinationIntakeId());tag.putString("Item",value.expectedItem().toString());tag.putLong("Declared",value.declaredAmount());tag.putLong("Verified",value.verifiedDeliveredAmount());tag.putLong("CreatedAt",value.createdAt());tag.putLong("DepartedAt",value.departedAt());tag.putLong("ArrivedAt",value.arrivedAt());tag.putLong("CompletedAt",value.completedAt());tag.putString("Status",value.status().name());shipmentTags.add(tag);}root.put("Shipments",shipmentTags);
         ListTag profileTags=new ListTag();for(var value:smartProfiles.values()){CompoundTag tag=new CompoundTag();tag.putString("Item",value.itemId().toString());tag.putLong("Target",value.targetStock());tag.putLong("Reorder",value.reorderPoint());tag.putLong("Batch",value.batchSize());tag.putLong("BasePrice",value.baseUnitPrice());tag.putInt("MinBps",value.minimumMultiplierBasisPoints());tag.putInt("MaxBps",value.maximumMultiplierBasisPoints());tag.putLong("Cooldown",value.cooldownTicks());tag.putLong("LastGenerated",value.lastGeneratedAt());profileTags.add(tag);}root.put("SmartProfiles",profileTags);
+        ListTag stateTags=new ListTag();marketStates.forEach((id,value)->{CompoundTag tag=new CompoundTag();tag.putString("Definition",id.toString());tag.putLong("Demand",value.demand());tag.putLong("Supply",value.supply());tag.putLong("LastRecovery",value.lastRecoveryTick());stateTags.add(tag);});root.put("MarketStates",stateTags);
+        ListTag offerTags=new ListTag();for(MarketOffer value:marketOffers.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.id());tag.putString("Definition",value.definitionId().toString());tag.putString("Item",value.itemId().toString());tag.putString("Direction",value.direction().name());tag.putLong("Quantity",value.quantity());tag.putLong("Remaining",value.remaining());tag.putLong("AcceptedQuantity",value.acceptedQuantity());tag.putLong("Dispatched",value.dispatchedAmount());tag.putLong("UnitPrice",value.unitPrice());tag.putLong("CreatedAt",value.createdAt());tag.putLong("ExpiresAt",value.expiresAt());tag.putLong("Bond",value.bond());tag.putString("Status",value.status().name());if(value.acceptedCity()!=null)tag.putUUID("AcceptedCity",value.acceptedCity());if(value.acceptedBy()!=null)tag.putUUID("AcceptedBy",value.acceptedBy());offerTags.add(tag);}root.put("MarketOffers",offerTags);
+        ListTag linkTags=new ListTag();offerByContract.forEach((contract,offer)->{CompoundTag tag=new CompoundTag();tag.putUUID("Contract",contract);tag.putUUID("Offer",offer);linkTags.add(tag);});root.put("OfferContracts",linkTags);
+        ListTag reputationTags=new ListTag();for(UUID offer:reputationAppliedOffers){CompoundTag tag=new CompoundTag();tag.putUUID("Offer",offer);reputationTags.add(tag);}root.put("ReputationAppliedOffers",reputationTags);
+        ListTag manifestTags=new ListTag();for(ShippingManifest value:manifests.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.manifestId());tag.putUUID("Contract",value.contractId());tag.putUUID("ContractorCity",value.contractorCityId());tag.putLong("Authorized",value.authorizedAmount());tag.putLong("Dispatched",value.dispatchedAmount());tag.putLong("Accepted",value.acceptedAmount());tag.putLong("ExpiresAt",value.expiresAt());tag.putString("State",value.state().name());manifestTags.add(tag);}root.put("Manifests",manifestTags);
+        ListTag tokenTags=new ListTag();for(ShipmentToken value:shipmentTokens.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.tokenId());if(value.manifestId()!=null)tag.putUUID("Manifest",value.manifestId());tag.putUUID("Subject",value.subjectId());tag.putString("Kind",value.kind().name());tag.putUUID("SenderCity",value.senderCityId());tag.putUUID("ReceiverCity",value.receiverCityId());tag.putString("Item",value.itemId().toString());tag.putLong("Amount",value.amount());tag.putLong("CreatedAt",value.createdAt());tag.putLong("ExpiresAt",value.expiresAt());tag.putString("State",value.state().name());tag.putLong("ConsumedAt",value.consumedAt());tokenTags.add(tag);}root.put("ShipmentTokens",tokenTags);
         return root;
     }
 

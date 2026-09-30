@@ -4,6 +4,7 @@ import com.example.examplemod.client.CityBoundaryRenderer;
 import com.example.examplemod.client.CityInviteClientHandler;
 import com.example.examplemod.client.CokeBatteryGuideRenderer;
 import com.example.examplemod.client.BlastFurnaceGuideRenderer;
+import com.example.examplemod.client.SteelConverterGuideRenderer;
 import com.example.examplemod.client.BuildGuideKeyMappings;
 import com.example.examplemod.client.ModFluidClientExtensions;
 import com.example.examplemod.client.render.CityPylonModels;
@@ -116,6 +117,7 @@ public class CreateCityExpansionCoreClient {
         );
         NeoForge.EVENT_BUS.register(CokeBatteryGuideRenderer.class);
         NeoForge.EVENT_BUS.register(BlastFurnaceGuideRenderer.class);
+        NeoForge.EVENT_BUS.register(SteelConverterGuideRenderer.class);
     }
     private void registerRenderers(
             EntityRenderersEvent.RegisterRenderers event
@@ -185,6 +187,8 @@ public class CreateCityExpansionCoreClient {
         CreateCityExpansionCore.BLAST_FURNACE_GUIDE_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> BlastFurnaceGuideRenderer.toggle(payload.controllerPos()));
         };
+        CreateCityExpansionCore.STEEL_CONVERTER_GUIDE_HANDLER = (payload, context) ->
+                invokeEnqueueWork(context, () -> SteelConverterGuideRenderer.toggle(payload.controllerPos()));
 
         CreateCityExpansionCore.CITY_INVITE_NOTIFICATION_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveInvite(payload));

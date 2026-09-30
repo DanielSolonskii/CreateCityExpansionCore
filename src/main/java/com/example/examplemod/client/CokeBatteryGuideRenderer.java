@@ -33,6 +33,7 @@ public final class CokeBatteryGuideRenderer {
 
     public static void toggle(BlockPos pos) {
         BlastFurnaceGuideRenderer.hide(false);
+        SteelConverterGuideRenderer.hide(false);
         if (pos.equals(controllerPos)) {
             hide(true);
             return;
