@@ -365,6 +365,14 @@ tasks.register('checkCityInviteUiLayout', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkCityInviteUiLayout') }
 
+tasks.register('checkCityPylonUiLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.CityPylonUiLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityPylonUiLayout') }
+
 def ccecProductionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
 tasks.register('checkNoCreateSplitPackage') {
     dependsOn tasks.named('jar')
@@ -384,7 +392,7 @@ tasks.named('check') { dependsOn tasks.named('checkNoCreateSplitPackage') }
 
 // Each headless JVM owns its log directory even when Gradle runs checks in parallel.
 tasks.withType(JavaExec).configureEach {
-    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkCityMapTerrainColor', 'checkTerrainPixelPacking', 'checkCityInviteSearch', 'checkCityInviteUiLayout']) {
+    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkCityMapTerrainColor', 'checkTerrainPixelPacking', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout']) {
         workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
         doFirst { workingDir.mkdirs() }
     }

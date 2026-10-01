@@ -570,12 +570,18 @@ public class CityPylonScreen
 
             final int tabIndex = i;
 
+            CityPylonUiLayout.Rect navRow =
+                    CityPylonUiLayout.navRow(
+                            this.leftPos + 10,
+                            this.topPos + 54,
+                            i);
+
             this.tabButtons[i] =
                     new CityButton(
-                            this.leftPos + 10,
-                            this.topPos + 54 + i * 25,
-                            150,
-                            24,
+                            navRow.x(),
+                            navRow.y(),
+                            navRow.width(),
+                            navRow.height(),
                             tabNames[i],
                             button -> {
 
@@ -633,6 +639,8 @@ public class CityPylonScreen
                                 updateInviteButton();
                             }
                     );
+
+            this.tabButtons[i].setIcon(navigationIcon(i));
 
             this.tabButtons[i].setActive(
                     hubTab() == i
@@ -709,6 +717,39 @@ public class CityPylonScreen
      * ОБНОВЛЕНИЕ ВКЛАДОК
      * =========================================
      */
+
+    /**
+     * Label of a management sub-tab, by tab id. {@code -1} is the relations entry, which opens its own
+     * screen, so it still needs a label for measuring and for the row.
+     */
+    /**
+ * Icon for each main section. Existing CCEC/Minecraft/Create items only — no drawn or Unicode glyphs.
+ * Обзор = city pylon, Экономика = traded goods, Логистика = the dispatch seal, Управление = a
+ * comparator (management-like), Карта = compass.
+ */
+private net.minecraft.world.item.ItemStack navigationIcon(int index) {
+    String id = switch (index) {
+        case 0 -> "createcityexpansioncore:city_pylon";
+        case 1 -> "minecraft:gold_ingot";
+        case 2 -> "createcityexpansioncore:shipment_seal";
+        case 3 -> "minecraft:comparator";
+        default -> "minecraft:compass";
+    };
+    return new net.minecraft.world.item.ItemStack(
+            net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
+                    net.minecraft.resources.ResourceLocation.parse(id)));
+}
+
+private String managementTabName(int tab) {
+        return switch (tab) {
+            case 1 -> tr("gui.createcityexpansioncore.city.tab.territory");
+            case 2 -> tr("gui.createcityexpansioncore.city.tab.members");
+            case 3 -> tr("gui.createcityexpansioncore.city.tab.projects");
+            case 5 -> tr("gui.createcityexpansioncore.city.tab.development");
+            case 6 -> tr("gui.createcityexpansioncore.city.tab.railway");
+            default -> tr("gui.createcityexpansioncore.city.tab.relations");
+        };
+    }
 
     private void updateTabButtons() {
 
@@ -1139,10 +1180,18 @@ public class CityPylonScreen
 
         if (button == 0 && isManagementTab(this.activeTab)) {
             int[] tabs = {1, 2, 3, 5, -1, 6};
-            int width = (CONTENT_WIDTH - 12) / tabs.length;
+            // Measured columns instead of a fixed width: Russian labels are far wider than their
+            // English originals and a fixed column made them touch or truncate.
+            int[] labelWidths = new int[tabs.length];
             for (int i = 0; i < tabs.length; i++) {
-                int x = this.contentLeft() + i * (width + 3);
-                if (inside(mouseX, mouseY, x, this.contentTop() + 22, width, 18)) {
+                labelWidths[i] = this.font.width(managementTabName(tabs[i]));
+            }
+            int width = CityPylonUiLayout.columnWidth(CONTENT_WIDTH, tabs.length, labelWidths);
+            int rows = CityPylonUiLayout.rows(CONTENT_WIDTH, tabs.length, labelWidths);
+            for (int i = 0; i < tabs.length; i++) {
+                CityPylonUiLayout.Rect cell = CityPylonUiLayout.tab(
+                        this.contentLeft(), this.contentTop() + 22, i, width, tabs.length, rows);
+                if (cell.contains(mouseX, mouseY)) {
                     if (i == 4) {
                         if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this));
                     } else if (i == 5) {

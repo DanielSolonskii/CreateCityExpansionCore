@@ -9,6 +9,12 @@ public class CityButton extends Button {
 
     private boolean selected;
     private final Style style;
+    /** Optional leading icon. Null for every existing button, so those render unchanged. */
+    private net.minecraft.world.item.ItemStack icon;
+
+    public void setIcon(net.minecraft.world.item.ItemStack icon) {
+        this.icon = icon;
+    }
 
     public void setActive(boolean active) {
         this.selected = active;
@@ -123,7 +129,14 @@ public class CityButton extends Button {
          * Текст
          */
         Component label = this.getMessage();
-        int availableWidth = Math.max(1, this.width - 8);
+        int iconSlot = this.icon == null ? 0 : 20;
+        if (this.icon != null) {
+            guiGraphics.renderItem(
+                    this.icon,
+                    this.getX() + 5,
+                    this.getY() + (this.height - 16) / 2);
+        }
+        int availableWidth = Math.max(1, this.width - 8 - iconSlot);
         String fitted = Minecraft.getInstance().font.plainSubstrByWidth(label.getString(), availableWidth);
         if (!fitted.equals(label.getString()) && fitted.length() > 2) {
             fitted = Minecraft.getInstance().font.plainSubstrByWidth(
@@ -133,7 +146,8 @@ public class CityButton extends Button {
 
         int textX =
                 this.getX()
-                        + (this.width - textWidth) / 2;
+                        + iconSlot
+                        + (this.width - iconSlot - textWidth) / 2;
 
         int textY =
                 this.getY()
