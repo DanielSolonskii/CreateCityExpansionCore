@@ -16,8 +16,13 @@ public record CityMapTilePayload(
         int[] colors
 ) implements CustomPacketPayload {
 
+    /**
+     * One sample per world block. The previous step of 2 meant four blocks were flattened into every
+     * drawn pixel, which is what made the terrain read as oversized squares; a vanilla chunk now maps
+     * exactly onto a 16×16 block of samples.
+     */
     public static final int SAMPLE_COUNT = 32;
-    public static final int SAMPLE_STEP = 2;
+    public static final int SAMPLE_STEP = 1;
     public static final int WORLD_SIZE = SAMPLE_COUNT * SAMPLE_STEP;
     public static final int COLOR_COUNT = SAMPLE_COUNT * SAMPLE_COUNT;
 

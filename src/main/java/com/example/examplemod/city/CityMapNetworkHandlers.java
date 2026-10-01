@@ -48,8 +48,11 @@ public final class CityMapNetworkHandlers {
             return;
         }
 
-        CityMapSavedData.TileSnapshot tile = CityMapSavedData.get(player.serverLevel())
-                .tile(request.tileX(), request.tileZ());
+        CityMapSavedData atlas = CityMapSavedData.get(player.serverLevel());
+        // The player is about to hold this tile, so later changes to it are pushed instead of
+        // waiting for a reopen that may never happen.
+        atlas.watch(player.getUUID(), request.tileX(), request.tileZ());
+        CityMapSavedData.TileSnapshot tile = atlas.tile(request.tileX(), request.tileZ());
         PacketDistributor.sendToPlayer(player, new CityMapTilePayload(
                 request.pylonPos(),
                 request.dimensionId(),

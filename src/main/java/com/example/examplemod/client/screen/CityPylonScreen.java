@@ -8,11 +8,15 @@ import com.example.examplemod.client.gui.CityButton;
 import com.example.examplemod.client.map.CityMapPanel;
 import com.example.examplemod.client.sound.SoundHelper;
 import com.example.examplemod.client.status.CcecStatusUi;
+import com.example.examplemod.client.status.CcecProblemCenter;
 import com.example.examplemod.status.CcecStatus;
+import com.example.examplemod.status.CcecStatusResolver;
 import com.example.examplemod.sound.ModSounds;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.InvitePlayerPayload;
+import com.example.examplemod.network.SyncCityMembersPayload;
 import com.example.examplemod.network.CityDevelopmentPayload;
+import com.example.examplemod.network.CityRelationsCommandPayload;
 import com.example.examplemod.network.DecommissionCityProjectPayload;
 import com.example.examplemod.network.RailwayCommandPayload;
 import com.example.examplemod.network.RailwayMapPayload;
@@ -21,6 +25,7 @@ import com.example.examplemod.network.EconomyStatePayload;
 import com.example.examplemod.railway.RailwayLineSnapshot;
 import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTrainSnapshot;
+import com.example.examplemod.railway.RailwayTrainCandidate;
 import com.example.examplemod.railway.RailwayOwnershipSnapshot;
 import com.example.examplemod.railway.RailwayOwnershipTypes;
 import com.example.examplemod.railway.RailwayTypes;
@@ -58,21 +63,21 @@ public class CityPylonScreen
     private int inviteScroll = 0;
 
     /*
-     * 0 = ÐžÐ±Ð·Ð¾Ñ€
-     * 1 = Ð¢ÐµÑ€Ñ€Ð¸Ñ‚Ð¾Ñ€Ð¸Ñ
-     * 2 = Ð£Ñ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¸
-     * 3 = ÐŸÑ€Ð¾ÐµÐºÑ‚Ñ‹
-     * 4 = ÐšÐ°Ñ€Ñ‚Ð°
-     * 5 = Ð Ð°Ð·Ð²Ð¸Ñ‚Ð¸Ðµ
-     * 6 = Ð–ÐµÐ»ÐµÐ·Ð½Ð°Ñ Ð´Ð¾Ñ€Ð¾Ð³Ð°
-     * 7 = Ð Ñ‹Ð½Ð¾Ðº
+     * 0 = ÃÅ¾ÃÂ±ÃÂ·ÃÂ¾Ã‘â‚¬
+     * 1 = ÃÂ¢ÃÂµÃ‘â‚¬Ã‘â‚¬ÃÂ¸Ã‘â€šÃÂ¾Ã‘â‚¬ÃÂ¸Ã‘Â
+     * 2 = ÃÂ£Ã‘â€¡ÃÂ°Ã‘ÂÃ‘â€šÃÂ½ÃÂ¸ÃÂºÃÂ¸
+     * 3 = ÃÅ¸Ã‘â‚¬ÃÂ¾ÃÂµÃÂºÃ‘â€šÃ‘â€¹
+     * 4 = ÃÅ¡ÃÂ°Ã‘â‚¬Ã‘â€šÃÂ°
+     * 5 = ÃÂ ÃÂ°ÃÂ·ÃÂ²ÃÂ¸Ã‘â€šÃÂ¸ÃÂµ
+     * 6 = Ãâ€“ÃÂµÃÂ»ÃÂµÃÂ·ÃÂ½ÃÂ°Ã‘Â ÃÂ´ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ³ÃÂ°
+     * 7 = ÃÂ Ã‘â€¹ÃÂ½ÃÂ¾ÃÂº
      */
     private int activeTab = 0;
     private UUID decommissionConfirmation;
 
     /*
      * =========================================
-     * ÐžÐšÐÐž ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
+     * ÃÅ¾ÃÅ¡ÃÂÃÅ¾ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¨Ãâ€¢ÃÂÃËœÃÂ¯
      * =========================================
      */
 
@@ -82,7 +87,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐšÐÐžÐŸÐšÐ˜
+     * ÃÅ¡ÃÂÃÅ¾ÃÅ¸ÃÅ¡ÃËœ
      * =========================================
      */
 
@@ -90,8 +95,11 @@ public class CityPylonScreen
 
     private CityButton closeButton;
 
-    private final CityButton[] tabButtons =
-            new CityButton[10];
+    /** Five player-facing hub destinations. Legacy activeTab values remain internal. */
+    private final CityButton[] tabButtons = new CityButton[5];
+    private static boolean cityHubGuideSeen;
+    private boolean cityHubGuideVisible;
+    private boolean problemCenterVisible;
 
     private int railwayPage;
     private int railwayRefreshTicks;
@@ -109,23 +117,23 @@ public class CityPylonScreen
     private float interfaceScale = 1.0F;
     private boolean marketplaceHintVisible;
     private boolean marketplaceHelpVisible;
-    /** ÐŸÑ€Ð¾ÐºÑ€ÑƒÑ‚ÐºÐ° Ñ‚ÐµÐºÑÑ‚Ð° ÑÐ¿Ñ€Ð°Ð²ÐºÐ¸ Ñ€Ñ‹Ð½ÐºÐ° (Ð´Ð»Ð¸Ð½Ð½Ñ‹Ð¹ help Ð½Ðµ Ñ€ÐµÐ¶ÐµÐ¼, Ð° Ð»Ð¸ÑÑ‚Ð°ÐµÐ¼). */
+    /** ÃÅ¸Ã‘â‚¬ÃÂ¾ÃÂºÃ‘â‚¬Ã‘Æ’Ã‘â€šÃÂºÃÂ° Ã‘â€šÃÂµÃÂºÃ‘ÂÃ‘â€šÃÂ° Ã‘ÂÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂºÃÂ¸ Ã‘â‚¬Ã‘â€¹ÃÂ½ÃÂºÃÂ° (ÃÂ´ÃÂ»ÃÂ¸ÃÂ½ÃÂ½Ã‘â€¹ÃÂ¹ help ÃÂ½ÃÂµ Ã‘â‚¬ÃÂµÃÂ¶ÃÂµÃÂ¼, ÃÂ° ÃÂ»ÃÂ¸Ã‘ÂÃ‘â€šÃÂ°ÃÂµÃÂ¼). */
     private int marketplaceHelpScroll;
     private int helpContentHeight;
 
     /*
      * =========================================
-     * ÐžÐ‘Ð›ÐÐ¡Ð¢Ð˜ ÐœÐÐšÐ•Ð¢Ð CITY PYLON
+     * ÃÅ¾Ãâ€˜Ãâ€ºÃÂÃÂ¡ÃÂ¢ÃËœ ÃÅ“ÃÂÃÅ¡Ãâ€¢ÃÂ¢ÃÂ CITY PYLON
      * =========================================
      *
-     * Ð’ÑÐµ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹ Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ ÑÑ‚Ð¸Ñ… Ð¾Ð±Ð»Ð°ÑÑ‚ÐµÐ¹,
-     * Ð° Ð½Ðµ Ð¾Ñ‚ Ð°Ð±ÑÐ¾Ð»ÑŽÑ‚Ð½Ñ‹Ñ… Ñ‡Ð¸ÑÐµÐ», Ð¾ÑÑ‚Ð°Ð²ÑˆÐ¸Ñ…ÑÑ Ð¾Ñ‚ ÑÑ‚Ð°Ñ€Ð¾Ð³Ð¾ Ð¼Ð°Ð»ÐµÐ½ÑŒÐºÐ¾Ð³Ð¾ GUI.
+     * Ãâ€™Ã‘ÂÃÂµ ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ¸ Ã‘ÂÃ‘â€¡ÃÂ¸Ã‘â€šÃÂ°Ã‘Å½Ã‘â€š ÃÂºÃÂ¾ÃÂ¾Ã‘â‚¬ÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã‘â€šÃ‘â€¹ ÃÂ¾Ã‘â€šÃÂ½ÃÂ¾Ã‘ÂÃÂ¸Ã‘â€šÃÂµÃÂ»Ã‘Å’ÃÂ½ÃÂ¾ Ã‘ÂÃ‘â€šÃÂ¸Ã‘â€¦ ÃÂ¾ÃÂ±ÃÂ»ÃÂ°Ã‘ÂÃ‘â€šÃÂµÃÂ¹,
+     * ÃÂ° ÃÂ½ÃÂµ ÃÂ¾Ã‘â€š ÃÂ°ÃÂ±Ã‘ÂÃÂ¾ÃÂ»Ã‘Å½Ã‘â€šÃÂ½Ã‘â€¹Ã‘â€¦ Ã‘â€¡ÃÂ¸Ã‘ÂÃÂµÃÂ», ÃÂ¾Ã‘ÂÃ‘â€šÃÂ°ÃÂ²Ã‘Ë†ÃÂ¸Ã‘â€¦Ã‘ÂÃ‘Â ÃÂ¾Ã‘â€š Ã‘ÂÃ‘â€šÃÂ°Ã‘â‚¬ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¼ÃÂ°ÃÂ»ÃÂµÃÂ½Ã‘Å’ÃÂºÃÂ¾ÃÂ³ÃÂ¾ GUI.
      *
-     * ROOT     = Ð²ÐµÑÑŒ Ð¿Ñ€ÑÐ¼Ð¾ÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸Ðº PANEL_WIDTH x PANEL_HEIGHT
-     * HEADER   = Ð²ÐµÑ€Ñ…Ð½ÑÑ Ð¿Ð¾Ð»Ð¾ÑÐ° (Ð³Ð¾Ñ€Ð¾Ð´, ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ, ÑÑ‚Ð°Ñ‚ÑƒÑ)
-     * SIDEBAR  = ÐºÐ¾Ð»Ð¾Ð½ÐºÐ° Ð²ÐºÐ»Ð°Ð´Ð¾Ðº ÑÐ»ÐµÐ²Ð°
-     * CONTENT  = Ñ€Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ ÑÐ¿Ñ€Ð°Ð²Ð° Ð¾Ñ‚ sidebar
-     * FOOTER   = Ð½Ð¸Ð¶Ð½ÑÑ Ð¿Ð¾Ð»Ð¾ÑÐ° Ð²Ð½ÑƒÑ‚Ñ€Ð¸ sidebar (ÐºÐ½Ð¾Ð¿ÐºÐ° Â«Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒÂ»)
+     * ROOT     = ÃÂ²ÃÂµÃ‘ÂÃ‘Å’ ÃÂ¿Ã‘â‚¬Ã‘ÂÃÂ¼ÃÂ¾Ã‘Æ’ÃÂ³ÃÂ¾ÃÂ»Ã‘Å’ÃÂ½ÃÂ¸ÃÂº PANEL_WIDTH x PANEL_HEIGHT
+     * HEADER   = ÃÂ²ÃÂµÃ‘â‚¬Ã‘â€¦ÃÂ½Ã‘ÂÃ‘Â ÃÂ¿ÃÂ¾ÃÂ»ÃÂ¾Ã‘ÂÃÂ° (ÃÂ³ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ´, Ã‘Æ’Ã‘â‚¬ÃÂ¾ÃÂ²ÃÂµÃÂ½Ã‘Å’, Ã‘ÂÃ‘â€šÃÂ°Ã‘â€šÃ‘Æ’Ã‘Â)
+     * SIDEBAR  = ÃÂºÃÂ¾ÃÂ»ÃÂ¾ÃÂ½ÃÂºÃÂ° ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂ¾ÃÂº Ã‘ÂÃÂ»ÃÂµÃÂ²ÃÂ°
+     * CONTENT  = Ã‘â‚¬ÃÂ°ÃÂ±ÃÂ¾Ã‘â€¡ÃÂ°Ã‘Â ÃÂ¾ÃÂ±ÃÂ»ÃÂ°Ã‘ÂÃ‘â€šÃ‘Å’ Ã‘ÂÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ° ÃÂ¾Ã‘â€š sidebar
+     * FOOTER   = ÃÂ½ÃÂ¸ÃÂ¶ÃÂ½Ã‘ÂÃ‘Â ÃÂ¿ÃÂ¾ÃÂ»ÃÂ¾Ã‘ÂÃÂ° ÃÂ²ÃÂ½Ã‘Æ’Ã‘â€šÃ‘â‚¬ÃÂ¸ sidebar (ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° Ã‚Â«Ãâ€”ÃÂ°ÃÂºÃ‘â‚¬Ã‘â€¹Ã‘â€šÃ‘Å’Ã‚Â»)
      */
 
     private static final int PANEL_WIDTH = 620;
@@ -143,33 +151,33 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐžÐŸÐžÐ Ð« ÐšÐžÐÐ¢Ð•ÐÐ¢Ð
+     * ÃÅ¾ÃÅ¸ÃÅ¾ÃÂ ÃÂ« ÃÅ¡ÃÅ¾ÃÂÃÂ¢Ãâ€¢ÃÂÃÂ¢ÃÂ
      * =========================================
      *
-     * ÐŸÐ°Ð½ÐµÐ»ÑŒ Ð²Ñ‹Ñ€Ð¾ÑÐ»Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ Ð±Ð¾Ð»ÑŒÑˆÐµ Ð½Ðµ Ð¼Ð¾Ð³ÑƒÑ‚ ÑÑ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ
-     * Ð¾Ñ‚ Â«Ð¼Ð°Ð³Ð¸Ñ‡ÐµÑÐºÐ¸Ñ…Â» 300 px: Ñ†ÐµÐ½Ñ‚Ñ€, ÐºÐ¾Ð»Ð¾Ð½ÐºÐ° Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ð¹ Ð¸ Ð¿Ð¾Ð»Ð¾Ð²Ð¸Ð½Ð°
-     * ÐºÐ½Ð¾Ð¿ÐºÐ¸ ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ÑÑ Ð¸Ð· CONTENT_WIDTH Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð·Ð´ÐµÑÑŒ.
+     * ÃÅ¸ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’ ÃÂ²Ã‘â€¹Ã‘â‚¬ÃÂ¾Ã‘ÂÃÂ»ÃÂ°, ÃÂ¿ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ¸ ÃÂ±ÃÂ¾ÃÂ»Ã‘Å’Ã‘Ë†ÃÂµ ÃÂ½ÃÂµ ÃÂ¼ÃÂ¾ÃÂ³Ã‘Æ’Ã‘â€š Ã‘ÂÃ‘â€¡ÃÂ¸Ã‘â€šÃÂ°Ã‘â€šÃ‘Å’
+     * ÃÂ¾Ã‘â€š Ã‚Â«ÃÂ¼ÃÂ°ÃÂ³ÃÂ¸Ã‘â€¡ÃÂµÃ‘ÂÃÂºÃÂ¸Ã‘â€¦Ã‚Â» 300 px: Ã‘â€ ÃÂµÃÂ½Ã‘â€šÃ‘â‚¬, ÃÂºÃÂ¾ÃÂ»ÃÂ¾ÃÂ½ÃÂºÃÂ° ÃÂ·ÃÂ½ÃÂ°Ã‘â€¡ÃÂµÃÂ½ÃÂ¸ÃÂ¹ ÃÂ¸ ÃÂ¿ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂ¸ÃÂ½ÃÂ°
+     * ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ Ã‘ÂÃ‘â€¡ÃÂ¸Ã‘â€šÃÂ°Ã‘Å½Ã‘â€šÃ‘ÂÃ‘Â ÃÂ¸ÃÂ· CONTENT_WIDTH ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ Ã‘â‚¬ÃÂ°ÃÂ· ÃÂ·ÃÂ´ÃÂµÃ‘ÂÃ‘Å’.
      */
     private static final int CONTENT_CENTER = CONTENT_WIDTH / 2;
     private static final int CONTENT_VALUE_X = CONTENT_WIDTH - 96;
     private static final int HALF_W = (CONTENT_WIDTH - 10) / 2;
     private static final int HALF_W2 = HALF_W + 10;
-    /** ÐŸÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ Ð½Ðµ ÑˆÐ¸Ñ€Ðµ ÑÐºÑ€Ð°Ð½Ð° Ð¸ Ð½Ðµ ÑˆÐ¸Ñ€Ðµ Ð¿Ð°Ð½ÐµÐ»Ð¸. */
+    /** ÃÅ¸ÃÂ¾ÃÂ´Ã‘ÂÃÂºÃÂ°ÃÂ·ÃÂºÃÂ¸ ÃÂ½ÃÂµ Ã‘Ë†ÃÂ¸Ã‘â‚¬ÃÂµ Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ° ÃÂ¸ ÃÂ½ÃÂµ Ã‘Ë†ÃÂ¸Ã‘â‚¬ÃÂµ ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»ÃÂ¸. */
     private static final int MAX_TOOLTIP_WIDTH = 320;
 
     /*
      * =========================================
-     * Ð‘Ð Ð•ÐÐ” Ð’ HEADER
+     * Ãâ€˜ÃÂ Ãâ€¢ÃÂÃâ€ Ãâ€™ HEADER
      * =========================================
      *
-     * ÐÐµÐ±Ð¾Ð»ÑŒÑˆÐ¾Ð¹ Ð·Ð½Ð°Ðº Ð¿Ñ€Ð¾ÐµÐºÑ‚Ð° Ð² Ð¿Ñ€Ð°Ð²Ð¾Ð¼ Ð²ÐµÑ€Ñ…Ð½ÐµÐ¼ ÑƒÐ³Ð»Ñƒ ÑˆÐ°Ð¿ÐºÐ¸.
-     * Ð­Ñ‚Ð¾ branding element, Ð° Ð½Ðµ Ð´ÐµÐºÐ¾Ñ€Ð°Ñ‚Ð¸Ð²Ð½Ð°Ñ ÐºÐ°Ñ€Ñ‚Ð¸Ð½ÐºÐ°:
-     * Ð¾Ð½ Ð½Ðµ Ñ‚Ñ€Ð¾Ð³Ð°ÐµÑ‚ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ð³Ð¾Ñ€Ð¾Ð´Ð°, ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ Ð¸ ÑÑ‚Ð°Ñ‚ÑƒÑÑ‹ â€”
-     * Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº Ð¿Ñ€Ð¾ÑÑ‚Ð¾ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ ÐµÐ³Ð¾ Ð»ÐµÐ²Ð¾Ð¹ Ð³Ñ€Ð°Ð½Ð¸Ñ†Ðµ.
+     * ÃÂÃÂµÃÂ±ÃÂ¾ÃÂ»Ã‘Å’Ã‘Ë†ÃÂ¾ÃÂ¹ ÃÂ·ÃÂ½ÃÂ°ÃÂº ÃÂ¿Ã‘â‚¬ÃÂ¾ÃÂµÃÂºÃ‘â€šÃÂ° ÃÂ² ÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ¾ÃÂ¼ ÃÂ²ÃÂµÃ‘â‚¬Ã‘â€¦ÃÂ½ÃÂµÃÂ¼ Ã‘Æ’ÃÂ³ÃÂ»Ã‘Æ’ Ã‘Ë†ÃÂ°ÃÂ¿ÃÂºÃÂ¸.
+     * ÃÂ­Ã‘â€šÃÂ¾ branding element, ÃÂ° ÃÂ½ÃÂµ ÃÂ´ÃÂµÃÂºÃÂ¾Ã‘â‚¬ÃÂ°Ã‘â€šÃÂ¸ÃÂ²ÃÂ½ÃÂ°Ã‘Â ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¸ÃÂ½ÃÂºÃÂ°:
+     * ÃÂ¾ÃÂ½ ÃÂ½ÃÂµ Ã‘â€šÃ‘â‚¬ÃÂ¾ÃÂ³ÃÂ°ÃÂµÃ‘â€š ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ³ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ´ÃÂ°, Ã‘Æ’Ã‘â‚¬ÃÂ¾ÃÂ²ÃÂµÃÂ½Ã‘Å’ ÃÂ¸ Ã‘ÂÃ‘â€šÃÂ°Ã‘â€šÃ‘Æ’Ã‘ÂÃ‘â€¹ Ã¢â‚¬â€
+     * ÃÂ·ÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂ¾ÃÂº ÃÂ¿Ã‘â‚¬ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¿ÃÂ¾ ÃÂµÃÂ³ÃÂ¾ ÃÂ»ÃÂµÃÂ²ÃÂ¾ÃÂ¹ ÃÂ³Ã‘â‚¬ÃÂ°ÃÂ½ÃÂ¸Ã‘â€ ÃÂµ.
      *
-     * Ð¢ÐµÐºÑÑ‚ÑƒÑ€Ð° Ð¿Ð¾Ð´Ð³Ð¾Ñ‚Ð¾Ð²Ð»ÐµÐ½Ð° Ð¸Ð· Ð¸ÑÑ…Ð¾Ð´Ð½Ð¾Ð¹ ÑÐ¼Ð±Ð»ÐµÐ¼Ñ‹
-     * (textures/gui/city_emblem.png) Ð¸ Ð»ÐµÐ¶Ð¸Ñ‚ Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¼
-     * Ñ€ÐµÑÑƒÑ€ÑÐ¾Ð¼, Ñ‡Ñ‚Ð¾Ð±Ñ‹ ÐºÐ°Ð¶Ð´Ñ‹Ð¹ ÐºÐ°Ð´Ñ€ Ð½Ðµ Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð±Ð¾Ð»ÑŒÑˆÑƒÑŽ PNG.
+     * ÃÂ¢ÃÂµÃÂºÃ‘ÂÃ‘â€šÃ‘Æ’Ã‘â‚¬ÃÂ° ÃÂ¿ÃÂ¾ÃÂ´ÃÂ³ÃÂ¾Ã‘â€šÃÂ¾ÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ° ÃÂ¸ÃÂ· ÃÂ¸Ã‘ÂÃ‘â€¦ÃÂ¾ÃÂ´ÃÂ½ÃÂ¾ÃÂ¹ Ã‘ÂÃÂ¼ÃÂ±ÃÂ»ÃÂµÃÂ¼Ã‘â€¹
+     * (textures/gui/city_emblem.png) ÃÂ¸ ÃÂ»ÃÂµÃÂ¶ÃÂ¸Ã‘â€š ÃÂ¾Ã‘â€šÃÂ´ÃÂµÃÂ»Ã‘Å’ÃÂ½Ã‘â€¹ÃÂ¼
+     * Ã‘â‚¬ÃÂµÃ‘ÂÃ‘Æ’Ã‘â‚¬Ã‘ÂÃÂ¾ÃÂ¼, Ã‘â€¡Ã‘â€šÃÂ¾ÃÂ±Ã‘â€¹ ÃÂºÃÂ°ÃÂ¶ÃÂ´Ã‘â€¹ÃÂ¹ ÃÂºÃÂ°ÃÂ´Ã‘â‚¬ ÃÂ½ÃÂµ ÃÂ³Ã‘â‚¬Ã‘Æ’ÃÂ·ÃÂ¸Ã‘â€šÃ‘Å’ ÃÂ±ÃÂ¾ÃÂ»Ã‘Å’Ã‘Ë†Ã‘Æ’Ã‘Å½ PNG.
      */
     private static final ResourceLocation HEADER_EMBLEM =
             ResourceLocation.fromNamespaceAndPath(
@@ -181,7 +189,7 @@ public class CityPylonScreen
     private static final int HEADER_EMBLEM_Y = 9;
     private static final int HEADER_EMBLEM_GAP = 10;
 
-    /* Ð Ñ‹Ð½Ð¾Ðº: ÑÐ»ÐµÐ²Ð° Ð¿Ñ€Ð¾ÐºÑ€ÑƒÑ‡Ð¸Ð²Ð°ÐµÐ¼Ñ‹Ð¹ ÑÐ¿Ð¸ÑÐ¾Ðº, ÑÐ¿Ñ€Ð°Ð²Ð° Ð¿Ð°Ð½ÐµÐ»ÑŒ Ð´ÐµÑ‚Ð°Ð»ÐµÐ¹. */
+    /* ÃÂ Ã‘â€¹ÃÂ½ÃÂ¾ÃÂº: Ã‘ÂÃÂ»ÃÂµÃÂ²ÃÂ° ÃÂ¿Ã‘â‚¬ÃÂ¾ÃÂºÃ‘â‚¬Ã‘Æ’Ã‘â€¡ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃÂ¼Ã‘â€¹ÃÂ¹ Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂ¾ÃÂº, Ã‘ÂÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ° ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’ ÃÂ´ÃÂµÃ‘â€šÃÂ°ÃÂ»ÃÂµÃÂ¹. */
     private static final int MARKET_LIST_W = 180;
     private static final int MARKET_DETAIL_W = CONTENT_WIDTH - MARKET_LIST_W - PANEL_GAP;
     private static final int MARKET_TOOLBAR_Y = 61;
@@ -192,7 +200,7 @@ public class CityPylonScreen
     private static final int MARKET_VISIBLE_ROWS =
             Math.max(1, (CONTENT_BODY_BOTTOM - MARKET_BODY_Y) / MARKET_ROW_PITCH);
 
-    /* Ð£Ñ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¸: ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ°, ÐµÑ‘ ÑˆÐ°Ð³ Ð¸ ÑÐºÐ¾Ð»ÑŒÐºÐ¾ Ð¿Ð¾Ð¼ÐµÑ‰Ð°ÐµÑ‚ÑÑ Ð² ÑÐ¿Ð¸ÑÐºÐµ. */
+    /* ÃÂ£Ã‘â€¡ÃÂ°Ã‘ÂÃ‘â€šÃÂ½ÃÂ¸ÃÂºÃÂ¸: ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ°, ÃÂµÃ‘â€˜ Ã‘Ë†ÃÂ°ÃÂ³ ÃÂ¸ Ã‘ÂÃÂºÃÂ¾ÃÂ»Ã‘Å’ÃÂºÃÂ¾ ÃÂ¿ÃÂ¾ÃÂ¼ÃÂµÃ‘â€°ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ² Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂºÃÂµ. */
     private static final int MEMBER_CARD_W = CONTENT_WIDTH - 30;
     private static final int MEMBER_CARD_H = 48;
     private static final int MEMBER_CARD_PITCH = MEMBER_CARD_H + 6;
@@ -201,32 +209,32 @@ public class CityPylonScreen
             (CONTENT_BODY_BOTTOM - MEMBER_LIST_OFFSET) / MEMBER_CARD_PITCH);
 
     /**
-     * Шестерёнка «управления ролями» на карточке участника.
+     * Ð¨ÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ° Â«ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ñ€Ð¾Ð»ÑÐ¼Ð¸Â» Ð½Ð° ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐµ ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ°.
      *
-     * <p>Размер 18×18 — чуть крупнее для лучшей кликабельности и видимости
-     * при GUI Scale 2/3/4. Пиксель-арт не растягивается: рисуется целочисленно.
+     * <p>Ð Ð°Ð·Ð¼ÐµÑ€ 18Ã—18 â€” Ñ‡ÑƒÑ‚ÑŒ ÐºÑ€ÑƒÐ¿Ð½ÐµÐµ Ð´Ð»Ñ Ð»ÑƒÑ‡ÑˆÐµÐ¹ ÐºÐ»Ð¸ÐºÐ°Ð±ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚Ð¸ Ð¸ Ð²Ð¸Ð´Ð¸Ð¼Ð¾ÑÑ‚Ð¸
+     * Ð¿Ñ€Ð¸ GUI Scale 2/3/4. ÐŸÐ¸ÐºÑÐµÐ»ÑŒ-Ð°Ñ€Ñ‚ Ð½Ðµ Ñ€Ð°ÑÑ‚ÑÐ³Ð¸Ð²Ð°ÐµÑ‚ÑÑ: Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ñ†ÐµÐ»Ð¾Ñ‡Ð¸ÑÐ»ÐµÐ½Ð½Ð¾.
      */
     private static final int MEMBER_GEAR_SIZE = 18;
 
-    /** Отступ шестерёнки от правого края карточки. */
+    /** ÐžÑ‚ÑÑ‚ÑƒÐ¿ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¸ Ð¾Ñ‚ Ð¿Ñ€Ð°Ð²Ð¾Ð³Ð¾ ÐºÑ€Ð°Ñ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸. */
     private static final int MEMBER_GEAR_RIGHT_MARGIN = 6;
 
-    /** Отступ шестерёнки от верхнего края карточки. */
+    /** ÐžÑ‚ÑÑ‚ÑƒÐ¿ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¸ Ð¾Ñ‚ Ð²ÐµÑ€Ñ…Ð½ÐµÐ³Ð¾ ÐºÑ€Ð°Ñ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸. */
     private static final int MEMBER_GEAR_TOP_MARGIN = 6;
 
     /**
-     * Ð•Ð´Ð¸Ð½Ñ‹Ð¹ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¿Ñ€Ð°Ð²Ð´Ñ‹ Ð¿Ð¾ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ð¸ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ°.
+     * Ãâ€¢ÃÂ´ÃÂ¸ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ¸Ã‘ÂÃ‘â€šÃÂ¾Ã‘â€¡ÃÂ½ÃÂ¸ÃÂº ÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ´Ã‘â€¹ ÃÂ¿ÃÂ¾ ÃÂ³ÃÂµÃÂ¾ÃÂ¼ÃÂµÃ‘â€šÃ‘â‚¬ÃÂ¸ÃÂ¸ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸ Ã‘Æ’Ã‘â€¡ÃÂ°Ã‘ÂÃ‘â€šÃÂ½ÃÂ¸ÃÂºÃÂ°.
      *
-     * <p>Ð Ð°Ð½ÑŒÑˆÐµ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ Ð²Ñ‹Ñ‡Ð¸ÑÐ»ÑÐ»Ð¸ÑÑŒ Ð´Ð²Ð°Ð¶Ð´Ñ‹ Ð¸ Ð¿Ð¾-Ñ€Ð°Ð·Ð½Ð¾Ð¼Ñƒ:
-     * Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð² renderMembers(), Ð´Ñ€ÑƒÐ³Ð¾Ð¹ â€” Ð² mouseClicked(). Ð˜Ð·-Ð·Ð°
-     * Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ñ ÑˆÐ¸Ñ€Ð¸Ð½Ñ‹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ (270 Ð¿Ñ€Ð¾Ñ‚Ð¸Ð² MEMBER_CARD_W) ÐºÐ½Ð¾Ð¿ÐºÐ°
-     * ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¸ ÑƒÐµÐ·Ð¶Ð°Ð»Ð° Ð½Ð° 120 Ð¿Ð¸ÐºÑÐµÐ»ÐµÐ¹ Ð²Ð¿Ñ€Ð°Ð²Ð¾ Ð¾Ñ‚ Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ð¹.
+     * <p>ÃÂ ÃÂ°ÃÂ½Ã‘Å’Ã‘Ë†ÃÂµ ÃÂºÃÂ¾ÃÂ¾Ã‘â‚¬ÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã‘â€šÃ‘â€¹ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸ ÃÂ²Ã‘â€¹Ã‘â€¡ÃÂ¸Ã‘ÂÃÂ»Ã‘ÂÃÂ»ÃÂ¸Ã‘ÂÃ‘Å’ ÃÂ´ÃÂ²ÃÂ°ÃÂ¶ÃÂ´Ã‘â€¹ ÃÂ¸ ÃÂ¿ÃÂ¾-Ã‘â‚¬ÃÂ°ÃÂ·ÃÂ½ÃÂ¾ÃÂ¼Ã‘Æ’:
+     * ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ Ã‘â‚¬ÃÂ°ÃÂ· ÃÂ² renderMembers(), ÃÂ´Ã‘â‚¬Ã‘Æ’ÃÂ³ÃÂ¾ÃÂ¹ Ã¢â‚¬â€ ÃÂ² mouseClicked(). ÃËœÃÂ·-ÃÂ·ÃÂ°
+     * Ã‘â‚¬ÃÂ°Ã‘ÂÃ‘â€¦ÃÂ¾ÃÂ¶ÃÂ´ÃÂµÃÂ½ÃÂ¸Ã‘Â Ã‘Ë†ÃÂ¸Ã‘â‚¬ÃÂ¸ÃÂ½Ã‘â€¹ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸ (270 ÃÂ¿Ã‘â‚¬ÃÂ¾Ã‘â€šÃÂ¸ÃÂ² MEMBER_CARD_W) ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ°
+     * Ã‘Ë†ÃÂµÃ‘ÂÃ‘â€šÃÂµÃ‘â‚¬Ã‘â€˜ÃÂ½ÃÂºÃÂ¸ Ã‘Æ’ÃÂµÃÂ·ÃÂ¶ÃÂ°ÃÂ»ÃÂ° ÃÂ½ÃÂ° 120 ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»ÃÂµÃÂ¹ ÃÂ²ÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ¾ ÃÂ¾Ã‘â€š ÃÂ½ÃÂ°Ã‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÂ¾ÃÂ¹.
      *
-     * <p>Ð¢ÐµÐ¿ÐµÑ€ÑŒ Ð¸ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐ°, Ð¸ hitbox Ð±ÐµÑ€ÑƒÑ‚ Ð¾Ð´Ð½Ð¸ Ð¸ Ñ‚Ðµ Ð¶Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ñ
-     * Ð¾Ñ‚ÑÑŽÐ´Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ Ñ€Ð°Ð·ÑŠÐµÑ…Ð°Ñ‚ÑŒÑÑ Ð¾Ð½Ð¸ ÑƒÐ¶Ðµ Ð½Ðµ Ð¼Ð¾Ð³ÑƒÑ‚.
+     * <p>ÃÂ¢ÃÂµÃÂ¿ÃÂµÃ‘â‚¬Ã‘Å’ ÃÂ¸ ÃÂ¾Ã‘â€šÃ‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂºÃÂ°, ÃÂ¸ hitbox ÃÂ±ÃÂµÃ‘â‚¬Ã‘Æ’Ã‘â€š ÃÂ¾ÃÂ´ÃÂ½ÃÂ¸ ÃÂ¸ Ã‘â€šÃÂµ ÃÂ¶ÃÂµ ÃÂ·ÃÂ½ÃÂ°Ã‘â€¡ÃÂµÃÂ½ÃÂ¸Ã‘Â
+     * ÃÂ¾Ã‘â€šÃ‘ÂÃ‘Å½ÃÂ´ÃÂ°, ÃÂ¿ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ Ã‘â‚¬ÃÂ°ÃÂ·Ã‘Å ÃÂµÃ‘â€¦ÃÂ°Ã‘â€šÃ‘Å’Ã‘ÂÃ‘Â ÃÂ¾ÃÂ½ÃÂ¸ Ã‘Æ’ÃÂ¶ÃÂµ ÃÂ½ÃÂµ ÃÂ¼ÃÂ¾ÃÂ³Ã‘Æ’Ã‘â€š.
      *
-     * @param x Ð»ÐµÐ²Ñ‹Ð¹ ÐºÑ€Ð°Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸
-     * @param y Ð²ÐµÑ€Ñ…Ð½Ð¸Ð¹ ÐºÑ€Ð°Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸
+     * @param x ÃÂ»ÃÂµÃÂ²Ã‘â€¹ÃÂ¹ ÃÂºÃ‘â‚¬ÃÂ°ÃÂ¹ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸
+     * @param y ÃÂ²ÃÂµÃ‘â‚¬Ã‘â€¦ÃÂ½ÃÂ¸ÃÂ¹ ÃÂºÃ‘â‚¬ÃÂ°ÃÂ¹ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸
      */
     private record MemberCardGeometry(int x, int y, int width, int height) {
 
@@ -240,8 +248,8 @@ public class CityPylonScreen
     }
 
     /**
-     * Ð“ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ i-Ð¹ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸ ÑÐ¿Ð¸ÑÐºÐ° ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð².
-     * Ð˜Ð½Ð´ÐµÐºÑ â€” Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ Ð½Ð°Ñ‡Ð°Ð»Ð° Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¾ÐºÐ½Ð°.
+     * Ãâ€œÃÂµÃÂ¾ÃÂ¼ÃÂµÃ‘â€šÃ‘â‚¬ÃÂ¸Ã‘Â i-ÃÂ¹ ÃÂ²ÃÂ¸ÃÂ´ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ¹ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸ Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂºÃÂ° Ã‘Æ’Ã‘â€¡ÃÂ°Ã‘ÂÃ‘â€šÃÂ½ÃÂ¸ÃÂºÃÂ¾ÃÂ².
+     * ÃËœÃÂ½ÃÂ´ÃÂµÃÂºÃ‘Â Ã¢â‚¬â€ ÃÂ¾Ã‘â€šÃÂ½ÃÂ¾Ã‘ÂÃÂ¸Ã‘â€šÃÂµÃÂ»Ã‘Å’ÃÂ½ÃÂ¾ ÃÂ½ÃÂ°Ã‘â€¡ÃÂ°ÃÂ»ÃÂ° ÃÂ²ÃÂ¸ÃÂ´ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ¹ ÃÂ¾ÃÂºÃÂ½ÃÂ°.
      */
     private MemberCardGeometry memberCard(int cardX, int cardY, int visibleIndex) {
         return new MemberCardGeometry(
@@ -252,14 +260,14 @@ public class CityPylonScreen
         );
     }
 
-    /* Ð˜Ð½Ñ„Ñ€Ð°ÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ð°: ÑÐºÐ¾Ð»ÑŒÐºÐ¾ ÑÑ‚Ñ€Ð¾Ðº Ð¿Ð¾Ð¼ÐµÑ‰Ð°ÐµÑ‚ÑÑ Ð¼ÐµÐ¶Ð´Ñƒ Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¾Ð¼ Ð¸ Ð½Ð¸Ð·Ð¾Ð¼. */
+    /* ÃËœÃÂ½Ã‘â€žÃ‘â‚¬ÃÂ°Ã‘ÂÃ‘â€šÃ‘â‚¬Ã‘Æ’ÃÂºÃ‘â€šÃ‘Æ’Ã‘â‚¬ÃÂ°: Ã‘ÂÃÂºÃÂ¾ÃÂ»Ã‘Å’ÃÂºÃÂ¾ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂº ÃÂ¿ÃÂ¾ÃÂ¼ÃÂµÃ‘â€°ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¼ÃÂµÃÂ¶ÃÂ´Ã‘Æ’ ÃÂ·ÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂºÃÂ¾ÃÂ¼ ÃÂ¸ ÃÂ½ÃÂ¸ÃÂ·ÃÂ¾ÃÂ¼. */
     private static final int INFRA_ROW_H = 42;
     private static final int INFRA_ROWS = Math.max(1,
             (CONTENT_BODY_BOTTOM - 72) / INFRA_ROW_H);
 
     /*
-     * Ð–ÐµÐ»ÐµÐ·Ð½Ð°Ñ Ð´Ð¾Ñ€Ð¾Ð³Ð°: ÑÐ¿Ð¸ÑÐ¾Ðº ÑÐ²ÐµÑ€Ñ…Ñƒ, Ð¿Ð°Ð½ÐµÐ»ÑŒ Ð´ÐµÐ¹ÑÑ‚Ð²Ð¸Ð¹ Ð¿Ñ€Ð¸Ð¶Ð°Ñ‚Ð° Ðº Ð½Ð¸Ð·Ñƒ
-     * ÐºÐ¾Ð½Ñ‚ÐµÐ½Ñ‚Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ ÑÑ‚Ñ€Ð¾ÐºÐ¸ ÑÐ¿Ð¸ÑÐºÐ¾Ð² ÑÑ‡Ð¸Ñ‚Ð°ÑŽÑ‚ÑÑ Ð¾Ñ‚ ÑÐ²Ð¾Ð±Ð¾Ð´Ð½Ð¾Ð¹ Ð²Ñ‹ÑÐ¾Ñ‚Ñ‹.
+     * Ãâ€“ÃÂµÃÂ»ÃÂµÃÂ·ÃÂ½ÃÂ°Ã‘Â ÃÂ´ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ³ÃÂ°: Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂ¾ÃÂº Ã‘ÂÃÂ²ÃÂµÃ‘â‚¬Ã‘â€¦Ã‘Æ’, ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’ ÃÂ´ÃÂµÃÂ¹Ã‘ÂÃ‘â€šÃÂ²ÃÂ¸ÃÂ¹ ÃÂ¿Ã‘â‚¬ÃÂ¸ÃÂ¶ÃÂ°Ã‘â€šÃÂ° ÃÂº ÃÂ½ÃÂ¸ÃÂ·Ã‘Æ’
+     * ÃÂºÃÂ¾ÃÂ½Ã‘â€šÃÂµÃÂ½Ã‘â€šÃÂ°, ÃÂ¿ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂºÃÂ¸ Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂºÃÂ¾ÃÂ² Ã‘ÂÃ‘â€¡ÃÂ¸Ã‘â€šÃÂ°Ã‘Å½Ã‘â€šÃ‘ÂÃ‘Â ÃÂ¾Ã‘â€š Ã‘ÂÃÂ²ÃÂ¾ÃÂ±ÃÂ¾ÃÂ´ÃÂ½ÃÂ¾ÃÂ¹ ÃÂ²Ã‘â€¹Ã‘ÂÃÂ¾Ã‘â€šÃ‘â€¹.
      */
     private static final int RAIL_LIST_TOP = 48;
     private static final int RAIL_ACTION_H = 22;
@@ -274,7 +282,7 @@ public class CityPylonScreen
         return Math.max(1, (RAIL_LIST_BOTTOM - 51) / pitch);
     }
 
-    /* ÐÐ°Ñ‡Ð°Ð»Ð¾ ÑÐ¾Ð´ÐµÑ€Ð¶Ð¸Ð¼Ð¾Ð³Ð¾ â€” Ð¾Ð´Ð¸Ð½ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¸ÑÑ‚Ð¸Ð½Ñ‹ Ð´Ð»Ñ Ð²ÑÐµÑ… Ð²ÐºÐ»Ð°Ð´Ð¾Ðº. */
+    /* ÃÂÃÂ°Ã‘â€¡ÃÂ°ÃÂ»ÃÂ¾ Ã‘ÂÃÂ¾ÃÂ´ÃÂµÃ‘â‚¬ÃÂ¶ÃÂ¸ÃÂ¼ÃÂ¾ÃÂ³ÃÂ¾ Ã¢â‚¬â€ ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ ÃÂ¸Ã‘ÂÃ‘â€šÃÂ¾Ã‘â€¡ÃÂ½ÃÂ¸ÃÂº ÃÂ¸Ã‘ÂÃ‘â€šÃÂ¸ÃÂ½Ã‘â€¹ ÃÂ´ÃÂ»Ã‘Â ÃÂ²Ã‘ÂÃÂµÃ‘â€¦ ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂ¾ÃÂº. */
     private int contentLeft() {
         return this.leftPos + CONTENT_OFFSET_X;
     }
@@ -284,8 +292,8 @@ public class CityPylonScreen
     }
 
     /**
-     * ÐžÐ±Ñ€ÐµÐ·ÐºÐ° Ð¿Ð¾ Ð³Ñ€Ð°Ð½Ð¸Ñ†Ð°Ð¼ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸.
-     * GuiGraphics Ð¶Ð´Ñ‘Ñ‚ ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ñ‹ ÑÐºÑ€Ð°Ð½Ð°, Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ ÑƒÑ‡Ð¸Ñ‚Ñ‹Ð²Ð°ÐµÐ¼ interfaceScale.
+     * ÃÅ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂºÃÂ° ÃÂ¿ÃÂ¾ ÃÂ³Ã‘â‚¬ÃÂ°ÃÂ½ÃÂ¸Ã‘â€ ÃÂ°ÃÂ¼ ÃÂ¾ÃÂ±ÃÂ»ÃÂ°Ã‘ÂÃ‘â€šÃÂ¸.
+     * GuiGraphics ÃÂ¶ÃÂ´Ã‘â€˜Ã‘â€š ÃÂºÃÂ¾ÃÂ¾Ã‘â‚¬ÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã‘â€šÃ‘â€¹ Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ°, ÃÂ¿ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ Ã‘Æ’Ã‘â€¡ÃÂ¸Ã‘â€šÃ‘â€¹ÃÂ²ÃÂ°ÃÂµÃÂ¼ interfaceScale.
      */
     private void beginClip(GuiGraphics graphics, int x1, int y1, int x2, int y2) {
         graphics.enableScissor(
@@ -304,16 +312,16 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐžÐ¢Ð›ÐžÐ–Ð•ÐÐÐ«Ð• ÐŸÐžÐ”Ð¡ÐšÐÐ—ÐšÐ˜
+     * ÃÅ¾ÃÂ¢Ãâ€ºÃÅ¾Ãâ€“Ãâ€¢ÃÂÃÂÃÂ«Ãâ€¢ ÃÅ¸ÃÅ¾Ãâ€ÃÂ¡ÃÅ¡ÃÂÃâ€”ÃÅ¡ÃËœ
      * =========================================
      *
-     * ÐŸÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ° Ð·Ð°Ð¿Ð¾Ð¼Ð¸Ð½Ð°ÐµÑ‚ÑÑ Ð² Ð¼Ð¾Ð¼ÐµÐ½Ñ‚ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐ¸ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ Ð¸ Ð²Ñ‹Ð²Ð¾Ð´Ð¸Ñ‚ÑÑ
-     * ÑƒÐ¶Ðµ Ð¿Ð¾ÑÐ»Ðµ popPose(). Ð­Ñ‚Ð¾ Ñ€ÐµÑˆÐ°ÐµÑ‚ Ñ‚Ñ€Ð¸ Ð¿Ñ€Ð¾Ð±Ð»ÐµÐ¼Ñ‹ ÑÑ€Ð°Ð·Ñƒ:
+     * ÃÅ¸ÃÂ¾ÃÂ´Ã‘ÂÃÂºÃÂ°ÃÂ·ÃÂºÃÂ° ÃÂ·ÃÂ°ÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¸ÃÂ½ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ² ÃÂ¼ÃÂ¾ÃÂ¼ÃÂµÃÂ½Ã‘â€š ÃÂ¾Ã‘â€šÃ‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂºÃÂ¸ ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ¸ ÃÂ¸ ÃÂ²Ã‘â€¹ÃÂ²ÃÂ¾ÃÂ´ÃÂ¸Ã‘â€šÃ‘ÂÃ‘Â
+     * Ã‘Æ’ÃÂ¶ÃÂµ ÃÂ¿ÃÂ¾Ã‘ÂÃÂ»ÃÂµ popPose(). ÃÂ­Ã‘â€šÃÂ¾ Ã‘â‚¬ÃÂµÃ‘Ë†ÃÂ°ÃÂµÃ‘â€š Ã‘â€šÃ‘â‚¬ÃÂ¸ ÃÂ¿Ã‘â‚¬ÃÂ¾ÃÂ±ÃÂ»ÃÂµÃÂ¼Ã‘â€¹ Ã‘ÂÃ‘â‚¬ÃÂ°ÃÂ·Ã‘Æ’:
      *
-     *  1) ÐµÑ‘ Ð½Ðµ Ñ€ÐµÐ¶ÐµÑ‚ scissor ÑÐ¿Ð¸ÑÐºÐ°/ÐºÐ°Ñ€Ñ‚Ñ‹;
-     *  2) GuiGraphics ÐºÐ»Ð°Ð¼Ð¿Ð¸Ñ‚ ÐµÑ‘ Ð¿Ð¾ Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾Ð¼Ñƒ ÑÐºÑ€Ð°Ð½Ñƒ, Ð° Ð½Ðµ Ð¿Ð¾
-     *     ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ð°Ð¼, Ð¿ÐµÑ€ÐµÑÑ‡Ð¸Ñ‚Ð°Ð½Ð½Ñ‹Ð¼ Ð¿Ð¾Ð´ interfaceScale;
-     *  3) ÑˆÑ€Ð¸Ñ„Ñ‚ Ð¿Ð¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ Ð½Ðµ Ð¼Ñ‹Ð»Ð¸Ñ‚ÑÑ Ð¾Ñ‚ Ð´Ñ€Ð¾Ð±Ð½Ð¾Ð³Ð¾ Ð¼Ð°ÑÑˆÑ‚Ð°Ð±Ð° Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹ÑÐ°.
+     *  1) ÃÂµÃ‘â€˜ ÃÂ½ÃÂµ Ã‘â‚¬ÃÂµÃÂ¶ÃÂµÃ‘â€š scissor Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂºÃÂ°/ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃ‘â€¹;
+     *  2) GuiGraphics ÃÂºÃÂ»ÃÂ°ÃÂ¼ÃÂ¿ÃÂ¸Ã‘â€š ÃÂµÃ‘â€˜ ÃÂ¿ÃÂ¾ Ã‘â‚¬ÃÂµÃÂ°ÃÂ»Ã‘Å’ÃÂ½ÃÂ¾ÃÂ¼Ã‘Æ’ Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½Ã‘Æ’, ÃÂ° ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾
+     *     ÃÂºÃÂ¾ÃÂ¾Ã‘â‚¬ÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã‘â€šÃÂ°ÃÂ¼, ÃÂ¿ÃÂµÃ‘â‚¬ÃÂµÃ‘ÂÃ‘â€¡ÃÂ¸Ã‘â€šÃÂ°ÃÂ½ÃÂ½Ã‘â€¹ÃÂ¼ ÃÂ¿ÃÂ¾ÃÂ´ interfaceScale;
+     *  3) Ã‘Ë†Ã‘â‚¬ÃÂ¸Ã‘â€žÃ‘â€š ÃÂ¿ÃÂ¾ÃÂ´Ã‘ÂÃÂºÃÂ°ÃÂ·ÃÂºÃÂ¸ ÃÂ½ÃÂµ ÃÂ¼Ã‘â€¹ÃÂ»ÃÂ¸Ã‘â€šÃ‘ÂÃ‘Â ÃÂ¾Ã‘â€š ÃÂ´Ã‘â‚¬ÃÂ¾ÃÂ±ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¼ÃÂ°Ã‘ÂÃ‘Ë†Ã‘â€šÃÂ°ÃÂ±ÃÂ° ÃÂ¸ÃÂ½Ã‘â€šÃÂµÃ‘â‚¬Ã‘â€žÃÂµÃÂ¹Ã‘ÂÃÂ°.
      */
     private List<FormattedCharSequence> deferredTooltipLines;
     private ItemStack deferredTooltipStack;
@@ -353,10 +361,40 @@ public class CityPylonScreen
     private final CityMapPanel mapPanel;
 
     /**
-     * Ð”Ð¾ÑÑ‚ÑƒÐ¿ Ðº Ð¿Ð°Ð½ÐµÐ»Ð¸ ÐºÐ°Ñ€Ñ‚Ñ‹ Ð´Ð»Ñ ÑÐµÑ‚ÐµÐ²Ð¾Ð³Ð¾ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ñ‡Ð¸ÐºÐ° ÑÐ¾ÑÐµÐ´Ð½Ð¸Ñ… Ð³Ð¾Ñ€Ð¾Ð´Ð¾Ð².
+     * Ãâ€ÃÂ¾Ã‘ÂÃ‘â€šÃ‘Æ’ÃÂ¿ ÃÂº ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»ÃÂ¸ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃ‘â€¹ ÃÂ´ÃÂ»Ã‘Â Ã‘ÂÃÂµÃ‘â€šÃÂµÃÂ²ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂ°ÃÂ±ÃÂ¾Ã‘â€šÃ‘â€¡ÃÂ¸ÃÂºÃÂ° Ã‘ÂÃÂ¾Ã‘ÂÃÂµÃÂ´ÃÂ½ÃÂ¸Ã‘â€¦ ÃÂ³ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ´ÃÂ¾ÃÂ².
      */
     public CityMapPanel getMapPanel() {
         return this.mapPanel;
+    }
+
+    /** Context-only entry point: railway management no longer occupies a hub tab. */
+    public void openRailwayManagement() {
+        this.activeTab = 6;
+        requestRailwayState();
+        requestRailwayMap();
+        updateTabButtons();
+    }
+
+    /**
+     * Train Management entry used by the World Map context card and the Management nav.
+     * Lands directly on the Trains page so registration/type work is one click away from
+     * whatever the player came from; {@code fleetTrainId} pins a train detail when known.
+     */
+    public void openTrainManagement(UUID fleetTrainId) {
+        this.activeTab = 6;
+        this.railwayPage = 2;
+        this.railwayScroll = 0;
+        this.railwayStationDetail = null;
+        this.railwayTrainDetail = fleetTrainId;
+        requestRailwayState();
+        requestRailwayMap();
+        updateTabButtons();
+        updateInviteButton();
+    }
+
+    /** Same as {@link #openTrainManagement(UUID)} but without pinning a specific train. */
+    public void openTrainManagement() {
+        openTrainManagement(null);
     }
 
     public CityPylonScreen(
@@ -377,9 +415,9 @@ public class CityPylonScreen
         this.lastObservedCityLevel = menu.getCityLevel();
 
         /*
-         * ÐžÐ´Ð½Ð¾ÐºÑ€Ð°Ñ‚Ð½Ñ‹Ð¹ Ð·Ð²ÑƒÐº Ð¿Ñ€Ð¾Ð±ÑƒÐ¶Ð´ÐµÐ½Ð¸Ñ ÑÐºÑ€Ð°Ð½Ð° Ð¿Ñ€Ð¸ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ð¸Ð¸.
-         * Ð˜Ð³Ñ€Ð°ÐµÑ‚ÑÑ Ð² ÐºÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€Ðµ, Ð° Ð½Ðµ Ð² render(), Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ
-         * Ð½Ðµ Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€ÑÐµÑ‚ÑÑ ÐºÐ°Ð¶Ð´Ñ‹Ð¹ ÐºÐ°Ð´Ñ€.
+         * ÃÅ¾ÃÂ´ÃÂ½ÃÂ¾ÃÂºÃ‘â‚¬ÃÂ°Ã‘â€šÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ·ÃÂ²Ã‘Æ’ÃÂº ÃÂ¿Ã‘â‚¬ÃÂ¾ÃÂ±Ã‘Æ’ÃÂ¶ÃÂ´ÃÂµÃÂ½ÃÂ¸Ã‘Â Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ° ÃÂ¿Ã‘â‚¬ÃÂ¸ ÃÂ¾Ã‘â€šÃÂºÃ‘â‚¬Ã‘â€¹Ã‘â€šÃÂ¸ÃÂ¸.
+         * ÃËœÃÂ³Ã‘â‚¬ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ² ÃÂºÃÂ¾ÃÂ½Ã‘ÂÃ‘â€šÃ‘â‚¬Ã‘Æ’ÃÂºÃ‘â€šÃÂ¾Ã‘â‚¬ÃÂµ, ÃÂ° ÃÂ½ÃÂµ ÃÂ² render(), ÃÂ¿ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼Ã‘Æ’
+         * ÃÂ½ÃÂµ ÃÂ¿ÃÂ¾ÃÂ²Ã‘â€šÃÂ¾Ã‘â‚¬Ã‘ÂÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂºÃÂ°ÃÂ¶ÃÂ´Ã‘â€¹ÃÂ¹ ÃÂºÃÂ°ÃÂ´Ã‘â‚¬.
          */
         SoundHelper.playUi(ModSounds.PYLON_SCREEN_WAKE.get());
     }
@@ -397,9 +435,9 @@ public class CityPylonScreen
         }
 
         /*
-         * GuiGraphics.enableScissor Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ Ð² ÑÐºÑ€Ð°Ð½Ð½Ñ‹Ñ… ÐºÐ¾Ð¾Ñ€Ð´Ð¸Ð½Ð°Ñ‚Ð°Ñ…,
-         * Ð° ÑÐ°Ð¼ Ð¿Ð°Ð½ÐµÐ»ÑŒ Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ð²Ð½ÑƒÑ‚Ñ€Ð¸ pose().scale(interfaceScale).
-         * ÐŸÐµÑ€ÐµÐ´Ð°Ñ‘Ð¼ Ð¼Ð°ÑÑˆÑ‚Ð°Ð± Ð²Ð½ÑƒÑ‚Ñ€ÑŒ, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð¾Ð±Ñ€ÐµÐ·ÐºÐ° ÐºÐ°Ñ€Ñ‚Ñ‹ Ð±Ñ‹Ð»Ð° Ñ‚Ð¾Ñ‡Ð½Ð¾Ð¹.
+         * GuiGraphics.enableScissor Ã‘â‚¬ÃÂ°ÃÂ±ÃÂ¾Ã‘â€šÃÂ°ÃÂµÃ‘â€š ÃÂ² Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ½Ã‘â€¹Ã‘â€¦ ÃÂºÃÂ¾ÃÂ¾Ã‘â‚¬ÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã‘â€šÃÂ°Ã‘â€¦,
+         * ÃÂ° Ã‘ÂÃÂ°ÃÂ¼ ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’ Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ²ÃÂ½Ã‘Æ’Ã‘â€šÃ‘â‚¬ÃÂ¸ pose().scale(interfaceScale).
+         * ÃÅ¸ÃÂµÃ‘â‚¬ÃÂµÃÂ´ÃÂ°Ã‘â€˜ÃÂ¼ ÃÂ¼ÃÂ°Ã‘ÂÃ‘Ë†Ã‘â€šÃÂ°ÃÂ± ÃÂ²ÃÂ½Ã‘Æ’Ã‘â€šÃ‘â‚¬Ã‘Å’, Ã‘â€¡Ã‘â€šÃÂ¾ÃÂ±Ã‘â€¹ ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂºÃÂ° ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃ‘â€¹ ÃÂ±Ã‘â€¹ÃÂ»ÃÂ° Ã‘â€šÃÂ¾Ã‘â€¡ÃÂ½ÃÂ¾ÃÂ¹.
          */
         this.mapPanel.setGuiScale(this.interfaceScale);
 
@@ -408,7 +446,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð•Ð¡Ð›Ð˜ Ð“ÐžÐ ÐžÐ”Ð ÐÐ•Ð¢
+         * Ãâ€¢ÃÂ¡Ãâ€ºÃËœ Ãâ€œÃÅ¾ÃÂ ÃÅ¾Ãâ€ÃÂ ÃÂÃâ€¢ÃÂ¢
          * =====================================
          */
 
@@ -442,7 +480,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð—ÐÐšÐ Ð«Ð¢Ð¬
+         * Ãâ€”ÃÂÃÅ¡ÃÂ ÃÂ«ÃÂ¢ÃÂ¬
          * =====================================
          */
 
@@ -462,26 +500,21 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð’ÐšÐ›ÐÐ”ÐšÐ˜
+         * Ãâ€™ÃÅ¡Ãâ€ºÃÂÃâ€ÃÅ¡ÃËœ
          * =====================================
          */
 
         Component[] tabNames = {
                 Component.translatable("gui.createcityexpansioncore.city.tab.overview"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.territory"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.members"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.projects"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.map"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.development"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.railway"),
                 Component.translatable("gui.createcityexpansioncore.city.tab.marketplace"),
-                Component.translatable("gui.createcityexpansioncore.city.tab.relations"),
-                Component.translatable("gui.createcityexpansioncore.freight.title")
+                Component.translatable("gui.createcityexpansioncore.freight.title"),
+                Component.translatable("gui.createcityexpansioncore.city.tab.management"),
+                Component.translatable("gui.createcityexpansioncore.city.tab.map")
         };
 
         /*
-         * Ð’ÐºÐ»Ð°Ð´ÐºÐ¸ Ð·Ð°Ð¿Ð¾Ð»Ð½ÑÑŽÑ‚ ÑÐ°Ð¹Ð´Ð±Ð°Ñ€ Ñ†ÐµÐ»Ð¸ÐºÐ¾Ð¼: 8 ÐºÐ½Ð¾Ð¿Ð¾Ðº Ñ ÑˆÐ°Ð³Ð¾Ð¼ 30 px
-         * Ð¾Ñ‚ ÑˆÐ°Ð¿ÐºÐ¸ Ð¸ Ð´Ð¾ Ð¾Ñ‚ÑÑ‚ÑƒÐ¿Ð° Ð½Ð°Ð´ Â«Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒÂ».
+         * Ãâ€™ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ¸ ÃÂ·ÃÂ°ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½Ã‘ÂÃ‘Å½Ã‘â€š Ã‘ÂÃÂ°ÃÂ¹ÃÂ´ÃÂ±ÃÂ°Ã‘â‚¬ Ã‘â€ ÃÂµÃÂ»ÃÂ¸ÃÂºÃÂ¾ÃÂ¼: 8 ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂ¾ÃÂº Ã‘Â Ã‘Ë†ÃÂ°ÃÂ³ÃÂ¾ÃÂ¼ 30 px
+         * ÃÂ¾Ã‘â€š Ã‘Ë†ÃÂ°ÃÂ¿ÃÂºÃÂ¸ ÃÂ¸ ÃÂ´ÃÂ¾ ÃÂ¾Ã‘â€šÃ‘ÂÃ‘â€šÃ‘Æ’ÃÂ¿ÃÂ° ÃÂ½ÃÂ°ÃÂ´ Ã‚Â«Ãâ€”ÃÂ°ÃÂºÃ‘â‚¬Ã‘â€¹Ã‘â€šÃ‘Å’Ã‚Â».
          */
         for (int i = 0; i < this.tabButtons.length; i++) {
 
@@ -496,29 +529,33 @@ public class CityPylonScreen
                             tabNames[i],
                             button -> {
 
-                                if (tabIndex == 8) {
-                                    if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this));
-                                    return;
-                                }
-                                if (tabIndex == 9) {
+                                if (tabIndex == 2) {
                                     requestEconomyState();
                                     if (this.minecraft != null) this.minecraft.setScreen(new LogisticsScreen(this));
                                     return;
                                 }
+                                if (tabIndex == 4) {
+                                    requestRailwayState(); requestRailwayMap(); requestEconomyState();
+                                    if (this.minecraft != null) this.minecraft.setScreen(new PolishedWorldMapScreen(this));
+                                    return;
+                                }
 
                                 /*
-                                 * Ð¢Ð¸Ñ…Ð¸Ð¹ Ð·Ð²ÑƒÐº Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ñ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸.
-                                 * ÐŸÐ¾Ð¼Ð¾Ð³Ð°ÐµÑ‚ Ð¾Ñ€Ð¸ÐµÐ½Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒÑÑ Ð² Ð¿Ð°Ð½ÐµÐ»Ð¸
-                                 * Ñ Ð²Ð¾ÑÐµÐ¼ÑŒÑŽ Ð²ÐºÐ»Ð°Ð´ÐºÐ°Ð¼Ð¸. ÐžÐ±Ñ‹Ñ‡Ð½Ñ‹Ðµ
-                                 * ÐºÐ½Ð¾Ð¿ÐºÐ¸ Ð¾ÑÑ‚Ð°Ð²Ð»ÑÑŽÑ‚ Ð²Ð°Ð½Ð¸Ð°Ð½ÑÐºÐ¸Ð¹
-                                 * Ñ‰ÐµÐ»Ñ‡Ð¾Ðº, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð½Ð°ÑÐ»Ð°Ð¸Ð²Ð°Ñ‚ÑŒ Ð·Ð²ÑƒÐºÐ¸.
+                                 * ÃÂ¢ÃÂ¸Ã‘â€¦ÃÂ¸ÃÂ¹ ÃÂ·ÃÂ²Ã‘Æ’ÃÂº ÃÂ¿ÃÂµÃ‘â‚¬ÃÂµÃÂºÃÂ»Ã‘Å½Ã‘â€¡ÃÂµÃÂ½ÃÂ¸Ã‘Â ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ¸.
+                                 * ÃÅ¸ÃÂ¾ÃÂ¼ÃÂ¾ÃÂ³ÃÂ°ÃÂµÃ‘â€š ÃÂ¾Ã‘â‚¬ÃÂ¸ÃÂµÃÂ½Ã‘â€šÃÂ¸Ã‘â‚¬ÃÂ¾ÃÂ²ÃÂ°Ã‘â€šÃ‘Å’Ã‘ÂÃ‘Â ÃÂ² ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»ÃÂ¸
+                                 * Ã‘Â ÃÂ²ÃÂ¾Ã‘ÂÃÂµÃÂ¼Ã‘Å’Ã‘Å½ ÃÂ²ÃÂºÃÂ»ÃÂ°ÃÂ´ÃÂºÃÂ°ÃÂ¼ÃÂ¸. ÃÅ¾ÃÂ±Ã‘â€¹Ã‘â€¡ÃÂ½Ã‘â€¹ÃÂµ
+                                 * ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ ÃÂ¾Ã‘ÂÃ‘â€šÃÂ°ÃÂ²ÃÂ»Ã‘ÂÃ‘Å½Ã‘â€š ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂ°ÃÂ½Ã‘ÂÃÂºÃÂ¸ÃÂ¹
+                                 * Ã‘â€°ÃÂµÃÂ»Ã‘â€¡ÃÂ¾ÃÂº, Ã‘â€¡Ã‘â€šÃÂ¾ÃÂ±Ã‘â€¹ ÃÂ½ÃÂµ ÃÂ½ÃÂ°Ã‘ÂÃÂ»ÃÂ°ÃÂ¸ÃÂ²ÃÂ°Ã‘â€šÃ‘Å’ ÃÂ·ÃÂ²Ã‘Æ’ÃÂºÃÂ¸.
                                  */
                                 SoundHelper.playUi(
                                         ModSounds.UI_TAB_SWITCH.get()
                                 );
 
-                                this.activeTab =
-                                        tabIndex;
+                                this.activeTab = switch (tabIndex) {
+                                    case 1 -> 7;
+                                    case 3 -> isManagementTab(this.activeTab) ? this.activeTab : 2;
+                                    default -> 0;
+                                };
 
                                 this.showInvitePlayers =
                                         false;
@@ -528,14 +565,7 @@ public class CityPylonScreen
 
                                 this.decommissionConfirmation = null;
 
-                                if (tabIndex == 4 || tabIndex == 6) {
-                                    requestRailwayState();
-                                }
-                                if (tabIndex == 4) {
-                                    requestRailwayMap();
-                                    requestEconomyState();
-                                }
-                                if (tabIndex == 7) {
+                                if (tabIndex == 1) {
                                     requestEconomyState();
                                     requestRailwayState();
                                     if (!marketplaceHintSeen) {
@@ -555,7 +585,7 @@ public class CityPylonScreen
                     );
 
             this.tabButtons[i].setActive(
-                    this.activeTab == i
+                    hubTab() == i
             );
 
             this.addRenderableWidget(
@@ -574,7 +604,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ÐŸÐ Ð˜Ð“Ð›ÐÐ¡Ð˜Ð¢Ð¬
+         * ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¡ÃËœÃÂ¢ÃÂ¬
          * =====================================
          */
 
@@ -583,7 +613,7 @@ public class CityPylonScreen
             this.inviteButton =
                     new CityButton(
                             this.leftPos + CONTENT_OFFSET_X + CONTENT_WIDTH - 110,
-                            this.topPos + CONTENT_OFFSET_Y + 38,
+                            this.topPos + CONTENT_OFFSET_Y + 44,
                             110,
                             24,
                             Component.translatable(
@@ -610,11 +640,17 @@ public class CityPylonScreen
         }
 
         updateTabButtonsVisibility();
+        this.cityHubGuideVisible = !cityHubGuideSeen;
+        requestEconomyState();
+        requestRailwayState();
+        requestRailwayMap();
+        PacketDistributor.sendToServer(new CityRelationsCommandPayload(
+                this.menu.getPylonPos(), CityRelationsCommandPayload.Action.REQUEST_STATE, null));
     }
 
     /*
      * =========================================
-     * ÐžÐ‘ÐÐžÐ’Ð›Ð•ÐÐ˜Ð• Ð’ÐšÐ›ÐÐ”ÐžÐš
+     * ÃÅ¾Ãâ€˜ÃÂÃÅ¾Ãâ€™Ãâ€ºÃâ€¢ÃÂÃËœÃâ€¢ Ãâ€™ÃÅ¡Ãâ€ºÃÂÃâ€ÃÅ¾ÃÅ¡
      * =========================================
      */
 
@@ -627,7 +663,7 @@ public class CityPylonScreen
             if (this.tabButtons[i] != null) {
 
                 this.tabButtons[i].setActive(
-                        this.activeTab == i
+                        hubTab() == i
                 );
             }
         }
@@ -635,9 +671,20 @@ public class CityPylonScreen
         updateTabButtonsVisibility();
     }
 
+    private int hubTab() {
+        if (this.activeTab == 7) return 1;
+        if (this.activeTab == 6) return 3;
+        if (isManagementTab(this.activeTab)) return 3;
+        return 0;
+    }
+
+    private static boolean isManagementTab(int tab) {
+        return tab == 1 || tab == 2 || tab == 3 || tab == 5;
+    }
+
     /*
      * =========================================
-     * Ð’Ð˜Ð”Ð˜ÐœÐžÐ¡Ð¢Ð¬ Ð’ÐšÐ›ÐÐ”ÐžÐš
+     * Ãâ€™ÃËœÃâ€ÃËœÃÅ“ÃÅ¾ÃÂ¡ÃÂ¢ÃÂ¬ Ãâ€™ÃÅ¡Ãâ€ºÃÂÃâ€ÃÅ¾ÃÅ¡
      * =========================================
      */
 
@@ -672,7 +719,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * Ð’Ð˜Ð”Ð˜ÐœÐžÐ¡Ð¢Ð¬ ÐšÐÐžÐŸÐšÐ˜ ÐŸÐ Ð˜Ð“Ð›ÐÐ¡Ð˜Ð¢Ð¬
+     * Ãâ€™ÃËœÃâ€ÃËœÃÅ“ÃÅ¾ÃÂ¡ÃÂ¢ÃÂ¬ ÃÅ¡ÃÂÃÅ¾ÃÅ¸ÃÅ¡ÃËœ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¡ÃËœÃÂ¢ÃÂ¬
      * =========================================
      */
 
@@ -692,8 +739,8 @@ public class CityPylonScreen
     public void onClose() {
 
         /*
-         * Ð—Ð²ÑƒÐº Ð·Ð°ÑÑ‹Ð¿Ð°Ð½Ð¸Ñ ÑÐºÑ€Ð°Ð½Ð°, Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð·Ð° Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ.
-         * onClose Ð²Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð·, Ð° Ð½Ðµ ÐºÐ°Ð¶Ð´Ñ‹Ð¹ ÐºÐ°Ð´Ñ€.
+         * Ãâ€”ÃÂ²Ã‘Æ’ÃÂº ÃÂ·ÃÂ°Ã‘ÂÃ‘â€¹ÃÂ¿ÃÂ°ÃÂ½ÃÂ¸Ã‘Â Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ°, ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ Ã‘â‚¬ÃÂ°ÃÂ· ÃÂ·ÃÂ° ÃÂ·ÃÂ°ÃÂºÃ‘â‚¬Ã‘â€¹Ã‘â€šÃÂ¸ÃÂµ.
+         * onClose ÃÂ²Ã‘â€¹ÃÂ·Ã‘â€¹ÃÂ²ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¾ÃÂ´ÃÂ¸ÃÂ½ Ã‘â‚¬ÃÂ°ÃÂ·, ÃÂ° ÃÂ½ÃÂµ ÃÂºÃÂ°ÃÂ¶ÃÂ´Ã‘â€¹ÃÂ¹ ÃÂºÃÂ°ÃÂ´Ã‘â‚¬.
          */
         SoundHelper.playUi(ModSounds.PYLON_SCREEN_SLEEP.get());
 
@@ -717,8 +764,8 @@ public class CityPylonScreen
         mouseY /= this.interfaceScale;
 
         /*
-         * Ð•ÑÐ»Ð¸ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚Ð¾ Ð¿Ñ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¸Ðµ,
-         * ÑÐºÑ€Ð¾Ð»Ð»Ð¸Ð¼ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð².
+         * Ãâ€¢Ã‘ÂÃÂ»ÃÂ¸ ÃÂ¾Ã‘â€šÃÂºÃ‘â‚¬Ã‘â€¹Ã‘â€šÃÂ¾ ÃÂ¿Ã‘â‚¬ÃÂ¸ÃÂ³ÃÂ»ÃÂ°Ã‘Ë†ÃÂµÃÂ½ÃÂ¸ÃÂµ,
+         * Ã‘ÂÃÂºÃ‘â‚¬ÃÂ¾ÃÂ»ÃÂ»ÃÂ¸ÃÂ¼ Ã‘ÂÃÂ¿ÃÂ¸Ã‘ÂÃÂ¾ÃÂº ÃÂ¸ÃÂ³Ã‘â‚¬ÃÂ¾ÃÂºÃÂ¾ÃÂ².
          */
 
         if (this.showInvitePlayers) {
@@ -813,7 +860,7 @@ public class CityPylonScreen
             int visible = railRows(pitch);
             int count = switch (this.railwayPage) {
                 case 1 -> this.menu.getRailwayLines().size();
-                case 2 -> this.menu.getRailwayTrains().size();
+                case 2 -> trainRows().size();
                 default -> this.menu.getRailwayStations().size();
             };
             this.railwayScroll = Math.clamp(this.railwayScroll + (scrollY < 0 ? 1 : -1),
@@ -822,7 +869,7 @@ public class CityPylonScreen
         }
 
         /*
-         * Ð¡Ð¿Ñ€Ð°Ð²ÐºÐ° Ñ€Ñ‹Ð½ÐºÐ° â€” Ð¼Ð¾Ð´Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±Ð»Ð¾Ðº: ÐºÐ¾Ð»ÐµÑÐ¾ Ð»Ð¸ÑÑ‚Ð°ÐµÑ‚ Ð¸Ð¼ÐµÐ½Ð½Ð¾ ÐµÑ‘.
+         * ÃÂ¡ÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂºÃÂ° Ã‘â‚¬Ã‘â€¹ÃÂ½ÃÂºÃÂ° Ã¢â‚¬â€ ÃÂ¼ÃÂ¾ÃÂ´ÃÂ°ÃÂ»Ã‘Å’ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ±ÃÂ»ÃÂ¾ÃÂº: ÃÂºÃÂ¾ÃÂ»ÃÂµÃ‘ÂÃÂ¾ ÃÂ»ÃÂ¸Ã‘ÂÃ‘â€šÃÂ°ÃÂµÃ‘â€š ÃÂ¸ÃÂ¼ÃÂµÃÂ½ÃÂ½ÃÂ¾ ÃÂµÃ‘â€˜.
          */
         if (this.activeTab == 7 && this.menu.hasCity()
                 && (this.marketplaceHintVisible || this.marketplaceHelpVisible)) {
@@ -851,7 +898,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐšÐ›Ð˜ÐšÐ˜
+     * ÃÅ¡Ãâ€ºÃËœÃÅ¡ÃËœ
      * =========================================
      */
 
@@ -866,7 +913,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ÐžÐšÐÐž ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
+         * ÃÅ¾ÃÅ¡ÃÂÃÅ¾ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¨Ãâ€¢ÃÂÃËœÃÂ¯
          * =====================================
          */
 
@@ -874,11 +921,11 @@ public class CityPylonScreen
                 && button == 0) {
 
             /*
-             * ÐšÐ½Ð¾Ð¿ÐºÐ° ÐÐÐ—ÐÐ”
+             * ÃÅ¡ÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° ÃÂÃÂÃâ€”ÃÂÃâ€
              *
-             * ÐžÐ½Ð° Ð¿Ð¾ÐºÐ° Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ð²Ñ€ÑƒÑ‡Ð½ÑƒÑŽ,
-             * Ð¿Ð¾Ñ‚Ð¾Ð¼Ñƒ Ñ‡Ñ‚Ð¾ ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚ Ñ‚Ð¾Ð»ÑŒÐºÐ¾
-             * Ð²Ð½ÑƒÑ‚Ñ€Ð¸ ÑÐºÑ€Ð°Ð½Ð° Ð¿Ñ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¸Ñ.
+             * ÃÅ¾ÃÂ½ÃÂ° ÃÂ¿ÃÂ¾ÃÂºÃÂ° Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ²Ã‘â‚¬Ã‘Æ’Ã‘â€¡ÃÂ½Ã‘Æ’Ã‘Å½,
+             * ÃÂ¿ÃÂ¾Ã‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ Ã‘â€¡Ã‘â€šÃÂ¾ Ã‘ÂÃ‘Æ’Ã‘â€°ÃÂµÃ‘ÂÃ‘â€šÃÂ²Ã‘Æ’ÃÂµÃ‘â€š Ã‘â€šÃÂ¾ÃÂ»Ã‘Å’ÃÂºÃÂ¾
+             * ÃÂ²ÃÂ½Ã‘Æ’Ã‘â€šÃ‘â‚¬ÃÂ¸ Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ° ÃÂ¿Ã‘â‚¬ÃÂ¸ÃÂ³ÃÂ»ÃÂ°Ã‘Ë†ÃÂµÃÂ½ÃÂ¸Ã‘Â.
              */
 
             int backX =
@@ -908,7 +955,7 @@ public class CityPylonScreen
             }
 
             /*
-             * Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð²
+             * ÃÂ¡ÃÂ¿ÃÂ¸Ã‘ÂÃÂ¾ÃÂº ÃÂ¸ÃÂ³Ã‘â‚¬ÃÂ¾ÃÂºÃÂ¾ÃÂ²
              */
 
             List<PlayerInfo> players =
@@ -956,7 +1003,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð“Ð ÐÐÐ˜Ð¦Ð«
+         * Ãâ€œÃÂ ÃÂÃÂÃËœÃÂ¦ÃÂ«
          * =====================================
          */
 
@@ -997,7 +1044,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð•Ð¡Ð›Ð˜ Ð“ÐžÐ ÐžÐ”Ð ÐÐ•Ð¢
+         * Ãâ€¢ÃÂ¡Ãâ€ºÃËœ Ãâ€œÃÅ¾ÃÂ ÃÅ¾Ãâ€ÃÂ ÃÂÃâ€¢ÃÂ¢
          * =====================================
          */
 
@@ -1008,6 +1055,49 @@ public class CityPylonScreen
                     mouseY,
                     button
             );
+        }
+
+        if (button == 0 && this.activeTab == 0) {
+            int left = this.contentLeft(), top = this.contentTop();
+            if (this.problemCenterVisible) {
+                if (inside(mouseX, mouseY, left + 315, top + 218, 112, 20)) {
+                    this.problemCenterVisible = false;
+                    requestEconomyState();
+                    if (this.minecraft != null) this.minecraft.setScreen(new LogisticsScreen(this));
+                }
+                return true;
+            }
+            if (this.cityHubGuideVisible) {
+                this.cityHubGuideVisible = false; cityHubGuideSeen = true; return true;
+            }
+            if (inside(mouseX, mouseY, left + 352, top - 3, 24, 20)) {
+                this.problemCenterVisible = true; return true;
+            }
+            if (inside(mouseX, mouseY, left + 382, top - 3, 24, 20)) {
+                this.cityHubGuideVisible = true; return true;
+            }
+            if (inside(mouseX, mouseY, left + 406, top + 32, 29, 23)) {
+                if (this.minecraft != null) this.minecraft.setScreen(new PolishedWorldMapScreen(this));
+                return true;
+            }
+        }
+
+        if (button == 0 && isManagementTab(this.activeTab)) {
+            int[] tabs = {1, 2, 3, 5, -1, 6};
+            int width = (CONTENT_WIDTH - 12) / tabs.length;
+            for (int i = 0; i < tabs.length; i++) {
+                int x = this.contentLeft() + i * (width + 3);
+                if (inside(mouseX, mouseY, x, this.contentTop() + 22, width, 18)) {
+                    if (i == 4) {
+                        if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this));
+                    } else if (i == 5) {
+                        openTrainManagement();
+                    } else {
+                        this.activeTab = tabs[i]; updateTabButtons(); updateInviteButton();
+                    }
+                    return true;
+                }
+            }
         }
 
         if (this.activeTab == 4
@@ -1036,8 +1126,8 @@ public class CityPylonScreen
             int contentTop = this.contentTop();
             List<CityProjectSnapshot> projects = this.menu.getProjects();
             for (int index = 0; index < Math.min(2, projects.size()); index++) {
-                // Ð¢Ð° Ð¶Ðµ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ, Ñ‡Ñ‚Ð¾ Ð¸ Ð² renderProjects(): ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ° 34 Ð¿Ð¸ÐºÑÐµÐ»Ñ.
-                int cardY = contentTop + 44 + index * 36;
+                // ÃÂ¢ÃÂ° ÃÂ¶ÃÂµ ÃÂ³ÃÂµÃÂ¾ÃÂ¼ÃÂµÃ‘â€šÃ‘â‚¬ÃÂ¸Ã‘Â, Ã‘â€¡Ã‘â€šÃÂ¾ ÃÂ¸ ÃÂ² renderProjects(): ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ° 34 ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»Ã‘Â.
+                int cardY = contentTop + 62 + index * 36;
                 if (mouseX >= contentLeft + CONTENT_WIDTH - 54 && mouseX <= contentLeft + CONTENT_WIDTH - 4
                         && mouseY >= cardY + 3 && mouseY <= cardY + 31) {
                     CityProjectSnapshot project = projects.get(index);
@@ -1081,7 +1171,7 @@ public class CityPylonScreen
 
         /*
          * =========================================
-         * Ð£ÐŸÐ ÐÐ’Ð›Ð•ÐÐ˜Ð• Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐžÐœ
+         * ÃÂ£ÃÅ¸ÃÂ ÃÂÃâ€™Ãâ€ºÃâ€¢ÃÂÃËœÃâ€¢ ÃÂ£ÃÂ§ÃÂÃÂ¡ÃÂ¢ÃÂÃËœÃÅ¡ÃÅ¾ÃÅ“
          * =========================================
          */
 
@@ -1117,10 +1207,10 @@ public class CityPylonScreen
                         i - start;
 
                 /*
-                 * Ð¢Ð° Ð¶Ðµ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ, Ñ‡Ñ‚Ð¾ Ð¸ Ð¿Ñ€Ð¸ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐµ.
-                 * Ð Ð°Ð½ÑŒÑˆÐµ Ð·Ð´ÐµÑÑŒ ÑÑ‚Ð¾ÑÐ»Ð¸ ÑÐ¾Ð±ÑÑ‚Ð²ÐµÐ½Ð½Ñ‹Ðµ cardWidth/spacing
-                 * Ð¸ ÑÐ¾Ð±ÑÑ‚Ð²ÐµÐ½Ð½Ñ‹Ð¹ Ð¿Ñ€ÑÐ¼Ð¾ÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸Ðº Ð´Ð»Ñ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¸,
-                 * Ð¸Ð·-Ð·Ð° Ñ‡ÐµÐ³Ð¾ ÐºÐ½Ð¾Ð¿ÐºÐ° ÑƒÐµÐ·Ð¶Ð°Ð»Ð° Ð¾Ñ‚ Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ð¹.
+                 * ÃÂ¢ÃÂ° ÃÂ¶ÃÂµ ÃÂ³ÃÂµÃÂ¾ÃÂ¼ÃÂµÃ‘â€šÃ‘â‚¬ÃÂ¸Ã‘Â, Ã‘â€¡Ã‘â€šÃÂ¾ ÃÂ¸ ÃÂ¿Ã‘â‚¬ÃÂ¸ ÃÂ¾Ã‘â€šÃ‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂºÃÂµ.
+                 * ÃÂ ÃÂ°ÃÂ½Ã‘Å’Ã‘Ë†ÃÂµ ÃÂ·ÃÂ´ÃÂµÃ‘ÂÃ‘Å’ Ã‘ÂÃ‘â€šÃÂ¾Ã‘ÂÃÂ»ÃÂ¸ Ã‘ÂÃÂ¾ÃÂ±Ã‘ÂÃ‘â€šÃÂ²ÃÂµÃÂ½ÃÂ½Ã‘â€¹ÃÂµ cardWidth/spacing
+                 * ÃÂ¸ Ã‘ÂÃÂ¾ÃÂ±Ã‘ÂÃ‘â€šÃÂ²ÃÂµÃÂ½ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ¿Ã‘â‚¬Ã‘ÂÃÂ¼ÃÂ¾Ã‘Æ’ÃÂ³ÃÂ¾ÃÂ»Ã‘Å’ÃÂ½ÃÂ¸ÃÂº ÃÂ´ÃÂ»Ã‘Â Ã‘Ë†ÃÂµÃ‘ÂÃ‘â€šÃÂµÃ‘â‚¬Ã‘â€˜ÃÂ½ÃÂºÃÂ¸,
+                 * ÃÂ¸ÃÂ·-ÃÂ·ÃÂ° Ã‘â€¡ÃÂµÃÂ³ÃÂ¾ ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ° Ã‘Æ’ÃÂµÃÂ·ÃÂ¶ÃÂ°ÃÂ»ÃÂ° ÃÂ¾Ã‘â€š ÃÂ½ÃÂ°Ã‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÂ¾ÃÂ¹.
                  */
                 MemberCardGeometry card =
                         memberCard(cardX, cardY, visibleIndex);
@@ -1129,8 +1219,8 @@ public class CityPylonScreen
                 int gearY = card.gearY();
 
                 /*
-                 * Hitbox Ñ€Ð¾Ð²Ð½Ð¾ Ð¿Ð¾ Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð¾Ð¹ Ð¸ÐºÐ¾Ð½ÐºÐµ:
-                 * Ñ€Ð°Ð½ÑŒÑˆÐµ Ð¾Ð½ Ð±Ñ‹Ð» ÑˆÐ¸Ñ€Ðµ Ð¸ Ð½Ð¸Ð¶Ðµ, Ñ‡ÐµÐ¼ ÑÐ°Ð¼Ð° ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ°.
+                 * Hitbox Ã‘â‚¬ÃÂ¾ÃÂ²ÃÂ½ÃÂ¾ ÃÂ¿ÃÂ¾ ÃÂ½ÃÂ°Ã‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÂ¾ÃÂ¹ ÃÂ¸ÃÂºÃÂ¾ÃÂ½ÃÂºÃÂµ:
+                 * Ã‘â‚¬ÃÂ°ÃÂ½Ã‘Å’Ã‘Ë†ÃÂµ ÃÂ¾ÃÂ½ ÃÂ±Ã‘â€¹ÃÂ» Ã‘Ë†ÃÂ¸Ã‘â‚¬ÃÂµ ÃÂ¸ ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ, Ã‘â€¡ÃÂµÃÂ¼ Ã‘ÂÃÂ°ÃÂ¼ÃÂ° Ã‘Ë†ÃÂµÃ‘ÂÃ‘â€šÃÂµÃ‘â‚¬Ã‘â€˜ÃÂ½ÃÂºÃÂ°.
                  */
                 boolean clicked =
                         mouseX >= gearX
@@ -1197,7 +1287,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐŸÐžÐ›Ð£Ð§Ð•ÐÐ˜Ð• Ð˜Ð“Ð ÐžÐšÐžÐ’ Ð”Ð›Ð¯ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
+     * ÃÅ¸ÃÅ¾Ãâ€ºÃÂ£ÃÂ§Ãâ€¢ÃÂÃËœÃâ€¢ ÃËœÃâ€œÃÂ ÃÅ¾ÃÅ¡ÃÅ¾Ãâ€™ Ãâ€Ãâ€ºÃÂ¯ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¨Ãâ€¢ÃÂÃËœÃÂ¯
      * =========================================
      */
 
@@ -1227,7 +1317,7 @@ public class CityPylonScreen
                             .getId();
 
             /*
-             * ÐÐµ Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ ÑÐ°Ð¼Ð¾Ð³Ð¾ ÑÐµÐ±Ñ.
+             * ÃÂÃÂµ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·Ã‘â€¹ÃÂ²ÃÂ°ÃÂµÃÂ¼ Ã‘ÂÃÂ°ÃÂ¼ÃÂ¾ÃÂ³ÃÂ¾ Ã‘ÂÃÂµÃÂ±Ã‘Â.
              */
 
             if (playerId.equals(currentPlayer)) {
@@ -1235,8 +1325,8 @@ public class CityPylonScreen
             }
 
             /*
-             * ÐÐµ Ð¿Ð¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ Ð¸Ð³Ñ€Ð¾ÐºÐ¾Ð²,
-             * ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ðµ ÑƒÐ¶Ðµ ÑÐ¾ÑÑ‚Ð¾ÑÑ‚ Ð² ÑÑ‚Ð¾Ð¼ Ð³Ð¾Ñ€Ð¾Ð´Ðµ.
+             * ÃÂÃÂµ ÃÂ¿ÃÂ¾ÃÂºÃÂ°ÃÂ·Ã‘â€¹ÃÂ²ÃÂ°ÃÂµÃÂ¼ ÃÂ¸ÃÂ³Ã‘â‚¬ÃÂ¾ÃÂºÃÂ¾ÃÂ²,
+             * ÃÂºÃÂ¾Ã‘â€šÃÂ¾Ã‘â‚¬Ã‘â€¹ÃÂµ Ã‘Æ’ÃÂ¶ÃÂµ Ã‘ÂÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾Ã‘ÂÃ‘â€š ÃÂ² Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼ ÃÂ³ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ´ÃÂµ.
              */
 
             boolean alreadyMember =
@@ -1263,7 +1353,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐŸÐ Ð˜Ð“Ð›ÐÐ¡Ð˜Ð¢Ð¬ Ð˜Ð“Ð ÐžÐšÐ
+     * ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¡ÃËœÃÂ¢ÃÂ¬ ÃËœÃâ€œÃÂ ÃÅ¾ÃÅ¡ÃÂ
      * =========================================
      */
 
@@ -1299,7 +1389,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐœÐžÐ–Ð•Ð¢ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨ÐÐ¢Ð¬
+     * ÃÅ“ÃÅ¾Ãâ€“Ãâ€¢ÃÂ¢ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¨ÃÂÃÂ¢ÃÂ¬
      * =========================================
      */
 
@@ -1339,7 +1429,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * Ð˜ÐœÐ¯ Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐ
+     * ÃËœÃÅ“ÃÂ¯ ÃÂ£ÃÂ§ÃÂÃÂ¡ÃÂ¢ÃÂÃËœÃÅ¡ÃÂ
      * =========================================
      */
 
@@ -1373,7 +1463,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * Ð¤ÐžÐ
+     * ÃÂ¤ÃÅ¾ÃÂ
      * =========================================
      */
 
@@ -1392,7 +1482,7 @@ public class CityPylonScreen
                 this.topPos;
 
         /*
-         * ÐžÑÐ½Ð¾Ð²Ð½Ð°Ñ Ð¿Ð°Ð½ÐµÐ»ÑŒ
+         * ÃÅ¾Ã‘ÂÃÂ½ÃÂ¾ÃÂ²ÃÂ½ÃÂ°Ã‘Â ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’
          */
 
         guiGraphics.fill(
@@ -1404,7 +1494,7 @@ public class CityPylonScreen
         );
 
         /*
-         * Ð’ÐµÑ€Ñ…Ð½ÑÑ Ð¿Ð°Ð½ÐµÐ»ÑŒ
+         * Ãâ€™ÃÂµÃ‘â‚¬Ã‘â€¦ÃÂ½Ã‘ÂÃ‘Â ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’
          */
 
         guiGraphics.fill(
@@ -1416,7 +1506,7 @@ public class CityPylonScreen
         );
 
         /*
-         * Ð—Ð¾Ð»Ð¾Ñ‚Ð°Ñ Ð»Ð¸Ð½Ð¸Ñ
+         * Ãâ€”ÃÂ¾ÃÂ»ÃÂ¾Ã‘â€šÃÂ°Ã‘Â ÃÂ»ÃÂ¸ÃÂ½ÃÂ¸Ã‘Â
 
          */
 
@@ -1433,7 +1523,7 @@ public class CityPylonScreen
         }
 
         /*
-         * Ð›ÐµÐ²Ð°Ñ Ð¿Ð°Ð½ÐµÐ»ÑŒ
+         * Ãâ€ºÃÂµÃÂ²ÃÂ°Ã‘Â ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’
          */
 
         guiGraphics.fill(
@@ -1445,7 +1535,7 @@ public class CityPylonScreen
         );
 
         /*
-         * Ð Ð°Ð·Ð´ÐµÐ»Ð¸Ñ‚ÐµÐ»ÑŒ
+         * ÃÂ ÃÂ°ÃÂ·ÃÂ´ÃÂµÃÂ»ÃÂ¸Ã‘â€šÃÂµÃÂ»Ã‘Å’
          */
 
         guiGraphics.fill(
@@ -1478,7 +1568,11 @@ public class CityPylonScreen
         }
         this.mapPanel.setProjects(this.menu.getProjects());
         this.mapPanel.setTerritorySize(this.menu.getTerritorySize());
-        if(this.menu.getEconomyState()!=null)this.mapPanel.setEconomyInfrastructure(this.menu.getEconomyState().infrastructure());
+        if(this.menu.getEconomyState()!=null){
+            this.mapPanel.setEconomyInfrastructure(this.menu.getEconomyState().infrastructure());
+            this.mapPanel.setFreightData(this.menu.getEconomyState().logistics());
+        }
+        if(this.menu.getRelationsState()!=null)this.mapPanel.setRelations(this.menu.getRelationsState().cities());
         this.mapPanel.setRailwayData(
                 this.menu.getRailwayStations(),
                 this.menu.getRailwayTrains()
@@ -1514,18 +1608,18 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð—ÐÐ“ÐžÐ›ÐžÐ’ÐžÐš
+         * Ãâ€”ÃÂÃâ€œÃÅ¾Ãâ€ºÃÅ¾Ãâ€™ÃÅ¾ÃÅ¡
          * =====================================
          */
 
         /*
          * =====================================
-         * Ð­ÐœÐ‘Ð›Ð•ÐœÐ (BRANDING)
+         * ÃÂ­ÃÅ“Ãâ€˜Ãâ€ºÃâ€¢ÃÅ“ÃÂ (BRANDING)
          * =====================================
          *
-         * Ð—Ð½Ð°Ðº Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ð¿ÐµÑ€Ð²Ñ‹Ð¼ Ð¸ Ð·Ð°Ð½Ð¸Ð¼Ð°ÐµÑ‚ Ñ„Ð¸ÐºÑÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ ÑƒÐ³Ð¾Ð» HEADER,
-         * Ð¿Ð¾ÑÑ‚Ð¾Ð¼Ñƒ Ð¾Ð½ Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ð½Ð°ÐµÑ…Ð°Ñ‚ÑŒ Ð½Ð° Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ Ð³Ð¾Ñ€Ð¾Ð´Ð° Ð¸Ð»Ð¸ ÑƒÑ€Ð¾Ð²ÐµÐ½ÑŒ:
-         * Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº Ð½Ð¸Ð¶Ðµ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ Ð»ÐµÐ²Ð¾Ð¹ Ð³Ñ€Ð°Ð½Ð¸Ñ†Ðµ Ð·Ð½Ð°ÐºÐ°.
+         * Ãâ€”ÃÂ½ÃÂ°ÃÂº Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¿ÃÂµÃ‘â‚¬ÃÂ²Ã‘â€¹ÃÂ¼ ÃÂ¸ ÃÂ·ÃÂ°ÃÂ½ÃÂ¸ÃÂ¼ÃÂ°ÃÂµÃ‘â€š Ã‘â€žÃÂ¸ÃÂºÃ‘ÂÃÂ¸Ã‘â‚¬ÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½Ã‘â€¹ÃÂ¹ Ã‘Æ’ÃÂ³ÃÂ¾ÃÂ» HEADER,
+         * ÃÂ¿ÃÂ¾Ã‘ÂÃ‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ ÃÂ¾ÃÂ½ ÃÂ½ÃÂµ ÃÂ¼ÃÂ¾ÃÂ¶ÃÂµÃ‘â€š ÃÂ½ÃÂ°ÃÂµÃ‘â€¦ÃÂ°Ã‘â€šÃ‘Å’ ÃÂ½ÃÂ° ÃÂ½ÃÂ°ÃÂ·ÃÂ²ÃÂ°ÃÂ½ÃÂ¸ÃÂµ ÃÂ³ÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ´ÃÂ° ÃÂ¸ÃÂ»ÃÂ¸ Ã‘Æ’Ã‘â‚¬ÃÂ¾ÃÂ²ÃÂµÃÂ½Ã‘Å’:
+         * ÃÂ·ÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂ¾ÃÂº ÃÂ½ÃÂ¸ÃÂ¶ÃÂµ ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¿ÃÂ¾ ÃÂ»ÃÂµÃÂ²ÃÂ¾ÃÂ¹ ÃÂ³Ã‘â‚¬ÃÂ°ÃÂ½ÃÂ¸Ã‘â€ ÃÂµ ÃÂ·ÃÂ½ÃÂ°ÃÂºÃÂ°.
          */
         int emblemX =
                 left + PANEL_WIDTH - OUTER_PADDING - HEADER_EMBLEM_SIZE;
@@ -1559,7 +1653,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð•Ð¡Ð›Ð˜ Ð“ÐžÐ ÐžÐ”Ð ÐÐ•Ð¢
+         * Ãâ€¢ÃÂ¡Ãâ€ºÃËœ Ãâ€œÃÅ¾ÃÂ ÃÅ¾Ãâ€ÃÂ ÃÂÃâ€¢ÃÂ¢
          * =====================================
          */
 
@@ -1587,7 +1681,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ÐŸÐžÐ”Ð—ÐÐ“ÐžÐ›ÐžÐ’ÐžÐš
+         * ÃÅ¸ÃÅ¾Ãâ€Ãâ€”ÃÂÃâ€œÃÅ¾Ãâ€ºÃÅ¾Ãâ€™ÃÅ¾ÃÅ¡
          * =====================================
          */
 
@@ -1601,7 +1695,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð­ÐšÐ ÐÐ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
+         * ÃÂ­ÃÅ¡ÃÂ ÃÂÃÂ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¨Ãâ€¢ÃÂÃËœÃÂ¯
          * =====================================
          */
 
@@ -1621,7 +1715,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ÐšÐžÐÐ¢Ð•ÐÐ¢
+         * ÃÅ¡ÃÅ¾ÃÂÃÂ¢Ãâ€¢ÃÂÃÂ¢
          * =====================================
          */
 
@@ -1675,6 +1769,10 @@ public class CityPylonScreen
                 contentTop + 18,
                 0xFFD09A3A
         );
+
+        if (isManagementTab(this.activeTab)) {
+            renderManagementNav(guiGraphics, contentLeft, contentTop, mouseX, mouseY);
+        }
 
         switch (this.activeTab) {
 
@@ -1751,13 +1849,14 @@ public class CityPylonScreen
             case 7 -> renderEconomy(guiGraphics, contentLeft, contentTop, mouseX, mouseY);
         }
         if (this.activeTab == 7) deferEconomyHeaderTooltip(contentLeft, contentTop, mouseX, mouseY);
+        if (this.activeTab == 0) renderHubOverlays(guiGraphics, contentLeft, contentTop, mouseX, mouseY);
         guiGraphics.pose().popPose();
         flushDeferredTooltip(guiGraphics, screenMouseX, screenMouseY);
     }
 
     /*
      * =========================================
-     * Ð­ÐšÐ ÐÐ Ð’Ð«Ð‘ÐžÐ Ð Ð˜Ð“Ð ÐžÐšÐ
+     * ÃÂ­ÃÅ¡ÃÂ ÃÂÃÂ Ãâ€™ÃÂ«Ãâ€˜ÃÅ¾ÃÂ ÃÂ ÃËœÃâ€œÃÂ ÃÅ¾ÃÅ¡ÃÂ
      * =========================================
      */
 
@@ -1797,12 +1896,12 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * ÐšÐÐžÐŸÐšÐ ÐÐÐ—ÐÐ”
+         * ÃÅ¡ÃÂÃÅ¾ÃÅ¸ÃÅ¡ÃÂ ÃÂÃÂÃâ€”ÃÂÃâ€
          * =====================================
          *
-         * ÐŸÐ¾ÐºÐ° Ð¾ÑÑ‚Ð°Ñ‘Ñ‚ÑÑ Ñ€ÑƒÑ‡Ð½Ð¾Ð¹,
-         * Ð¿Ð¾Ñ‚Ð¾Ð¼Ñƒ Ñ‡Ñ‚Ð¾ Ð¾Ð½Ð° ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÐµÑ‚ Ñ‚Ð¾Ð»ÑŒÐºÐ¾
-         * Ð²Ð½ÑƒÑ‚Ñ€Ð¸ ÑÐºÑ€Ð°Ð½Ð° Ð¿Ñ€Ð¸Ð³Ð»Ð°ÑˆÐµÐ½Ð¸Ñ.
+         * ÃÅ¸ÃÂ¾ÃÂºÃÂ° ÃÂ¾Ã‘ÂÃ‘â€šÃÂ°Ã‘â€˜Ã‘â€šÃ‘ÂÃ‘Â Ã‘â‚¬Ã‘Æ’Ã‘â€¡ÃÂ½ÃÂ¾ÃÂ¹,
+         * ÃÂ¿ÃÂ¾Ã‘â€šÃÂ¾ÃÂ¼Ã‘Æ’ Ã‘â€¡Ã‘â€šÃÂ¾ ÃÂ¾ÃÂ½ÃÂ° Ã‘ÂÃ‘Æ’Ã‘â€°ÃÂµÃ‘ÂÃ‘â€šÃÂ²Ã‘Æ’ÃÂµÃ‘â€š Ã‘â€šÃÂ¾ÃÂ»Ã‘Å’ÃÂºÃÂ¾
+         * ÃÂ²ÃÂ½Ã‘Æ’Ã‘â€šÃ‘â‚¬ÃÂ¸ Ã‘ÂÃÂºÃ‘â‚¬ÃÂ°ÃÂ½ÃÂ° ÃÂ¿Ã‘â‚¬ÃÂ¸ÃÂ³ÃÂ»ÃÂ°Ã‘Ë†ÃÂµÃÂ½ÃÂ¸Ã‘Â.
          */
 
         int backX =
@@ -1852,7 +1951,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð¡Ð¢ÐÐ¢Ð£Ð¡
+         * ÃÂ¡ÃÂ¢ÃÂÃÂ¢ÃÂ£ÃÂ¡
          * =====================================
          */
 
@@ -1871,7 +1970,7 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð˜Ð“Ð ÐžÐšÐ˜
+         * ÃËœÃâ€œÃÂ ÃÅ¾ÃÅ¡ÃËœ
          * =====================================
          */
 
@@ -1924,7 +2023,7 @@ public class CityPylonScreen
                             && mouseY <= currentY + 32;
 
             /*
-             * Ð¤Ð¾Ð½ ÑÑ‚Ñ€Ð¾ÐºÐ¸
+             * ÃÂ¤ÃÂ¾ÃÂ½ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂºÃÂ¸
              */
 
             guiGraphics.fill(
@@ -1948,7 +2047,7 @@ public class CityPylonScreen
             );
 
             /*
-             * Ð¡ÐºÐ¸Ð½
+             * ÃÂ¡ÃÂºÃÂ¸ÃÂ½
              */
 
             PlayerSkin skin =
@@ -1972,7 +2071,7 @@ public class CityPylonScreen
             );
 
             /*
-             * Ð˜Ð¼Ñ
+             * ÃËœÃÂ¼Ã‘Â
              */
 
             String playerName =
@@ -2005,7 +2104,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐžÐ‘Ð—ÐžÐ 
+     * ÃÅ¾Ãâ€˜Ãâ€”ÃÅ¾ÃÂ 
      * =========================================
      */
 
@@ -2015,98 +2114,109 @@ public class CityPylonScreen
             int top
     ) {
 
-        int row =
-                top + 45;
+        EconomyStatePayload economy = this.menu.getEconomyState();
+        int problems = hubProblemCount();
+        int activeContracts = economy == null ? 0 : (int) economy.contracts().stream()
+                .filter(v -> !v.state().terminal()).count();
+        int activeShipments = economy == null ? 0 : economy.shipments().size();
+        int delivered = economy == null ? 0 : (int) economy.shipments().stream()
+                .filter(v -> v.verified() >= v.declared()).count();
 
-        guiGraphics.drawString(
-                this.font,
-                Component.translatable("gui.createcityexpansioncore.city.level_label"),
-                left,
-                row,
-                0xAAAAAA
-        );
+        int statusY = top + 27;
+        guiGraphics.fill(left, statusY, left + 206, statusY + 42, problems > 0 ? 0xFF34282A : 0xFF21322D);
+        guiGraphics.renderOutline(left, statusY, 206, 42, problems > 0 ? 0xFFC86D68 : 0xFF5AB890);
+        guiGraphics.drawString(this.font, Component.translatable(problems > 0
+                        ? "gui.createcityexpansioncore.city.hub.action_required"
+                        : "gui.createcityexpansioncore.city.hub.ready"),
+                left + 9, statusY + 7, problems > 0 ? 0xFFFFB0A9 : 0xFF9FE1C0, false);
+        Component next=Component.translatable(nextStepKey());
+        List<net.minecraft.util.FormattedCharSequence> nextLines=this.font.split(next,188);
+        for(int i=0;i<Math.min(2,nextLines.size());i++)guiGraphics.drawString(this.font,nextLines.get(i),left+9,statusY+21+i*10,0xFFD0D5D6,false);
 
-        guiGraphics.drawString(
-                this.font,
-                Component.literal(
-                        String.valueOf(
-                                this.menu.getCityLevel()
-                        )
-                ),
-                left + 220,
-                row,
-                0xFFFFFF
-        );
+        hubKpi(guiGraphics, left, top + 76, 98, Component.translatable("gui.createcityexpansioncore.city.hub.treasury"),
+                economy == null ? "â€”" : economy.treasury() + " CR");
+        hubKpi(guiGraphics, left + 108, top + 76, 98, Component.translatable("gui.createcityexpansioncore.city.hub.contracts"), Integer.toString(activeContracts));
+        hubKpi(guiGraphics, left, top + 116, 98, Component.translatable("gui.createcityexpansioncore.city.hub.shipments"), Integer.toString(activeShipments));
+        hubKpi(guiGraphics, left + 108, top + 116, 98, Component.translatable("gui.createcityexpansioncore.city.hub.delivered"), Integer.toString(delivered));
+        hubKpi(guiGraphics, left, top + 156, 98, Component.translatable("gui.createcityexpansioncore.city.hub.level"), Integer.toString(this.menu.getCityLevel()));
+        hubKpi(guiGraphics, left + 108, top + 156, 98, Component.translatable("gui.createcityexpansioncore.city.hub.members"), Integer.toString(this.menu.getMemberCount()));
 
-        guiGraphics.drawString(
-                this.font,
-                Component.translatable("gui.createcityexpansioncore.city.territory"),
-                left,
-                row + 35,
-                0xAAAAAA
-        );
+        this.mapPanel.render(guiGraphics, left + 216, top + 27, 224, 171, -1000, -1000);
+        guiGraphics.fill(left + 406, top + 32, left + 435, top + 55, 0xDD20282A);
+        guiGraphics.renderOutline(left + 406, top + 32, 29, 23, 0xFFD09A3A);
+        guiGraphics.drawCenteredString(this.font, "âŒ•", left + 420, top + 39, 0xFFFFFFFF);
 
-        guiGraphics.drawString(
-                this.font,
-                Component.literal(
-                        this.menu.getTerritorySize()
-                                + " × "
-                                + this.menu.getTerritorySize()
-                ),
-                left + 220,
-                row + 35,
-                0xFFFFFF
-        );
+        guiGraphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.members_list"),
+                left, top + 211, 0xFFD09A3A, false);
+        String names = this.menu.getMembers().stream().limit(5).map(this::getMemberName)
+                .reduce((a, b) -> a + "  â€¢  " + b).orElse("â€”");
+        if (this.menu.getMemberCount() > 5) names += "  +" + (this.menu.getMemberCount() - 5);
+        guiGraphics.drawString(this.font, Component.literal(this.font.plainSubstrByWidth(names, CONTENT_WIDTH)),
+                left, top + 226, 0xFFB9C1C3, false);
+    }
 
-        guiGraphics.drawString(
-                this.font,
-                Component.translatable("gui.createcityexpansioncore.city.residents"),
-                left,
-                row + 70,
-                0xAAAAAA
-        );
+    private void hubKpi(GuiGraphics graphics, int x, int y, int width, Component label, String value) {
+        graphics.fill(x, y, x + width, y + 34, 0xFF282E30);
+        graphics.fill(x, y, x + 2, y + 34, 0xFFD09A3A);
+        graphics.drawString(this.font, label, x + 7, y + 6, 0xFF929DA0, false);
+        graphics.drawString(this.font, value, x + 7, y + 19, 0xFFF0F2F2, false);
+    }
 
-        guiGraphics.drawString(
-                this.font,
-                Component.literal(
-                        String.valueOf(
-                                this.menu.getMemberCount()
-                        )
-                ),
-                left + 220,
-                row + 70,
-                0xFFFFFF
-        );
+    private void renderManagementNav(GuiGraphics graphics, int left, int top, int mouseX, int mouseY) {
+        int[] tabs = {1, 2, 3, 5, -1, 6};
+        String[] keys = {"territory", "members", "projects", "development", "relations", "railway"};
+        int width = (CONTENT_WIDTH - 12) / tabs.length;
+        for (int i = 0; i < tabs.length; i++) {
+            int x = left + i * (width + 3), y = top + 22;
+            boolean hover = inside(mouseX, mouseY, x, y, width, 18);
+            graphics.fill(x, y, x + width, y + 18, this.activeTab == tabs[i] ? 0xFF4A3A20 : hover ? 0xFF34393B : 0xFF292E30);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.tab." + keys[i]), x + width / 2, y + 5,
+                    this.activeTab == tabs[i] ? 0xFFFFD59A : 0xFFB9C1C3);
+        }
+    }
 
-        BlockPos pos =
-                this.menu.getPylonPos();
+    private void renderHubOverlays(GuiGraphics graphics, int left, int top, int mouseX, int mouseY) {
+        int problems = hubProblemCount();
+        hubIconButton(graphics, left + 352, top - 3, problems > 0 ? "!" + problems : "âœ“", problems > 0, mouseX, mouseY);
+        hubIconButton(graphics, left + 382, top - 3, "?", false, mouseX, mouseY);
+        if (this.problemCenterVisible) {
+            graphics.fill(left + 55, top + 28, left + 430, top + 245, 0xF3182023);
+            graphics.renderOutline(left + 55, top + 28, 375, 217, 0xFFD09A3A);
+            graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.problems"), left + 68, top + 42, 0xFFFFD59A, false);
+            graphics.drawWordWrap(this.font, Component.translatable(nextStepKey()), left + 68, top + 67, 345, 0xFFD7DDDE);
+            graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.problem_count", problems), left + 68, top + 104, problems > 0 ? 0xFFFFA7A0 : 0xFF9FE1C0, false);
+            graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.problem_hint"), left + 68, top + 126, 345, 0xFF9DA8AB);
+            graphics.fill(left + 315, top + 218, left + 427, top + 238, 0xFF4A3A20);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.open_logistics"), left + 371, top + 224, 0xFFFFFFFF);
+        } else if (this.cityHubGuideVisible) {
+            graphics.fill(left - 4, top + 20, left + CONTENT_WIDTH + 4, top + 246, 0xD5101517);
+            graphics.fill(left + 48, top + 52, left + 392, top + 184, 0xFF222B2E);
+            graphics.renderOutline(left + 48, top + 52, 344, 132, 0xFFD09A3A);
+            graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.title"), left + 64, top + 68, 0xFFFFD59A, false);
+            graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.text"), left + 64, top + 91, 312, 0xFFD7DDDE);
+            graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.dismiss"), left + 220, top + 162, 0xFFB9C1C3);
+        }
+    }
 
-        guiGraphics.drawString(
-                this.font,
-                Component.translatable("gui.createcityexpansioncore.city.pylon"),
-                left,
-                row + 105,
-                0xAAAAAA
-        );
+    private void hubIconButton(GuiGraphics graphics, int x, int y, String text, boolean warning, int mouseX, int mouseY) {
+        boolean hover = inside(mouseX, mouseY, x, y, 24, 20);
+        graphics.fill(x, y, x + 24, y + 20, hover ? 0xFF4A3A20 : 0xFF303638);
+        graphics.renderOutline(x, y, 24, 20, warning ? 0xFFD07872 : 0xFF596064);
+        graphics.drawCenteredString(this.font, text, x + 12, y + 6, warning ? 0xFFFFAAA3 : 0xFFD3D8DA);
+    }
 
-        guiGraphics.drawString(
-                this.font,
-                Component.literal(
-                        pos.getX()
-                                + ", "
-                                + pos.getY()
-                                + ", "
-                                + pos.getZ()
-                ),
-                left + 220,
-                row + 105,
-                0xFFFFFF
-        );
+    private int hubProblemCount() {
+        return CcecProblemCenter.count(this.menu.getEconomyState(), this.menu.getRailwayOwnership(),
+                this.menu.getRailwayTrains());
+    }
+
+    private String nextStepKey() {
+        return CcecProblemCenter.nextStepKey(this.menu.getEconomyState(), hubProblemCount());
     }
 
     /*
      * =========================================
-     * Ð¢Ð•Ð Ð Ð˜Ð¢ÐžÐ Ð˜Ð¯
+     * ÃÂ¢Ãâ€¢ÃÂ ÃÂ ÃËœÃÂ¢ÃÅ¾ÃÂ ÃËœÃÂ¯
      * =========================================
      */
 
@@ -2131,7 +2241,7 @@ public class CityPylonScreen
                 this.font,
                 Component.literal(
                         this.menu.getTerritorySize()
-                                + " × "
+                                + " Ã— "
                                 + this.menu.getTerritorySize()
                 ),
                 left + 220,
@@ -2174,7 +2284,7 @@ public class CityPylonScreen
                 this.font,
                 this.menu.getCityLevel() >= 2
                         ? Component.translatable("gui.createcityexpansioncore.city.maximum_level")
-                        : Component.literal(nextSize + " × " + nextSize),
+                        : Component.literal(nextSize + " Ã— " + nextSize),
                 left + 220,
                 row + 70,
                 0xFFFFFF
@@ -2228,7 +2338,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐ˜
+     * ÃÂ£ÃÂ§ÃÂÃÂ¡ÃÂ¢ÃÂÃËœÃÅ¡ÃËœ
      * =========================================
      */
 
@@ -2244,7 +2354,7 @@ public class CityPylonScreen
                 top + 45;
 
         /*
-         * Ð—Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº
+         * Ãâ€”ÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂ¾ÃÂº
          */
 
         String residentsLabel = tr("gui.createcityexpansioncore.city.residents_title");
@@ -2280,13 +2390,13 @@ public class CityPylonScreen
 
         /*
          * =====================================
-         * Ð¡ÐŸÐ˜Ð¡ÐžÐš
+         * ÃÂ¡ÃÅ¸ÃËœÃÂ¡ÃÅ¾ÃÅ¡
          * =====================================
          */
 
         /*
-         * Ð•Ð´Ð¸Ð½Ð°Ñ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸Ñ: Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ÑÑ Ð¸ Ð·Ð´ÐµÑÑŒ, Ð¸ Ð² mouseClicked().
-         * hardcoded 270 Ñ€Ð°Ð½ÑŒÑˆÐµ Ð½Ðµ ÑÐ¾Ð²Ð¿Ð°Ð´Ð°Ð» Ñ MEMBER_CARD_W.
+         * Ãâ€¢ÃÂ´ÃÂ¸ÃÂ½ÃÂ°Ã‘Â ÃÂ³ÃÂµÃÂ¾ÃÂ¼ÃÂµÃ‘â€šÃ‘â‚¬ÃÂ¸Ã‘Â: ÃÂ¸Ã‘ÂÃÂ¿ÃÂ¾ÃÂ»Ã‘Å’ÃÂ·Ã‘Æ’ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¸ ÃÂ·ÃÂ´ÃÂµÃ‘ÂÃ‘Å’, ÃÂ¸ ÃÂ² mouseClicked().
+         * hardcoded 270 Ã‘â‚¬ÃÂ°ÃÂ½Ã‘Å’Ã‘Ë†ÃÂµ ÃÂ½ÃÂµ Ã‘ÂÃÂ¾ÃÂ²ÃÂ¿ÃÂ°ÃÂ´ÃÂ°ÃÂ» Ã‘Â MEMBER_CARD_W.
          */
         int cardX =
                 left;
@@ -2417,7 +2527,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐšÐÐ Ð¢ÐžÐ§ÐšÐ
+     * ÃÅ¡ÃÂÃÂ ÃÂ¢ÃÅ¾ÃÂ§ÃÅ¡ÃÂ
      * =========================================
      */
 
@@ -2608,14 +2718,14 @@ public class CityPylonScreen
     }
 
     /**
-     * Ð Ð¸ÑÑƒÐµÑ‚ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÑƒ Ñ†ÐµÐ»Ð¾Ñ‡Ð¸ÑÐ»ÐµÐ½Ð½Ñ‹Ð¼Ð¸ Ð¿Ñ€ÑÐ¼Ð¾ÑƒÐ³Ð¾Ð»ÑŒÐ½Ð¸ÐºÐ°Ð¼Ð¸.
+     * ÃÂ ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃ‘â€š Ã‘Ë†ÃÂµÃ‘ÂÃ‘â€šÃÂµÃ‘â‚¬Ã‘â€˜ÃÂ½ÃÂºÃ‘Æ’ Ã‘â€ ÃÂµÃÂ»ÃÂ¾Ã‘â€¡ÃÂ¸Ã‘ÂÃÂ»ÃÂµÃÂ½ÃÂ½Ã‘â€¹ÃÂ¼ÃÂ¸ ÃÂ¿Ã‘â‚¬Ã‘ÂÃÂ¼ÃÂ¾Ã‘Æ’ÃÂ³ÃÂ¾ÃÂ»Ã‘Å’ÃÂ½ÃÂ¸ÃÂºÃÂ°ÃÂ¼ÃÂ¸.
      *
-     * <p>Ð Ð°Ð½ÑŒÑˆÐµ Ð·Ð´ÐµÑÑŒ Ð±Ñ‹Ð» Unicode-Ð³Ð»Ð¸Ñ„ Â«âš™Â» Ñ€Ð°Ð·Ð¼ÐµÑ€Ð¾Ð¼ ÑÐ¾ ÑˆÑ€Ð¸Ñ„Ñ‚
-     * (Ð¾ÐºÐ¾Ð»Ð¾ 8×8 Ð¸ Ð·Ð°Ð¼ÐµÑ‚Ð½Ð¾ Ð¼ÐµÐ½ÑŒÑˆÐµ Ð¾ÑÑ‚Ð°Ð»ÑŒÐ½Ñ‹Ñ… ÑÐ»ÐµÐ¼ÐµÐ½Ñ‚Ð¾Ð² ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸).
-     * Ð¢ÐµÐ¿ÐµÑ€ÑŒ ÑÑ‚Ð¾ Ð½Ð°ÑÑ‚Ð¾ÑÑ‰Ð°Ñ Ð¸ÐºÐ¾Ð½ÐºÐ° 16×16, Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð°Ñ Ð¿Ð¸ÐºÑÐµÐ»ÑŒ-Ð°Ñ€Ñ‚Ð¾Ð¼
-     * Ð² ÑÑ‚Ð¸Ð»Ðµ Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹ÑÐ°: Ð±ÐµÐ· ÑÐ³Ð»Ð°Ð¶Ð¸Ð²Ð°Ð½Ð¸Ñ, Ð±ÐµÐ· Ñ€Ð°ÑÑ‚ÑÐ³Ð¸Ð²Ð°Ð½Ð¸Ñ Ñ‚ÐµÐºÑÑ‚ÑƒÑ€Ñ‹.
+     * <p>ÃÂ ÃÂ°ÃÂ½Ã‘Å’Ã‘Ë†ÃÂµ ÃÂ·ÃÂ´ÃÂµÃ‘ÂÃ‘Å’ ÃÂ±Ã‘â€¹ÃÂ» Unicode-ÃÂ³ÃÂ»ÃÂ¸Ã‘â€ž Ã‚Â«Ã¢Å¡â„¢Ã‚Â» Ã‘â‚¬ÃÂ°ÃÂ·ÃÂ¼ÃÂµÃ‘â‚¬ÃÂ¾ÃÂ¼ Ã‘ÂÃÂ¾ Ã‘Ë†Ã‘â‚¬ÃÂ¸Ã‘â€žÃ‘â€š
+     * (ÃÂ¾ÃÂºÃÂ¾ÃÂ»ÃÂ¾ 8Ã—8 ÃÂ¸ ÃÂ·ÃÂ°ÃÂ¼ÃÂµÃ‘â€šÃÂ½ÃÂ¾ ÃÂ¼ÃÂµÃÂ½Ã‘Å’Ã‘Ë†ÃÂµ ÃÂ¾Ã‘ÂÃ‘â€šÃÂ°ÃÂ»Ã‘Å’ÃÂ½Ã‘â€¹Ã‘â€¦ Ã‘ÂÃÂ»ÃÂµÃÂ¼ÃÂµÃÂ½Ã‘â€šÃÂ¾ÃÂ² ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸).
+     * ÃÂ¢ÃÂµÃÂ¿ÃÂµÃ‘â‚¬Ã‘Å’ Ã‘ÂÃ‘â€šÃÂ¾ ÃÂ½ÃÂ°Ã‘ÂÃ‘â€šÃÂ¾Ã‘ÂÃ‘â€°ÃÂ°Ã‘Â ÃÂ¸ÃÂºÃÂ¾ÃÂ½ÃÂºÃÂ° 16Ã—16, ÃÂ½ÃÂ°Ã‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂ°ÃÂ½ÃÂ½ÃÂ°Ã‘Â ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»Ã‘Å’-ÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾ÃÂ¼
+     * ÃÂ² Ã‘ÂÃ‘â€šÃÂ¸ÃÂ»ÃÂµ ÃÂ¸ÃÂ½Ã‘â€šÃÂµÃ‘â‚¬Ã‘â€žÃÂµÃÂ¹Ã‘ÂÃÂ°: ÃÂ±ÃÂµÃÂ· Ã‘ÂÃÂ³ÃÂ»ÃÂ°ÃÂ¶ÃÂ¸ÃÂ²ÃÂ°ÃÂ½ÃÂ¸Ã‘Â, ÃÂ±ÃÂµÃÂ· Ã‘â‚¬ÃÂ°Ã‘ÂÃ‘â€šÃ‘ÂÃÂ³ÃÂ¸ÃÂ²ÃÂ°ÃÂ½ÃÂ¸Ã‘Â Ã‘â€šÃÂµÃÂºÃ‘ÂÃ‘â€šÃ‘Æ’Ã‘â‚¬Ã‘â€¹.
      *
-     * @param size ÑÑ‚Ð¾Ñ€Ð¾Ð½Ð° Ð¸ÐºÐ¾Ð½ÐºÐ¸ Ð² Ð»Ð¾Ð³Ð¸Ñ‡ÐµÑÐºÐ¸Ñ… Ð¿Ð¸ÐºÑÐµÐ»ÑÑ… GUI
+     * @param size Ã‘ÂÃ‘â€šÃÂ¾Ã‘â‚¬ÃÂ¾ÃÂ½ÃÂ° ÃÂ¸ÃÂºÃÂ¾ÃÂ½ÃÂºÃÂ¸ ÃÂ² ÃÂ»ÃÂ¾ÃÂ³ÃÂ¸Ã‘â€¡ÃÂµÃ‘ÂÃÂºÃÂ¸Ã‘â€¦ ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»Ã‘ÂÃ‘â€¦ GUI
      */
     private void drawGear(
             GuiGraphics guiGraphics,
@@ -2625,9 +2735,9 @@ public class CityPylonScreen
             int color
     ) {
         /*
-         * Ð¡Ñ…ÐµÐ¼Ð° 16×16. '#' â€” Ð¿Ð¸ÐºÑÐµÐ»ÑŒ Ð¸ÐºÐ¾Ð½ÐºÐ¸, '.' â€” Ð¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ñ‹Ð¹.
-         * Ð£Ð³Ð»Ñ‹ Ð¸ Ñ†ÐµÐ½Ñ‚Ñ€ Ð¾ÑÑ‚Ð°Ð²Ð»ÐµÐ½Ñ‹ Ð¿ÑƒÑÑ‚Ñ‹Ð¼Ð¸, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð¸ÐºÐ¾Ð½ÐºÐ° Ñ‡Ð¸Ñ‚Ð°Ð»Ð°ÑÑŒ
-         * ÐºÐ°Ðº ÑˆÐµÑÑ‚ÐµÑ€Ð½Ñ, Ð° Ð½Ðµ ÐºÐ°Ðº ÑÐ¿Ð»Ð¾ÑˆÐ½Ð¾Ð¹ ÐºÐ²Ð°Ð´Ñ€Ð°Ñ‚.
+         * ÃÂ¡Ã‘â€¦ÃÂµÃÂ¼ÃÂ° 16Ã—16. '#' Ã¢â‚¬â€ ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»Ã‘Å’ ÃÂ¸ÃÂºÃÂ¾ÃÂ½ÃÂºÃÂ¸, '.' Ã¢â‚¬â€ ÃÂ¿Ã‘â‚¬ÃÂ¾ÃÂ·Ã‘â‚¬ÃÂ°Ã‘â€¡ÃÂ½Ã‘â€¹ÃÂ¹.
+         * ÃÂ£ÃÂ³ÃÂ»Ã‘â€¹ ÃÂ¸ Ã‘â€ ÃÂµÃÂ½Ã‘â€šÃ‘â‚¬ ÃÂ¾Ã‘ÂÃ‘â€šÃÂ°ÃÂ²ÃÂ»ÃÂµÃÂ½Ã‘â€¹ ÃÂ¿Ã‘Æ’Ã‘ÂÃ‘â€šÃ‘â€¹ÃÂ¼ÃÂ¸, Ã‘â€¡Ã‘â€šÃÂ¾ÃÂ±Ã‘â€¹ ÃÂ¸ÃÂºÃÂ¾ÃÂ½ÃÂºÃÂ° Ã‘â€¡ÃÂ¸Ã‘â€šÃÂ°ÃÂ»ÃÂ°Ã‘ÂÃ‘Å’
+         * ÃÂºÃÂ°ÃÂº Ã‘Ë†ÃÂµÃ‘ÂÃ‘â€šÃÂµÃ‘â‚¬ÃÂ½Ã‘Â, ÃÂ° ÃÂ½ÃÂµ ÃÂºÃÂ°ÃÂº Ã‘ÂÃÂ¿ÃÂ»ÃÂ¾Ã‘Ë†ÃÂ½ÃÂ¾ÃÂ¹ ÃÂºÃÂ²ÃÂ°ÃÂ´Ã‘â‚¬ÃÂ°Ã‘â€š.
          */
                 final String[] GEAR = {
                 "..................",
@@ -2662,8 +2772,8 @@ public class CityPylonScreen
                 int px = x + column;
                 int py = y + row;
                 /*
-                 * ÐÐ¸Ð¶Ð½Ð¸Ð¹ Ñ€ÑÐ´ Ð¿Ð¸ÐºÑÐµÐ»Ñ Ñ€Ð¸ÑÑƒÐµÑ‚ÑÑ Ñ‚ÐµÐ¼Ð½ÐµÐµ â€” ÑÑ‚Ð¾ Ð´Ð°Ñ‘Ñ‚
-                 * Ð¾Ð±ÑŠÑ‘Ð¼ Ð±ÐµÐ· ÐµÐ´Ð¸Ð½Ð¾Ð³Ð¾ ÑÐ³Ð»Ð°Ð¶ÐµÐ½Ð½Ð¾Ð³Ð¾ Ð¿Ð¸ÐºÑÐµÐ»Ñ.
+                 * ÃÂÃÂ¸ÃÂ¶ÃÂ½ÃÂ¸ÃÂ¹ Ã‘â‚¬Ã‘ÂÃÂ´ ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»Ã‘Â Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃ‘â€šÃ‘ÂÃ‘Â Ã‘â€šÃÂµÃÂ¼ÃÂ½ÃÂµÃÂµ Ã¢â‚¬â€ Ã‘ÂÃ‘â€šÃÂ¾ ÃÂ´ÃÂ°Ã‘â€˜Ã‘â€š
+                 * ÃÂ¾ÃÂ±Ã‘Å Ã‘â€˜ÃÂ¼ ÃÂ±ÃÂµÃÂ· ÃÂµÃÂ´ÃÂ¸ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ Ã‘ÂÃÂ³ÃÂ»ÃÂ°ÃÂ¶ÃÂµÃÂ½ÃÂ½ÃÂ¾ÃÂ³ÃÂ¾ ÃÂ¿ÃÂ¸ÃÂºÃ‘ÂÃÂµÃÂ»Ã‘Â.
                  */
                 guiGraphics.fill(px, py, px + 1, py + 1,
                         (row >= GEAR.length / 2) ? dark : color);
@@ -2672,8 +2782,8 @@ public class CityPylonScreen
     }
 
     /**
-     * ÐÐ°Ñ…Ð¾Ð´Ð¸Ñ‚ÑÑ Ð»Ð¸ ÐºÑƒÑ€ÑÐ¾Ñ€ Ð½Ð°Ð´ ÑˆÐµÑÑ‚ÐµÑ€Ñ‘Ð½ÐºÐ¾Ð¹ ÐºÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ¸.
-     * Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ Ñ‚Ñƒ Ð¶Ðµ Ð³ÐµÐ¾Ð¼ÐµÑ‚Ñ€Ð¸ÑŽ, Ñ‡Ñ‚Ð¾ Ð¸ Ð¾Ñ‚Ñ€Ð¸ÑÐ¾Ð²ÐºÐ°.
+     * ÃÂÃÂ°Ã‘â€¦ÃÂ¾ÃÂ´ÃÂ¸Ã‘â€šÃ‘ÂÃ‘Â ÃÂ»ÃÂ¸ ÃÂºÃ‘Æ’Ã‘â‚¬Ã‘ÂÃÂ¾Ã‘â‚¬ ÃÂ½ÃÂ°ÃÂ´ Ã‘Ë†ÃÂµÃ‘ÂÃ‘â€šÃÂµÃ‘â‚¬Ã‘â€˜ÃÂ½ÃÂºÃÂ¾ÃÂ¹ ÃÂºÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ¸.
+     * ÃËœÃ‘ÂÃÂ¿ÃÂ¾ÃÂ»Ã‘Å’ÃÂ·Ã‘Æ’ÃÂµÃ‘â€š Ã‘â€šÃ‘Æ’ ÃÂ¶ÃÂµ ÃÂ³ÃÂµÃÂ¾ÃÂ¼ÃÂµÃ‘â€šÃ‘â‚¬ÃÂ¸Ã‘Å½, Ã‘â€¡Ã‘â€šÃÂ¾ ÃÂ¸ ÃÂ¾Ã‘â€šÃ‘â‚¬ÃÂ¸Ã‘ÂÃÂ¾ÃÂ²ÃÂºÃÂ°.
      */
     private boolean mouseOverGear(MemberCardGeometry card) {
         double mouseX =
@@ -2696,7 +2806,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * ÐŸÐ ÐžÐ•ÐšÐ¢Ð«
+     * ÃÅ¸ÃÂ ÃÅ¾Ãâ€¢ÃÅ¡ÃÂ¢ÃÂ«
      * =========================================
      */
 
@@ -2708,16 +2818,16 @@ public class CityPylonScreen
 
         guiGraphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.city.level", romanLevel(this.menu.getCityLevel())),
-                left, top + 29, 0xFFFFFFFF);
+                left, top + 47, 0xFFFFFFFF);
         guiGraphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.city.project_capacity",
                         this.menu.getProjects().size(), this.menu.getProjectCapacity()),
-                left + 125, top + 29, 0xFFD09A3A);
+                left + 125, top + 47, 0xFFD09A3A);
 
         List<CityProjectSnapshot> projects = this.menu.getProjects();
         for (int index = 0; index < Math.min(2, projects.size()); index++) {
             CityProjectSnapshot project = projects.get(index);
-            int cardY = top + 44 + index * 36;
+            int cardY = top + 62 + index * 36;
             guiGraphics.fill(left, cardY, left + CONTENT_WIDTH, cardY + 34, 0xFF181D20);
             guiGraphics.renderOutline(left, cardY, CONTENT_WIDTH, 34, 0xFF455159);
             Component resource = resourceName(project.resourceId());
@@ -2756,7 +2866,7 @@ public class CityPylonScreen
         if (projects.isEmpty()) {
             guiGraphics.drawString(this.font, Component.translatable(
                             "gui.createcityexpansioncore.project.none"),
-                    left, top + 57, 0xFF888888);
+                    left, top + 75, 0xFF888888);
         }
     }
 
@@ -2883,7 +2993,7 @@ public class CityPylonScreen
                 x + 23, y + 4, requirement.complete() ? 0xFFB8D8C4 : 0xFFFFFFFF);
         graphics.drawString(this.font, Component.literal(
                         formatCount(requirement.current()) + " / " + formatCount(requirement.required())
-                                + (requirement.complete() ? " âœ“" : "")),
+                                + (requirement.complete() ? " Ã¢Å“â€œ" : "")),
                 x + width - 88, y + 4, requirement.complete() ? 0xFF77C98D : 0xFFD09A3A);
         if (prominent) {
             int barX = x + 23;
@@ -3017,7 +3127,7 @@ public class CityPylonScreen
                             "gui.createcityexpansioncore.railway.line_summary",
                             line.stops().size(), line.assignedTrains(), railStatus(line.statusKey())),
                     left + 9, y + 16, 0xFFAEB8BB, false);
-            graphics.drawString(this.font, "×", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
+            graphics.drawString(this.font, "Ã—", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
         }
         graphics.disableScissor();
         if (lines.isEmpty()) {
@@ -3029,6 +3139,58 @@ public class CityPylonScreen
                 mouseX, mouseY);
     }
 
+    /** One row of the Trains page: a registered train, or a Create train still awaiting one. */
+    private record TrainRow(RailwayTrainSnapshot train, RailwayTrainCandidate candidate) {
+        boolean registered() { return this.train != null; }
+    }
+
+    private List<TrainRow> trainRows() {
+        List<TrainRow> rows = new ArrayList<>();
+        for (RailwayTrainSnapshot train : this.menu.getRailwayTrains()) rows.add(new TrainRow(train, null));
+        for (RailwayTrainCandidate candidate : this.menu.getRailwayTrainCandidates())
+            rows.add(new TrainRow(null, candidate));
+        return rows;
+    }
+
+    private void renderRailTrainRow(GuiGraphics graphics, int left, int y, RailwayTrainSnapshot train) {
+        CcecStatusUi.observe(train.fleetTrainId(),train.uiStatus());
+        graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
+        graphics.fill(left, y, left + 3, y + 27, CcecStatusUi.color(train.uiStatus()));
+        graphics.drawString(this.font, train.name(), left + 9, y + 4,
+                train.cityOwned() ? 0xFFE6E9EA : 0xFF9AA5A9, false);
+        graphics.drawString(this.font,
+                train.cityOwned() ? CcecStatusUi.title(train.uiStatus())
+                        : Component.translatable("gui.createcityexpansioncore.railway.personal"),
+                left + 9, y + 15, 0xFFAEB8BB, false);
+        if (train.cityOwned()) {
+            graphics.drawString(this.font, Component.translatable(
+                            "gui.createcityexpansioncore.railway.train_type."
+                                    + train.type().name().toLowerCase()),
+                    left + 170, y + 9, 0xFF70A9C0, false);
+        }
+        Component action = !train.cityOwned()
+                ? Component.translatable("gui.createcityexpansioncore.railway.attach")
+                : "missing".equals(train.statusKey())
+                ? Component.translatable("gui.createcityexpansioncore.railway.rebind")
+                : train.automationSuspended()
+                ? Component.translatable("gui.createcityexpansioncore.railway.restore")
+                : train.activeLineId() == null
+                ? Component.translatable("gui.createcityexpansioncore.railway.assign")
+                : Component.translatable("gui.createcityexpansioncore.railway.unassign");
+        graphics.drawString(this.font, action, left + CONTENT_WIDTH - 150, y + 9, 0xFFD09A3A, false);
+        if (train.cityOwned()) graphics.drawString(this.font, "Ã—", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
+    }
+
+    private void renderRailTrainCandidateRow(GuiGraphics graphics, int left, int y, RailwayTrainCandidate candidate) {
+        CcecStatus status = CcecStatusResolver.unregisteredTrain();
+        graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
+        graphics.fill(left, y, left + 3, y + 27, CcecStatusUi.color(status));
+        graphics.drawString(this.font, candidate.name(), left + 9, y + 4, 0xFFE6E9EA, false);
+        graphics.drawString(this.font, CcecStatusUi.title(status), left + 9, y + 15, 0xFFAEB8BB, false);
+        graphics.drawString(this.font, CcecStatusUi.action(status), left + CONTENT_WIDTH - 150, y + 9,
+                candidate.canManage() ? 0xFFD09A3A : 0xFF6E777A, false);
+    }
+
     private void renderRailTrains(GuiGraphics graphics, int left, int top, int mouseX, int mouseY) {
         List<RailwayTrainSnapshot> trains = this.menu.getRailwayTrains();
         RailwayTrainSnapshot detail = trains.stream()
@@ -3038,38 +3200,17 @@ public class CityPylonScreen
             renderRailTrainDetail(graphics, left, top, detail, mouseX, mouseY);
             return;
         }
-        this.railwayTrainDetail = null;
-        int end = Math.min(trains.size(), this.railwayScroll + railRows(31));
+        // Keep a detail pinned while the state request is still in flight; clear it only once we
+        // know the train really is gone, otherwise opening a train from the World Map drops it.
+        if (!trains.isEmpty()) this.railwayTrainDetail = null;
+        List<TrainRow> rows = trainRows();
+        int end = Math.min(rows.size(), this.railwayScroll + railRows(31));
         beginClip(graphics, left, top + 48, left + CONTENT_WIDTH, top + RAIL_LIST_BOTTOM);
         for (int i = this.railwayScroll; i < end; i++) {
-            RailwayTrainSnapshot train = trains.get(i);
-            CcecStatusUi.observe(train.fleetTrainId(),train.uiStatus());
+            TrainRow row = rows.get(i);
             int y = top + 51 + (i - this.railwayScroll) * 31;
-            graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
-            graphics.fill(left, y, left + 3, y + 27, CcecStatusUi.color(train.uiStatus()));
-            graphics.drawString(this.font, train.name(), left + 9, y + 4,
-                    train.cityOwned() ? 0xFFE6E9EA : 0xFF9AA5A9, false);
-            graphics.drawString(this.font,
-                    train.cityOwned() ? CcecStatusUi.title(train.uiStatus())
-                            : Component.translatable("gui.createcityexpansioncore.railway.personal"),
-                    left + 9, y + 15, 0xFFAEB8BB, false);
-            if (train.cityOwned()) {
-                graphics.drawString(this.font, Component.translatable(
-                                "gui.createcityexpansioncore.railway.train_type."
-                                        + train.type().name().toLowerCase()),
-                        left + 170, y + 9, 0xFF70A9C0, false);
-            }
-            Component action = !train.cityOwned()
-                    ? Component.translatable("gui.createcityexpansioncore.railway.attach")
-                    : "missing".equals(train.statusKey())
-                    ? Component.translatable("gui.createcityexpansioncore.railway.rebind")
-                    : train.automationSuspended()
-                    ? Component.translatable("gui.createcityexpansioncore.railway.restore")
-                    : train.activeLineId() == null
-                    ? Component.translatable("gui.createcityexpansioncore.railway.assign")
-                    : Component.translatable("gui.createcityexpansioncore.railway.unassign");
-            graphics.drawString(this.font, action, left + CONTENT_WIDTH - 150, y + 9, 0xFFD09A3A, false);
-            if (train.cityOwned()) graphics.drawString(this.font, "×", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
+            if (row.registered()) renderRailTrainRow(graphics, left, y, row.train());
+            else renderRailTrainCandidateRow(graphics, left, y, row.candidate());
         }
         graphics.disableScissor();
         List<RailwayLineSnapshot> lines = this.menu.getRailwayLines();
@@ -3120,7 +3261,7 @@ public class CityPylonScreen
                                 "gui.createcityexpansioncore.railway.link_project_short"),
                         left + 170, y + 9, 0xFF70A9C0, false);
             }
-            if (station.cityOwned()) graphics.drawString(this.font, "×", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
+            if (station.cityOwned()) graphics.drawString(this.font, "Ã—", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
         }
         graphics.disableScissor();
     }
@@ -3288,15 +3429,26 @@ public class CityPylonScreen
                 return true;
             }
             int railActionX = left + CONTENT_WIDTH - 150;
-            int end = Math.min(trains.size(), this.railwayScroll + railRows(31));
+            List<TrainRow> rows = trainRows();
+            int end = Math.min(rows.size(), this.railwayScroll + railRows(31));
             for (int i = this.railwayScroll; i < end; i++) {
                 int y = top + 51 + (i - this.railwayScroll) * 31;
+                TrainRow row = rows.get(i);
+                if (!row.registered()) {
+                    // Unregistered Create train: the row itself is the register action, and the
+                    // server replies with a state push that re-renders it as a registered train.
+                    if (inside(mouseX, mouseY, left, y, CONTENT_WIDTH, 27) && row.candidate().canManage()) {
+                        sendRailway(RailwayCommandPayload.Action.REGISTER_TRAIN,
+                                row.candidate().createTrainId(), null);
+                    }
+                    return true;
+                }
+                RailwayTrainSnapshot train = row.train();
                 if (inside(mouseX, mouseY, left, y, 165, 27)) {
-                    this.railwayTrainDetail = trains.get(i).fleetTrainId();
+                    this.railwayTrainDetail = train.fleetTrainId();
                     return true;
                 }
                 if (!inside(mouseX, mouseY, left + 165, y, CONTENT_WIDTH - 165, 27)) continue;
-                RailwayTrainSnapshot train = trains.get(i);
                 if (train.cityOwned() && mouseX >= left + RAIL_REMOVE_HIT_X) {
                     sendRailway(RailwayCommandPayload.Action.REMOVE_TRAIN, train.fleetTrainId(), null);
                 } else if (train.cityOwned() && mouseX < railActionX) {
@@ -3430,7 +3582,7 @@ public class CityPylonScreen
 
     /*
      * =========================================
-     * Ð Ð«ÐÐžÐš: Ð¡ÐŸÐ˜Ð¡ÐžÐš Ð¡Ð›Ð•Ð’Ð + Ð”Ð•Ð¢ÐÐ›Ð˜ Ð¡ÐŸÐ ÐÐ’Ð
+     * ÃÂ ÃÂ«ÃÂÃÅ¾ÃÅ¡: ÃÂ¡ÃÅ¸ÃËœÃÂ¡ÃÅ¾ÃÅ¡ ÃÂ¡Ãâ€ºÃâ€¢Ãâ€™ÃÂ + Ãâ€Ãâ€¢ÃÂ¢ÃÂÃâ€ºÃËœ ÃÂ¡ÃÅ¸ÃÂ ÃÂÃâ€™ÃÂ
      * =========================================
      */
 
@@ -3463,7 +3615,7 @@ public class CityPylonScreen
         else renderEconomyDetailPlaceholder(g,detailX,top+MARKET_TOOLBAR_Y);
     }
 
-    /** ÐšÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ° Ð¾Ð±ÑŠÑÐ²Ð»ÐµÐ½Ð¸Ñ/ÐºÐ¾Ð½Ñ‚Ñ€Ð°ÐºÑ‚Ð° Ð² Ð»ÐµÐ²Ð¾Ð¹ ÐºÐ¾Ð»Ð¾Ð½ÐºÐµ. */
+    /** ÃÅ¡ÃÂ°Ã‘â‚¬Ã‘â€šÃÂ¾Ã‘â€¡ÃÂºÃÂ° ÃÂ¾ÃÂ±Ã‘Å Ã‘ÂÃÂ²ÃÂ»ÃÂµÃÂ½ÃÂ¸Ã‘Â/ÃÂºÃÂ¾ÃÂ½Ã‘â€šÃ‘â‚¬ÃÂ°ÃÂºÃ‘â€šÃÂ° ÃÂ² ÃÂ»ÃÂµÃÂ²ÃÂ¾ÃÂ¹ ÃÂºÃÂ¾ÃÂ»ÃÂ¾ÃÂ½ÃÂºÃÂµ. */
     private void renderEconomyCard(GuiGraphics g,int x,int y,int width,EconomyEntry entry,boolean selected,int mouseX,int mouseY){
         boolean hover=inside(mouseX,mouseY,x,y,width,MARKET_ROW_H);
         g.fill(x,y,x+width,y+MARKET_ROW_H,selected?0xFF26323A:(hover?0xFF242C31:0xFF20272B));
@@ -3515,7 +3667,7 @@ public class CityPylonScreen
     private Component economyCardExchange(EconomyEntry entry){
         if(entry.contract()!=null)return Component.translatable("gui.createcityexpansioncore.economy.card_contract",formatCount(entry.contract().amount()),formatCount(entry.contract().reward()));
         var l=entry.listingView();
-        String symbol=l.isBarter()?"⇄ ":"→ ";
+        String symbol=l.isBarter()?"â‡„ ":"â†’ ";
         ResourceLocation id=l.requestItemId();
         if(id==null)return Component.literal(symbol+Component.translatable("gui.createcityexpansioncore.economy.card.money_line",formatCount(l.requestAmount())).getString());
         return Component.literal(symbol+formatCount(l.requestAmount())+" "+economyIcon(id).getHoverName().getString());
@@ -3535,16 +3687,16 @@ public class CityPylonScreen
     }
 
     /*
-     * ÐŸÐ°Ð½ÐµÐ»ÑŒ Ð´ÐµÑ‚Ð°Ð»ÐµÐ¹ ÑÐ¿Ñ€Ð°Ð²Ð°.
-     * ÐšÐ¾Ð½Ñ‚ÐµÐ½Ñ‚ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ ÑÐ²Ð¾ÐµÐ¹ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ñ‚ÐµÐºÑÑ‚ Ð½Ðµ Ð»ÐµÐ· Ð½Ð° ÐºÐ½Ð¾Ð¿ÐºÐ¸.
+     * ÃÅ¸ÃÂ°ÃÂ½ÃÂµÃÂ»Ã‘Å’ ÃÂ´ÃÂµÃ‘â€šÃÂ°ÃÂ»ÃÂµÃÂ¹ Ã‘ÂÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂ°.
+     * ÃÅ¡ÃÂ¾ÃÂ½Ã‘â€šÃÂµÃÂ½Ã‘â€š ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â ÃÂ¿ÃÂ¾ Ã‘ÂÃÂ²ÃÂ¾ÃÂµÃÂ¹ ÃÂ¾ÃÂ±ÃÂ»ÃÂ°Ã‘ÂÃ‘â€šÃÂ¸, Ã‘â€¡Ã‘â€šÃÂ¾ÃÂ±Ã‘â€¹ Ã‘â€šÃÂµÃÂºÃ‘ÂÃ‘â€š ÃÂ½ÃÂµ ÃÂ»ÃÂµÃÂ· ÃÂ½ÃÂ° ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸.
      */
     private void renderEconomyDetailPanel(GuiGraphics g,int x,int y,EconomyEntry entry,EconomyStatePayload state,int mouseX,int mouseY){
         boolean isContract=entry.contract()!=null;
         int width=MARKET_DETAIL_W;
         int height=CONTENT_BODY_BOTTOM-MARKET_TOOLBAR_Y;
         /*
-         * ÐÐ¸Ð· Ð¾Ð±Ñ€ÐµÐ·ÐºÐ¸ Ð¾Ñ‚ÑÑ‚ÑƒÐ¿Ð°ÐµÑ‚ Ð¿Ð¾Ð´ ÑÑ‚Ñ€Ð¾ÐºÑƒ Ð±Ð°Ñ€Ñ‚ÐµÑ€Ð° (Ð¸Ð½Ð°Ñ‡Ðµ Ð¾Ð½Ð° Ñ€ÐµÐ·Ð°Ð»Ð°ÑÑŒ),
-         * Ð° ÐºÐ½Ð¾Ð¿ÐºÐ¸ Ð¿Ñ€Ð¸Ð¶Ð°Ñ‚Ñ‹ Ðº Ð½Ð¸Ð·Ñƒ Ð¿Ð°Ð½ÐµÐ»Ð¸ â€” Ð¼Ñ‘Ñ€Ñ‚Ð²Ð°Ñ Ð¿Ð¾Ð»Ð¾ÑÐ° Ð¸ÑÑ‡ÐµÐ·Ð°ÐµÑ‚.
+         * ÃÂÃÂ¸ÃÂ· ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂºÃÂ¸ ÃÂ¾Ã‘â€šÃ‘ÂÃ‘â€šÃ‘Æ’ÃÂ¿ÃÂ°ÃÂµÃ‘â€š ÃÂ¿ÃÂ¾ÃÂ´ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂºÃ‘Æ’ ÃÂ±ÃÂ°Ã‘â‚¬Ã‘â€šÃÂµÃ‘â‚¬ÃÂ° (ÃÂ¸ÃÂ½ÃÂ°Ã‘â€¡ÃÂµ ÃÂ¾ÃÂ½ÃÂ° Ã‘â‚¬ÃÂµÃÂ·ÃÂ°ÃÂ»ÃÂ°Ã‘ÂÃ‘Å’),
+         * ÃÂ° ÃÂºÃÂ½ÃÂ¾ÃÂ¿ÃÂºÃÂ¸ ÃÂ¿Ã‘â‚¬ÃÂ¸ÃÂ¶ÃÂ°Ã‘â€šÃ‘â€¹ ÃÂº ÃÂ½ÃÂ¸ÃÂ·Ã‘Æ’ ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»ÃÂ¸ Ã¢â‚¬â€ ÃÂ¼Ã‘â€˜Ã‘â‚¬Ã‘â€šÃÂ²ÃÂ°Ã‘Â ÃÂ¿ÃÂ¾ÃÂ»ÃÂ¾Ã‘ÂÃÂ° ÃÂ¸Ã‘ÂÃ‘â€¡ÃÂµÃÂ·ÃÂ°ÃÂµÃ‘â€š.
          */
         int contentBottom=y+139;
         int actionY=y+height-26;
@@ -3580,7 +3732,7 @@ public class CityPylonScreen
         cursor+=10;
 
         cursor=detailExchangeRow(g,x+4,cursor,inner,l.offerItemId(),l.offerAmount(),"");
-        cursor=detailExchangeRow(g,x+4,cursor,inner,l.requestItemId(),l.requestAmount(),l.isBarter()?"⇄ ":"→ ");
+        cursor=detailExchangeRow(g,x+4,cursor,inner,l.requestItemId(),l.requestAmount(),l.isBarter()?"â‡„ ":"â†’ ");
 
         boolean escrowHeld=!l.isBarter()&&(l.offersCurrency()
                 ||l.state()!=com.example.examplemod.economy.EconomyTypes.ListingState.OPEN);
@@ -3608,7 +3760,7 @@ public class CityPylonScreen
                 x+4,cursor,0xFF657177,false);
     }
 
-    /** Ð¡Ñ‚Ñ€Ð¾ÐºÐ° Â«[Ð¸ÐºÐ¾Ð½ÐºÐ°] 64 ÐœÐµÐ´Ð½Ñ‹Ð¹ Ð»Ð¸ÑÑ‚Â» Ð¸Ð»Ð¸ Â«Ð’Ð°Ð»ÑŽÑ‚Ð° 800Â» Ð² Ð¿Ð°Ð½ÐµÐ»Ð¸ Ð´ÐµÑ‚Ð°Ð»ÐµÐ¹. */
+    /** ÃÂ¡Ã‘â€šÃ‘â‚¬ÃÂ¾ÃÂºÃÂ° Ã‚Â«[ÃÂ¸ÃÂºÃÂ¾ÃÂ½ÃÂºÃÂ°] 64 ÃÅ“ÃÂµÃÂ´ÃÂ½Ã‘â€¹ÃÂ¹ ÃÂ»ÃÂ¸Ã‘ÂÃ‘â€šÃ‚Â» ÃÂ¸ÃÂ»ÃÂ¸ Ã‚Â«Ãâ€™ÃÂ°ÃÂ»Ã‘Å½Ã‘â€šÃÂ° 800Ã‚Â» ÃÂ² ÃÂ¿ÃÂ°ÃÂ½ÃÂµÃÂ»ÃÂ¸ ÃÂ´ÃÂµÃ‘â€šÃÂ°ÃÂ»ÃÂµÃÂ¹. */
     private int detailExchangeRow(GuiGraphics g,int x,int y,int width,ResourceLocation id,long amount,String prefix){
         if(id==null){
             g.drawString(this.font,ellipsize(Component.literal(prefix+Component.translatable("gui.createcityexpansioncore.economy.card.money_line",formatCount(amount)).getString()),width),
@@ -3629,7 +3781,7 @@ public class CityPylonScreen
                 x+4,y+3,0xFFFFD59A,false);
         g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.issuer",c.issuerName()),inner),
                 x+4,y+14,0xFFAEB8BB,false);
-        g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.contractor",c.contractorName().isBlank()?"â€”":c.contractorName()),inner),
+        g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.contractor",c.contractorName().isBlank()?"Ã¢â‚¬â€":c.contractorName()),inner),
                 x+4,y+25,0xFFAEB8BB,false);
         g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.reward",formatCount(c.reward())),inner),
                 x+4,y+36,0xFFFFD59A,false);
@@ -3646,8 +3798,8 @@ public class CityPylonScreen
     private void renderEconomyHeaderTooltip(GuiGraphics graphics,int left,int top,int mouseX,int mouseY){deferEconomyHeaderTooltip(left,top,mouseX,mouseY);}
 
     /**
-     * ÐŸÐ¾Ð´ÑÐºÐ°Ð·ÐºÐ¸ ÑˆÐ°Ð¿ÐºÐ¸ ÑÐºÐ¾Ð½Ð¾Ð¼Ð¸ÐºÐ¸: Â«?Â» Ð¸ ÑÑ‚Ñ€Ð¾ÐºÐ° Ñ ÑÑÐºÑ€Ð¾Ñƒ.
-     * Ð—Ð°Ð¿Ð¾Ð¼Ð¸Ð½Ð°ÐµÐ¼, Ð° Ð½Ðµ Ñ€Ð¸ÑÑƒÐµÐ¼ â€” ÑÐ¼. flushDeferredTooltip().
+     * ÃÅ¸ÃÂ¾ÃÂ´Ã‘ÂÃÂºÃÂ°ÃÂ·ÃÂºÃÂ¸ Ã‘Ë†ÃÂ°ÃÂ¿ÃÂºÃÂ¸ Ã‘ÂÃÂºÃÂ¾ÃÂ½ÃÂ¾ÃÂ¼ÃÂ¸ÃÂºÃÂ¸: Ã‚Â«?Ã‚Â» ÃÂ¸ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂºÃÂ° Ã‘Â Ã‘ÂÃ‘ÂÃÂºÃ‘â‚¬ÃÂ¾Ã‘Æ’.
+     * Ãâ€”ÃÂ°ÃÂ¿ÃÂ¾ÃÂ¼ÃÂ¸ÃÂ½ÃÂ°ÃÂµÃÂ¼, ÃÂ° ÃÂ½ÃÂµ Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃÂ¼ Ã¢â‚¬â€ Ã‘ÂÃÂ¼. flushDeferredTooltip().
      */
     private void deferEconomyHeaderTooltip(int left,int top,int mouseX,int mouseY){
         EconomyStatePayload state=this.menu.getEconomyState();
@@ -3667,8 +3819,8 @@ public class CityPylonScreen
         g.renderOutline(left+3,overlayTop,CONTENT_WIDTH-6,overlayBottom-overlayTop,0xFFD09A3A);
 
         /*
-         * Ð¡Ð¿Ñ€Ð°Ð²ÐºÐ° Ð½Ðµ Ð¾Ð±Ñ€ÐµÐ·Ð°ÐµÑ‚ÑÑ: ÐµÑÐ»Ð¸ Ñ‚ÐµÐºÑÑ‚ Ð½Ðµ Ð²Ð»ÐµÐ· â€” Ð¾Ð½ Ð¿Ñ€Ð¾ÐºÑ€ÑƒÑ‡Ð¸Ð²Ð°ÐµÑ‚ÑÑ
-         * ÐºÐ¾Ð»ÐµÑÐ¾Ð¼, Ð° ÑÐ½Ð¸Ð·Ñƒ Ð²Ð¸Ð´Ð½Ð° ÑÑ‚Ñ€ÐµÐ»ÐºÐ° Â«ÐµÑ‰Ñ‘ ÐµÑÑ‚ÑŒÂ».
+         * ÃÂ¡ÃÂ¿Ã‘â‚¬ÃÂ°ÃÂ²ÃÂºÃÂ° ÃÂ½ÃÂµ ÃÂ¾ÃÂ±Ã‘â‚¬ÃÂµÃÂ·ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â: ÃÂµÃ‘ÂÃÂ»ÃÂ¸ Ã‘â€šÃÂµÃÂºÃ‘ÂÃ‘â€š ÃÂ½ÃÂµ ÃÂ²ÃÂ»ÃÂµÃÂ· Ã¢â‚¬â€ ÃÂ¾ÃÂ½ ÃÂ¿Ã‘â‚¬ÃÂ¾ÃÂºÃ‘â‚¬Ã‘Æ’Ã‘â€¡ÃÂ¸ÃÂ²ÃÂ°ÃÂµÃ‘â€šÃ‘ÂÃ‘Â
+         * ÃÂºÃÂ¾ÃÂ»ÃÂµÃ‘ÂÃÂ¾ÃÂ¼, ÃÂ° Ã‘ÂÃÂ½ÃÂ¸ÃÂ·Ã‘Æ’ ÃÂ²ÃÂ¸ÃÂ´ÃÂ½ÃÂ° Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂµÃÂ»ÃÂºÃÂ° Ã‚Â«ÃÂµÃ‘â€°Ã‘â€˜ ÃÂµÃ‘ÂÃ‘â€šÃ‘Å’Ã‚Â».
          */
         int maxScroll=Math.max(0,helpContentHeight-(contentBottom-overlayTop-14));
         marketplaceHelpScroll=Math.clamp(marketplaceHelpScroll,0,maxScroll);
@@ -3692,20 +3844,20 @@ public class CityPylonScreen
         g.disableScissor();
         helpContentHeight=cursor-overlayTop;
         if(marketplaceHelpScroll>0||marketplaceHelpScroll<maxScroll)
-            g.drawString(this.font,marketplaceHelpScroll>0?"â–²":"â–¼",left+CONTENT_WIDTH-18,contentBottom-11,0xFFFFD59A,false);
+            g.drawString(this.font,marketplaceHelpScroll>0?"Ã¢â€“Â²":"Ã¢â€“Â¼",left+CONTENT_WIDTH-18,contentBottom-11,0xFFFFD59A,false);
         if(marketplaceHintVisible)
             renderEconomyButton(g,left+CONTENT_CENTER-58,buttonY,116,Component.translatable("gui.createcityexpansioncore.economy.understood"),mouseX,mouseY);
         else
             renderEconomyButton(g,left+CONTENT_CENTER-45,buttonY,90,Component.translatable("gui.createcityexpansioncore.common.close"),mouseX,mouseY);
     }
 
-    /** Ð—Ð°Ð³Ð¾Ð»Ð¾Ð²Ð¾Ðº ÑÐµÐºÑ†Ð¸Ð¸ + Ð¿ÐµÑ€ÐµÐ½Ð¾ÑÐ¸Ð¼Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚; Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Y ÑÐ»ÐµÐ´ÑƒÑŽÑ‰ÐµÐ¹ ÑÑ‚Ñ€Ð¾ÐºÐ¸. */
+    /** Ãâ€”ÃÂ°ÃÂ³ÃÂ¾ÃÂ»ÃÂ¾ÃÂ²ÃÂ¾ÃÂº Ã‘ÂÃÂµÃÂºÃ‘â€ ÃÂ¸ÃÂ¸ + ÃÂ¿ÃÂµÃ‘â‚¬ÃÂµÃÂ½ÃÂ¾Ã‘ÂÃÂ¸ÃÂ¼Ã‘â€¹ÃÂ¹ Ã‘â€šÃÂµÃÂºÃ‘ÂÃ‘â€š; ÃÂ²ÃÂ¾ÃÂ·ÃÂ²Ã‘â‚¬ÃÂ°Ã‘â€°ÃÂ°ÃÂµÃ‘â€š Y Ã‘ÂÃÂ»ÃÂµÃÂ´Ã‘Æ’Ã‘Å½Ã‘â€°ÃÂµÃÂ¹ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂºÃÂ¸. */
     private int drawHelpSection(GuiGraphics g,Component title,Component body,int x,int y,int width){
         g.drawString(this.font,title,x,y,0xFFFFFFFF,false);
         return drawWrapped(g,body,x,y+this.font.lineHeight,width,0xFFB7C0C3);
     }
 
-    /** ÐŸÐµÑ€ÐµÐ½Ð¾Ñ Ð±ÐµÐ· Â«...Â»: Ð¿Ð¾Ð»Ð½Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚ Ð¸ ÑÑ€Ð°Ð·Ñƒ Ð²Ñ‹ÑÐ¾Ñ‚Ð° Ð·Ð°Ð½ÑÑ‚Ñ‹Ñ… ÑÑ‚Ñ€Ð¾Ðº. */
+    /** ÃÅ¸ÃÂµÃ‘â‚¬ÃÂµÃÂ½ÃÂ¾Ã‘Â ÃÂ±ÃÂµÃÂ· Ã‚Â«...Ã‚Â»: ÃÂ¿ÃÂ¾ÃÂ»ÃÂ½Ã‘â€¹ÃÂ¹ Ã‘â€šÃÂµÃÂºÃ‘ÂÃ‘â€š ÃÂ¸ Ã‘ÂÃ‘â‚¬ÃÂ°ÃÂ·Ã‘Æ’ ÃÂ²Ã‘â€¹Ã‘ÂÃÂ¾Ã‘â€šÃÂ° ÃÂ·ÃÂ°ÃÂ½Ã‘ÂÃ‘â€šÃ‘â€¹Ã‘â€¦ Ã‘ÂÃ‘â€šÃ‘â‚¬ÃÂ¾ÃÂº. */
     private int drawWrapped(GuiGraphics g,Component text,int x,int y,int width,int color){
         for(FormattedCharSequence line:this.font.split(text,width)){
             g.drawString(this.font,line,x,y,color,false);
@@ -3781,6 +3933,30 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
     private static int economyStateColor(String name){return name.equals("COMPLETED")||name.equals("DELIVERED")?0xFF77B992:name.equals("FAILED")||name.equals("DISPUTED")?0xFFD07872:0xFFD09A3A;}
     private record EconomyEntry(UUID id,boolean listing,ResourceLocation item,EconomyStatePayload.ContractView contract,EconomyStatePayload.ListingView listingView){}
 
+
+    /**
+     * Applies an authoritative member snapshot. Ignored unless the pylon matches, and idempotent: a
+     * snapshot replaces the list wholesale, so the same one applied twice cannot duplicate anybody,
+     * and an out-of-order arrival still converges because every snapshot is complete.
+     */
+    public void applyMembersSnapshot(SyncCityMembersPayload payload) {
+        if (!this.menu.getPylonPos().equals(payload.pylonPos())) {
+            return;
+        }
+        List<CityMember> members = new ArrayList<>();
+        for (SyncCityMembersPayload.Entry entry : payload.members()) {
+            CityMember.Role[] roles = CityMember.Role.values();
+            int roleId = entry.roleId();
+            CityMember.Role role = roleId >= 0 && roleId < roles.length
+                    ? roles[roleId]
+                    : CityMember.Role.RESIDENT;
+            members.add(new CityMember(entry.playerId(), role));
+        }
+        this.menu.replaceMembers(members);
+        // The section is redrawn from the menu every frame, so a fresh list and a reset
+        // scroll are all it takes; no extra invalidation flag is needed.
+        this.memberScroll = 0;
+    }
     private void requestEconomyState(){PacketDistributor.sendToServer(EconomyCommandPayload.simple(this.menu.getPylonPos(),EconomyCommandPayload.Action.REQUEST_STATE,null));}
 
     private void requestRailwayState() {
@@ -3869,7 +4045,7 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
 
     /*
      * =========================================
-     * Ð£ÐŸÐ ÐÐ’Ð›Ð•ÐÐ˜Ð• Ð£Ð§ÐÐ¡Ð¢ÐÐ˜ÐšÐžÐœ
+     * ÃÂ£ÃÅ¸ÃÂ ÃÂÃâ€™Ãâ€ºÃâ€¢ÃÂÃËœÃâ€¢ ÃÂ£ÃÂ§ÃÂÃÂ¡ÃÂ¢ÃÂÃËœÃÅ¡ÃÅ¾ÃÅ“
      * =========================================
      */
 
@@ -3921,7 +4097,7 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
 
     /*
      * =========================================
-     * Ð¡Ð›Ð•Ð”Ð£Ð®Ð©Ð˜Ð™ Ð£Ð ÐžÐ’Ð•ÐÐ¬
+     * ÃÂ¡Ãâ€ºÃâ€¢Ãâ€ÃÂ£ÃÂ®ÃÂ©ÃËœÃâ„¢ ÃÂ£ÃÂ ÃÅ¾Ãâ€™Ãâ€¢ÃÂÃÂ¬
      * =========================================
      */
 
@@ -3951,13 +4127,13 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
     ) {
 
         /*
-         * ÐÐ¸Ñ‡ÐµÐ³Ð¾ Ð½Ðµ Ñ€Ð¸ÑÑƒÐµÐ¼.
+         * ÃÂÃÂ¸Ã‘â€¡ÃÂµÃÂ³ÃÂ¾ ÃÂ½ÃÂµ Ã‘â‚¬ÃÂ¸Ã‘ÂÃ‘Æ’ÃÂµÃÂ¼.
          */
     }
 
     /*
      * =========================================
-     * ÐŸÐžÐ›Ð®Ð¡ ÐŸÐ Ð˜Ð“Ð›ÐÐ¨Ð•ÐÐ˜Ð¯
+     * ÃÅ¸ÃÅ¾Ãâ€ºÃÂ®ÃÂ¡ ÃÅ¸ÃÂ ÃËœÃâ€œÃâ€ºÃÂÃÂ¨Ãâ€¢ÃÂÃËœÃÂ¯
      * =========================================
      */
 

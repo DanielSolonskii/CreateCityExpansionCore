@@ -5,6 +5,7 @@ import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.railway.*;
 import com.example.examplemod.economy.block.EconomyThroughputBlockEntity;
+import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.logistics.BigItemStack;
 import com.simibubi.create.content.logistics.box.PackageItem;
@@ -24,12 +25,17 @@ import net.minecraft.nbt.*;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.wrapper.InvWrapper;
 import java.util.*;
 import com.example.examplemod.status.CcecStatus;
 
@@ -179,13 +185,83 @@ public final class FreightLogistics {
     }
     public RoutePlan routeOptions(ServerLevel level,City city,UUID subject,UUID fleetId){
         FreightAssignment a=assignments.get(subject);FreightPoint source=a==null?null:point(a.source),destination=a==null?null:point(a.destination);RailwayManager railway=RailwayManager.get(level);
-        if(a==null||source==null||destination==null||!city.getId().equals(source.cityId)||source.station==null||destination.station==null)return new RoutePlan("","",List.of(),"not_ready");
+        if(a==null)return new RoutePlan("","",List.of(),"assignment_missing");
+        if(source==null)return routeFailure(a,"","","source_missing");
+        if(destination==null)return routeFailure(a,source.stationName,"","destination_missing");
+        if(!city.getId().equals(source.cityId))return routeFailure(a,source.stationName,destination.stationName,"train_not_owned");
+        validate(level.getServer(),source);validate(level.getServer(),destination);
+        if(!source.online())return routeFailure(a,source.stationName,destination.stationName,"source_offline");
+        if(!destination.online())return routeFailure(a,source.stationName,destination.stationName,"destination_offline");
+        if(source.station==null)return routeFailure(a,source.stationName,destination.stationName,"source_station_missing");
+        if(destination.station==null)return routeFailure(a,source.stationName,destination.stationName,"destination_station_missing");
         CityFleetTrain fleet=railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());GlobalStation target=CreateRailwayAdapter.station(destination.station);
-        if(fleet==null||train==null||!city.getId().equals(fleet.cityId())||fleet.activeLineId()!=null||(fleet.type()!=RailwayTypes.TrainType.FREIGHT&&fleet.type()!=RailwayTypes.TrainType.MIXED)||target==null||train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id)||railway.activeTrip(fleet.createTrainId())!=null||trainBusy(fleetId,subject))return new RoutePlan(source.stationName,destination.stationName,List.of(),"not_ready");
+        if(fleet==null||train==null)return routeFailure(a,source.stationName,destination.stationName,"train_missing");
+        if(!city.getId().equals(fleet.cityId()))return routeFailure(a,source.stationName,destination.stationName,"train_not_owned");
+        if(fleet.activeLineId()!=null)return routeFailure(a,source.stationName,destination.stationName,"train_has_schedule");
+        if(fleet.type()!=RailwayTypes.TrainType.FREIGHT&&fleet.type()!=RailwayTypes.TrainType.MIXED)return routeFailure(a,source.stationName,destination.stationName,"train_wrong_type");
+        if(target==null)return routeFailure(a,source.stationName,destination.stationName,"destination_station_missing");
+        if(train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id))return routeFailure(a,source.stationName,destination.stationName,"train_not_at_source");
+        if(railway.activeTrip(fleet.createTrainId())!=null)return routeFailure(a,source.stationName,destination.stationName,"trip_active");
+        if(trainBusy(fleetId,subject))return routeFailure(a,source.stationName,destination.stationName,"train_busy");
         List<RailwayRouteOption> routes=RailwayRoutePlanner.plan(train,target,railway,RailwayOwnershipTypes.OwnerType.CITY,city.getId(),CityManager.get(level));
-        String error="";if(routes.isEmpty()){error=train.navigation.findPathTo(target,Double.MAX_VALUE)!=null?"private_access_denied":"no_route";a.dispatchError=error;markChanged();}
+        String error="";if(routes.isEmpty())error=train.navigation.findPathTo(target,Double.MAX_VALUE)!=null?"private_access_denied":"no_route";
+        updateDispatchError(a,error);
         railway.proposeRoutes(fleetId,routes);return new RoutePlan(source.stationName,destination.stationName,routes,error);
     }
+    private RoutePlan routeFailure(FreightAssignment a,String source,String destination,String error){updateDispatchError(a,error);return new RoutePlan(source,destination,List.of(),error);}
+    private void updateDispatchError(FreightAssignment a,String error){if(!Objects.equals(a.dispatchError,error)){a.dispatchError=error;markChanged();}}
+    /** Reasons {@link #routeOptions} records from a physical endpoint check; all re-validated every tick. */
+    private static final Set<String> ENDPOINT_ERRORS=Set.of("source_missing","destination_missing",
+            "source_offline","destination_offline","source_station_missing","destination_station_missing");
+    /**
+     * A recorded endpoint failure is re-derived from the world on every pass, so it must not
+     * survive the validation that clears it: as soon as both endpoints check out again the stale
+     * reason is dropped instead of lingering until the player happens to replan a route.
+     */
+    void clearResolvedDispatchError(FreightAssignment a){
+        if(!ENDPOINT_ERRORS.contains(a.dispatchError))return;
+        FreightPoint source=point(a.source),dest=point(a.destination);
+        if(source==null||dest==null||!source.online()||!dest.online())return;
+        boolean resolved=switch(a.dispatchError){
+            case "source_station_missing" -> source.station!=null;
+            case "destination_station_missing" -> dest.station!=null;
+            default -> true;
+        };
+        if(resolved)updateDispatchError(a,"");
+    }
+    /**
+     * Pure handoff rule: only positive, server-authoritative evidence may hand a shipment off.
+     *
+     * <p>{@code carried} is the ACTIVE shipment token sitting inside the selected train's carriage
+     * storage, and {@code travelling} is a started trip — {@link #tryStartTrain} refuses to start
+     * navigation until the whole outstanding cargo is loaded, so an active trip already implies the
+     * cargo was verified on that train. {@code handedOff} then sticks while the shipment is still in
+     * the air and resets as soon as nothing of it is, so the next one is gated by the source again.
+     *
+     * <p>Source inventory is deliberately not an input. A source we cannot see (unloaded chunk), or
+     * a source that reads empty for reasons we cannot account for, is UNKNOWN — never ABSENT — and
+     * either of those read as proof of handoff would hand the shipment off while its cargo is still
+     * sitting at the Postbox/Packager. The freight side never inspects that inventory at all.
+     */
+    static boolean handoff(boolean handedOff,boolean carried,boolean travelling,boolean airborne){
+        if(carried||travelling)return true;
+        if(!airborne)return false;
+        return handedOff;
+    }
+    /** Recomputes {@link FreightAssignment#handedOff} from train/trip evidence alone. */
+    private void refreshHandoff(MinecraftServer server,FreightAssignment a){
+        boolean carried=false,travelling=false;
+        if(a.train!=null){
+            RailwayManager railway=RailwayManager.get(server.overworld());
+            CityFleetTrain fleet=railway.train(a.train);
+            Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());
+            carried=train!=null&&loadedAmount(train,a.subject)>0;
+            travelling=fleet!=null&&railway.activeTrip(fleet.createTrainId())!=null;
+        }
+        boolean next=handoff(a.handedOff,carried,travelling,airborne(a.subject));
+        if(a.handedOff!=next){a.handedOff=next;markChanged();}
+    }
+    private boolean airborne(UUID subject){return economy.shipmentTokens().stream().anyMatch(t->t.subjectId().equals(subject)&&t.state()==EconomyTypes.ShipmentTokenState.ACTIVE);}
     public boolean selectDispatch(ServerLevel level,City city,UUID subject,UUID fleetId,UUID optionId){
         FreightAssignment a=assignments.get(subject);FreightPoint source=a==null?null:point(a.source),destination=a==null?null:point(a.destination);RailwayManager railway=RailwayManager.get(level);CityFleetTrain fleet=railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());RailwayRouteOption option=railway.proposedRoutes(fleetId).stream().filter(o->o.id().equals(optionId)).findFirst().orElse(null);
         if(a==null||source==null||destination==null||source.station==null||destination.station==null||fleet==null||train==null||fleet.activeLineId()!=null||!city.getId().equals(source.cityId)||!city.getId().equals(fleet.cityId())||train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id)||option==null||!destination.station.equals(option.destinationStationId())||RailwayTripAccountingService.selectedPath(train,CreateRailwayAdapter.station(destination.station),option)==null)return false;
@@ -193,7 +269,7 @@ public final class FreightLogistics {
         SelectedRailwayRoute selected=railway.selectedRoute(fleetId);a.train=fleetId;a.routeSelection=selected.selectionId();a.running=false;a.dispatchError="";markChanged();return true;
     }
     private boolean trainBusy(UUID train,UUID except){return assignments.values().stream().anyMatch(a->train.equals(a.train)&&!a.subject.equals(except)&&!terminal(a.subject));}
-    private static void clearDispatch(FreightAssignment a,RailwayManager railway){if(a.train!=null)railway.consumeSelectedRoute(a.train);a.train=null;a.routeSelection=null;a.running=false;a.dispatchError="";}
+    private static void clearDispatch(FreightAssignment a,RailwayManager railway){if(a.train!=null)railway.consumeSelectedRoute(a.train);a.train=null;a.routeSelection=null;a.running=false;a.dispatchError="";a.handedOff=false;}
     public static boolean inside(City city,ServerLevel level,BlockPos pos){
         int half=city.getTerritorySize()/2;return city.getPylonDimension().equals(level.dimension().location())&&Math.abs((long)pos.getX()-city.getPylonPos().getX())<=half&&Math.abs((long)pos.getZ()-city.getPylonPos().getZ())<=half;
     }
@@ -292,11 +368,15 @@ public final class FreightLogistics {
         FreightPoint dest=point(a.destination),source=point(a.source);
         if(dest==null||!dest.online())return "destination_unavailable";
         if(source==null)return "requires_setup";
-        if(!source.online())return "source_unavailable";
-        if(!route(source,dest).equals("connected"))return "route_error";
+        // A source outage only ever blocks cargo that has not left the endpoint yet. Once the
+        // shipment has been handed off, the source gates the *next* packages (see tick) and owns
+        // its own Freight Point card; reporting it against the shipment that is already on its way
+        // is what produced the false "Источник недоступен" after a normal cargo handoff.
+        if(!source.online())return a.handedOff?(a.running?"running":"paused"):"source_unavailable";
+        if(!route(source,dest).equals("connected"))return a.running?"running":"paused";
         return a.running?"running":"paused";
     }
-    private CcecStatus uiStatus(FreightAssignment a,String state,long delivered,long amount,long inFlight,boolean outgoing,RailwayManager railway){
+    CcecStatus uiStatus(FreightAssignment a,String state,long delivered,long amount,long inFlight,boolean outgoing,RailwayManager railway){
         CcecStatus endpoint=switch(state){
             case "complete" -> CcecStatus.of(CcecStatus.Category.SUCCESS,CcecStatus.Code.DELIVERED,CcecStatus.Action.NONE);
             case "expired" -> CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.SHIPMENT_REVOKED,CcecStatus.Action.FIX_PROBLEM);
@@ -315,7 +395,15 @@ public final class FreightLogistics {
         RailwayTripLedger latest=railway.tripLedgers().stream().filter(t->t.fleetTrainId().equals(a.train)).max(Comparator.comparingLong(t->Math.max(t.startedAt(),t.settledAt()))).orElse(null);if(latest!=null&&latest.status()==RailwayTripLedger.Status.ROUTE_INVALIDATED)return CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.ROUTE_INVALIDATED,CcecStatus.Action.SELECT_ROUTE);
         if(inFlight>0&&latest!=null&&latest.status()==RailwayTripLedger.Status.COMPLETED)return CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.IN_TRANSIT,CcecStatus.Action.OPEN_FREIGHT_POINT);
         SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected==null||a.routeSelection==null||!a.routeSelection.equals(selected.selectionId()))return CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.ROUTE_NOT_SELECTED,CcecStatus.Action.SELECT_ROUTE);
-        return a.running?CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.WAITING_FOR_CARGO,CcecStatus.Action.OPEN_FREIGHT_POINT):CcecStatus.of(CcecStatus.Category.SUCCESS,CcecStatus.Code.READY_TO_DISPATCH,CcecStatus.Action.START_DISPATCH);
+        // A dispatch that is set up but stuck used to say nothing beyond "waiting for cargo". The station
+        // gate is checked first: without the train at the source station the mail transfer never
+        // loads anything, so claiming "the cargo is not counted" there would be untrue.
+        if(a.running)return switch(a.waitReason){
+            case "train_not_at_source" -> CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.TRAIN_NOT_AT_SOURCE,CcecStatus.Action.OPEN_FREIGHT_POINT);
+            case "cargo_not_counted" -> CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.CARGO_NOT_COUNTED,CcecStatus.Action.OPEN_FREIGHT_POINT);
+            default -> CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.WAITING_FOR_CARGO,CcecStatus.Action.OPEN_FREIGHT_POINT);
+        };
+        return CcecStatus.of(CcecStatus.Category.SUCCESS,CcecStatus.Code.READY_TO_DISPATCH,CcecStatus.Action.START_DISPATCH);
     }
     @SubscribeEvent public static void afterLevel(LevelTickEvent.Post event){
         if(event.getLevel() instanceof ServerLevel level&&level==level.getServer().overworld())EconomyManager.get(level).freight().tick(level.getServer());
@@ -323,7 +411,12 @@ public final class FreightLogistics {
     public void tick(MinecraftServer server){
         for(FreightPoint p:points.values())validate(server,p);
         for(FreightAssignment a:assignments.values()){
-            if(terminal(a.subject)){if(a.running){a.running=false;markChanged();}if(a.train!=null&&a.routeSelection!=null){RailwayManager railway=RailwayManager.get(server.overworld());SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected!=null&&a.routeSelection.equals(selected.selectionId()))railway.consumeSelectedRoute(a.train);}continue;}if(!a.running)continue;
+            // Runs before any guard: a source outage must not stop us from noticing that the
+            // shipment has already left, and a recorded endpoint failure must not outlive the
+            // validation that produced it.
+            refreshHandoff(server,a);
+            clearResolvedDispatchError(a);
+            if(terminal(a.subject)){if(a.running){a.running=false;markChanged();}await(a,"");if(a.train!=null&&a.routeSelection!=null){RailwayManager railway=RailwayManager.get(server.overworld());SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected!=null&&a.routeSelection.equals(selected.selectionId()))railway.consumeSelectedRoute(a.train);}continue;}if(!a.running){await(a,"");continue;}
             FreightPoint p=point(a.source),dest=point(a.destination);
             // A deleted source is terminal for the dispatch; a merely broken one only pauses it so
             // restoring the point resumes the same assignment instead of losing the player's intent.
@@ -356,8 +449,112 @@ public final class FreightLogistics {
             }
             tryStartTrain(a,server);
         }
+        // Arrival intake is its own pass on purpose: the cargo has already left the source, so a
+        // source outage must never be able to stop it from being accepted at the destination.
+        for(FreightAssignment a:assignments.values())acceptArrivals(server,a);
         if(server.getTickCount()%20L==0L)observeAssignmentStates(server);
         flushPush(server);
+    }
+    /** The goods a package carries, with every dispatch seal stripped off. */
+    private record Goods(List<ItemStack> stacks,long amount){}
+    /**
+     * Destination intake. A shipment package that has physically arrived in the destination Postbox
+     * is accepted exactly the way a manual unpack is: the seal is dropped, the goods land in the
+     * receiver behind the point's Packager, and the ledger call is the very same one the unpacking
+     * handler already uses — so completion, escrow settlement, manifest closure and replay rejection
+     * all apply unchanged and cannot drift apart from it.
+     *
+     * <p>This is the link that was missing. Nothing else ever hands a resting package to the ledger,
+     * so a trip that had physically completed left the token ACTIVE, {@code deliveredAmount} at zero
+     * and the dispatch reporting IN_TRANSIT forever. Presence in the destination Postbox is the
+     * server-authoritative arrival signal, and this never loads a chunk: an unreadable destination is
+     * simply not inspected, and the packages wait there until it can be.
+     */
+    private void acceptArrivals(MinecraftServer server,FreightAssignment a){
+        if(terminal(a.subject))return;
+        FreightPoint dest=point(a.destination);if(dest==null)return;
+        ServerLevel level=server.getLevel(ResourceKey.create(Registries.DIMENSION,dest.dimension));
+        if(level==null||!dest.online()||!level.hasChunkAt(dest.postbox))return;
+        if(!(level.getBlockEntity(dest.postbox) instanceof PostboxBlockEntity box))return;
+        IItemHandlerModifiable receiver=intakeOf(level,dest);if(receiver==null)return;
+        for(int slot=0;slot<box.inventory.getSlots();slot++){
+            ItemStack candidate=box.inventory.getStackInSlot(slot);
+            if(!PackageItem.isPackage(candidate))continue;
+            Set<UUID> ids=arrivalTokens(candidate);
+            // Ambiguous packages are left strictly alone: crediting the wrong shipment is far worse
+            // than leaving a box for the player to look at.
+            if(ids.size()!=1)continue;
+            UUID tokenId=ids.iterator().next();
+            if(!isFreightToken(tokenId)||!tokenTargets(tokenId,dest.id))continue;
+            ShipmentToken token=economy.shipmentToken(tokenId);
+            if(token==null||token.state()!=EconomyTypes.ShipmentTokenState.ACTIVE)continue;
+            Goods goods=strippedGoods(candidate);if(goods==null||goods.amount()!=token.amount())continue;
+            economy.acceptShipmentPackage(dest.id,tokenId,token.itemId(),goods.amount(),level.getGameTime(),false,
+                    new ArrivalTransaction(receiver,box.inventory,slot,goods.stacks()));
+        }
+    }
+    /** Every seal a package carries, from its order and its contents, exactly like the unpacking handler. */
+    private static Set<UUID> arrivalTokens(ItemStack box){
+        Set<UUID> ids=new LinkedHashSet<>(packageTokens(box));
+        ItemStackHandler contents=PackageItem.getContents(box);
+        for(int slot=0;slot<contents.getSlots();slot++)ShipmentTokenItemData.read(contents.getStackInSlot(slot)).ifPresent(ids::add);
+        return ids;
+    }
+    /** The package's contents as plain goods, or null when it is not a single well-formed cargo. */
+    private static Goods strippedGoods(ItemStack box){
+        ItemStackHandler contents=PackageItem.getContents(box);
+        net.minecraft.world.item.Item item=null;long amount=0L;List<ItemStack> cargo=new ArrayList<>();
+        for(int slot=0;slot<contents.getSlots();slot++){
+            ItemStack raw=contents.getStackInSlot(slot);if(raw.isEmpty())continue;
+            if(item!=null&&item!=raw.getItem())return null;
+            item=raw.getItem();amount+=raw.getCount();cargo.add(ShipmentTokenItemData.withoutToken(raw));
+        }
+        return item==null||amount<=0L?null:new Goods(cargo,amount);
+    }
+    /** The physical container behind a point's Packager; null when there is nothing to unload into. */
+    private static IItemHandlerModifiable intakeOf(ServerLevel level,FreightPoint dest){
+        BlockPos pos=receiverPos(level,dest.packager);
+        if(!level.hasChunkAt(pos))return null;
+        if(level.getBlockEntity(pos) instanceof EconomyThroughputBlockEntity throughput)return throughput.buffer();
+        if(level.getBlockEntity(pos) instanceof Container container)return new InvWrapper(container);
+        return null;
+    }
+    /**
+     * Moves one arrived package into the receiver: goods in, exactly one package slot consumed. The
+     * receiver is snapshotted so a partially inserted stack is rolled back rather than half-applied,
+     * and the package slot is only touched after every stack has landed.
+     */
+    private static final class ArrivalTransaction implements EconomyManager.PhysicalTransaction {
+        private final IItemHandlerModifiable receiver,source;
+        private final int slot;
+        private final List<ItemStack> cargo;
+        private final ItemStack[] snapshot;
+        ArrivalTransaction(IItemHandlerModifiable receiver,IItemHandlerModifiable source,int slot,List<ItemStack> cargo){
+            this.receiver=receiver;this.source=source;this.slot=slot;this.cargo=cargo;
+            this.snapshot=new ItemStack[receiver.getSlots()];
+            for(int i=0;i<receiver.getSlots();i++)snapshot[i]=receiver.getStackInSlot(i).copy();
+        }
+        public boolean prepare(){
+            if(!fittable(receiver,cargo))return false;
+            ItemStack current=source.getStackInSlot(slot);
+            return !current.isEmpty()&&PackageItem.isPackage(current);
+        }
+        public boolean commit(){
+            ItemStack current=source.getStackInSlot(slot);
+            if(current.isEmpty()||!PackageItem.isPackage(current)){rollback();return false;}
+            if(!fittable(receiver,cargo)){rollback();return false;}
+            for(ItemStack stack:cargo)if(!ItemHandlerHelper.insertItemStacked(receiver,stack.copy(),false).isEmpty()){rollback();return false;}
+            if(current.getCount()<=1)source.setStackInSlot(slot,ItemStack.EMPTY);
+            else{current.shrink(1);source.setStackInSlot(slot,current);}
+            return true;
+        }
+        public void rollback(){for(int i=0;i<snapshot.length&&i<receiver.getSlots();i++)receiver.setStackInSlot(i,snapshot[i].copy());}
+        private static boolean fittable(IItemHandlerModifiable target,List<ItemStack> cargo){
+            ItemStackHandler copy=new ItemStackHandler(target.getSlots());
+            for(int i=0;i<copy.getSlots()&&i<target.getSlots();i++)copy.setStackInSlot(i,target.getStackInSlot(i).copy());
+            for(ItemStack stack:cargo)if(!ItemHandlerHelper.insertItemStacked(copy,stack.copy(),false).isEmpty())return false;
+            return true;
+        }
     }
     /**
      * Ledger-level transitions (route invalidation, arrival, an invalidated trip) never mutate an
@@ -370,6 +567,7 @@ public final class FreightLogistics {
         for(FreightAssignment a:assignments.values()){
             fingerprint.append(a.subject).append('=').append(state(a)).append('|').append(a.running)
                     .append('|').append(a.dispatchError).append('|').append(a.routeSelection)
+                    .append('|').append(a.waitReason)
                     .append('|').append(ledgerStatus(railway,a)).append(';');
         }
         String current=fingerprint.toString();
@@ -384,11 +582,23 @@ public final class FreightLogistics {
     private String lastStateFingerprint="";
     private void tryStartTrain(FreightAssignment a,MinecraftServer server){
         if(!a.running||a.train==null||a.routeSelection==null)return;RailwayManager railway=RailwayManager.get(server.overworld());CityFleetTrain fleet=railway.train(a.train);SelectedRailwayRoute selected=railway.selectedRoute(a.train);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());FreightPoint source=point(a.source),destination=point(a.destination);
-        if(fleet==null||selected==null||!a.routeSelection.equals(selected.selectionId())||train==null||source==null||destination==null||source.station==null||destination.station==null)return;
-        if(railway.activeTrip(fleet.createTrainId())!=null||train.navigation.destination!=null)return;if(train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id))return;
-        long remaining=remaining(a.subject),loaded=loadedAmount(train,a.subject);var readiness=FreightDispatchPolicy.readiness(true,true,economy.treasury(source.cityId),selected.option().tariffCost(),loaded,remaining);if(readiness==FreightDispatchPolicy.Readiness.WAITING_FOR_CARGO)return;if(readiness==FreightDispatchPolicy.Readiness.INSUFFICIENT_FUNDS){a.dispatchError="insufficient_funds";a.running=false;markChanged();return;}
+        if(fleet==null||selected==null||!a.routeSelection.equals(selected.selectionId())||train==null||source==null||destination==null||source.station==null||destination.station==null){await(a,"");return;}
+        if(railway.activeTrip(fleet.createTrainId())!=null||train.navigation.destination!=null){await(a,"");return;}
+        // The train has to stand at the source station: that is where the station's mail transfer
+        // loads the carriage storage, so nothing else can put this dispatch's cargo aboard.
+        if(train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id)){await(a,"train_not_at_source");return;}
+        long remaining=remaining(a.subject);TrainCargo cargo=trainCargo(train,a.subject);
+        // Boxes in the train that this dispatch will never accept are reported instead of a bare
+        // "waiting for cargo"; an empty train stays an ordinary wait, not a false alarm.
+        await(a,cargo.counted()==0&&cargo.stray()>0&&remaining>0?"cargo_not_counted":"");
+        var readiness=FreightDispatchPolicy.readiness(true,true,economy.treasury(source.cityId),selected.option().tariffCost(),cargo.counted(),remaining);if(readiness==FreightDispatchPolicy.Readiness.WAITING_FOR_CARGO)return;if(readiness==FreightDispatchPolicy.Readiness.INSUFFICIENT_FUNDS){a.dispatchError="insufficient_funds";a.running=false;markChanged();return;}
         GlobalStation target=CreateRailwayAdapter.station(destination.station);var path=target==null?null:RailwayTripAccountingService.selectedPath(train,target,selected.option());
         if(path==null||train.navigation.startNavigation(path)<0){a.dispatchError="route_invalidated";a.running=false;markChanged();}
+    }
+    /** Records why the train has not left yet; pure presentation state, re-derived every tick. */
+    private void await(FreightAssignment a,String reason){
+        if(a.waitReason.equals(reason))return;
+        a.waitReason=reason;markChanged();
     }
     /** Throttled server-authoritative push: at most one payload per 10 ticks, never dropped. */
     private void flushPush(MinecraftServer server){
@@ -401,10 +611,82 @@ public final class FreightLogistics {
     /** True while an open Logistics/overview screen still needs a fresh copy of this state. */
     public boolean pushPending(){return pendingPush;}
     private long remaining(UUID subject){IndustrialContract contract=economy.contract(subject);if(contract!=null)return Math.max(0,contract.amount()-contract.deliveredAmount());MarketOffer offer=economy.marketOffer(subject);return offer==null?0:Math.max(0,offer.remaining());}
-    private long loadedAmount(Train train,UUID subject){Set<UUID> seen=new HashSet<>();long total=0;for(var carriage:train.carriages){var inventory=carriage.storage.getAllItems();if(inventory==null)continue;for(int slot=0;slot<inventory.getSlots();slot++){ItemStack box=inventory.getStackInSlot(slot);if(!PackageItem.isPackage(box))continue;var context=PackageItem.getOrderContext(box);if(context==null)continue;for(BigItemStack stack:context.stacks()){var tokenId=ShipmentTokenItemData.read(stack.stack);if(tokenId.isEmpty()||!seen.add(tokenId.get()))continue;ShipmentToken token=economy.shipmentToken(tokenId.get());if(token!=null&&token.subjectId().equals(subject)&&token.state()==EconomyTypes.ShipmentTokenState.ACTIVE)total=total>Long.MAX_VALUE-token.amount()?Long.MAX_VALUE:total+token.amount();}}}return total;}
+    /** What the selected train physically carries: cargo this dispatch may count, and packages it cannot. */
+    private record TrainCargo(long counted,long stray){}
+    /** How one single package counts for one dispatch. */
+    record PackageVerdict(long counted,boolean stray){}
+    /**
+     * Token ids a package carries.
+     *
+     * <p>This must always go through {@code PackageItem.getOrderContext}. Create 6 stores the order
+     * of any box produced by a packager request in {@code PACKAGE_ORDER_DATA} and resolves that
+     * component in preference to the legacy {@code PACKAGE_ORDER_CONTEXT}; a stamp written only to
+     * the legacy component is invisible here, and then also to Create's own unpacking call, which
+     * reads the same accessor.
+     */
+    static Set<UUID> packageTokens(ItemStack box){
+        Set<UUID> ids=new LinkedHashSet<>();
+        PackageOrderWithCrafts context=PackageItem.getOrderContext(box);
+        if(context!=null)context.stacks().forEach(value->ShipmentTokenItemData.read(value.stack).ifPresent(ids::add));
+        return ids;
+    }
+    static PackageVerdict packageVerdict(ItemStack box,UUID subject,EconomyManager economy,Set<UUID> seen){
+        return packageVerdict(packageTokens(box),subject,economy,seen);
+    }
+    /**
+     * Classifies one package's token ids against a dispatch, which is exactly the predicate that
+     * used to report a perfectly good box as unusable. Split out of {@link #trainCargo} so the
+     * headless regression can drive it without a live Create train or a bootstrapped item registry.
+     *
+     * <p>A box counts only when it carries an ACTIVE token of this subject. A box that carries no
+     * stamp at all, or carries this subject's stamp in a spent state, is {@code stray}: proof that
+     * something is in the train that this dispatch will never accept. A box carrying a live token of
+     * a different dispatch is neither — it is somebody else's cargo.
+     *
+     * @param seen token ids already attributed in this scan; guarantees a token is never counted twice.
+     */
+    static PackageVerdict packageVerdict(Set<UUID> ids,UUID subject,EconomyManager economy,Set<UUID> seen){
+        boolean stamped=false,stale=false;long counted=0;
+        for(UUID id:ids){
+            if(!seen.add(id))continue;
+            stamped=true;
+            ShipmentToken token=economy.shipmentToken(id);
+            if(token==null||!token.subjectId().equals(subject))continue;
+            if(token.state()==EconomyTypes.ShipmentTokenState.ACTIVE){counted=counted>Long.MAX_VALUE-token.amount()?Long.MAX_VALUE:counted+token.amount();}
+            else stale=true;
+        }
+        return new PackageVerdict(counted,!stamped||stale);
+    }
+    /**
+     * Reads the train's carriage storage once. {@code counted} is the ACTIVE shipment-token amount
+     * for this subject — the only figure readiness may rely on. {@code stray} counts packages the
+     * dispatch provably cannot use: a box with no shipment stamp at all, or one stamped with this
+     * subject's token that is no longer ACTIVE. Both mean "there is a box in the train that this
+     * dispatch will never accept", which used to surface as a bare "waiting for cargo".
+     *
+     * <p>A box carrying a live token of a *different* dispatch is deliberately not stray: it is
+     * somebody else's cargo and says nothing about this one.
+     */
+    private TrainCargo trainCargo(Train train,UUID subject){
+        if(train==null)return new TrainCargo(0,0);
+        Set<UUID> seen=new HashSet<>();long total=0,stray=0;
+        for(var carriage:train.carriages){
+            var inventory=carriage.storage.getAllItems();if(inventory==null)continue;
+            for(int slot=0;slot<inventory.getSlots();slot++){
+                ItemStack box=inventory.getStackInSlot(slot);if(!PackageItem.isPackage(box))continue;
+                PackageVerdict verdict=packageVerdict(box,subject,economy,seen);
+                total=total>Long.MAX_VALUE-verdict.counted()?Long.MAX_VALUE:total+verdict.counted();
+                if(verdict.stray())stray++;
+            }
+        }
+        return new TrainCargo(total,stray);
+    }
+    private long loadedAmount(Train train,UUID subject){return trainCargo(train,subject).counted();}
     private void stamp(ServerLevel level,PackagerBlockEntity packager,ItemStack box,ShippingManifest manifest,FreightAssignment a){
         if(box.isEmpty()||!PackageItem.isPackage(box))return;
-        var context=PackageItem.getOrderContext(box);if(context!=null&&context.stacks().stream().anyMatch(v->ShipmentTokenItemData.read(v.stack).isPresent()))return;
+        // Read the stamp exactly the way trainCargo() does, or a box that is already stamped looks
+        // unstamped and every pass would mint another token instead of stopping.
+        if(!packageTokens(box).isEmpty())return;
         var contents=PackageItem.getContents(box);net.minecraft.world.item.Item item=null;long count=0;
         for(int i=0;i<contents.getSlots();i++){ItemStack s=contents.getStackInSlot(i);if(s.isEmpty())continue;if(ShipmentTokenItemData.read(s).isPresent())return;if(item!=null&&item!=s.getItem())return;item=s.getItem();count+=s.getCount();}
         if(item==null)return;
@@ -414,7 +696,19 @@ public final class FreightLogistics {
     public static void mark(ItemStack box,UUID token,String address){
         var current=PackageItem.getOrderContext(box);List<BigItemStack> stacks=new ArrayList<>(current==null?List.of():current.stacks());
         ItemStack seal=new ItemStack(CreateCityExpansionCore.SHIPMENT_SEAL.get());ShipmentTokenItemData.write(seal,token);stacks.add(new BigItemStack(seal,1));
-        PackageItem.addOrderContext(box,new PackageOrderWithCrafts(new PackageOrder(stacks),current==null?List.of():current.orderedCrafts()));
+        PackageOrderWithCrafts stamped=new PackageOrderWithCrafts(new PackageOrder(stacks),current==null?List.of():current.orderedCrafts());
+        // Create 6 keeps the order in PACKAGE_ORDER_DATA whenever a box comes out of a packager
+        // request, and getOrderContext() returns that component in preference to the legacy
+        // PACKAGE_ORDER_CONTEXT. Writing only the legacy component therefore produced a package
+        // whose stamp nobody could ever read again: not our own stamp guard, not trainCargo(), and
+        // not Create's own unpacking call, which all go through getOrderContext(). The stamp was
+        // minted, stored in a dead component, and the box counted as an unrecognised package.
+        // setOrder() is the sanctioned writer and it takes the linkage metadata explicitly, so all
+        // of Create's own order bookkeeping is carried over untouched.
+        if(box.has(AllDataComponents.PACKAGE_ORDER_DATA)){
+            PackageItem.PackageOrderData order=box.get(AllDataComponents.PACKAGE_ORDER_DATA);
+            PackageItem.setOrder(box,order.orderId(),order.linkIndex(),order.isFinalLink(),order.fragmentIndex(),order.isFinal(),stamped);
+        }else PackageItem.addOrderContext(box,stamped);
         PackageItem.clearAddress(box);PackageItem.addAddress(box,address);
     }
     public CompoundTag save(){

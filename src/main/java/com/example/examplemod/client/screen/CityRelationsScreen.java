@@ -67,8 +67,12 @@ public final class CityRelationsScreen extends Screen {
                 Component action = Component.translatable(city.status() == CityRelationSnapshot.Status.TRUSTED
                         || city.status() == CityRelationSnapshot.Status.PARTNER
                         ? "gui.createcityexpansioncore.relations.remove" : "gui.createcityexpansioncore.relations.add");
-                graphics.drawString(font, action, right - 22 - font.width(action), y + 13,
-                        state.canManage() ? 0xFFDFC47A : 0xFF69747B, false);
+                int actionX=right-120,actionY=y+7,actionW=108,actionH=22;
+                boolean hover=mouseX>=actionX&&mouseX<actionX+actionW&&mouseY>=actionY&&mouseY<actionY+actionH;
+                graphics.fill(actionX,actionY,actionX+actionW,actionY+actionH,state.canManage()?(hover?0xFF604B29:0xFF443720):0xFF252B2E);
+                graphics.renderOutline(actionX,actionY,actionW,actionH,state.canManage()?0xFFB99049:0xFF4F585D);
+                graphics.drawCenteredString(font, action, actionX+actionW/2, actionY+7,
+                        state.canManage() ? 0xFFDFC47A : 0xFF69747B);
             }
         }
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -84,7 +88,7 @@ public final class CityRelationsScreen extends Screen {
             int left = width / 2 - 170, right = width / 2 + 170, y = 72;
             List<CityRelationSnapshot> cities = visible();
             for (int i = scroll; i < cities.size() && y + 38 < height - 22; i++, y += 42) {
-                if (mouseX >= right - 120 && mouseX < right - 12 && mouseY >= y && mouseY < y + 36) {
+                if (mouseX >= right - 120 && mouseX < right - 12 && mouseY >= y+7 && mouseY < y + 29) {
                     CityRelationSnapshot city = cities.get(i); boolean remove = city.status() == CityRelationSnapshot.Status.TRUSTED
                             || city.status() == CityRelationSnapshot.Status.PARTNER;
                     request(remove ? CityRelationsCommandPayload.Action.REMOVE_TRUST

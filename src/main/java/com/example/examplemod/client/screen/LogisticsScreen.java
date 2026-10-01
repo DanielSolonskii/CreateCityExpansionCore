@@ -470,9 +470,9 @@ public final class LogisticsScreen extends Screen {
             });return y+34;
         }
         if(view==View.TRAIN){
-            y+=wrap(g,tr("train_select_help"),x,y,w,MUTED)+12;List<CompoundTag> trains=tags(a,"TrainCandidates");
-            if(trains.isEmpty())y+=wrap(g,tr("no_freight_train"),x,y,w,RED)+12;
-            for(CompoundTag train:trains){boolean available=train.getBoolean("Available");Component label=Component.literal(train.getString("Name")).append(" · ").append(tr("train_type."+train.getString("Type").toLowerCase(Locale.ROOT))).append(" · ").append(tr(available?"train_ready":"train_not_ready"));button(x,y,w,label,train.hasUUID("Id")&&train.getUUID("Id").equals(chosenTrain),()->available,()->{chosenTrain=train.getUUID("Id");send(EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES,selected,chosenTrain,0,0,0,"","");});y+=29;}
+            y+=wrap(g,FreightUi.tr("train_select_help"),x,y,w,MUTED)+12;List<CompoundTag> trains=tags(a,"TrainCandidates");
+            if(trains.isEmpty())y+=wrap(g,FreightUi.tr("no_freight_train"),x,y,w,RED)+12;
+            for(CompoundTag train:trains){boolean available=train.getBoolean("Available");Component label=Component.literal(train.getString("Name")).append(" · ").append(FreightUi.tr("train_type."+train.getString("Type").toLowerCase(Locale.ROOT))).append(" · ").append(FreightUi.tr(available?"train_ready":"train_not_ready"));button(x,y,w,label,train.hasUUID("Id")&&train.getUUID("Id").equals(chosenTrain),()->available,()->{chosenTrain=train.getUUID("Id");send(EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES,selected,chosenTrain,0,0,0,"","");});y+=29;}
             return y+12;
         }
         FreightPoint source=endpoint(a,"Source"),destination=endpoint(a,"Destination");
@@ -484,10 +484,10 @@ public final class LogisticsScreen extends Screen {
         String route=source==null||destination==null?"unknown":FreightUi.route(snapshot,source.id,destination.id);
         y+=wrap(g,FreightUi.tr("route."+route),x,y,w,route.equals("connected")?GREEN:GOLD)+8;
         if(source!=null&&destination!=null)y+=wrap(g,Component.literal(source.stationName+" → "+destination.stationName),x,y,w,MUTED)+10;
-        if(a.hasUUID("Train")){y+=wrap(g,tr("selected_train",a.getString("TrainName")),x,y,w,TEXT)+8;if(a.contains("RouteStrategy")){y+=wrap(g,tr("selected_route",tr("route_strategy."+a.getString("RouteStrategy").toLowerCase(Locale.ROOT)),String.format(Locale.ROOT,"%.0f",a.getDouble("RouteDistance")),a.getLong("RouteCost"),formatEta(a.getLong("RouteEta"))),x,y,w,MUTED)+10;}}
+        if(a.hasUUID("Train")){y+=wrap(g,FreightUi.tr("selected_train",a.getString("TrainName")),x,y,w,TEXT)+8;if(a.contains("RouteStrategy")){y+=wrap(g,FreightUi.tr("selected_route",FreightUi.tr("route_strategy."+a.getString("RouteStrategy").toLowerCase(Locale.ROOT)),String.format(Locale.ROOT,"%.0f",a.getDouble("RouteDistance")),a.getLong("RouteCost"),formatEta(a.getLong("RouteEta"))),x,y,w,MUTED)+10;}}
         y+=wrap(g,tr(a.getBoolean("Outgoing")?"dispatch_help":"receipt_help"),x,y,w,MUTED)+14;
         if(a.getBoolean("Outgoing")&&!terminal(a)){
-            button(x,y,w,tr(a.hasUUID("Train")?"change_train_route":"select_train_route"),!a.hasUUID("Train"),()->{chosenTrain=a.hasUUID("Train")?a.getUUID("Train"):null;open(View.TRAIN,selected);});y+=30;
+            button(x,y,w,FreightUi.tr(a.hasUUID("Train")?"change_train_route":"select_train_route"),!a.hasUUID("Train"),()->{chosenTrain=a.hasUUID("Train")?a.getUUID("Train"):null;open(View.TRAIN,selected);});y+=30;
             int bw=(w-8)/2;
             button(x,y,bw,FreightUi.tr("start"),true,()->source!=null&&source.online()&&destination!=null&&destination.online()&&route.equals("connected")&&!a.getBoolean("Running"),
                     ()->send(EconomyCommandPayload.Action.CONTROL_DISPATCH,selected,null,0,0,1,"",""));

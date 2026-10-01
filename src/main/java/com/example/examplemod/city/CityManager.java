@@ -131,10 +131,10 @@ public class CityManager extends SavedData {
                         roles[roleId];
 
                 /*
-                 * Владелец всегда OWNER.
+                 * Ð’Ð»Ð°Ð´ÐµÐ»ÐµÑ† Ð²ÑÐµÐ³Ð´Ð° OWNER.
                  *
-                 * Никто другой не может загрузиться
-                 * как OWNER из сохранения.
+                 * ÐÐ¸ÐºÑ‚Ð¾ Ð´Ñ€ÑƒÐ³Ð¾Ð¹ Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒÑÑ
+                 * ÐºÐ°Ðº OWNER Ð¸Ð· ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ñ.
                  */
 
                 if (
@@ -177,7 +177,8 @@ public class CityManager extends SavedData {
                         inviteTag.getUUID("Player");
 
                 city.addInvite(
-                        playerId
+                        playerId,
+                        inviteTag.hasUUID("Inviter") ? inviteTag.getUUID("Inviter") : null
                 );
             }
 
@@ -384,10 +385,7 @@ public class CityManager extends SavedData {
                 CompoundTag inviteTag =
                         new CompoundTag();
 
-                inviteTag.putUUID(
-                        "Player",
-                        invite.getPlayerId()
-                );
+                inviteTag.putUUID("Player", invite.getPlayerId()); inviteTag.putUUID("Inviter", invite.getInvokerId());
 
                 invites.add(
                         inviteTag
@@ -718,8 +716,8 @@ public class CityManager extends SavedData {
     // =========================================================
     // GET CITY BY MEMBER
     //
-    // Ищет игрока среди ВСЕХ участников городов.
-    // Нужно для запрета нахождения в нескольких городах.
+    // Ð˜Ñ‰ÐµÑ‚ Ð¸Ð³Ñ€Ð¾ÐºÐ° ÑÑ€ÐµÐ´Ð¸ Ð’Ð¡Ð•Ð¥ ÑƒÑ‡Ð°ÑÑ‚Ð½Ð¸ÐºÐ¾Ð² Ð³Ð¾Ñ€Ð¾Ð´Ð¾Ð².
+    // ÐÑƒÐ¶Ð½Ð¾ Ð´Ð»Ñ Ð·Ð°Ð¿Ñ€ÐµÑ‚Ð° Ð½Ð°Ñ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ñ Ð² Ð½ÐµÑÐºÐ¾Ð»ÑŒÐºÐ¸Ñ… Ð³Ð¾Ñ€Ð¾Ð´Ð°Ñ….
     // =========================================================
 
     public City getCityByMember(
@@ -745,7 +743,7 @@ public class CityManager extends SavedData {
     // =========================================================
     // HAS CITY
     //
-    // Проверяет именно наличие собственного города.
+    // ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚ Ð¸Ð¼ÐµÐ½Ð½Ð¾ Ð½Ð°Ð»Ð¸Ñ‡Ð¸Ðµ ÑÐ¾Ð±ÑÑ‚Ð²ÐµÐ½Ð½Ð¾Ð³Ð¾ Ð³Ð¾Ñ€Ð¾Ð´Ð°.
     // =========================================================
 
     public boolean hasCity(

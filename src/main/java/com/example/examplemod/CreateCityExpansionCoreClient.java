@@ -56,7 +56,7 @@ public class CreateCityExpansionCoreClient {
 
         /*
          * =========================================
-         * РЕГИСТРАЦИЯ ЭКРАНА ПИЛОНА
+         * Ð Ð•Ð“Ð˜Ð¡Ð¢Ð ÐÐ¦Ð˜Ð¯ Ð­ÐšÐ ÐÐÐ ÐŸÐ˜Ð›ÐžÐÐ
          * =========================================
          */
 
@@ -66,7 +66,7 @@ public class CreateCityExpansionCoreClient {
 
         /*
          * =========================================
-         * CITY PYLON: RENDERER И МОДЕЛИ
+         * CITY PYLON: RENDERER Ð˜ ÐœÐžÐ”Ð•Ð›Ð˜
          * =========================================
          */
 
@@ -93,7 +93,7 @@ public class CreateCityExpansionCoreClient {
 
         /*
          * =========================================
-         * РЕГИСТРАЦИЯ CLIENT PAYLOADS
+         * Ð Ð•Ð“Ð˜Ð¡Ð¢Ð ÐÐ¦Ð˜Ð¯ CLIENT PAYLOADS
          * =========================================
          */
 
@@ -106,7 +106,7 @@ public class CreateCityExpansionCoreClient {
 
         /*
          * =========================================
-         * РЕГИСТРАЦИЯ РЕНДЕРЕРА ГРАНИЦ ГОРОДА
+         * Ð Ð•Ð“Ð˜Ð¡Ð¢Ð ÐÐ¦Ð˜Ð¯ Ð Ð•ÐÐ”Ð•Ð Ð•Ð Ð Ð“Ð ÐÐÐ˜Ð¦ Ð“ÐžÐ ÐžÐ”Ð
          * =========================================
          */
         NeoForge.EVENT_BUS.register(
@@ -158,11 +158,11 @@ public class CreateCityExpansionCoreClient {
      * CLIENT PAYLOAD HANDLERS
      * =========================================
      *
-     * Устанавливаем статические делегаты в common классе.
-     * Регистрация самих TYPE происходит в common классе (CreateCityExpansionCore).
-     * Здесь только предоставляем реальные client-side реализации.
-     * Контекст приходит как Object; вызываем enqueueWork через рефлексию,
-     * чтобы не зависеть от внутренних классов NeoForge на compile-time.
+     * Ð£ÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ ÑÑ‚Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ðµ Ð´ÐµÐ»ÐµÐ³Ð°Ñ‚Ñ‹ Ð² common ÐºÐ»Ð°ÑÑÐµ.
+     * Ð ÐµÐ³Ð¸ÑÑ‚Ñ€Ð°Ñ†Ð¸Ñ ÑÐ°Ð¼Ð¸Ñ… TYPE Ð¿Ñ€Ð¾Ð¸ÑÑ…Ð¾Ð´Ð¸Ñ‚ Ð² common ÐºÐ»Ð°ÑÑÐµ (CreateCityExpansionCore).
+     * Ð—Ð´ÐµÑÑŒ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð¿Ñ€ÐµÐ´Ð¾ÑÑ‚Ð°Ð²Ð»ÑÐµÐ¼ Ñ€ÐµÐ°Ð»ÑŒÐ½Ñ‹Ðµ client-side Ñ€ÐµÐ°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ð¸.
+     * ÐšÐ¾Ð½Ñ‚ÐµÐºÑÑ‚ Ð¿Ñ€Ð¸Ñ…Ð¾Ð´Ð¸Ñ‚ ÐºÐ°Ðº Object; Ð²Ñ‹Ð·Ñ‹Ð²Ð°ÐµÐ¼ enqueueWork Ñ‡ÐµÑ€ÐµÐ· Ñ€ÐµÑ„Ð»ÐµÐºÑÐ¸ÑŽ,
+     * Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð·Ð°Ð²Ð¸ÑÐµÑ‚ÑŒ Ð¾Ñ‚ Ð²Ð½ÑƒÑ‚Ñ€ÐµÐ½Ð½Ð¸Ñ… ÐºÐ»Ð°ÑÑÐ¾Ð² NeoForge Ð½Ð° compile-time.
      */
 
     private void registerClientPayloads(
@@ -213,15 +213,34 @@ public class CreateCityExpansionCoreClient {
             });
         };
 
+        CreateCityExpansionCore.CITY_PLAYER_SEARCH_RESULT_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveSearchResults(payload));
+        };
+
+        CreateCityExpansionCore.CITY_INVITE_RESULT_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveInviteResult(payload));
+        };
+
+        CreateCityExpansionCore.CITY_INVITE_OUTCOME_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveOutcome(payload));
+        };
+        CreateCityExpansionCore.SYNC_CITY_MEMBERS_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> {
+                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen) {
+                    screen.applyMembersSnapshot(payload);
+                }
+            });
+        };
+
         CreateCityExpansionCore.CITY_NOTIFICATION_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveNotification(payload));
         };
     }
 
     /**
-     * Вызывает enqueueWork(Runnable) на объекте контекста через рефлексию.
-     * Это позволяет не зависеть от класса PacketContext на compile-time,
-     * так как его может не быть на compile classpath.
+     * Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ enqueueWork(Runnable) Ð½Ð° Ð¾Ð±ÑŠÐµÐºÑ‚Ðµ ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚Ð° Ñ‡ÐµÑ€ÐµÐ· Ñ€ÐµÑ„Ð»ÐµÐºÑÐ¸ÑŽ.
+     * Ð­Ñ‚Ð¾ Ð¿Ð¾Ð·Ð²Ð¾Ð»ÑÐµÑ‚ Ð½Ðµ Ð·Ð°Ð²Ð¸ÑÐµÑ‚ÑŒ Ð¾Ñ‚ ÐºÐ»Ð°ÑÑÐ° PacketContext Ð½Ð° compile-time,
+     * Ñ‚Ð°Ðº ÐºÐ°Ðº ÐµÐ³Ð¾ Ð¼Ð¾Ð¶ÐµÑ‚ Ð½Ðµ Ð±Ñ‹Ñ‚ÑŒ Ð½Ð° compile classpath.
      */
     private static void invokeEnqueueWork(Object context, Runnable runnable) {
         try {

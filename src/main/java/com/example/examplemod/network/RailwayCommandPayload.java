@@ -19,7 +19,9 @@ public record RailwayCommandPayload(BlockPos pylonPos, Action action, UUID prima
     public enum Action { REQUEST_STATE, REQUEST_MAP, ATTACH_STATION, ATTACH_TRAIN, CREATE_LINE, UPDATE_LINE,
         REMOVE_LINE, ASSIGN_LINE, UNASSIGN_LINE, RESTORE_SCHEDULE, REMOVE_TRAIN, REMOVE_STATION,
         SET_STATION_TYPE, SET_TRAIN_TYPE, REBIND_STATION, REBIND_TRAIN, LINK_PROJECT,
-        SET_NETWORK_ACCESS, SET_NETWORK_TARIFF, REQUEST_ROUTES, SELECT_ROUTE }
+        SET_NETWORK_ACCESS, SET_NETWORK_TARIFF, REQUEST_ROUTES, SELECT_ROUTE,
+        /** Register a Create train (payload.primaryId = Create train id) into CCEC. */
+        REGISTER_TRAIN }
     public static final Type<RailwayCommandPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(
             CreateCityExpansionCore.MODID, "railway_command"));
     public static final StreamCodec<RegistryFriendlyByteBuf, RailwayCommandPayload> STREAM_CODEC =

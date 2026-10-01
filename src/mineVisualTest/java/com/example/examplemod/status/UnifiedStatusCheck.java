@@ -1,6 +1,7 @@
 package com.example.examplemod.status;
 
 import com.example.examplemod.client.status.CcecStatusUi;
+import com.example.examplemod.client.status.CcecProblemCenter;
 import com.example.examplemod.economy.FreightPointRules;
 
 import java.nio.file.Files;
@@ -88,6 +89,10 @@ public final class UnifiedStatusCheck {
         require(CcecStatusUi.decision("postbox_missing","online")==CcecStatusUi.PointToast.RESTORED,"recovery is announced");
         require(CcecStatusUi.decision("station_changed","online")==CcecStatusUi.PointToast.RESTORED,"rebind success is announced");
         require(CcecStatusUi.decision("online","unloaded")==CcecStatusUi.PointToast.SILENT,"chunk unload is quiet");
+        require(!CcecProblemCenter.isProblem(CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.WAITING_FOR_CARGO,CcecStatus.Action.NONE),false),"normal incoming wait is not a problem");
+        require(CcecProblemCenter.isProblem(CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.WAITING_FOR_CARGO,CcecStatus.Action.OPEN_FREIGHT_POINT),true),"outgoing cargo wait remains actionable");
+        require(!CcecProblemCenter.isProblem(CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.IN_TRANSIT,CcecStatus.Action.OPEN_FREIGHT_POINT),true),"in-transit shipment is not a problem");
+        require(CcecProblemCenter.isProblem(CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.ROUTE_INVALIDATED,CcecStatus.Action.SELECT_ROUTE),true),"route invalidation remains a problem");
 
         // Language completeness for the whole catalog and for every reason the player can see.
         Map<String,Map<String,String>> langs=loadLang();
@@ -107,6 +112,13 @@ public final class UnifiedStatusCheck {
                 "station_mismatch_at","check.mismatch","revoke","revoke_warning","revoke_help","confirm_revoke"))
             checkKey(en,ru,"gui.createcityexpansioncore.freight.console."+console,missing);
         checkKey(en,ru,"gui.createcityexpansioncore.freight.point_restored",missing);
+        for(String reason:List.of("assignment_missing","source_missing","destination_missing","source_offline","destination_offline",
+                "source_station_missing","destination_station_missing","train_missing","train_not_owned","train_has_schedule",
+                "train_wrong_type","train_not_at_source","trip_active","train_busy","no_route_options","return_hint"))
+            checkKey(en,ru,"gui.createcityexpansioncore.railway.routes."+reason,missing);
+        for(String key:List.of("gui.createcityexpansioncore.world_map.selection.discovery","gui.createcityexpansioncore.world_map.discovery.setup_hint",
+                "gui.createcityexpansioncore.world_map.action.setup_freight"))checkKey(en,ru,key,missing);
+        scanRuntimeVisibleKeys(en,ru,missing);
         require(missing.isEmpty(),"missing translation keys: "+missing);
 
         System.out.println("PASS: "+checks+" unified status serialization, catalog, toast policy and lang completeness checks");
@@ -151,6 +163,31 @@ public final class UnifiedStatusCheck {
         }
     }
 
+    /** Literal runtime keys in the repaired screens are checked automatically; dynamic catalogs stay above. */
+    private static void scanRuntimeVisibleKeys(Map<String,String> en,Map<String,String> ru,Set<String> missing){
+        Path root=Paths.get("").toAbsolutePath();
+        while(root!=null&&!Files.isDirectory(root.resolve("src/main/java")))root=root.getParent();
+        if(root==null)throw new AssertionError("cannot locate source tree");
+        Pattern direct=Pattern.compile("Component\\.translatable\\(\\\"([^\\\"]+)\\\"");
+        Pattern freight=Pattern.compile("FreightUi\\.tr\\(\\\"([^\\\"]+)\\\"");
+        Pattern console=Pattern.compile("(?<![A-Za-z0-9_.])tr\\(\\\"([^\\\"]+)\\\"");
+        for(String file:List.of("client/screen/LogisticsScreen.java","client/screen/PolishedWorldMapScreen.java",
+                "client/screen/CityPylonScreen.java","client/screen/RailwayRouteSelectionScreen.java","client/screen/CityRelationsScreen.java")){
+            Path source=root.resolve("src/main/java/com/example/examplemod").resolve(file);
+            try{
+                String text=Files.readString(source);
+                collectLiteralKeys(direct.matcher(text),"",en,ru,missing);
+                if(file.endsWith("LogisticsScreen.java")){
+                    collectLiteralKeys(freight.matcher(text),"gui.createcityexpansioncore.freight.",en,ru,missing);
+                    collectLiteralKeys(console.matcher(text),"gui.createcityexpansioncore.freight.console.",en,ru,missing);
+                }
+            }catch(Exception ex){throw new AssertionError("cannot scan "+source+": "+ex);}
+        }
+    }
+    private static void collectLiteralKeys(Matcher matcher,String prefix,Map<String,String> en,Map<String,String> ru,Set<String> missing){
+        while(matcher.find())if(!matcher.group(1).endsWith("."))checkKey(en,ru,prefix+matcher.group(1),missing);
+    }
+
     private static CcecStatus.Category category(CcecStatus.Code code){return switch(code){
         case READY,ARRIVED,READY_TO_DISPATCH,DELIVERED,POINT_READY->CcecStatus.Category.SUCCESS;
         case NETWORK_OFFLINE,SECTION_OFFLINE,SOURCE_OFFLINE,DESTINATION_OFFLINE,
@@ -160,12 +197,13 @@ public final class UnifiedStatusCheck {
         default->CcecStatus.Category.ACTION_REQUIRED;
     };}
     private static CcecStatus.Action action(CcecStatus.Code code){return switch(code){
-        case WAITING_FOR_ROUTE,ROUTE_INVALIDATED,ROUTE_NOT_SELECTED->CcecStatus.Action.SELECT_ROUTE;
+        case WAITING_FOR_ROUTE,ROUTE_INVALIDATED,ROUTE_NOT_SELECTED,TRAIN_ASSIGNED->CcecStatus.Action.SELECT_ROUTE;
         case READY->CcecStatus.Action.CONFIRM_DEPARTURE;
         case READY_TO_DISPATCH->CcecStatus.Action.START_DISPATCH;
-        case IN_TRANSIT,WAITING_FOR_CARGO,TRAIN_NOT_ASSIGNED->CcecStatus.Action.OPEN_FREIGHT_POINT;
+        case IN_TRANSIT,WAITING_FOR_CARGO,TRAIN_NOT_ASSIGNED,TRAIN_IN_USE,CARGO_NOT_COUNTED,TRAIN_NOT_AT_SOURCE->CcecStatus.Action.OPEN_FREIGHT_POINT;
         case ARRIVED,DELIVERED,POINT_READY,POINT_UNLOADED,POINT_DISABLED,POINT_REMOVED->CcecStatus.Action.NONE;
         case POINT_POSTBOX_INCOMPATIBLE,POINT_PACKAGER_INCOMPATIBLE,POINT_STATION_MISMATCH,POINT_ADDRESS_MISMATCH->CcecStatus.Action.REBIND_POINT;
+        case TRAIN_UNREGISTERED->CcecStatus.Action.REGISTER_TRAIN;
         default->CcecStatus.Action.FIX_PROBLEM;
     };}
 }

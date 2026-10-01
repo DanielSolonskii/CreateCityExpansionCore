@@ -3,6 +3,7 @@ package com.example.examplemod.railway;
 import com.example.examplemod.block.CityPylonBlock;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
+import com.example.examplemod.economy.EconomyManager;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.RailwayCommandPayload;
 import com.example.examplemod.network.RailwayMapPayload;
@@ -26,6 +27,8 @@ import java.util.*;
 
 public final class RailwayNetworkHandlers {
     private static final long MAP_CACHE_MILLIS = 30_000L;
+    /** Unregistered Create trains are a discovery list, not a world dump. */
+    private static final int MAX_TRAIN_CANDIDATES = 32;
     private static final Map<net.minecraft.server.MinecraftServer, Map<MapKey, CachedRailMap>> MAP_CACHE =
             new WeakHashMap<>();
     private RailwayNetworkHandlers() {}
@@ -48,6 +51,7 @@ public final class RailwayNetworkHandlers {
         boolean success = switch (payload.action()) {
             case ATTACH_STATION -> payload.primaryId() != null && manager.attachStationToCity(payload.primaryId(), player.getUUID(), context.city.getId());
             case ATTACH_TRAIN -> payload.primaryId() != null && manager.attachTrainToCity(payload.primaryId(), player.getUUID(), context.city.getId());
+            case REGISTER_TRAIN -> registerTrain(context, payload.primaryId());
             case CREATE_LINE -> createLine(context, payload);
             case UPDATE_LINE -> updateLine(context, payload);
             case REMOVE_LINE -> removeLine(context, payload.primaryId());
@@ -90,7 +94,7 @@ public final class RailwayNetworkHandlers {
     private static boolean assign(Context c, UUID trainId, UUID lineId) { CityFleetTrain t=c.railway.train(trainId);RailLine l=c.railway.line(lineId);return t!=null&&l!=null&&c.city.getId().equals(t.cityId())&&c.city.getId().equals(l.cityId())&&RailwayOperations.assign(c.player.serverLevel(),c.railway,t,l); }
     private static boolean unassign(Context c, UUID id) { CityFleetTrain t=c.railway.train(id);return t!=null&&c.city.getId().equals(t.cityId())&&RailwayOperations.unassign(c.railway,t); }
     private static boolean restore(Context c, UUID id) { CityFleetTrain t=c.railway.train(id);return t!=null&&c.city.getId().equals(t.cityId())&&RailwayOperations.restore(c.player.serverLevel(),c.railway,t); }
-    private static boolean removeTrain(Context c, UUID id) { CityFleetTrain t=c.railway.train(id);if(t==null||!c.city.getId().equals(t.cityId()))return false;RailwayOperations.unassign(c.railway,t);c.railway.removeTrain(id);return true; }
+    private static boolean removeTrain(Context c, UUID id) { CityFleetTrain t=c.railway.train(id);if(t==null||!c.city.getId().equals(t.cityId()))return false;if(c.railway.activeTrip(t.createTrainId())!=null)return false;RailwayOperations.unassign(c.railway,t);c.railway.removeTrain(id);return true; }
     private static boolean removeStation(Context c, UUID id) { CityRailStation s=c.railway.station(id);if(s==null||!c.city.getId().equals(s.cityId()))return false;if(c.railway.linesForCity(c.city.getId()).stream().anyMatch(line->line.stops().stream().anyMatch(stop->stop.stationRegistrationId().equals(id))))return false;if(c.railway.isStationLinkedToProject(id))return false;c.railway.removeStationFromCity(id);return true; }
     private static boolean setStationType(Context c,UUID id,int ordinal){CityRailStation s=c.railway.station(id);if(s==null||!c.city.getId().equals(s.cityId()))return false;s.setType(enumAt(RailwayTypes.StationType.values(),ordinal,RailwayTypes.StationType.MIXED));return mark(c);}
     private static boolean setTrainType(Context c,UUID id,int ordinal){CityFleetTrain t=c.railway.train(id);if(t==null||!c.city.getId().equals(t.cityId()))return false;t.setType(enumAt(RailwayTypes.TrainType.values(),ordinal,RailwayTypes.TrainType.MIXED));return mark(c);}
@@ -98,6 +102,20 @@ public final class RailwayNetworkHandlers {
     private static boolean rebindStation(Context c,UUID targetId,UUID replacementId){CityRailStation target=c.railway.station(targetId);return target!=null&&c.city.getId().equals(target.cityId())&&c.railway.rebindStation(targetId,replacementId,c.player.getUUID());}
     private static boolean rebindTrain(Context c,UUID targetId,UUID replacementId){CityFleetTrain target=c.railway.train(targetId);return target!=null&&c.city.getId().equals(target.cityId())&&c.railway.rebindTrain(targetId,replacementId,c.player.getUUID());}
     private static boolean mark(Context c){c.railway.markChanged();return true;}
+    /**
+     * Registers a live Create train into CCEC from a city pylon context. Registration is the
+     * gate for routes, tariffs, ownership and freight dispatch, so it immediately attaches the
+     * train to the pylon's city: the existing city-scoped type/line/remove operations then apply
+     * to it unchanged instead of needing a second personal-train code path.
+     */
+    private static boolean registerTrain(Context c, UUID createId) {
+        if (createId == null) return false;
+        Train actual = CreateRailwayAdapter.train(createId);
+        if (actual == null) return false;
+        if (c.railway.trainByCreateId(createId) != null) return false;
+        CityFleetTrain created = c.railway.registerTrain(createId, c.player.getUUID(), actual.name.getString());
+        return c.railway.attachTrainToCity(created.fleetTrainId(), c.player.getUUID(), c.city.getId());
+    }
     private static boolean configureNetwork(Context c,RailwayCommandPayload p,boolean access){
         OwnedRailwayNetwork network=c.railway.ownedNetwork(p.primaryId());if(network==null)return false;
         UUID owner=network.ownerType()==RailwayOwnershipTypes.OwnerType.CITY?c.city.getId():c.player.getUUID();
@@ -121,8 +139,9 @@ public final class RailwayNetworkHandlers {
         for(CityRailStation s:c.railway.stationsForCity(c.city.getId()))stations.add(stationSnapshot(s,true,c.railway));
         for(CityRailStation s:c.railway.personalStations(player.getUUID()))stations.add(stationSnapshot(s,false,c.railway));
         List<RailwayTrainSnapshot> trains=new ArrayList<>();
-        for(CityFleetTrain t:c.railway.trainsForCity(c.city.getId()))trains.add(trainSnapshot(t,c.railway,true));
-        for(CityFleetTrain t:c.railway.personalTrains(player.getUUID()))trains.add(trainSnapshot(t,c.railway,false));
+        for(CityFleetTrain t:c.railway.trainsForCity(c.city.getId()))trains.add(trainSnapshot(t,c,true));
+        for(CityFleetTrain t:c.railway.personalTrains(player.getUUID()))trains.add(trainSnapshot(t,c,false));
+        List<RailwayTrainCandidate> candidates=trainCandidates(c);
         List<RailwayLineSnapshot> lines=new ArrayList<>();
         for(RailLine line:c.railway.linesForCity(c.city.getId())){
             int assigned=(int)c.railway.trainsForCity(c.city.getId()).stream().filter(t->line.lineId().equals(t.activeLineId())).count();
@@ -133,10 +152,52 @@ public final class RailwayNetworkHandlers {
         }
         List<RailwayOwnershipSnapshot> ownership=new ArrayList<>();for(OwnedRailwayNetwork network:c.railway.ownedNetworksFor(c.city.getId(),player.getUUID())){var sections=c.railway.sectionsForNetwork(network.id());ownership.add(new RailwayOwnershipSnapshot(network.id(),network.name(),network.ownerType(),network.access(),network.freightTariff(),sections.size(),(int)sections.stream().filter(s->s.status()==RailwayOwnershipTypes.SectionStatus.ONLINE).count(),sections.stream().mapToDouble(OwnedRailwaySection::length).sum()));}
         Set<UUID> visibleNetworkIds=ownership.stream().map(RailwayOwnershipSnapshot::networkId).collect(java.util.stream.Collectors.toSet());List<RailwaySectionSnapshot> ownedSections=c.railway.ownedSections().stream().filter(s->visibleNetworkIds.contains(s.networkId())).map(s->new RailwaySectionSnapshot(s.id(),s.networkId(),s.length(),s.status())).toList();
-        PacketDistributor.sendToPlayer(player,new RailwayStatePayload(c.city.getPylonPos(),stations,trains,lines,ownership,ownedSections));
+        PacketDistributor.sendToPlayer(player,new RailwayStatePayload(c.city.getPylonPos(),stations,trains,lines,ownership,ownedSections,candidates));
+    }
+    /** Create trains that exist but have no CCEC registration: the "register me" discovery list. */
+    private static List<RailwayTrainCandidate> trainCandidates(Context c){
+        List<RailwayTrainCandidate> result=new ArrayList<>();
+        boolean canBuild=c.city.canBuild(c.player.getUUID());
+        for(var entry:Create.RAILWAYS.trains.entrySet()){
+            if(result.size()>=MAX_TRAIN_CANDIDATES)break;
+            if(c.railway.trainByCreateId(entry.getKey())!=null)continue;
+            Train actual=entry.getValue();
+            var pos=trainPosition(actual);
+            if(pos.dimension()==null)continue;
+            var station=actual.getCurrentStation();
+            result.add(new RailwayTrainCandidate(entry.getKey(),actual.name.getString(),pos.dimension(),
+                    pos.x,pos.z,station==null?"":station.name,canBuild));
+        }
+        return List.copyOf(result);
+    }
+    /** Token of the oldest shipment this train still carries, empty when it carries none. */
+    private static String activeShipment(ServerPlayer player,CityFleetTrain f){
+        for(var shipment: EconomyManager.get(player.serverLevel()).shipments()){
+            if(!f.fleetTrainId().equals(shipment.fleetTrainId()))continue;
+            if(!shipment.active())continue;
+            return shipment.status().name().toLowerCase(Locale.ROOT);
+        }
+        return "";
+    }
+    private static RailwayTrainSnapshot trainSnapshot(CityFleetTrain f,Context c,boolean city){
+        RailwayManager manager=c.railway;
+        Train t=CreateRailwayAdapter.train(f.createTrainId());
+        String line=f.activeLineId()==null?"":Optional.ofNullable(manager.line(f.activeLineId())).map(RailLine::name).orElse("");
+        String owner=city?c.city.getName():c.player.getGameProfile().getName();
+        RailwayTripLedger trip=manager.activeTrip(f.createTrainId());
+        String tripToken=trip==null?"":trip.status().name().toLowerCase(Locale.ROOT);
+        String shipment=activeShipment(c.player,f);
+        boolean canManage=city?c.city.canBuild(c.player.getUUID()):true;
+        if(t==null)return new RailwayTrainSnapshot(f.fleetTrainId(),f.lastKnownName(),f.type(),f.activeLineId(),line,"missing",city,f.automationSuspended(),null,0,0,"",0,
+                com.example.examplemod.status.CcecStatusResolver.railway(manager,f,null,"missing",!shipment.isEmpty()),
+                f.createTrainId(),owner,"",tripToken,shipment,canManage);
+        String status=trainStatus(t,f);String next=t.navigation.destination==null?"":t.navigation.destination.name;var pos=trainPosition(t);
+        var current=t.getCurrentStation();
+        return new RailwayTrainSnapshot(f.fleetTrainId(),t.name.getString(),f.type(),f.activeLineId(),line,status,city,f.automationSuspended(),pos.dimension,pos.x,pos.z,next,t.speed*20.0,
+                com.example.examplemod.status.CcecStatusResolver.railway(manager,f,t,status,!shipment.isEmpty()),
+                f.createTrainId(),owner,current==null?"":current.name,tripToken,shipment,canManage);
     }
     private static RailwayStationSnapshot stationSnapshot(CityRailStation s,boolean city,RailwayManager manager){var actual=CreateRailwayAdapter.station(s.createStationId());return new RailwayStationSnapshot(s.registrationId(),actual==null?s.lastKnownName():actual.name,s.type(),actual!=null,city,s.lastKnownDimension(),s.lastKnownPos(),manager.projectForStation(s.registrationId()));}
-    private static RailwayTrainSnapshot trainSnapshot(CityFleetTrain f,RailwayManager manager,boolean city){Train t=CreateRailwayAdapter.train(f.createTrainId());String line=f.activeLineId()==null?"":Optional.ofNullable(manager.line(f.activeLineId())).map(RailLine::name).orElse("");if(t==null)return new RailwayTrainSnapshot(f.fleetTrainId(),f.lastKnownName(),f.type(),f.activeLineId(),line,"missing",city,f.automationSuspended(),null,0,0,"",0,com.example.examplemod.status.CcecStatusResolver.railway(manager,f,null,"missing"));String status=trainStatus(t,f);String next=t.navigation.destination==null?"":t.navigation.destination.name;var pos=trainPosition(t);return new RailwayTrainSnapshot(f.fleetTrainId(),t.name.getString(),f.type(),f.activeLineId(),line,status,city,f.automationSuspended(),pos.dimension,pos.x,pos.z,next,t.speed*20.0,com.example.examplemod.status.CcecStatusResolver.railway(manager,f,t,status));}
     private static String trainStatus(Train t,CityFleetTrain f){if(t.derailed)return"derailed";if(f.automationSuspended())return"schedule_changed";if(t.status.conductor)return"missing_conductor";if(t.status.track)return"track_issue";if(t.status.navigation)return"no_route";if(t.runtime.getSchedule()==null)return"no_schedule";if(t.runtime.paused)return"manual";if(t.getCurrentStation()!=null&&t.runtime.state== ScheduleRuntime.State.POST_TRANSIT){try{var e=t.runtime.getSchedule().entries.get(t.runtime.currentEntry);if(!e.conditions.isEmpty()&&!e.conditions.getFirst().isEmpty()&&e.conditions.getFirst().get(Math.min(t.runtime.conditionProgress.getFirst(),e.conditions.getFirst().size()-1)) instanceof IdleCargoCondition)return"cargo";}catch(RuntimeException ignored){}return"waiting";}if(t.getCurrentStation()!=null)return"at_station";return"in_transit";}
     private static boolean isHealthyStatus(String status){return status.equals("in_transit")||status.equals("at_station")||status.equals("waiting")||status.equals("cargo");}
     private record Position(net.minecraft.resources.ResourceLocation dimension,double x,double z){}

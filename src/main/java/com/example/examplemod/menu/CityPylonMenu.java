@@ -16,6 +16,7 @@ import com.example.examplemod.network.CityRelationsStatePayload;
 import com.example.examplemod.railway.RailwayLineSnapshot;
 import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTrainSnapshot;
+import com.example.examplemod.railway.RailwayTrainCandidate;
 import com.example.examplemod.railway.RailwayOwnershipSnapshot;
 import com.example.examplemod.railway.RailwaySectionSnapshot;
 import net.minecraft.core.BlockPos;
@@ -48,6 +49,7 @@ public class CityPylonMenu extends AbstractContainerMenu {
     private final List<CityMapTilePayload> pendingMapTiles = new ArrayList<>();
     private List<RailwayStationSnapshot> railwayStations = new ArrayList<>();
     private List<RailwayTrainSnapshot> railwayTrains = new ArrayList<>();
+    private List<RailwayTrainCandidate> railwayTrainCandidates = new ArrayList<>();
     private List<RailwayLineSnapshot> railwayLines = new ArrayList<>();
     private List<RailwayOwnershipSnapshot> railwayOwnership = new ArrayList<>();
     private List<RailwaySectionSnapshot> railwayOwnedSections = new ArrayList<>();
@@ -293,6 +295,11 @@ public class CityPylonMenu extends AbstractContainerMenu {
         return List.copyOf(this.railwayTrains);
     }
 
+    /** Create trains visible to this pylon that are not registered in CCEC yet. */
+    public List<RailwayTrainCandidate> getRailwayTrainCandidates() {
+        return List.copyOf(this.railwayTrainCandidates);
+    }
+
     public List<RailwayLineSnapshot> getRailwayLines() {
         return List.copyOf(this.railwayLines);
     }
@@ -305,6 +312,7 @@ public class CityPylonMenu extends AbstractContainerMenu {
         }
         this.railwayStations = new ArrayList<>(payload.stations());
         this.railwayTrains = new ArrayList<>(payload.trains());
+        this.railwayTrainCandidates = new ArrayList<>(payload.candidates());
         this.railwayLines = new ArrayList<>(payload.lines());
         this.railwayOwnership = new ArrayList<>(payload.ownership());
         this.railwayOwnedSections = new ArrayList<>(payload.ownedSections());
@@ -346,6 +354,16 @@ public class CityPylonMenu extends AbstractContainerMenu {
             }
         }
     }
+    /**
+     * Replaces the whole member list from an authoritative snapshot. A snapshot cannot be applied
+     * twice or out of order and end up wrong, so no delta bookkeeping is needed, and applying the
+     * same snapshot twice is a no-op rather than a duplication.
+     */
+    public void replaceMembers(List<CityMember> authoritative) {
+        this.members.clear();
+        this.members.addAll(authoritative);
+    }
+
     public void removeMember(UUID playerId) {
 
         this.members.removeIf(

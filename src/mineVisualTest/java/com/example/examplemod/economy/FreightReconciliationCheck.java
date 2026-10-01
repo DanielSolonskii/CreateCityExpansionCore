@@ -122,6 +122,20 @@ public final class FreightReconciliationCheck {
         require(FreightPointRules.healAddress("CCEC_x_y",null),"a missing filter is healed");
         require(!FreightPointRules.healAddress("CCEC_x_y","CCEC_other"),"a deliberately foreign address is left for an explicit rebind");
         require(!FreightPointRules.healAddress("",""),"our own address is never empty, so nothing is invented");
+        // Create's package-port screen caps its address field at 25 characters and re-sends the
+        // value unconditionally when the screen closes, so opening it on a registered Postbox
+        // writes back the first 25 characters of our 70-character address.
+        String ownAddress="CCEC_"+UUID.randomUUID().toString().replace("-","")+"_"+UUID.randomUUID().toString().replace("-","");
+        String otherAddress="CCEC_"+UUID.randomUUID().toString().replace("-","")+"_"+UUID.randomUUID().toString().replace("-","");
+        require(ownAddress.length()==70,"a registered address really is longer than Create's 25-character port field");
+        require(FreightPointRules.healAddress(ownAddress,ownAddress.substring(0,25)),
+                "the truncated prefix Create writes back when its port screen closes is healed without a rebind");
+        require(FreightPointRules.healAddress(ownAddress,ownAddress.substring(0,5)),
+                "any shorter prefix of our own address is still our address, not a configuration");
+        require(!FreightPointRules.healAddress(ownAddress,otherAddress),
+                "a complete foreign address is never a prefix of ours, so it still demands a rebind");
+        require(!FreightPointRules.healAddress(ownAddress,otherAddress.substring(0,25)),
+                "another point's 25-character truncation is not a prefix of ours either");
 
         // ------------------------------------------------------------------ rebind pre-flight
         require(FreightPointRules.pairFailure(true,true,false,true,

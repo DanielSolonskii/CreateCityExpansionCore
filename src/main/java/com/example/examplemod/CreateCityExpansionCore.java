@@ -3,6 +3,7 @@ import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityInvite;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityMapNetworkHandlers;
+import com.example.examplemod.city.CityInviteDirectory;
 import com.example.examplemod.city.CityMapSavedData;
 import com.example.examplemod.city.CityProjectNetworkHandlers;
 import com.example.examplemod.electrical.*;
@@ -117,6 +118,11 @@ import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import com.example.examplemod.network.CityPlayerSearchResultPayload;
+import com.example.examplemod.network.CityInviteResultPayload;
+import com.example.examplemod.network.CityInviteOutcomePayload;
+import com.example.examplemod.network.CityPlayerSearchPayload;
+import com.example.examplemod.network.SyncCityMembersPayload;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 
@@ -207,6 +213,22 @@ public class CreateCityExpansionCore {
             (payload, context) -> {};
 
     public static PayloadHandler<CityNotificationPayload> CITY_NOTIFICATION_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CityPlayerSearchResultPayload> CITY_PLAYER_SEARCH_RESULT_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CityInviteResultPayload> CITY_INVITE_RESULT_HANDLER =
+            (payload, context) -> {};
+
+    public static PayloadHandler<CityInviteOutcomePayload> CITY_INVITE_OUTCOME_HANDLER =
+            (payload, context) -> {};
+
+    /**
+     * The authoritative member list, pushed when an invite is accepted. Removal and role changes
+     * already have their own delta payloads and are deliberately not duplicated here.
+     */
+    public static PayloadHandler<SyncCityMembersPayload> SYNC_CITY_MEMBERS_HANDLER =
             (payload, context) -> {};
 
     /*
@@ -1809,21 +1831,13 @@ public class CreateCityExpansionCore {
                                 city == null
                         ) {
 
-                            return;
-                        }
-
-                        UUID senderId =
-                                serverPlayer.getUUID();
-
-                        /*
-                         * Только OWNER / ADMIN
-                         */
-
-                        if (
-                                !city.isAdmin(
-                                        senderId
-                                )
-                        ) {
+                            CityInviteDirectory.reportResult(
+                                    serverPlayer,
+                                    payload.pylonPos(),
+                                    false,
+                                    "gui.createcityexpansioncore.city.invite.state.city_gone",
+                                    ""
+                            );
 
                             return;
                         }
@@ -1831,89 +1845,107 @@ public class CreateCityExpansionCore {
                         UUID targetId =
                                 payload.targetPlayer();
 
-                        /*
-                         * Нельзя пригласить себя.
-                         */
-
-                        if (
-                                targetId.equals(
-                                        senderId
-                                )
-                        ) {
-
-                            return;
-                        }
-
-                        /*
-                         * Игрок уже в этом городе.
-                         */
-
-                        if (
-                                city.hasMember(
+                        String targetName =
+                                CityInviteDirectory.displayName(
+                                        serverPlayer.server,
                                         targetId
-                                )
-                        ) {
+                                );
+
+                        /*
+                         * One authoritative verdict, computed exactly the way the search computes it,
+                         * so a row that said AVAILABLE and a click that happens later can never
+                         * disagree with each other. Every refusal is reported instead of swallowed.
+                         */
+
+                        if (!city.isAdmin(serverPlayer.getUUID())) {
+
+                            CityInviteDirectory.reportResult(
+                                    serverPlayer,
+                                    payload.pylonPos(),
+                                    false,
+                                    CityInviteDirectory.NO_PERMISSION_KEY,
+                                    targetName
+                            );
 
                             return;
                         }
 
-                        /*
-                         * Игрок уже состоит
-                         * в ДРУГОМ городе.
-                         */
-
-                        if (
-                                cityManager
-                                        .getCityByMember(
+                        CityPlayerSearchResultPayload.State state =
+                                CityInviteDirectory.stateOf(
+                                        targetId.equals(
+                                                serverPlayer.getUUID()
+                                        ),
+                                        city.hasMember(
                                                 targetId
-                                        ) != null
-                        ) {
+                                        ),
+                                        city.hasInvite(
+                                                targetId
+                                        ),
+                                        cityManager
+                                                .getCityByMember(
+                                                        targetId
+                                                ) != null
+                                );
+
+                        if (state != CityPlayerSearchResultPayload.State.AVAILABLE) {
+
+                            CityInviteDirectory.reportResult(
+                                    serverPlayer,
+                                    payload.pylonPos(),
+                                    false,
+                                    CityInviteDirectory.reasonKey(
+                                            state
+                                    ),
+                                    targetName
+                            );
 
                             return;
                         }
 
                         /*
-                         * Игрок должен быть онлайн.
+                         * Being offline is not a refusal. The invite is stored against the account id,
+                         * so it survives a restart and is waiting on the next login; being connected
+                         * only decides whether the recipient is told straight away.
                          */
+
+                        City.InviteResult result =
+                                city.addInvite(
+                                        targetId,
+                                        serverPlayer.getUUID()
+                                );
+
+                        cityManager.setDirty();
 
                         ServerPlayer target =
                                 serverPlayer
-                                        .getServer()
+                                        .server
                                         .getPlayerList()
                                         .getPlayer(
                                                 targetId
                                         );
 
-                        if (
-                                target == null
-                        ) {
+                        if (target != null) {
 
-                            return;
+                            PacketDistributor.sendToPlayer(
+                                    target,
+                                    new CityInviteNotificationPayload(
+                                            city.getPylonPos(),
+                                            city.getName(),
+                                            serverPlayer
+                                                    .getName()
+                                                    .getString()
+                                    )
+                            );
                         }
 
-                        /*
-                         * Создаём приглашение.
-                         */
-
-                        city.addInvite(
-                                targetId
-                        );
-
-                        cityManager.setDirty();
-
-                        /*
-                         * Отправляем приглашение.
-                         */
-
-                        PacketDistributor.sendToPlayer(
-                                target,
-                                new CityInviteNotificationPayload(
-                                        city.getPylonPos(),
-                                        city.getName(),
-                                        serverPlayer
-                                                .getName()
-                                                .getString()
-                                )
+                        CityInviteDirectory.reportResult(
+                                serverPlayer,
+                                payload.pylonPos(),
+                                result == City.InviteResult.SENT,
+                                CityInviteDirectory.reasonKey(
+                                        result
+                                ),
+                                targetName
                         );
                     });
                 }
@@ -1983,6 +2015,19 @@ public class CreateCityExpansionCore {
                         }
 
                         /*
+                         * Read the invite before it is consumed: this is the only place the sender is
+                         * known, and they are the one who wants to hear how it ended.
+                         */
+
+                        CityInvite invite =
+                                city.getInvite(
+                                        player.getUUID()
+                                );
+
+                        UUID inviterId =
+                                invite == null ? null : invite.getInvokerId();
+
+                        /*
                          * ОТКЛОНИТЬ
                          */
 
@@ -1993,6 +2038,14 @@ public class CreateCityExpansionCore {
                             );
 
                             cityManager.setDirty();
+
+                            CityInviteDirectory.reportOutcome(
+                                    player.server,
+                                    inviterId,
+                                    player.getName().getString(),
+                                    city.getName(),
+                                    false
+                            );
 
                             PacketDistributor.sendToPlayer(
                                     player,
@@ -2039,6 +2092,32 @@ public class CreateCityExpansionCore {
                         );
 
                         cityManager.setDirty();
+
+                        CityInviteDirectory.reportOutcome(
+                                player.server,
+                                inviterId,
+                                player.getName().getString(),
+                                city.getName(),
+                                true
+                        );
+
+                        /*
+                         * Membership really changed here, so the inviter receives the complete
+                         * authoritative list and their open pylon updates without a reopen. A decline
+                         * never reaches this point, because it leaves the member list untouched.
+                         */
+
+                        CityInviteDirectory.publishMembers(
+                                player.server,
+                                city,
+                                inviterId == null
+                                        ? null
+                                        : player.server
+                                                .getPlayerList()
+                                                .getPlayer(
+                                                        inviterId
+                                                )
+                        );
 
                         /*
                          * Уведомление об успешном принятии
@@ -2101,6 +2180,39 @@ public class CreateCityExpansionCore {
                 CityInviteNotificationPayload.TYPE,
                 CityInviteNotificationPayload.STREAM_CODEC,
                 (payload, context) -> CITY_INVITE_NOTIFICATION_HANDLER.handle(payload, context)
+        );
+
+        /* City invite search, its authoritative result, the invite outcome, and the member list
+         * pushed on accept. Removal and role changes keep using their own delta payloads. */
+
+        registrar.playToServer(
+                CityPlayerSearchPayload.TYPE,
+                CityPlayerSearchPayload.STREAM_CODEC,
+                (payload, context) -> CityInviteDirectory.handleSearch(payload, context)
+        );
+
+        registrar.playToClient(
+                CityPlayerSearchResultPayload.TYPE,
+                CityPlayerSearchResultPayload.STREAM_CODEC,
+                (payload, context) -> CITY_PLAYER_SEARCH_RESULT_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                CityInviteResultPayload.TYPE,
+                CityInviteResultPayload.STREAM_CODEC,
+                (payload, context) -> CITY_INVITE_RESULT_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                CityInviteOutcomePayload.TYPE,
+                CityInviteOutcomePayload.STREAM_CODEC,
+                (payload, context) -> CITY_INVITE_OUTCOME_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                SyncCityMembersPayload.TYPE,
+                SyncCityMembersPayload.STREAM_CODEC,
+                (payload, context) -> SYNC_CITY_MEMBERS_HANDLER.handle(payload, context)
         );
 
         registrar.playToClient(

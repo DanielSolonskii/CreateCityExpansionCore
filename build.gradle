@@ -269,6 +269,14 @@ tasks.register('checkWorldMapV2', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkWorldMapV2') }
 
+tasks.register('checkWorldMapUiLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.WorldMapUiLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkWorldMapUiLayout') }
+
 tasks.register('checkUnifiedStatus', JavaExec) {
     dependsOn tasks.named('mineVisualTestClasses')
     classpath = sourceSets.mineVisualTest.runtimeClasspath
@@ -293,6 +301,70 @@ tasks.register('checkFreightReconciliation', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkFreightReconciliation') }
 
+tasks.register('checkTrainManagement', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.railway.TrainManagementCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkTrainManagement') }
+
+tasks.register('checkFreightHandoff', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.economy.FreightHandoffCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkFreightHandoff') }
+
+tasks.register('checkShipmentPackageIdentity', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.economy.ShipmentPackageIdentityCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkShipmentPackageIdentity') }
+
+tasks.register('checkFreightArrivalSettlement', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.economy.FreightArrivalSettlementCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkFreightArrivalSettlement') }
+
+tasks.register('checkCityMapTerrainColor', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityMapTerrainColorCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityMapTerrainColor') }
+
+tasks.register('checkTerrainPixelPacking', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.TerrainPixelPackingCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkTerrainPixelPacking') }
+
+tasks.register('checkCityInviteSearch', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityInviteSearchCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityInviteSearch') }
+
+tasks.register('checkCityInviteUiLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.CityInviteUiLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityInviteUiLayout') }
+
 def ccecProductionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
 tasks.register('checkNoCreateSplitPackage') {
     dependsOn tasks.named('jar')
@@ -312,7 +384,7 @@ tasks.named('check') { dependsOn tasks.named('checkNoCreateSplitPackage') }
 
 // Each headless JVM owns its log directory even when Gradle runs checks in parallel.
 tasks.withType(JavaExec).configureEach {
-    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation']) {
+    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkCityMapTerrainColor', 'checkTerrainPixelPacking', 'checkCityInviteSearch', 'checkCityInviteUiLayout']) {
         workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
         doFirst { workingDir.mkdirs() }
     }

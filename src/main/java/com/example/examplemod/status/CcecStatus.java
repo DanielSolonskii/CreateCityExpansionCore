@@ -7,7 +7,9 @@ public record CcecStatus(Category category, Code code, Action action) {
     public enum Category { SUCCESS, ACTION_REQUIRED, BLOCKED, WARNING }
     public enum Action { NONE, SELECT_ROUTE, CONFIRM_DEPARTURE, FIX_PROBLEM, OPEN_FREIGHT_POINT, ASSIGN_TRAIN, START_DISPATCH,
         /** Repair the registered Freight Point: pick a compatible Postbox/Packager/station pair. */
-        REBIND_POINT }
+        REBIND_POINT,
+        /** Register a Create train into CCEC so routes/tariffs/dispatch can see it. */
+        REGISTER_TRAIN }
     public enum Code {
         READY, WAITING_FOR_ROUTE, WAITING_FOR_CARGO, INSUFFICIENT_FUNDS,
         ROUTE_INVALIDATED, PRIVATE_ACCESS_DENIED, IN_TRANSIT, ARRIVED,
@@ -18,7 +20,11 @@ public record CcecStatus(Category category, Code code, Action action) {
         POINT_READY, POINT_POSTBOX_MISSING, POINT_POSTBOX_INCOMPATIBLE,
         POINT_PACKAGER_MISSING, POINT_PACKAGER_INCOMPATIBLE,
         POINT_STATION_MISSING, POINT_STATION_MISMATCH, POINT_ADDRESS_MISMATCH,
-        POINT_RECEIVER_MISSING, POINT_UNLOADED, POINT_DISABLED, POINT_REMOVED
+        POINT_RECEIVER_MISSING, POINT_UNLOADED, POINT_DISABLED, POINT_REMOVED,
+        // Train management states. Appended so saved snapshots keep their existing ordinals.
+        TRAIN_UNREGISTERED, TRAIN_ASSIGNED, TRAIN_IN_USE,
+        // Why the train has not left yet. Appended so saved snapshots keep their existing ordinals.
+        CARGO_NOT_COUNTED, TRAIN_NOT_AT_SOURCE
     }
     public static CcecStatus of(Category category, Code code, Action action) { return new CcecStatus(category, code, action); }
     public CompoundTag save() { CompoundTag t=new CompoundTag();t.putString("Category",category.name());t.putString("Code",code.name());t.putString("Action",action.name());return t; }

@@ -47,9 +47,20 @@ public final class FreightPointRules {
      * position that is unambiguous evidence the box is ours, so the registered address is restored
      * instead of leaving the point in {@code address_changed} forever. A non-empty foreign filter
      * is a deliberate reconfiguration and is left alone for an explicit rebind.
+     *
+     * <p>The other healed case is Create's own truncation: its package-port screen caps the address
+     * field at 25 characters and unconditionally re-sends the field when the screen closes
+     * ({@code PackagePortScreen#removed}), while a registered CCEC address is 70 characters
+     * ({@code CCEC_} + city uuid + {@code _} + point uuid). Opening and closing that screen on a
+     * registered Postbox therefore writes back the first 25 characters of our own address — short by
+     * an upstream field limit, not another configuration. That is healed exactly like an empty
+     * filter. A complete foreign address is never a prefix of ours, so it still demands the
+     * explicit rebind it always did.
      */
     public static boolean healAddress(String registered, String present) {
-        return registered != null && !registered.isEmpty() && (present == null || present.isEmpty());
+        if (registered == null || registered.isEmpty()) return false;
+        if (present == null || present.isEmpty()) return true;
+        return present.length() < registered.length() && registered.startsWith(present);
     }
 
     /** Pre-flight shared by register ({@code overLimit=true} only for new points) and rebind. */
