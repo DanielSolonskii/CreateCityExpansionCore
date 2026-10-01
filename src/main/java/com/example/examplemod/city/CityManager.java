@@ -12,9 +12,11 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
 
 public class CityManager extends SavedData {
 
@@ -23,6 +25,7 @@ public class CityManager extends SavedData {
 
     private final Map<UUID, City> cities =
             new HashMap<>();
+    private final Map<UUID, Set<UUID>> trustedCities = new HashMap<>();
 
     public CityManager() {
     }
@@ -235,6 +238,16 @@ public class CityManager extends SavedData {
             );
         }
 
+        for (Tag raw : tag.getList("Relations", Tag.TAG_COMPOUND)) {
+            CompoundTag relation = (CompoundTag) raw;
+            if (!relation.hasUUID("From") || !relation.hasUUID("To")) continue;
+            UUID from = relation.getUUID("From");
+            UUID to = relation.getUUID("To");
+            if (!from.equals(to) && manager.cities.containsKey(from) && manager.cities.containsKey(to)) {
+                manager.trustedCities.computeIfAbsent(from, ignored -> new HashSet<>()).add(to);
+            }
+        }
+
         return manager;
     }
 
@@ -396,6 +409,17 @@ public class CityManager extends SavedData {
                 cityList
         );
 
+        ListTag relations = new ListTag();
+        trustedCities.forEach((from, targets) -> targets.forEach(to -> {
+            if (!from.equals(to) && cities.containsKey(from) && cities.containsKey(to)) {
+                CompoundTag relation = new CompoundTag();
+                relation.putUUID("From", from);
+                relation.putUUID("To", to);
+                relations.add(relation);
+            }
+        }));
+        tag.put("Relations", relations);
+
         return tag;
     }
 
@@ -469,6 +493,35 @@ public class CityManager extends SavedData {
 
     public List<City> getCities() {
         return List.copyOf(cities.values());
+    }
+
+    public boolean trusts(UUID fromCityId, UUID toCityId) {
+        return fromCityId != null && toCityId != null && !fromCityId.equals(toCityId)
+                && trustedCities.getOrDefault(fromCityId, Set.of()).contains(toCityId);
+    }
+
+    public boolean partners(UUID firstCityId, UUID secondCityId) {
+        return trusts(firstCityId, secondCityId) && trusts(secondCityId, firstCityId);
+    }
+
+    public Set<UUID> trustedCities(UUID cityId) {
+        return Set.copyOf(trustedCities.getOrDefault(cityId, Set.of()));
+    }
+
+    public boolean setTrusted(UUID fromCityId, UUID toCityId, boolean trusted) {
+        if (fromCityId == null || toCityId == null || fromCityId.equals(toCityId)
+                || !cities.containsKey(fromCityId) || !cities.containsKey(toCityId)) return false;
+        Set<UUID> targets = trustedCities.computeIfAbsent(fromCityId, ignored -> new HashSet<>());
+        boolean changed = trusted ? targets.add(toCityId) : targets.remove(toCityId);
+        if (targets.isEmpty()) trustedCities.remove(fromCityId);
+        if (changed) setDirty();
+        return changed;
+    }
+
+    private void removeRelations(UUID cityId) {
+        trustedCities.remove(cityId);
+        trustedCities.values().forEach(targets -> targets.remove(cityId));
+        trustedCities.entrySet().removeIf(entry -> entry.getValue().isEmpty());
     }
 
     public City getCityByName(String name) {
@@ -607,6 +660,7 @@ public class CityManager extends SavedData {
         }
 
         cities.remove(city.getId());
+        removeRelations(city.getId());
 
         setDirty();
 
@@ -749,6 +803,7 @@ public class CityManager extends SavedData {
         }
 
         cities.remove(city.getId());
+        removeRelations(city.getId());
 
         setDirty();
 

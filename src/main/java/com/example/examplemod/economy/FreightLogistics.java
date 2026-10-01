@@ -3,7 +3,7 @@ package com.example.examplemod.economy;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
-import com.example.examplemod.railway.CreateRailwayAdapter;
+import com.example.examplemod.railway.*;
 import com.example.examplemod.economy.block.EconomyThroughputBlockEntity;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.logistics.BigItemStack;
@@ -15,6 +15,7 @@ import com.simibubi.create.content.logistics.stockTicker.PackageOrder;
 import com.simibubi.create.content.logistics.stockTicker.PackageOrderWithCrafts;
 import com.simibubi.create.content.trains.graph.EdgePointType;
 import com.simibubi.create.content.trains.station.GlobalStation;
+import com.simibubi.create.content.trains.entity.Train;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -30,15 +31,20 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import java.util.*;
+import com.example.examplemod.status.CcecStatus;
 
 /** Server-side coordinator shared by P2P, exports and imports. Never loads chunks. */
 @EventBusSubscriber(modid=CreateCityExpansionCore.MODID)
 public final class FreightLogistics {
+    public record RoutePlan(String source,String destination,List<RailwayRouteOption> options,String error){}
     private final EconomyManager economy;
     public final Map<UUID,FreightPoint> points=new LinkedHashMap<>();
     public final Map<UUID,FreightAssignment> assignments=new LinkedHashMap<>();
     public final Map<UUID,FreightSellOffer> sales=new LinkedHashMap<>();
     private final Map<UUID,UUID> tokenDestinations=new LinkedHashMap<>();
+    /** Deferred server-authoritative push: set by any meaningful transition, flushed on a throttle. */
+    private boolean pendingPush;
+    private long lastPushTick=Long.MIN_VALUE/2;
     public FreightLogistics(EconomyManager economy){this.economy=economy;}
     public FreightPoint point(UUID id){return points.get(id);}
     public FreightPoint defaultReceive(UUID city){return points.values().stream().filter(p->p.cityId.equals(city)&&p.mode.receives()&&p.enabled&&!p.removed).sorted(Comparator.comparing(p->!p.defaultReceive)).findFirst().orElse(null);}
@@ -47,30 +53,101 @@ public final class FreightLogistics {
     public boolean sending(UUID id,UUID city,UUID subject){FreightPoint p=point(id);return p!=null&&p.cityId.equals(city)&&p.mode.sends()&&p.enabled&&!p.removed&&!busy(id,subject);}
     private boolean terminal(UUID subject){IndustrialContract c=economy.contract(subject);if(c!=null)return c.state().terminal()||c.state()==EconomyTypes.ContractState.DELIVERED;MarketOffer o=economy.marketOffer(subject);return o==null||o.status().terminal();}
     public boolean busy(UUID point,UUID except){return assignments.values().stream().anyMatch(a->point.equals(a.source)&&!a.subject.equals(except)&&!terminal(a.subject));}
-    public void bind(UUID subject,UUID source,FreightPoint destination){assignments.put(subject,new FreightAssignment(subject,source,destination));economy.setDirty();}
+    public void bind(UUID subject,UUID source,FreightPoint destination){assignments.put(subject,new FreightAssignment(subject,source,destination));markChanged();}
     public UUID destination(UUID subject){FreightAssignment a=assignments.get(subject);return a==null?null:a.destination;}
-    public void tokenCreated(UUID token,UUID subject){FreightAssignment a=assignments.get(subject);if(a!=null){tokenDestinations.put(token,a.destination);economy.setDirty();}}
+    public void tokenCreated(UUID token,UUID subject){FreightAssignment a=assignments.get(subject);if(a!=null){tokenDestinations.put(token,a.destination);markChanged();}}
     public boolean tokenTargets(UUID token,UUID receiver){return Objects.equals(tokenDestinations.get(token),receiver);}
     public boolean isFreightToken(UUID token){return tokenDestinations.containsKey(token);}
+    /**
+     * Stops dispatching for a revoked/closed subject without touching the assignment record itself,
+     * so the point pair, address and destination identity stay intact for the UI. The selected rail
+     * route is released by {@link #tick} on the next pass, which already closes terminal subjects.
+     */
+    public void stopDispatch(UUID subject){
+        FreightAssignment a=assignments.get(subject);
+        if(a==null)return;
+        if(a.running||!a.dispatchError.isEmpty()){a.running=false;a.dispatchError="";markChanged();}
+    }
 
     public String register(ServerLevel level,City city,UUID player,BlockPos postboxPos,BlockPos packagerPos,String name,int mode){
         if(!city.isAdmin(player))return "permission";
         if(mode<0||mode>=FreightPoint.Mode.values().length||name.isBlank())return "invalid";
-        if(!inside(city,level,postboxPos)||!inside(city,level,packagerPos))return "wrong_city";
-        if(postboxPos.distSqr(packagerPos)>256)return "packager_missing";
-        if(!level.hasChunkAt(postboxPos)||!level.hasChunkAt(packagerPos))return "unloaded";
-        if(!(level.getBlockEntity(postboxPos) instanceof PostboxBlockEntity postbox))return "postbox_missing";
-        if(!compatiblePackager(level,packagerPos))return "packager_missing";
-        if(points.values().stream().anyMatch(p->p.dimension.equals(level.dimension().location())&&(p.postbox.equals(postboxPos)||p.packager.equals(packagerPos))))return "duplicate";
-        if(points.values().stream().filter(p->p.cityId.equals(city.getId())).count()>=64)return "limit";
-        FreightPoint p=new FreightPoint(UUID.randomUUID(),city.getId(),level.dimension().location(),postboxPos,packagerPos,name,FreightPoint.Mode.values()[mode]);
-        if(station(level,postbox)==null)return "station_missing";
-        if(p.mode.receives()&&(!inside(city,level,receiverPos(level,p))||!supportedReceiver(level,receiverPos(level,p))))return "receiver_missing";
-        p.defaultReceive=p.mode.receives()&&defaultReceive(city.getId())==null;
-        p.defaultSend=p.mode.sends()&&defaultSend(city.getId())==null;
-        points.put(p.id,p);postbox.addressFilter=p.address;postbox.acceptsPackages=p.mode.receives();postbox.filterChanged();postbox.notifyUpdate();
-        validate(level.getServer(),p);economy.setDirty();return "ok";
+        String failure=pairFailure(level,city,null,postboxPos,packagerPos);
+        if(!failure.isEmpty())return failure;
+        FreightPoint.Mode selected=FreightPoint.Mode.values()[mode];
+        failure=receiverFailure(level,city,selected,packagerPos);
+        if(!failure.isEmpty())return failure;
+        FreightPoint p=new FreightPoint(UUID.randomUUID(),city.getId(),level.dimension().location(),postboxPos,packagerPos,name,selected);
+        p.defaultReceive=selected.receives()&&defaultReceive(city.getId())==null;
+        p.defaultSend=selected.sends()&&defaultSend(city.getId())==null;
+        points.put(p.id,p);
+        applyAddress(p,(PostboxBlockEntity)level.getBlockEntity(postboxPos));
+        validate(level.getServer(),p);markChanged();return "ok";
     }
+
+    /**
+     * Repoint an existing Freight Point at a new Postbox/Packager pair. Everything that identifies
+     * the trade — id, address, name, mode, city, assignments and in-flight token destinations — is
+     * preserved, so a broken rebuild never orphans shipments. Returns a translation-safe reason key
+     * when the replacement pair is not compatible.
+     */
+    public String rebind(ServerLevel level,City city,UUID player,UUID id,BlockPos postboxPos,BlockPos packagerPos){
+        if(!city.isAdmin(player))return "permission";
+        FreightPoint p=point(id);
+        if(p==null||!p.cityId.equals(city.getId())||p.removed)return "invalid";
+        if(!p.dimension.equals(level.dimension().location()))return "wrong_dimension";
+        String failure=pairFailure(level,city,p,postboxPos,packagerPos);
+        if(!failure.isEmpty())return failure;
+        failure=receiverFailure(level,city,p.mode,packagerPos);
+        if(!failure.isEmpty())return failure;
+        PostboxBlockEntity box=(PostboxBlockEntity)level.getBlockEntity(postboxPos);
+        p.postbox=postboxPos.immutable();p.packager=packagerPos.immutable();
+        p.stationPos=null;p.stationMatched=true;
+        applyAddress(p,box);
+        GlobalStation detected=station(level,box);
+        if(detected!=null){p.stationPos=stationPosOf(box);p.station=detected.id;p.stationName=detected.name;}
+        p.postboxPresent=true;p.packagerPresent=true;p.stationPresent=detected!=null;
+        assignments.values().stream().filter(a->id.equals(a.source)||id.equals(a.destination)).forEach(a->a.dispatchError="");
+        validate(level.getServer(),p);markChanged();return "ok";
+    }
+
+    /** Pre-flight shared by {@link #register} and {@link #rebind}; never loads a chunk. */
+    private String pairFailure(ServerLevel level,City city,FreightPoint self,BlockPos postboxPos,BlockPos packagerPos){
+        boolean loaded=level.hasChunkAt(postboxPos)&&level.hasChunkAt(packagerPos);
+        PostboxBlockEntity box=loaded&&level.getBlockEntity(postboxPos) instanceof PostboxBlockEntity b?b:null;
+        return FreightPointRules.pairFailure(inside(city,level,postboxPos),inside(city,level,packagerPos),
+                postboxPos.distSqr(packagerPos)>256,loaded,
+                probePostbox(level,postboxPos),probePackager(level,packagerPos),
+                points.values().stream().anyMatch(p->p!=self&&p.dimension.equals(level.dimension().location())
+                        &&(p.postbox.equals(postboxPos)||p.packager.equals(packagerPos))),
+                self==null&&points.values().stream().filter(p->p.cityId.equals(city.getId())).count()>=64,
+                box!=null&&station(level,box)!=null);
+    }
+    private static String receiverFailure(ServerLevel level,City city,FreightPoint.Mode mode,BlockPos packagerPos){
+        if(!mode.receives())return"";
+        BlockPos receiver=receiverPos(level,packagerPos);
+        return !inside(city,level,receiver)||!supportedReceiver(level,receiver)?"receiver_missing":"";
+    }
+    private static void applyAddress(FreightPoint p,PostboxBlockEntity box){
+        box.addressFilter=p.address;box.acceptsPackages=p.mode.receives();box.filterChanged();box.notifyUpdate();
+    }
+    private static FreightPointRules.Probe probePostbox(ServerLevel level,BlockPos pos){
+        if(!level.hasChunkAt(pos))return FreightPointRules.Probe.MISSING;
+        if(level.getBlockEntity(pos) instanceof PostboxBlockEntity)return FreightPointRules.Probe.PRESENT;
+        return level.getBlockState(pos).isAir()?FreightPointRules.Probe.MISSING:FreightPointRules.Probe.INCOMPATIBLE;
+    }
+    private static FreightPointRules.Probe probePackager(ServerLevel level,BlockPos pos){
+        if(!level.hasChunkAt(pos))return FreightPointRules.Probe.MISSING;
+        if(level.getBlockEntity(pos) instanceof PackagerBlockEntity pe&&!(pe instanceof com.simibubi.create.content.logistics.packager.repackager.RepackagerBlockEntity))
+            return FreightPointRules.Probe.PRESENT;
+        return level.getBlockState(pos).isAir()?FreightPointRules.Probe.MISSING:FreightPointRules.Probe.INCOMPATIBLE;
+    }
+    private static Long stationPosOf(PostboxBlockEntity box){
+        if(!(box.target instanceof PackagePortTarget.TrainStationFrogportTarget))return null;
+        return box.getBlockPos().offset(box.target.relativePos).asLong();
+    }
+    /** Records a meaningful state transition so open Logistics/overview screens get a fresh copy. */
+    public void markChanged(){pendingPush=true;economy.setDirty();}
     public boolean manage(UUID city,UUID id,String action,String name){
         FreightPoint p=point(id);if(p==null||!p.cityId.equals(city))return false;
         switch(action){
@@ -81,12 +158,13 @@ public final class FreightLogistics {
             default -> {return false;}
         }
         if(!p.enabled)assignments.values().stream().filter(a->id.equals(a.source)).forEach(a->a.running=false);
-        economy.setDirty();return true;
+        markChanged();return true;
     }
     public void restoreAddress(MinecraftServer server,UUID id){
         FreightPoint p=point(id);if(p==null||!p.enabled||p.removed)return;
         ServerLevel level=server.getLevel(ResourceKey.create(Registries.DIMENSION,p.dimension));
-        if(level!=null&&level.hasChunkAt(p.postbox)&&level.getBlockEntity(p.postbox) instanceof PostboxBlockEntity box){box.addressFilter=p.address;box.acceptsPackages=p.mode.receives();box.filterChanged();box.notifyUpdate();}
+        if(level!=null&&level.hasChunkAt(p.postbox)&&level.getBlockEntity(p.postbox) instanceof PostboxBlockEntity box)applyAddress(p,box);
+        markChanged();
     }
     public boolean control(UUID city,UUID subject,UUID source,boolean running,MinecraftServer server){
         FreightAssignment a=assignments.get(subject);IndustrialContract c=economy.contract(subject);MarketOffer o=economy.marketOffer(subject);
@@ -95,8 +173,27 @@ public final class FreightLogistics {
         UUID selected=source==null?a.source:source;if(!sending(selected,city,subject))return false;
         FreightPoint p=point(selected);validate(server,p);FreightPoint dest=point(a.destination);if(dest!=null)validate(server,dest);
         if(running&&(!p.online()||dest==null||!dest.online()||!route(p,dest).equals("connected")))return false;
-        a.source=selected;a.running=running;economy.setDirty();return true;
+        if(!Objects.equals(a.source,selected)){clearDispatch(a,RailwayManager.get(server.overworld()));a.source=selected;}
+        if(running){RailwayManager railway=RailwayManager.get(server.overworld());SelectedRailwayRoute route=a.train==null?null:railway.selectedRoute(a.train);var readiness=FreightDispatchPolicy.readiness(a.train!=null,route!=null&&a.routeSelection!=null&&a.routeSelection.equals(route.selectionId()),economy.treasury(city),route==null?0:route.option().tariffCost(),0,1);if(readiness==FreightDispatchPolicy.Readiness.ROUTE_NOT_SELECTED||readiness==FreightDispatchPolicy.Readiness.TRAIN_NOT_ASSIGNED){a.dispatchError="route_not_selected";markChanged();return false;}if(readiness==FreightDispatchPolicy.Readiness.INSUFFICIENT_FUNDS){a.dispatchError="insufficient_funds";markChanged();return false;}a.dispatchError="";}
+        a.running=running;markChanged();return true;
     }
+    public RoutePlan routeOptions(ServerLevel level,City city,UUID subject,UUID fleetId){
+        FreightAssignment a=assignments.get(subject);FreightPoint source=a==null?null:point(a.source),destination=a==null?null:point(a.destination);RailwayManager railway=RailwayManager.get(level);
+        if(a==null||source==null||destination==null||!city.getId().equals(source.cityId)||source.station==null||destination.station==null)return new RoutePlan("","",List.of(),"not_ready");
+        CityFleetTrain fleet=railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());GlobalStation target=CreateRailwayAdapter.station(destination.station);
+        if(fleet==null||train==null||!city.getId().equals(fleet.cityId())||fleet.activeLineId()!=null||(fleet.type()!=RailwayTypes.TrainType.FREIGHT&&fleet.type()!=RailwayTypes.TrainType.MIXED)||target==null||train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id)||railway.activeTrip(fleet.createTrainId())!=null||trainBusy(fleetId,subject))return new RoutePlan(source.stationName,destination.stationName,List.of(),"not_ready");
+        List<RailwayRouteOption> routes=RailwayRoutePlanner.plan(train,target,railway,RailwayOwnershipTypes.OwnerType.CITY,city.getId(),CityManager.get(level));
+        String error="";if(routes.isEmpty()){error=train.navigation.findPathTo(target,Double.MAX_VALUE)!=null?"private_access_denied":"no_route";a.dispatchError=error;markChanged();}
+        railway.proposeRoutes(fleetId,routes);return new RoutePlan(source.stationName,destination.stationName,routes,error);
+    }
+    public boolean selectDispatch(ServerLevel level,City city,UUID subject,UUID fleetId,UUID optionId){
+        FreightAssignment a=assignments.get(subject);FreightPoint source=a==null?null:point(a.source),destination=a==null?null:point(a.destination);RailwayManager railway=RailwayManager.get(level);CityFleetTrain fleet=railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());RailwayRouteOption option=railway.proposedRoutes(fleetId).stream().filter(o->o.id().equals(optionId)).findFirst().orElse(null);
+        if(a==null||source==null||destination==null||source.station==null||destination.station==null||fleet==null||train==null||fleet.activeLineId()!=null||!city.getId().equals(source.cityId)||!city.getId().equals(fleet.cityId())||train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id)||option==null||!destination.station.equals(option.destinationStationId())||RailwayTripAccountingService.selectedPath(train,CreateRailwayAdapter.station(destination.station),option)==null)return false;
+        if(a.train!=null&&!a.train.equals(fleetId))railway.consumeSelectedRoute(a.train);if(!railway.selectRoute(fleetId,optionId,level.getGameTime()))return false;
+        SelectedRailwayRoute selected=railway.selectedRoute(fleetId);a.train=fleetId;a.routeSelection=selected.selectionId();a.running=false;a.dispatchError="";markChanged();return true;
+    }
+    private boolean trainBusy(UUID train,UUID except){return assignments.values().stream().anyMatch(a->train.equals(a.train)&&!a.subject.equals(except)&&!terminal(a.subject));}
+    private static void clearDispatch(FreightAssignment a,RailwayManager railway){if(a.train!=null)railway.consumeSelectedRoute(a.train);a.train=null;a.routeSelection=null;a.running=false;a.dispatchError="";}
     public static boolean inside(City city,ServerLevel level,BlockPos pos){
         int half=city.getTerritorySize()/2;return city.getPylonDimension().equals(level.dimension().location())&&Math.abs((long)pos.getX()-city.getPylonPos().getX())<=half&&Math.abs((long)pos.getZ()-city.getPylonPos().getZ())<=half;
     }
@@ -104,33 +201,91 @@ public final class FreightLogistics {
         if(!(box.target instanceof PackagePortTarget.TrainStationFrogportTarget))return null;
         return CreateRailwayAdapter.stationAt(level.dimension(),box.getBlockPos().offset(box.target.relativePos));
     }
-    public static BlockPos receiverPos(ServerLevel level,FreightPoint p){
-        var state=level.getBlockState(p.packager);return state.hasProperty(BlockStateProperties.FACING)?p.packager.relative(state.getValue(BlockStateProperties.FACING).getOpposite()):p.packager;
+    public static BlockPos receiverPos(ServerLevel level,BlockPos packager){
+        var state=level.getBlockState(packager);return state.hasProperty(BlockStateProperties.FACING)?packager.relative(state.getValue(BlockStateProperties.FACING).getOpposite()):packager;
     }
+    public static BlockPos receiverPos(ServerLevel level,FreightPoint p){return receiverPos(level,p.packager);}
     private static boolean supportedReceiver(ServerLevel level,BlockPos pos){return level.hasChunkAt(pos)&&(level.getBlockState(pos).getBlock() instanceof com.example.examplemod.economy.block.ContractIntakeBlock||level.getBlockState(pos).is(Blocks.CHEST)||level.getBlockState(pos).is(Blocks.BARREL));}
     private static boolean compatiblePackager(ServerLevel level,BlockPos pos){return level.getBlockEntity(pos) instanceof PackagerBlockEntity&&!(level.getBlockEntity(pos) instanceof com.simibubi.create.content.logistics.packager.repackager.RepackagerBlockEntity);}
     public FreightPoint receiver(ServerLevel level,BlockPos pos,Direction side){
         return points.values().stream().filter(p->p.dimension.equals(level.dimension().location())&&level.hasChunkAt(p.packager)&&p.packager.equals(pos.relative(side))&&receiverPos(level,p).equals(pos)).findFirst().orElse(null);
     }
-    public void validate(MinecraftServer server,FreightPoint p){
-        ServerLevel level=server.getLevel(ResourceKey.create(Registries.DIMENSION,p.dimension));String old=p.status;
-        if(p.removed)p.status="removed";
-        else if(!p.enabled)p.status="disabled";
-        else if(level==null||!level.hasChunkAt(p.postbox)||!level.hasChunkAt(p.packager))p.status="unloaded";
-        else {
-            p.postboxPresent=level.getBlockEntity(p.postbox) instanceof PostboxBlockEntity;p.packagerPresent=compatiblePackager(level,p.packager);
-            PostboxBlockEntity box=p.postboxPresent?(PostboxBlockEntity)level.getBlockEntity(p.postbox):null;
-            GlobalStation station=box==null?null:station(level,box);p.stationPresent=station!=null;
-            if(station!=null){p.station=station.id;p.stationName=station.name;}
-            p.status=!p.postboxPresent?"postbox_missing":!p.packagerPresent?"packager_missing":!p.stationPresent?"station_missing":p.mode.receives()&&!supportedReceiver(level,receiverPos(level,p))?"receiver_missing":!p.address.equals(box.addressFilter)?"address_changed":"online";
-        }
-        if(!old.equals(p.status))economy.setDirty();
+
+    /**
+     * Live reconciliation. Re-reads the physical world every tick and heals whatever a temporary
+     * breakage lost — most importantly a replaced Postbox's address filter, which previously left
+     * the point stuck in {@code address_changed} until a manual toggle. Never loads a chunk.
+     *
+     * @return {@code true} when the visible status changed, so callers can request a state push.
+     */
+    public boolean validate(MinecraftServer server,FreightPoint p){
+        ServerLevel level=server.getLevel(ResourceKey.create(Registries.DIMENSION,p.dimension));
+        if(level!=null&&level.hasChunkAt(p.postbox)&&level.getBlockEntity(p.postbox) instanceof PostboxBlockEntity box
+                &&FreightPointRules.healAddress(p.address,box.addressFilter))applyAddress(p,box);
+        String old=p.status;
+        p.status=FreightPointRules.status(observe(level,p));
+        if(!old.equals(p.status)){markChanged();return true;}
+        return false;
+    }
+
+    /** World observation only; the decision itself lives in {@link FreightPointRules}. */
+    private FreightPointRules.Observation observe(ServerLevel level,FreightPoint p){
+        if(level==null||!level.hasChunkAt(p.postbox)||!level.hasChunkAt(p.packager))
+            return new FreightPointRules.Observation(p.removed,p.enabled,false,FreightPointRules.Probe.MISSING,
+                    FreightPointRules.Probe.MISSING,false,true,true,true);
+        FreightPointRules.Probe postbox=probePostbox(level,p.postbox);
+        FreightPointRules.Probe packager=probePackager(level,p.packager);
+        p.postboxPresent=postbox==FreightPointRules.Probe.PRESENT;
+        p.packagerPresent=packager==FreightPointRules.Probe.PRESENT;
+        boolean stationPresent=false,stationMatched=true,receiverOk=true,addressMatches=true;
+        if(postbox==FreightPointRules.Probe.PRESENT){
+            PostboxBlockEntity box=(PostboxBlockEntity)level.getBlockEntity(p.postbox);
+            addressMatches=p.address.equals(box.addressFilter);
+            GlobalStation detected=station(level,box);
+            stationPresent=detected!=null;p.stationPresent=stationPresent;
+            if(detected!=null){
+                Long detectedPos=stationPosOf(box);
+                if(p.stationPos==null&&detectedPos!=null)p.stationPos=detectedPos;
+                stationMatched=detectedPos==null||p.stationPos==null||p.stationPos.longValue()==detectedPos.longValue();
+                p.stationMatched=stationMatched;
+                if(stationMatched){p.station=detected.id;p.stationName=detected.name;}
+            }
+        }else p.stationPresent=false;
+        receiverOk=!p.mode.receives()||supportedReceiver(level,receiverPos(level,p.packager));
+        return new FreightPointRules.Observation(p.removed,p.enabled,true,postbox,packager,stationPresent,stationMatched,receiverOk,addressMatches);
     }
     /** Connectivity only: no invented timetable, path or distance. */
     public static String route(FreightPoint source,FreightPoint dest){
         if(source==null||dest==null||source.station==null||dest.station==null)return "unknown";
         for(var graph:Create.RAILWAYS.trackNetworks.values())if(graph.getPoint(EdgePointType.STATION,source.station)!=null&&graph.getPoint(EdgePointType.STATION,dest.station)!=null)return "connected";
         return "disconnected";
+    }
+    /**
+     * Whether {@code cityId} may cancel this dispatch right now, and a translation-safe reason key
+     * when it may not. Mirrors {@link EconomyManager#revokeDispatch} so the client never offers an
+     * action the server would refuse.
+     */
+    public String revocable(UUID subject,UUID cityId){
+        IndustrialContract contract=economy.contract(subject);
+        if(contract!=null){
+            FreightAssignment assignment=assignments.get(subject);
+            FreightPoint source=assignment==null?null:point(assignment.source);
+            FreightPoint destination=assignment==null?null:point(assignment.destination);
+            boolean issuer=cityId.equals(contract.issuerCityId());
+            boolean endpoint=source!=null&&cityId.equals(source.cityId)||destination!=null&&cityId.equals(destination.cityId);
+            if(!issuer&&!endpoint)return "freight_revoke_denied";
+            if(contract.state()==EconomyTypes.ContractState.DELIVERED||contract.state()==EconomyTypes.ContractState.DISPUTED)return "freight_revoke_state";
+            if(contract.state().terminal())return "freight_revoke_already";
+            return "ok";
+        }
+        MarketOffer offer=economy.marketOffer(subject);
+        if(offer!=null){
+            if(offer.direction()!=EconomyTypes.MarketDirection.BUY_FROM_MASTER||offer.acceptedCity()==null||!offer.acceptedCity().equals(cityId))return "freight_revoke_denied";
+            if(offer.status().terminal())return "freight_revoke_already";
+            if(offer.status()==EconomyTypes.MarketOfferStatus.OPEN)return "freight_revoke_state";
+            return "ok";
+        }
+        return "freight_revoke_unknown";
     }
     public String state(FreightAssignment a){
         if(terminal(a.subject)){IndustrialContract c=economy.contract(a.subject);MarketOffer o=economy.marketOffer(a.subject);return c!=null&&c.state()==EconomyTypes.ContractState.COMPLETED||o!=null&&o.status()==EconomyTypes.MarketOfferStatus.COMPLETED?"complete":"expired";}
@@ -141,15 +296,39 @@ public final class FreightLogistics {
         if(!route(source,dest).equals("connected"))return "route_error";
         return a.running?"running":"paused";
     }
+    private CcecStatus uiStatus(FreightAssignment a,String state,long delivered,long amount,long inFlight,boolean outgoing,RailwayManager railway){
+        CcecStatus endpoint=switch(state){
+            case "complete" -> CcecStatus.of(CcecStatus.Category.SUCCESS,CcecStatus.Code.DELIVERED,CcecStatus.Action.NONE);
+            case "expired" -> CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.SHIPMENT_REVOKED,CcecStatus.Action.FIX_PROBLEM);
+            case "destination_unavailable" -> CcecStatus.of(CcecStatus.Category.WARNING,CcecStatus.Code.DESTINATION_OFFLINE,CcecStatus.Action.FIX_PROBLEM);
+            case "source_unavailable" -> CcecStatus.of(CcecStatus.Category.WARNING,CcecStatus.Code.SOURCE_OFFLINE,CcecStatus.Action.FIX_PROBLEM);
+            case "route_error" -> CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.RAIL_ROUTE_UNAVAILABLE,CcecStatus.Action.FIX_PROBLEM);
+            default -> null;
+        };
+        if(endpoint!=null)return endpoint;if(!outgoing)return inFlight>0?CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.IN_TRANSIT,CcecStatus.Action.OPEN_FREIGHT_POINT):CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.WAITING_FOR_CARGO,CcecStatus.Action.NONE);
+        if("insufficient_funds".equals(a.dispatchError))return CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.INSUFFICIENT_FUNDS,CcecStatus.Action.FIX_PROBLEM);
+        if("private_access_denied".equals(a.dispatchError))return CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.PRIVATE_ACCESS_DENIED,CcecStatus.Action.SELECT_ROUTE);
+        if("route_invalidated".equals(a.dispatchError))return CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.ROUTE_INVALIDATED,CcecStatus.Action.SELECT_ROUTE);
+        if("no_route".equals(a.dispatchError))return CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.RAIL_ROUTE_UNAVAILABLE,CcecStatus.Action.SELECT_ROUTE);
+        if(a.train==null)return CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.TRAIN_NOT_ASSIGNED,CcecStatus.Action.ASSIGN_TRAIN);
+        CityFleetTrain fleet=railway.train(a.train);if(fleet!=null&&railway.activeTrip(fleet.createTrainId())!=null)return CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.IN_TRANSIT,CcecStatus.Action.OPEN_FREIGHT_POINT);
+        RailwayTripLedger latest=railway.tripLedgers().stream().filter(t->t.fleetTrainId().equals(a.train)).max(Comparator.comparingLong(t->Math.max(t.startedAt(),t.settledAt()))).orElse(null);if(latest!=null&&latest.status()==RailwayTripLedger.Status.ROUTE_INVALIDATED)return CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.ROUTE_INVALIDATED,CcecStatus.Action.SELECT_ROUTE);
+        if(inFlight>0&&latest!=null&&latest.status()==RailwayTripLedger.Status.COMPLETED)return CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.IN_TRANSIT,CcecStatus.Action.OPEN_FREIGHT_POINT);
+        SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected==null||a.routeSelection==null||!a.routeSelection.equals(selected.selectionId()))return CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.ROUTE_NOT_SELECTED,CcecStatus.Action.SELECT_ROUTE);
+        return a.running?CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED,CcecStatus.Code.WAITING_FOR_CARGO,CcecStatus.Action.OPEN_FREIGHT_POINT):CcecStatus.of(CcecStatus.Category.SUCCESS,CcecStatus.Code.READY_TO_DISPATCH,CcecStatus.Action.START_DISPATCH);
+    }
     @SubscribeEvent public static void afterLevel(LevelTickEvent.Post event){
         if(event.getLevel() instanceof ServerLevel level&&level==level.getServer().overworld())EconomyManager.get(level).freight().tick(level.getServer());
     }
     public void tick(MinecraftServer server){
         for(FreightPoint p:points.values())validate(server,p);
         for(FreightAssignment a:assignments.values()){
-            if(terminal(a.subject)||!a.running)continue;
+            if(terminal(a.subject)){if(a.running){a.running=false;markChanged();}if(a.train!=null&&a.routeSelection!=null){RailwayManager railway=RailwayManager.get(server.overworld());SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected!=null&&a.routeSelection.equals(selected.selectionId()))railway.consumeSelectedRoute(a.train);}continue;}if(!a.running)continue;
             FreightPoint p=point(a.source),dest=point(a.destination);
-            if(p==null||!p.online()){a.running=false;economy.setDirty();continue;}
+            // A deleted source is terminal for the dispatch; a merely broken one only pauses it so
+            // restoring the point resumes the same assignment instead of losing the player's intent.
+            if(p==null){a.running=false;markChanged();continue;}
+            if(!p.online())continue;
             if(dest==null||!dest.online()||!route(p,dest).equals("connected"))continue;
             ServerLevel level=server.getLevel(ResourceKey.create(Registries.DIMENSION,p.dimension));
             if(level==null||!(level.getBlockEntity(p.packager) instanceof PackagerBlockEntity packager))continue;
@@ -175,8 +354,54 @@ public final class FreightLogistics {
                     mark(box,token,a.address);packager.heldBox=box;packager.animationInward=false;packager.animationTicks=20;packager.notifyUpdate();
                 });
             }
+            tryStartTrain(a,server);
         }
+        if(server.getTickCount()%20L==0L)observeAssignmentStates(server);
+        flushPush(server);
     }
+    /**
+     * Ledger-level transitions (route invalidation, arrival, an invalidated trip) never mutate an
+     * assignment, so nothing else would notice them. Compare the rendered state once a second and
+     * request a push when it moves; the first pass simply seeds the baseline.
+     */
+    private void observeAssignmentStates(MinecraftServer server){
+        RailwayManager railway=RailwayManager.get(server.overworld());
+        StringBuilder fingerprint=new StringBuilder(assignments.size()*64);
+        for(FreightAssignment a:assignments.values()){
+            fingerprint.append(a.subject).append('=').append(state(a)).append('|').append(a.running)
+                    .append('|').append(a.dispatchError).append('|').append(a.routeSelection)
+                    .append('|').append(ledgerStatus(railway,a)).append(';');
+        }
+        String current=fingerprint.toString();
+        if(!current.equals(lastStateFingerprint)){lastStateFingerprint=current;markChanged();}
+    }
+    private static String ledgerStatus(RailwayManager railway,FreightAssignment a){
+        if(a.train==null)return "";
+        RailwayTripLedger latest=railway.tripLedgers().stream().filter(t->t.fleetTrainId().equals(a.train))
+                .max(Comparator.comparingLong(t->Math.max(t.startedAt(),t.settledAt()))).orElse(null);
+        return latest==null?"":latest.status().name();
+    }
+    private String lastStateFingerprint="";
+    private void tryStartTrain(FreightAssignment a,MinecraftServer server){
+        if(!a.running||a.train==null||a.routeSelection==null)return;RailwayManager railway=RailwayManager.get(server.overworld());CityFleetTrain fleet=railway.train(a.train);SelectedRailwayRoute selected=railway.selectedRoute(a.train);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());FreightPoint source=point(a.source),destination=point(a.destination);
+        if(fleet==null||selected==null||!a.routeSelection.equals(selected.selectionId())||train==null||source==null||destination==null||source.station==null||destination.station==null)return;
+        if(railway.activeTrip(fleet.createTrainId())!=null||train.navigation.destination!=null)return;if(train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id))return;
+        long remaining=remaining(a.subject),loaded=loadedAmount(train,a.subject);var readiness=FreightDispatchPolicy.readiness(true,true,economy.treasury(source.cityId),selected.option().tariffCost(),loaded,remaining);if(readiness==FreightDispatchPolicy.Readiness.WAITING_FOR_CARGO)return;if(readiness==FreightDispatchPolicy.Readiness.INSUFFICIENT_FUNDS){a.dispatchError="insufficient_funds";a.running=false;markChanged();return;}
+        GlobalStation target=CreateRailwayAdapter.station(destination.station);var path=target==null?null:RailwayTripAccountingService.selectedPath(train,target,selected.option());
+        if(path==null||train.navigation.startNavigation(path)<0){a.dispatchError="route_invalidated";a.running=false;markChanged();}
+    }
+    /** Throttled server-authoritative push: at most one payload per 10 ticks, never dropped. */
+    private void flushPush(MinecraftServer server){
+        if(!pendingPush)return;
+        long tick=server.getTickCount();
+        if(tick-lastPushTick<10L)return;
+        pendingPush=false;lastPushTick=tick;
+        EconomyNetworkHandlers.pushOpenMenus(server);
+    }
+    /** True while an open Logistics/overview screen still needs a fresh copy of this state. */
+    public boolean pushPending(){return pendingPush;}
+    private long remaining(UUID subject){IndustrialContract contract=economy.contract(subject);if(contract!=null)return Math.max(0,contract.amount()-contract.deliveredAmount());MarketOffer offer=economy.marketOffer(subject);return offer==null?0:Math.max(0,offer.remaining());}
+    private long loadedAmount(Train train,UUID subject){Set<UUID> seen=new HashSet<>();long total=0;for(var carriage:train.carriages){var inventory=carriage.storage.getAllItems();if(inventory==null)continue;for(int slot=0;slot<inventory.getSlots();slot++){ItemStack box=inventory.getStackInSlot(slot);if(!PackageItem.isPackage(box))continue;var context=PackageItem.getOrderContext(box);if(context==null)continue;for(BigItemStack stack:context.stacks()){var tokenId=ShipmentTokenItemData.read(stack.stack);if(tokenId.isEmpty()||!seen.add(tokenId.get()))continue;ShipmentToken token=economy.shipmentToken(tokenId.get());if(token!=null&&token.subjectId().equals(subject)&&token.state()==EconomyTypes.ShipmentTokenState.ACTIVE)total=total>Long.MAX_VALUE-token.amount()?Long.MAX_VALUE:total+token.amount();}}}return total;}
     private void stamp(ServerLevel level,PackagerBlockEntity packager,ItemStack box,ShippingManifest manifest,FreightAssignment a){
         if(box.isEmpty()||!PackageItem.isPackage(box))return;
         var context=PackageItem.getOrderContext(box);if(context!=null&&context.stacks().stream().anyMatch(v->ShipmentTokenItemData.read(v.stack).isPresent()))return;
@@ -204,7 +429,7 @@ public final class FreightLogistics {
         for(Tag raw:t.getList("TokenDestinations",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)raw;tokenDestinations.put(v.getUUID("Token"),v.getUUID("Point"));}
     }
     public CompoundTag snapshot(ServerLevel level,City city){
-        CompoundTag t=new CompoundTag();ListTag ps=new ListTag(),as=new ListTag(),candidates=new ListTag(),routes=new ListTag();
+        CompoundTag t=new CompoundTag();ListTag ps=new ListTag(),as=new ListTag(),candidates=new ListTag(),routes=new ListTag();RailwayManager railway=RailwayManager.get(level);
         ListTag ss=new ListTag();for(FreightSellOffer s:sales.values())if(s.contract()==null){CompoundTag v=s.save();City seller=CityManager.get(level.getServer().overworld()).getCity(s.city());v.putString("CityName",seller==null?"?":seller.getName());ss.add(v);}t.put("Sales",ss);
         ListTag legacy=new ListTag();
         for(IndustrialContract c:economy.contracts())if(c.issuerCityId().equals(city.getId())&&!c.state().terminal()&&!assignments.containsKey(c.id())){CompoundTag v=new CompoundTag();v.putUUID("Subject",c.id());legacy.add(v);}
@@ -217,11 +442,17 @@ public final class FreightLogistics {
             boolean outgoing=source!=null&&source.cityId.equals(city.getId())||ownedContract!=null&&city.getId().equals(ownedContract.contractorCityId());
             if(!outgoing&&(dest==null||!dest.cityId.equals(city.getId())))continue;
             CompoundTag v=a.save();v.putString("State",state(a));v.putBoolean("Outgoing",outgoing);
+            String revoke=revocable(a.subject,city.getId());
+            v.putBoolean("Revocable","ok".equals(revoke));
+            if(!"ok".equals(revoke))v.putString("RevokeReason",revoke);
             IndustrialContract c=economy.contract(a.subject);MarketOffer o=economy.marketOffer(a.subject);
             if(c!=null){v.putString("Item",c.itemId().toString());v.putLong("Amount",c.amount());v.putLong("Delivered",c.deliveredAmount());}
             else if(o!=null){v.putString("Item",o.itemId().toString());v.putLong("Amount",o.acceptedQuantity());v.putLong("Delivered",o.acceptedQuantity()-o.remaining());}
             long flight=economy.shipmentTokens().stream().filter(s->s.subjectId().equals(a.subject)&&s.state()==EconomyTypes.ShipmentTokenState.ACTIVE).mapToLong(ShipmentToken::amount).sum();
-            v.putLong("InFlight",flight);v.putLong("Available",Math.max(0,v.getLong("Amount")-v.getLong("Delivered")-flight));as.add(v);
+            v.putLong("InFlight",flight);v.putLong("Available",Math.max(0,v.getLong("Amount")-v.getLong("Delivered")-flight));
+            if(a.train!=null){CityFleetTrain fleet=railway.train(a.train);v.putString("TrainName",fleet==null?"?":fleet.lastKnownName());SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected!=null&&a.routeSelection!=null&&a.routeSelection.equals(selected.selectionId())){v.putDouble("RouteDistance",selected.option().distance());v.putLong("RouteCost",selected.option().tariffCost());v.putLong("RouteEta",selected.option().estimatedTicks());v.putString("RouteStrategy",selected.option().strategy().name());}}
+            ListTag trainTags=new ListTag();if(outgoing&&source!=null&&source.station!=null)for(CityFleetTrain fleet:railway.trainsForCity(city.getId())){if(fleet.type()!=RailwayTypes.TrainType.FREIGHT&&fleet.type()!=RailwayTypes.TrainType.MIXED)continue;Train train=CreateRailwayAdapter.train(fleet.createTrainId());boolean atSource=train!=null&&train.getCurrentStation()!=null&&source.station.equals(train.getCurrentStation().id);boolean available=fleet.activeLineId()==null&&FreightDispatchPolicy.eligibleTrain(fleet.type(),city.getId().equals(fleet.cityId()),atSource,railway.activeTrip(fleet.createTrainId())!=null,trainBusy(fleet.fleetTrainId(),a.subject));CompoundTag candidate=new CompoundTag();candidate.putUUID("Id",fleet.fleetTrainId());candidate.putString("Name",fleet.lastKnownName());candidate.putString("Type",fleet.type().name());candidate.putBoolean("Available",available);candidate.putBoolean("AtSource",atSource);trainTags.add(candidate);}v.put("TrainCandidates",trainTags);
+            v.put("UiStatus",uiStatus(a,v.getString("State"),v.getLong("Delivered"),v.getLong("Amount"),flight,outgoing,railway).save());as.add(v);
         }
         for(FreightPoint p:points.values())if(p.cityId.equals(city.getId()))for(FreightPoint d:points.values()){
             CompoundTag r=new CompoundTag();r.putUUID("Source",p.id);r.putUUID("Destination",d.id);r.putString("State",route(p,d));routes.add(r);

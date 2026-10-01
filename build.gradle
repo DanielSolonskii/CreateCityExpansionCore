@@ -237,9 +237,82 @@ tasks.register('checkLogisticsLayout', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkLogisticsLayout') }
 
+tasks.register('checkRailwayOwnership', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.railway.RailwayOwnershipCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkRailwayOwnership') }
+
+tasks.register('checkRailwayTripAccounting', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.railway.RailwayTripAccountingCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkRailwayTripAccounting') }
+
+tasks.register('checkCityRelations', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityRelationsCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityRelations') }
+
+tasks.register('checkWorldMapV2', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.WorldMapV2Check'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkWorldMapV2') }
+
+tasks.register('checkUnifiedStatus', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.status.UnifiedStatusCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkUnifiedStatus') }
+
+tasks.register('checkFreightDispatch', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.economy.FreightDispatchCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkFreightDispatch') }
+
+tasks.register('checkFreightReconciliation', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.economy.FreightReconciliationCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkFreightReconciliation') }
+
+def ccecProductionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+tasks.register('checkNoCreateSplitPackage') {
+    dependsOn tasks.named('jar')
+    inputs.file(ccecProductionJar)
+    doLast {
+        def archive = inputs.files.singleFile
+        def forbidden = []
+        new java.util.zip.ZipFile(archive).withCloseable { zip ->
+            zip.entries().each { entry ->
+                if (entry.name.startsWith('com/simibubi/create/')) forbidden.add(entry.name)
+            }
+        }
+        if (!forbidden.empty) throw new GradleException("CCEC jar contains forbidden Create split-package classes: ${forbidden}")
+    }
+}
+tasks.named('check') { dependsOn tasks.named('checkNoCreateSplitPackage') }
+
 // Each headless JVM owns its log directory even when Gradle runs checks in parallel.
 tasks.withType(JavaExec).configureEach {
-    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout']) {
+    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation']) {
         workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
         doFirst { workingDir.mkdirs() }
     }

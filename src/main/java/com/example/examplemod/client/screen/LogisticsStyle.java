@@ -47,6 +47,15 @@ final class LogisticsStyle {
             default -> RED;
         };
     }
+    /** Fallback colour when only a unified status is available (mirrors CcecStatusUi). */
+    static int statusColor(com.example.examplemod.status.CcecStatus s) {
+        return switch(s.category()) {
+            case SUCCESS -> GREEN;
+            case ACTION_REQUIRED -> 0xFFD6A342;
+            case WARNING -> 0xFFE08045;
+            default -> RED;
+        };
+    }
     static final class Action extends Button {
         private final boolean primary;
         Action(int x,int y,int w,Component label,boolean primary,Runnable action) {

@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Список соседних городов для отрисовки на карте пилона.
@@ -37,11 +38,13 @@ public record CityMapPeersPayload(
      * @param own            true, если это город самого игрока
      */
     public record Peer(
+            UUID cityId,
             String name,
             int pylonX,
             int pylonZ,
             int territorySize,
-            boolean own
+            boolean own,
+            boolean master
     ) {
     }
 
@@ -62,11 +65,13 @@ public record CityMapPeersPayload(
                         ResourceLocation.STREAM_CODEC.encode(buffer, payload.dimensionId());
                         buffer.writeVarInt(payload.peers().size());
                         for (Peer peer : payload.peers()) {
+                            buffer.writeUUID(peer.cityId());
                             buffer.writeUtf(peer.name(), 48);
                             buffer.writeVarInt(peer.pylonX());
                             buffer.writeVarInt(peer.pylonZ());
                             buffer.writeVarInt(peer.territorySize());
                             buffer.writeBoolean(peer.own());
+                            buffer.writeBoolean(peer.master());
                         }
                     },
                     buffer -> {
@@ -77,10 +82,12 @@ public record CityMapPeersPayload(
                         List<Peer> peers = new ArrayList<>(Math.min(size, MAX_PEERS));
                         for (int i = 0; i < size; i++) {
                             peers.add(new Peer(
+                                    buffer.readUUID(),
                                     buffer.readUtf(48),
                                     buffer.readVarInt(),
                                     buffer.readVarInt(),
                                     buffer.readVarInt(),
+                                    buffer.readBoolean(),
                                     buffer.readBoolean()
                             ));
                         }

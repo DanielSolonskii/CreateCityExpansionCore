@@ -475,11 +475,13 @@ public class CityPylonBlock extends BaseEntityBlock {
                     && other.getId().equals(ownCity.getId());
 
             peers.add(new CityMapPeersPayload.Peer(
+                    other.getId(),
                     other.getName(),
                     otherPos.getX(),
                     otherPos.getZ(),
                     other.getTerritorySize(),
-                    own
+                    own,
+                    other.getId().equals(com.example.examplemod.economy.EconomyManager.get(player.serverLevel()).masterCityId())
             ));
 
             if (peers.size() >= CityMapPeersPayload.MAX_PEERS) {

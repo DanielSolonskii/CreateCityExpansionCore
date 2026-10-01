@@ -7,6 +7,8 @@ import com.example.examplemod.client.CityBoundaryRenderer;
 import com.example.examplemod.client.gui.CityButton;
 import com.example.examplemod.client.map.CityMapPanel;
 import com.example.examplemod.client.sound.SoundHelper;
+import com.example.examplemod.client.status.CcecStatusUi;
+import com.example.examplemod.status.CcecStatus;
 import com.example.examplemod.sound.ModSounds;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.InvitePlayerPayload;
@@ -19,6 +21,8 @@ import com.example.examplemod.network.EconomyStatePayload;
 import com.example.examplemod.railway.RailwayLineSnapshot;
 import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTrainSnapshot;
+import com.example.examplemod.railway.RailwayOwnershipSnapshot;
+import com.example.examplemod.railway.RailwayOwnershipTypes;
 import com.example.examplemod.railway.RailwayTypes;
 import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.city.CityDevelopmentRequirementSnapshot;
@@ -87,7 +91,7 @@ public class CityPylonScreen
     private CityButton closeButton;
 
     private final CityButton[] tabButtons =
-            new CityButton[9];
+            new CityButton[10];
 
     private int railwayPage;
     private int railwayRefreshTicks;
@@ -471,6 +475,7 @@ public class CityPylonScreen
                 Component.translatable("gui.createcityexpansioncore.city.tab.development"),
                 Component.translatable("gui.createcityexpansioncore.city.tab.railway"),
                 Component.translatable("gui.createcityexpansioncore.city.tab.marketplace"),
+                Component.translatable("gui.createcityexpansioncore.city.tab.relations"),
                 Component.translatable("gui.createcityexpansioncore.freight.title")
         };
 
@@ -485,13 +490,17 @@ public class CityPylonScreen
             this.tabButtons[i] =
                     new CityButton(
                             this.leftPos + 10,
-                            this.topPos + 54 + i * 27,
+                            this.topPos + 54 + i * 25,
                             150,
                             24,
                             tabNames[i],
                             button -> {
 
                                 if (tabIndex == 8) {
+                                    if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this));
+                                    return;
+                                }
+                                if (tabIndex == 9) {
                                     requestEconomyState();
                                     if (this.minecraft != null) this.minecraft.setScreen(new LogisticsScreen(this));
                                     return;
@@ -2950,6 +2959,11 @@ public class CityPylonScreen
     }
 
     private void renderRailNetwork(GuiGraphics graphics, int left, int top) {
+        List<RailwayOwnershipSnapshot> owned=this.menu.getRailwayOwnership();
+        if(!owned.isEmpty()){
+            int y=top+51,end=Math.min(owned.size(),3);for(int i=0;i<end;i++){var network=owned.get(i);int color=network.onlineSections()==network.sections()?0xFF77B992:0xFFD07968;graphics.fill(left,y,left+CONTENT_WIDTH,y+35,0xFF292F31);graphics.fill(left,y,left+3,y+35,color);graphics.drawString(this.font,network.name(),left+9,y+4,0xFFE6E9EA,false);graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_summary",network.sections(),network.onlineSections(),String.format(java.util.Locale.ROOT,"%.0f",network.totalLength())),left+9,y+15,0xFFAEB8BB,false);graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_access_tariff",Component.translatable("gui.createcityexpansioncore.railway.access."+network.access().name().toLowerCase()),network.freightTariff()),left+9,y+25,0xFFD09A3A,false);y+=39;for(var section:this.menu.getRailwayOwnedSections().stream().filter(s->s.networkId().equals(network.networkId())).limit(2).toList()){graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.section_summary",section.sectionId().toString().substring(0,8),String.format(java.util.Locale.ROOT,"%.0f",section.length()),Component.translatable("gui.createcityexpansioncore.railway.section_status."+section.status().name().toLowerCase())),left+12,y,section.status()==RailwayOwnershipTypes.SectionStatus.ONLINE?0xFF77B992:0xFFD07968,false);y+=12;}}
+            graphics.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_hint"),left,top+CONTENT_BODY_BOTTOM-24,CONTENT_WIDTH,0xFF8F9A9E);return;
+        }
         long availableStations = this.menu.getRailwayStations().stream()
                 .filter(RailwayStationSnapshot::cityOwned).filter(RailwayStationSnapshot::available).count();
         long missingStations = this.menu.getRailwayStations().stream()
@@ -3029,13 +3043,14 @@ public class CityPylonScreen
         beginClip(graphics, left, top + 48, left + CONTENT_WIDTH, top + RAIL_LIST_BOTTOM);
         for (int i = this.railwayScroll; i < end; i++) {
             RailwayTrainSnapshot train = trains.get(i);
+            CcecStatusUi.observe(train.fleetTrainId(),train.uiStatus());
             int y = top + 51 + (i - this.railwayScroll) * 31;
             graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
-            graphics.fill(left, y, left + 3, y + 27, railStatusColor(train.statusKey()));
+            graphics.fill(left, y, left + 3, y + 27, CcecStatusUi.color(train.uiStatus()));
             graphics.drawString(this.font, train.name(), left + 9, y + 4,
                     train.cityOwned() ? 0xFFE6E9EA : 0xFF9AA5A9, false);
             graphics.drawString(this.font,
-                    train.cityOwned() ? railStatus(train.statusKey())
+                    train.cityOwned() ? CcecStatusUi.title(train.uiStatus())
                             : Component.translatable("gui.createcityexpansioncore.railway.personal"),
                     left + 9, y + 15, 0xFFAEB8BB, false);
             if (train.cityOwned()) {
@@ -3113,7 +3128,8 @@ public class CityPylonScreen
     private void renderRailTrainDetail(GuiGraphics graphics, int left, int top,
                                        RailwayTrainSnapshot train, int mouseX, int mouseY) {
         graphics.fill(left, top + 51, left + CONTENT_WIDTH, top + 196, 0xFF292F31);
-        graphics.fill(left, top + 51, left + 4, top + 196, railStatusColor(train.statusKey()));
+        CcecStatusUi.observe(train.fleetTrainId(),train.uiStatus());
+        graphics.fill(left, top + 51, left + 4, top + 196, CcecStatusUi.color(train.uiStatus()));
         graphics.drawString(this.font, train.name(), left + 12, top + 58, 0xFFFFFFFF, false);
         graphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.railway.detail.type",
@@ -3126,17 +3142,16 @@ public class CityPylonScreen
                                 ? Component.translatable("status.createcityexpansioncore.railway.no_schedule")
                                 : Component.literal(train.lineName())),
                 left + 12, top + 89, 0xFFB7C0C3, false);
-        graphics.drawString(this.font, Component.translatable(
-                        "gui.createcityexpansioncore.railway.detail.status", railStatus(train.statusKey())),
-                left + 12, top + 103, railStatusColor(train.statusKey()), false);
+        CcecStatusUi.render(graphics,this.font,train.uiStatus(),left+12,top+101,CONTENT_WIDTH-24,false);
         if (!train.nextStation().isEmpty()) {
             graphics.drawString(this.font, Component.translatable(
                             "gui.createcityexpansioncore.railway.next_station", train.nextStation()),
-                    left + 12, top + 117, 0xFFB7C0C3, false);
+                    left + 12, top + 140, 0xFFB7C0C3, false);
         }
         graphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.railway.speed", String.format(java.util.Locale.ROOT, "%.1f", train.speed())),
-                left + 12, top + 131, 0xFFB7C0C3, false);
+                left + 12, top + 153, 0xFFB7C0C3, false);
+        if(train.cityOwned()&&train.uiStatus().action()!=CcecStatus.Action.NONE)renderRailAction(graphics,left+12,top+170,CONTENT_WIDTH-24,CcecStatusUi.action(train.uiStatus()),mouseX,mouseY);
         renderRailAction(graphics, left, top + 202, RAIL_ACTION_MAIN_W,
                 trainActionLabel(train), mouseX, mouseY);
         renderRailAction(graphics, left + RAIL_ACTION_REMOVE_X, top + 202, 74,
@@ -3219,6 +3234,7 @@ public class CityPylonScreen
                 return true;
             }
         }
+        if(this.railwayPage==0){List<RailwayOwnershipSnapshot> owned=this.menu.getRailwayOwnership();int end=Math.min(owned.size(),5);for(int i=0;i<end;i++){int y=top+51+i*39;if(!inside(mouseX,mouseY,left,y,CONTENT_WIDTH,35))continue;var network=owned.get(i);if(mouseX<left+CONTENT_WIDTH/2){var next=network.access()==RailwayOwnershipTypes.Access.PUBLIC?RailwayOwnershipTypes.Access.PRIVATE:RailwayOwnershipTypes.Access.PUBLIC;PacketDistributor.sendToServer(new RailwayCommandPayload(this.menu.getPylonPos(),RailwayCommandPayload.Action.SET_NETWORK_ACCESS,network.networkId(),null,"",next.ordinal(),false,List.of()));}else{long delta=hasShiftDown()?-100:100;long tariff=Math.max(0,network.freightTariff()+delta);PacketDistributor.sendToServer(new RailwayCommandPayload(this.menu.getPylonPos(),RailwayCommandPayload.Action.SET_NETWORK_TARIFF,network.networkId(),null,Long.toString(tariff),0,false,List.of()));}return true;}return false;}
         if (this.railwayPage == 1) {
             List<RailwayLineSnapshot> lines = this.menu.getRailwayLines();
             int end = Math.min(lines.size(), this.railwayScroll + railRows(32));
@@ -3247,7 +3263,11 @@ public class CityPylonScreen
                     .filter(train -> train.fleetTrainId().equals(this.railwayTrainDetail))
                     .findFirst().orElse(null);
             if (detail != null) {
-                if (inside(mouseX, mouseY, left + HALF_W2, top + RAIL_ACTION_Y, HALF_W, 22)) {
+                if(detail.cityOwned()&&detail.uiStatus().action()!=CcecStatus.Action.NONE&&inside(mouseX,mouseY,left+12,top+170,CONTENT_WIDTH-24,22)){
+                    if(detail.uiStatus().action()==CcecStatus.Action.OPEN_FREIGHT_POINT&&this.minecraft!=null)this.minecraft.setScreen(new LogisticsScreen(this));
+                    else if(detail.uiStatus().action()==CcecStatus.Action.SELECT_ROUTE||detail.uiStatus().action()==CcecStatus.Action.CONFIRM_DEPARTURE)sendRailway(RailwayCommandPayload.Action.REQUEST_ROUTES,detail.fleetTrainId(),null);
+                    else operateTrain(detail);
+                } else if (inside(mouseX, mouseY, left + HALF_W2, top + RAIL_ACTION_Y, HALF_W, 22)) {
                     this.railwayTrainDetail = null;
                 } else if (inside(mouseX, mouseY, left + RAIL_ACTION_REMOVE_X, top + 202, 74, 22)) {
                     sendRailway(RailwayCommandPayload.Action.REMOVE_TRAIN, detail.fleetTrainId(), null);
@@ -3795,6 +3815,7 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
     @Override
     protected void containerTick() {
         super.containerTick();
+        var routeOptions=this.menu.drainRouteOptions();if(routeOptions!=null&&this.minecraft!=null)this.minecraft.setScreen(new RailwayRouteSelectionScreen(this,routeOptions));
         int currentLevel = this.menu.getCityLevel();
         if (lastObservedCityLevel < 2 && currentLevel >= 2) {
             developmentAnimationTicks = 0;

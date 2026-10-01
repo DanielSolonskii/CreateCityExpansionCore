@@ -7,6 +7,7 @@ import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.RailwayCommandPayload;
 import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.RailwayStatePayload;
+import com.example.examplemod.network.RailwayRouteOptionsPayload;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.TrackEdge;
@@ -16,6 +17,7 @@ import com.simibubi.create.content.trains.graph.TrackNodeLocation;
 import com.simibubi.create.content.trains.schedule.ScheduleRuntime;
 import com.simibubi.create.content.trains.schedule.condition.IdleCargoCondition;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -33,6 +35,7 @@ public final class RailwayNetworkHandlers {
         if (context == null) return;
         if (payload.action() == RailwayCommandPayload.Action.REQUEST_STATE) { sendState(player, context); return; }
         if (payload.action() == RailwayCommandPayload.Action.REQUEST_MAP) { sendMap(player, context); return; }
+        if (payload.action() == RailwayCommandPayload.Action.REQUEST_ROUTES) { sendRouteOptions(player,context,payload.primaryId()); return; }
         if (!context.city.canBuild(player.getUUID())) { feedback(player, "permission_denied"); return; }
         if ((payload.action() == RailwayCommandPayload.Action.REMOVE_LINE
                 || payload.action() == RailwayCommandPayload.Action.REMOVE_TRAIN
@@ -58,6 +61,9 @@ public final class RailwayNetworkHandlers {
             case REBIND_STATION -> rebindStation(context, payload.primaryId(), payload.secondaryId());
             case REBIND_TRAIN -> rebindTrain(context, payload.primaryId(), payload.secondaryId());
             case LINK_PROJECT -> linkProject(context, payload.primaryId(), payload.secondaryId());
+            case SET_NETWORK_ACCESS -> configureNetwork(context,payload,true);
+            case SET_NETWORK_TARIFF -> configureNetwork(context,payload,false);
+            case SELECT_ROUTE -> selectRoute(context,payload.primaryId(),payload.secondaryId());
             default -> false;
         };
         feedback(player, success ? "operation_complete" : "operation_failed");
@@ -92,6 +98,23 @@ public final class RailwayNetworkHandlers {
     private static boolean rebindStation(Context c,UUID targetId,UUID replacementId){CityRailStation target=c.railway.station(targetId);return target!=null&&c.city.getId().equals(target.cityId())&&c.railway.rebindStation(targetId,replacementId,c.player.getUUID());}
     private static boolean rebindTrain(Context c,UUID targetId,UUID replacementId){CityFleetTrain target=c.railway.train(targetId);return target!=null&&c.city.getId().equals(target.cityId())&&c.railway.rebindTrain(targetId,replacementId,c.player.getUUID());}
     private static boolean mark(Context c){c.railway.markChanged();return true;}
+    private static boolean configureNetwork(Context c,RailwayCommandPayload p,boolean access){
+        OwnedRailwayNetwork network=c.railway.ownedNetwork(p.primaryId());if(network==null)return false;
+        UUID owner=network.ownerType()==RailwayOwnershipTypes.OwnerType.CITY?c.city.getId():c.player.getUUID();
+        if(network.ownerType()==RailwayOwnershipTypes.OwnerType.CITY&&!c.city.isAdmin(c.player.getUUID()))return false;
+        Long tariff=null;if(!access)try{tariff=Math.max(0L,Long.parseLong(p.name()));}catch(NumberFormatException ex){return false;}
+        return c.railway.configureNetwork(network.id(),network.ownerType(),owner,
+                access?enumAt(RailwayOwnershipTypes.Access.values(),p.typeOrdinal(),network.access()):null,
+                tariff,null);
+    }
+    private static void sendRouteOptions(ServerPlayer player,Context c,UUID fleetId){
+        CityFleetTrain fleet=c.railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());
+        if(fleet==null||train==null||!c.city.getId().equals(fleet.cityId())||train.getCurrentStation()==null||train.navigation.destination==null){PacketDistributor.sendToPlayer(player,new RailwayRouteOptionsPayload(c.pylonPos,fleetId==null?new UUID(0,0):fleetId,"","",List.of(),"not_ready"));return;}
+        var source=train.getCurrentStation();var destination=train.navigation.destination;train.navigation.cancelNavigation();train.speed=0;train.targetSpeed=0;
+        var routes=RailwayRoutePlanner.plan(train,destination,c.railway,RailwayOwnershipTypes.OwnerType.CITY,c.city.getId(),CityManager.get(c.player.serverLevel()));c.railway.proposeRoutes(fleetId,routes);
+        PacketDistributor.sendToPlayer(player,new RailwayRouteOptionsPayload(c.pylonPos,fleetId,source.name,destination.name,routes,routes.isEmpty()?"no_route":""));
+    }
+    private static boolean selectRoute(Context c,UUID fleetId,UUID optionId){CityFleetTrain fleet=c.railway.train(fleetId);if(fleet==null||!c.city.getId().equals(fleet.cityId())||!c.railway.selectRoute(fleetId,optionId,c.player.serverLevel().getGameTime()))return false;Train train=CreateRailwayAdapter.train(fleet.createTrainId());SelectedRailwayRoute selected=c.railway.selectedRoute(fleetId);if(train==null||selected==null){c.railway.consumeSelectedRoute(fleetId);return false;}var destination=CreateRailwayAdapter.station(selected.option().destinationStationId());var path=destination==null?null:RailwayTripAccountingService.selectedPath(train,destination,selected.option());if(path==null){return false;}return train.navigation.startNavigation(path)>=0;}
 
     private static void sendState(ServerPlayer player, Context c) {
         List<RailwayStationSnapshot> stations=new ArrayList<>();
@@ -108,10 +131,12 @@ public final class RailwayNetworkHandlers {
             String status=missing?"route_broken":assigned==0?"unserved":healthy==assigned?"running":healthy>0?"partial":"attention";
             lines.add(new RailwayLineSnapshot(line.lineId(),line.name(),line.type(),line.cyclic(),line.revision(),line.stops(),status,assigned));
         }
-        PacketDistributor.sendToPlayer(player,new RailwayStatePayload(c.city.getPylonPos(),stations,trains,lines));
+        List<RailwayOwnershipSnapshot> ownership=new ArrayList<>();for(OwnedRailwayNetwork network:c.railway.ownedNetworksFor(c.city.getId(),player.getUUID())){var sections=c.railway.sectionsForNetwork(network.id());ownership.add(new RailwayOwnershipSnapshot(network.id(),network.name(),network.ownerType(),network.access(),network.freightTariff(),sections.size(),(int)sections.stream().filter(s->s.status()==RailwayOwnershipTypes.SectionStatus.ONLINE).count(),sections.stream().mapToDouble(OwnedRailwaySection::length).sum()));}
+        Set<UUID> visibleNetworkIds=ownership.stream().map(RailwayOwnershipSnapshot::networkId).collect(java.util.stream.Collectors.toSet());List<RailwaySectionSnapshot> ownedSections=c.railway.ownedSections().stream().filter(s->visibleNetworkIds.contains(s.networkId())).map(s->new RailwaySectionSnapshot(s.id(),s.networkId(),s.length(),s.status())).toList();
+        PacketDistributor.sendToPlayer(player,new RailwayStatePayload(c.city.getPylonPos(),stations,trains,lines,ownership,ownedSections));
     }
     private static RailwayStationSnapshot stationSnapshot(CityRailStation s,boolean city,RailwayManager manager){var actual=CreateRailwayAdapter.station(s.createStationId());return new RailwayStationSnapshot(s.registrationId(),actual==null?s.lastKnownName():actual.name,s.type(),actual!=null,city,s.lastKnownDimension(),s.lastKnownPos(),manager.projectForStation(s.registrationId()));}
-    private static RailwayTrainSnapshot trainSnapshot(CityFleetTrain f,RailwayManager manager,boolean city){Train t=CreateRailwayAdapter.train(f.createTrainId());String line=f.activeLineId()==null?"":Optional.ofNullable(manager.line(f.activeLineId())).map(RailLine::name).orElse("");if(t==null)return new RailwayTrainSnapshot(f.fleetTrainId(),f.lastKnownName(),f.type(),f.activeLineId(),line,"missing",city,f.automationSuspended(),null,0,0,"",0);String status=trainStatus(t,f);String next=t.navigation.destination==null?"":t.navigation.destination.name;var pos=trainPosition(t);return new RailwayTrainSnapshot(f.fleetTrainId(),t.name.getString(),f.type(),f.activeLineId(),line,status,city,f.automationSuspended(),pos.dimension,pos.x,pos.z,next,t.speed*20.0);}
+    private static RailwayTrainSnapshot trainSnapshot(CityFleetTrain f,RailwayManager manager,boolean city){Train t=CreateRailwayAdapter.train(f.createTrainId());String line=f.activeLineId()==null?"":Optional.ofNullable(manager.line(f.activeLineId())).map(RailLine::name).orElse("");if(t==null)return new RailwayTrainSnapshot(f.fleetTrainId(),f.lastKnownName(),f.type(),f.activeLineId(),line,"missing",city,f.automationSuspended(),null,0,0,"",0,com.example.examplemod.status.CcecStatusResolver.railway(manager,f,null,"missing"));String status=trainStatus(t,f);String next=t.navigation.destination==null?"":t.navigation.destination.name;var pos=trainPosition(t);return new RailwayTrainSnapshot(f.fleetTrainId(),t.name.getString(),f.type(),f.activeLineId(),line,status,city,f.automationSuspended(),pos.dimension,pos.x,pos.z,next,t.speed*20.0,com.example.examplemod.status.CcecStatusResolver.railway(manager,f,t,status));}
     private static String trainStatus(Train t,CityFleetTrain f){if(t.derailed)return"derailed";if(f.automationSuspended())return"schedule_changed";if(t.status.conductor)return"missing_conductor";if(t.status.track)return"track_issue";if(t.status.navigation)return"no_route";if(t.runtime.getSchedule()==null)return"no_schedule";if(t.runtime.paused)return"manual";if(t.getCurrentStation()!=null&&t.runtime.state== ScheduleRuntime.State.POST_TRANSIT){try{var e=t.runtime.getSchedule().entries.get(t.runtime.currentEntry);if(!e.conditions.isEmpty()&&!e.conditions.getFirst().isEmpty()&&e.conditions.getFirst().get(Math.min(t.runtime.conditionProgress.getFirst(),e.conditions.getFirst().size()-1)) instanceof IdleCargoCondition)return"cargo";}catch(RuntimeException ignored){}return"waiting";}if(t.getCurrentStation()!=null)return"at_station";return"in_transit";}
     private static boolean isHealthyStatus(String status){return status.equals("in_transit")||status.equals("at_station")||status.equals("waiting")||status.equals("cargo");}
     private record Position(net.minecraft.resources.ResourceLocation dimension,double x,double z){}
@@ -129,8 +154,28 @@ public final class RailwayNetworkHandlers {
             serverCache.put(key, cached);
         }
         PacketDistributor.sendToPlayer(player, new RailwayMapPayload(
-                c.city.getPylonPos(), player.serverLevel().dimension().location(), cached.segments()));
+                c.city.getPylonPos(), player.serverLevel().dimension().location(), cached.segments(),
+                mapNetworks(player,c),mapSections(player,c),mapRoutes(player,c)));
     }
+
+    private static List<RailwayMapPayload.NetworkView> mapNetworks(ServerPlayer player,Context c){
+        CityManager cities=CityManager.get(player.getServer().overworld());List<RailwayMapPayload.NetworkView> result=new ArrayList<>();
+        for(OwnedRailwayNetwork network:c.railway.ownedNetworks()){if(result.size()>=RailwayMapPayload.MAX_NETWORKS)break;var sections=c.railway.sectionsForNetwork(network.id());String owner=network.ownerType()==RailwayOwnershipTypes.OwnerType.CITY?Optional.ofNullable(cities.getCity(network.ownerId())).map(City::getName).orElse(shortId(network.ownerId())):player.getServer().getProfileCache().get(network.ownerId()).map(profile->profile.getName()).orElse(shortId(network.ownerId()));result.add(new RailwayMapPayload.NetworkView(network.id(),network.name(),network.ownerType(),network.ownerId(),owner,network.access(),network.freightTariff(),sections.stream().mapToDouble(OwnedRailwaySection::length).sum(),sections.size(),(int)sections.stream().filter(s->s.status()==RailwayOwnershipTypes.SectionStatus.ONLINE).count()));}
+        return List.copyOf(result);
+    }
+    private static List<RailwayMapPayload.SectionView> mapSections(ServerPlayer player,Context c){
+        ResourceLocation dimension=player.serverLevel().dimension().location();List<RailwayMapPayload.SectionView> result=new ArrayList<>();int[] budget={RailwayMapPayload.MAX_SEMANTIC_SEGMENTS};
+        for(OwnedRailwaySection section:c.railway.ownedSections()){if(result.size()>=RailwayMapPayload.MAX_SECTIONS)break;List<RailwayMapPayload.TrackSegment> geometry=edgeSegments(section.first().graphId(),section.path(),dimension,budget);if(!geometry.isEmpty())result.add(new RailwayMapPayload.SectionView(section.id(),section.networkId(),section.length(),section.status(),geometry));if(budget[0]<=0)break;}
+        return List.copyOf(result);
+    }
+    private static List<RailwayMapPayload.RouteView> mapRoutes(ServerPlayer player,Context c){
+        ResourceLocation dimension=player.serverLevel().dimension().location();List<RailwayMapPayload.RouteView> result=new ArrayList<>();int[] budget={RailwayMapPayload.MAX_SEMANTIC_SEGMENTS};
+        for(CityFleetTrain fleet:c.railway.trainsForCity(c.city.getId())){if(result.size()>=RailwayMapPayload.MAX_ROUTES)break;SelectedRailwayRoute selected=c.railway.selectedRoute(fleet.fleetTrainId());if(selected!=null){var option=selected.option();var geometry=edgeSegments(option.graphId(),option.edges(),dimension,budget);if(!geometry.isEmpty())result.add(new RailwayMapPayload.RouteView(selected.selectionId(),fleet.fleetTrainId(),true,"selected",option.distance(),option.tariffCost(),option.estimatedTicks(),geometry));}}
+        for(RailwayTripLedger trip:c.railway.tripLedgers()){if(result.size()>=RailwayMapPayload.MAX_ROUTES)break;if(!trip.payerId().equals(c.city.getId()))continue;RouteReservation reservation=c.railway.reservationForTrip(trip.id());if(reservation==null)continue;var geometry=edgeSegments(reservation.graphId(),reservation.orderedEdges(),dimension,budget);if(!geometry.isEmpty())result.add(new RailwayMapPayload.RouteView(reservation.id(),trip.fleetTrainId(),false,reservation.status().name().toLowerCase(Locale.ROOT),trip.plannedDistance(),trip.reservedAmount(),0,geometry));if(budget[0]<=0)break;}
+        return List.copyOf(result);
+    }
+    private static List<RailwayMapPayload.TrackSegment> edgeSegments(UUID graphId,List<RailwayEdgeReference> refs,ResourceLocation dimension,int[] budget){TrackGraph graph=Create.RAILWAYS.trackNetworks.get(graphId);if(graph==null||budget[0]<=0)return List.of();List<RailwayMapPayload.TrackSegment> result=new ArrayList<>();for(RailwayEdgeReference ref:refs){if(budget[0]<=0)break;if(!ref.first().dimension().equals(dimension)||!ref.second().dimension().equals(dimension))continue;TrackNode a=graph.locateNode(ref.first().resolve()),b=graph.locateNode(ref.second().resolve());if(a==null||b==null)continue;TrackEdge edge=graph.getConnectionsFrom(a).get(b);if(edge==null||edge.isInterDimensional())continue;int steps=edge.isTurn()?Math.max(2,(int)Math.ceil(edge.getLength()/2d)):1;Vec3 previous=edge.getPosition(graph,0);for(int i=1;i<=steps&&budget[0]>0;i++){Vec3 next=edge.getPosition(graph,i/(double)steps);result.add(new RailwayMapPayload.TrackSegment((float)previous.x,(float)previous.z,(float)next.x,(float)next.z));previous=next;budget[0]--;}}return List.copyOf(result);}
+    private static String shortId(UUID id){return id.toString().substring(0,8);}
 
     private static List<RailwayMapPayload.TrackSegment> buildMapSegments(
             ServerPlayer player, net.minecraft.core.BlockPos center
@@ -175,8 +220,8 @@ public final class RailwayNetworkHandlers {
     private record CachedRailMap(net.minecraft.core.BlockPos center, long createdAt,
                                  List<RailwayMapPayload.TrackSegment> segments) {}
 
-    private static Context context(ServerPlayer p,net.minecraft.core.BlockPos pos){if(!(p.containerMenu instanceof CityPylonMenu menu)||!menu.getPylonPos().equals(pos)||p.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)>64||!(p.serverLevel().getBlockState(pos).getBlock() instanceof CityPylonBlock))return null;CityManager cm=CityManager.get(p.getServer().overworld());City city=cm.getCityByPylon(p.serverLevel().dimension().location(),pos);return city==null||!city.hasMember(p.getUUID())?null:new Context(p,city,RailwayManager.get(p.serverLevel()));}
+    private static Context context(ServerPlayer p,net.minecraft.core.BlockPos pos){if(!(p.containerMenu instanceof CityPylonMenu menu)||!menu.getPylonPos().equals(pos)||p.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)>64||!(p.serverLevel().getBlockState(pos).getBlock() instanceof CityPylonBlock))return null;CityManager cm=CityManager.get(p.getServer().overworld());City city=cm.getCityByPylon(p.serverLevel().dimension().location(),pos);return city==null||!city.hasMember(p.getUUID())?null:new Context(p,city,RailwayManager.get(p.serverLevel()),pos);}
     private static void feedback(ServerPlayer p,String key){p.displayClientMessage(Component.translatable("message.createcityexpansioncore.railway."+key),true);}
     private static <T>T enumAt(T[]v,int i,T f){return i>=0&&i<v.length?v[i]:f;}
-    private record Context(ServerPlayer player,City city,RailwayManager railway){}
+    private record Context(ServerPlayer player,City city,RailwayManager railway,net.minecraft.core.BlockPos pylonPos){}
 }

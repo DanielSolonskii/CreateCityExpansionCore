@@ -17,6 +17,10 @@ final class FreightUi {
         if(s==null)return List.of();
         return points(s).stream().filter(p->p.cityId.equals(s.cityId())&&p.enabled&&!p.removed&&(receiving?p.mode.receives():p.mode.sends())).sorted(Comparator.comparing(p->receiving?!p.defaultReceive:!p.defaultSend)).toList();
     }
+    /** Unified status card for a point; the raw status string never reaches the player. */
+    static com.example.examplemod.status.CcecStatus status(FreightPoint p){
+        return com.example.examplemod.economy.FreightPointRules.ui(p.status);
+    }
     static UUID destination(EconomyStatePayload s,UUID subject,UUID fallback){
         for(Tag raw:s.logistics().getList("Assignments",Tag.TAG_COMPOUND)){CompoundTag a=(CompoundTag)raw;if(a.getUUID("Subject").equals(subject))return a.getUUID("Destination");}return fallback;
     }

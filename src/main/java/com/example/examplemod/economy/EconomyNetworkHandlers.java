@@ -7,7 +7,9 @@ import com.example.examplemod.city.CityManager;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.EconomyCommandPayload;
 import com.example.examplemod.network.EconomyStatePayload;
+import com.example.examplemod.network.RailwayRouteOptionsPayload;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import com.example.examplemod.railway.RailwayManager;
@@ -25,6 +27,16 @@ public final class EconomyNetworkHandlers {
         Context context=context(player,payload.pylonPos());if(context==null)return;
         if(payload.action()== EconomyCommandPayload.Action.REQUEST_STATE){sendState(context);return;}
         if(!context.unlocked&&payload.action()!=EconomyCommandPayload.Action.REGISTER_FREIGHT&&payload.action()!=EconomyCommandPayload.Action.MANAGE_FREIGHT){feedback(player,"locked");return;}
+        if(payload.action()==EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES){
+            if(context.city.canBuild(player.getUUID())&&payload.targetId()!=null&&payload.secondaryId()!=null){var plan=context.manager.freight().routeOptions(player.serverLevel(),context.city,payload.targetId(),payload.secondaryId());PacketDistributor.sendToPlayer(player,new RailwayRouteOptionsPayload(payload.pylonPos(),payload.secondaryId(),plan.source(),plan.destination(),plan.options(),plan.error()));}sendState(context);return;
+        }
+        if(payload.action()==EconomyCommandPayload.Action.REVOKE_FREIGHT){
+            String reason=!context.city.canBuild(player.getUUID())?"freight_revoke_denied"
+                    :payload.targetId()==null?"freight_revoke_unknown"
+                    :context.manager.revokeDispatch(payload.targetId(),context.city.getId());
+            feedback(player,reason);sendState(context);return;
+        }
+        boolean specificFeedback=payload.action()==EconomyCommandPayload.Action.MANAGE_FREIGHT&&"rebind".equals(payload.note());
         boolean masterContract=payload.action()==EconomyCommandPayload.Action.CREATE_MASTER_SPECIAL;
         if(payload.action()==EconomyCommandPayload.Action.CREATE_CITY_CONTRACT||masterContract){
             String failure=contractCreationFailure(context,payload,player,masterContract);
@@ -38,10 +50,20 @@ public final class EconomyNetworkHandlers {
                 player.displayClientMessage(Component.translatable("gui.createcityexpansioncore.freight."+result),true);yield result.equals("ok");
             }
             case MANAGE_FREIGHT -> {
-                boolean changed=context.city.isAdmin(player.getUUID())&&context.manager.freight().manage(context.city.getId(),payload.targetId(),payload.note(),payload.title());
-                if(changed&&payload.note().equals("toggle"))context.manager.freight().restoreAddress(player.getServer(),payload.targetId());yield changed;
+                boolean changed;
+                if(specificFeedback){
+                    String result=context.manager.freight().rebind(player.serverLevel(),context.city,player.getUUID(),
+                            payload.targetId(),net.minecraft.core.BlockPos.of(payload.amount()),net.minecraft.core.BlockPos.of(payload.value()));
+                    player.displayClientMessage(Component.translatable("gui.createcityexpansioncore.freight."+result),true);
+                    changed=result.equals("ok");
+                }else{
+                    changed=context.city.isAdmin(player.getUUID())&&context.manager.freight().manage(context.city.getId(),payload.targetId(),payload.note(),payload.title());
+                    if(changed&&payload.note().equals("toggle"))context.manager.freight().restoreAddress(player.getServer(),payload.targetId());
+                }
+                yield changed;
             }
             case CONTROL_DISPATCH -> context.city.canBuild(player.getUUID())&&context.manager.freight().control(context.city.getId(),payload.targetId(),payload.secondaryId(),payload.typeOrdinal()==1,player.getServer());
+            case SELECT_FREIGHT_ROUTE -> context.city.canBuild(player.getUUID())&&payload.targetId()!=null&&payload.secondaryId()!=null&&parseUuid(payload.note())!=null&&context.manager.freight().selectDispatch(player.serverLevel(),context.city,payload.targetId(),payload.secondaryId(),parseUuid(payload.note()));
             case SETUP_FREIGHT -> context.city.isAdmin(player.getUUID())&&context.manager.setupFreight(payload.targetId(),context.city.getId(),payload.secondaryId());
 
             case ACCEPT_MARKET_OFFER -> context.city.isAdmin(player.getUUID())&&payload.targetId()!=null
@@ -67,7 +89,21 @@ public final class EconomyNetworkHandlers {
             default -> false;
         };
 
-        if(payload.action()!=EconomyCommandPayload.Action.REGISTER_FREIGHT)feedback(player,success?"operation_complete":"operation_failed");sendState(context);
+        if(payload.action()!=EconomyCommandPayload.Action.REGISTER_FREIGHT&&!specificFeedback)feedback(player,success?"operation_complete":"operation_failed");sendState(context);
+    }
+
+    /**
+     * Server-authoritative push for every player currently looking at a pylon menu. Called on the
+     * FreightLogistics throttle so breaking, restoring, rebinding or revoking updates the open
+     * screen immediately instead of waiting for the client's poll.
+     */
+    public static void pushOpenMenus(MinecraftServer server){
+        if(server==null)return;
+        for(ServerPlayer player:server.getPlayerList().getPlayers()){
+            if(!(player.containerMenu instanceof CityPylonMenu menu))continue;
+            Context context=context(player,menu.getPylonPos(),false);
+            if(context!=null)sendState(context);
+        }
     }
 
     private static void giveManifest(ServerPlayer player,ShippingManifest manifest){
@@ -84,7 +120,16 @@ public final class EconomyNetworkHandlers {
         PacketDistributor.sendToPlayer(context.player,new EconomyStatePayload(context.city.getPylonPos(),context.city.getId(),context.unlocked,context.master,manager.wallet(context.player.getUUID()),manager.treasury(context.city.getId()),manager.treasuryEscrow(context.city.getId()),manager.procurementAvailable(),manager.procurementReserved(),Config.ECONOMY_PROCUREMENT_CAP.get(),Config.ECONOMY_PRIVATE_FEE_BPS.get(),Config.ECONOMY_CITY_FEE_BPS.get(),context.city.getTradeReputation(),obligations,offers,contracts,listings,shipments,infrastructure,warehouse,manager.freight().snapshot(context.player.serverLevel(),context.city)));
     }
 
-    private static Context context(ServerPlayer player,net.minecraft.core.BlockPos pos){if(!(player.containerMenu instanceof CityPylonMenu menu)||!menu.getPylonPos().equals(pos)||player.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)>64||!(player.serverLevel().getBlockState(pos).getBlock() instanceof CityPylonBlock))return null;CityManager cities=CityManager.get(player.getServer().overworld());City city=cities.getCityByPylon(player.serverLevel().dimension().location(),pos);if(city==null||!city.hasMember(player.getUUID()))return null;EconomyManager manager=EconomyManager.get(player.serverLevel());boolean master=city.getId().equals(manager.masterCityId());return new Context(player,city,cities,manager,city.getLevel()>=2||master,master);}
+    private static Context context(ServerPlayer player,net.minecraft.core.BlockPos pos){return context(player,pos,true);}
+    /** {@code strict} additionally enforces reach and block checks; a push only needs the open menu. */
+    private static Context context(ServerPlayer player,net.minecraft.core.BlockPos pos,boolean strict){
+        if(!(player.containerMenu instanceof CityPylonMenu menu)||!menu.getPylonPos().equals(pos))return null;
+        if(strict&&(player.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)>64||!(player.serverLevel().getBlockState(pos).getBlock() instanceof CityPylonBlock)))return null;
+        CityManager cities=CityManager.get(player.getServer().overworld());City city=cities.getCityByPylon(player.serverLevel().dimension().location(),pos);
+        if(city==null||!city.hasMember(player.getUUID()))return null;
+        EconomyManager manager=EconomyManager.get(player.serverLevel());boolean master=city.getId().equals(manager.masterCityId());
+        return new Context(player,city,cities,manager,city.getLevel()>=2||master,master);
+    }
     private static void feedback(ServerPlayer player,String key){player.displayClientMessage(Component.translatable("message.createcityexpansioncore.economy."+key),true);}
     private static String contractCreationFailure(Context context,EconomyCommandPayload payload,ServerPlayer player,boolean masterContract){
         if(!validItem(payload.itemId()))return "contract_invalid_item";
@@ -104,6 +149,7 @@ public final class EconomyNetworkHandlers {
         return null;
     }
     private static <T>T enumAt(T[] values,int index,T fallback){return index>=0&&index<values.length?values[index]:fallback;}
+    private static UUID parseUuid(String value){try{return UUID.fromString(value);}catch(IllegalArgumentException ex){return null;}}
     private static boolean validItem(net.minecraft.resources.ResourceLocation id){return id!=null&&net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id)&&net.minecraft.core.registries.BuiltInRegistries.ITEM.get(id)!=net.minecraft.world.item.Items.AIR;}
     private static boolean validOptionalItem(net.minecraft.resources.ResourceLocation id){return id==null||validItem(id);}
     public record Context(ServerPlayer player,City city,CityManager cities,EconomyManager manager,boolean unlocked,boolean master){}

@@ -675,6 +675,15 @@ public class CreateCityExpansionCore {
             () -> new com.example.examplemod.economy.ShippingManifestItem(new Item.Properties()));
     public static final DeferredItem<Item> SHIPMENT_SEAL = ITEMS.registerSimpleItem("shipment_seal",
             new Item.Properties().stacksTo(1));
+    public static final DeferredBlock<com.example.examplemod.railway.block.RailwayTrackMarkerBlock> RAILWAY_TRACK_MARKER =
+            BLOCKS.register("railway_track_marker",()->new com.example.examplemod.railway.block.RailwayTrackMarkerBlock(
+                    BlockBehaviour.Properties.of().strength(2.5F).mapColor(MapColor.METAL)));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.example.examplemod.railway.block.RailwayTrackMarkerBlockEntity>> RAILWAY_TRACK_MARKER_BLOCK_ENTITY=
+            BLOCK_ENTITY_TYPES.register("railway_track_marker",()->BlockEntityType.Builder.of(
+                    com.example.examplemod.railway.block.RailwayTrackMarkerBlockEntity::new,RAILWAY_TRACK_MARKER.get()).build(null));
+    public static final DeferredItem<com.example.examplemod.railway.block.RailwayTrackMarkerItem> RAILWAY_TRACK_MARKER_ITEM=
+            ITEMS.register("railway_track_marker",()->new com.example.examplemod.railway.block.RailwayTrackMarkerItem(
+                    RAILWAY_TRACK_MARKER.get(),new Item.Properties()));
 
     /*
      * =========================================
@@ -1050,6 +1059,22 @@ public class CreateCityExpansionCore {
                 })
         );
         registrar.playToServer(
+                com.example.examplemod.network.CityRelationsCommandPayload.TYPE,
+                com.example.examplemod.network.CityRelationsCommandPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        com.example.examplemod.city.CityRelationsNetworkHandlers.handle(player, payload);
+                    }
+                })
+        );
+        registrar.playToClient(
+                com.example.examplemod.network.CityRelationsStatePayload.TYPE,
+                com.example.examplemod.network.CityRelationsStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) menu.applyRelationsState(payload);
+                })
+        );
+        registrar.playToServer(
                 com.example.examplemod.network.InfrastructureCommandPayload.TYPE,
                 com.example.examplemod.network.InfrastructureCommandPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
@@ -1095,6 +1120,13 @@ public class CreateCityExpansionCore {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.acceptRailwayMap(payload);
                     }
+                })
+        );
+        registrar.playToClient(
+                com.example.examplemod.network.RailwayRouteOptionsPayload.TYPE,
+                com.example.examplemod.network.RailwayRouteOptionsPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player().containerMenu instanceof CityPylonMenu menu) menu.acceptRouteOptions(payload);
                 })
         );
 

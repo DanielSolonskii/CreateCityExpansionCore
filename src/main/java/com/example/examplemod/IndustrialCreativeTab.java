@@ -105,7 +105,8 @@ public final class IndustrialCreativeTab {
             CreateCityExpansionCore.CITY_PYLON_ITEM.get(),
             CreateCityExpansionCore.CONTRACT_INTAKE_ITEM.get(),
             CreateCityExpansionCore.CONTRACT_DISPATCH_TERMINAL_ITEM.get(),
-            CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get()
+            CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get(),
+            CreateCityExpansionCore.RAILWAY_TRACK_MARKER_ITEM.get()
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(

@@ -3,6 +3,8 @@ package com.example.examplemod.client.screen;
 import com.example.examplemod.economy.FreightPoint;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.*;
+import com.example.examplemod.status.CcecStatus;
+import com.example.examplemod.client.status.CcecStatusUi;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -19,7 +21,7 @@ import static com.example.examplemod.client.screen.LogisticsStyle.*;
  * All economic actions still go through the existing server-validated payload.
  */
 public final class LogisticsScreen extends Screen {
-    private enum View { LIST, REGISTER, POINT, SHIPMENT, SOURCE, RENAME, REMOVE, LEGACY }
+    private enum View { LIST, REGISTER, POINT, SHIPMENT, SOURCE, TRAIN, RENAME, REMOVE, LEGACY, REVOKE }
     private final CityPylonScreen parent;
     private final CityPylonMenu menu;
     private final LogisticsBlueprint blueprint=new LogisticsBlueprint();
@@ -32,11 +34,11 @@ public final class LogisticsScreen extends Screen {
     private LogisticsLayout layout;
     private View view=View.LIST;
     private int page,scroll,ticks,contentHeight,filter,step,mode=2,submittedAt=-1000;
-    private UUID selected,chosenSource,legacySubject;
+    private UUID selected,chosenSource,chosenTrain,legacySubject;
     private CompoundTag chosenPair;
     private String draft="";
     private EditBox nameBox;
-    private boolean building,waitingRegistration,registrationFailed,diagnostics;
+    private boolean building,waitingRegistration,registrationFailed,diagnostics,rebinding;
     private record Hit(int x,int y,int w,int h,Runnable action) {
         boolean contains(double mx,double my){return mx>=x&&mx<x+w&&my>=y&&my<y+h;}
     }
@@ -68,7 +70,9 @@ public final class LogisticsScreen extends Screen {
                 .filter(p->p.cityId.equals(snapshot.cityId()))
                 .sorted(Comparator.comparing((FreightPoint p)->p.removed).thenComparing(p->!p.online()).thenComparing(p->p.name))
                 .toList();
+        for(FreightPoint p:ownPoints)CcecStatusUi.observePoint(p.id,p.status);
         allAssignments=snapshot==null?List.of():tags(snapshot.logistics(),"Assignments");
+        for(CompoundTag assignment:allAssignments)if(assignment.contains("UiStatus",Tag.TAG_COMPOUND))CcecStatusUi.observe(assignment.getUUID("Subject"),status(assignment));
         candidates=snapshot==null?List.of():tags(snapshot.logistics(),"Candidates");
         legacy=snapshot==null?List.of():tags(snapshot.logistics(),"Legacy");
         blueprint.update(menu.getPylonPos(),menu.getDimensionId(),ownPoints,menu.getRailwayStations());
@@ -78,12 +82,21 @@ public final class LogisticsScreen extends Screen {
         if(ticks%40==0){request();requestRails(false);}
         if(ticks%600==0)requestRails(true);
         var map=menu.drainRailwayMap();if(map!=null)blueprint.receive(map);
+        var routeOptions=menu.drainRouteOptions();if(routeOptions!=null&&view==View.TRAIN){minecraft.setScreen(new RailwayRouteSelectionScreen(this,routeOptions,option->{send(EconomyCommandPayload.Action.SELECT_FREIGHT_ROUTE,selected,routeOptions.fleetTrainId(),0,0,0,"",option.id().toString());view=View.SHIPMENT;chosenTrain=null;}));}
         if(snapshot!=menu.getEconomyState()){
             refresh();
             if(waitingRegistration&&chosenPair!=null) {
-                FreightPoint added=ownPoints.stream().filter(p->p.postbox.asLong()==chosenPair.getLong("Postbox")
-                        &&p.packager.asLong()==chosenPair.getLong("Packager")&&!p.removed).findFirst().orElse(null);
-                if(added!=null){waitingRegistration=false;selected=added.id;view=View.POINT;scroll=0;}
+                if(rebinding){
+                    FreightPoint updated=point(selected);
+                    if(updated!=null&&updated.postbox.asLong()==chosenPair.getLong("Postbox")
+                            &&updated.packager.asLong()==chosenPair.getLong("Packager")){
+                        waitingRegistration=false;rebinding=false;selected=updated.id;view=View.POINT;scroll=0;
+                    }
+                }else{
+                    FreightPoint added=ownPoints.stream().filter(p->p.postbox.asLong()==chosenPair.getLong("Postbox")
+                            &&p.packager.asLong()==chosenPair.getLong("Packager")&&!p.removed).findFirst().orElse(null);
+                    if(added!=null){waitingRegistration=false;selected=added.id;view=View.POINT;scroll=0;}
+                }
             }
             rebuild();
         }
@@ -102,14 +115,21 @@ public final class LogisticsScreen extends Screen {
         view=target;selected=id;scroll=0;diagnostics=false;rebuild();
     }
     private void startSetup() {
-        page=1;view=View.REGISTER;step=0;scroll=0;draft="";chosenPair=null;
+        page=1;view=View.REGISTER;step=0;scroll=0;draft="";chosenPair=null;rebinding=false;
+        waitingRegistration=false;registrationFailed=false;rebuild();request();
+    }
+    /** Repair flow: pick a compatible pair for an existing point without recreating it. */
+    private void startRebind() {
+        page=1;view=View.REGISTER;step=0;scroll=0;draft="";chosenPair=null;rebinding=true;
         waitingRegistration=false;registrationFailed=false;rebuild();request();
     }
     @Override public void onClose() {
         if(waitingRegistration)return;
+        if(view==View.REGISTER&&rebinding){open(View.POINT,selected);return;}
         if(view==View.REGISTER&&step>0){step--;scroll=0;rebuild();return;}
         if(view==View.RENAME||view==View.REMOVE){open(View.POINT,selected);return;}
-        if(view==View.SOURCE){open(View.SHIPMENT,selected);return;}
+        if(view==View.REVOKE){open(View.SHIPMENT,selected);return;}
+        if(view==View.SOURCE||view==View.TRAIN){open(View.SHIPMENT,selected);return;}
         if(view!=View.LIST){view=View.LIST;scroll=0;rebuild();return;}
         minecraft.setScreen(parent);
     }
@@ -165,8 +185,9 @@ public final class LogisticsScreen extends Screen {
         return Set.of("complete","expired").contains(a.getString("State"));
     }
     private boolean attention(CompoundTag a) {
-        return Set.of("source_unavailable","destination_unavailable","route_error","requires_setup").contains(a.getString("State"));
+        return status(a).category()==CcecStatus.Category.BLOCKED||status(a).category()==CcecStatus.Category.WARNING;
     }
+    private CcecStatus status(CompoundTag a){return a.contains("UiStatus",Tag.TAG_COMPOUND)?CcecStatus.load(a.getCompound("UiStatus")):CcecStatus.of(CcecStatus.Category.WARNING,CcecStatus.Code.SHIPMENT_INVALIDATED,CcecStatus.Action.FIX_PROBLEM);}
     private FreightPoint point(UUID id){return pointById.get(id);}
     private FreightPoint endpoint(CompoundTag a,String key){return a.hasUUID(key)?point(a.getUUID(key)):null;}
     private String pointName(FreightPoint p){return p==null?tr("unassigned").getString():p.name;}
@@ -187,7 +208,7 @@ public final class LogisticsScreen extends Screen {
             case LIST -> {y=page==0?overview(g,y,mx,my):list(g,y);}
             case REGISTER -> y=registration(g,y);
             case POINT,RENAME,REMOVE -> y=pointDetails(g,y);
-            case SHIPMENT,SOURCE -> y=shipmentDetails(g,y);
+            case SHIPMENT,SOURCE,TRAIN,REVOKE -> y=shipmentDetails(g,y);
             case LEGACY -> y=legacySetup(g,y);
         }
         return y-start+12;
@@ -279,14 +300,14 @@ public final class LogisticsScreen extends Screen {
             if(list.isEmpty())return empty(g,y,page==2?"outgoing":"incoming",
                     filter==0?()->minecraft.setScreen(new MarketScreen(parent)):()->{filter=2;rebuild();},filter==0?"find_trade":"show_all");
             for(CompoundTag a:list){
-                panel(g,x,y,w,100,PANEL);if(g!=null)g.renderItem(item(a.getString("Item")),x+9,y+9);
+                panel(g,x,y,w,116,PANEL);if(g!=null)g.renderItem(item(a.getString("Item")),x+9,y+9);
                 line(g,FreightUi.tr("cargo",a.getLong("Amount"),item(a.getString("Item")).getHoverName()),x+32,y+10,w-44,TEXT);
                 line(g,Component.literal(pointName(endpoint(a,"Source"))+" → "+pointName(endpoint(a,"Destination"))),x+10,y+28,w-20,MUTED);
-                badge(g,font,FreightUi.tr(a.getString("State")),x+10,y+42,w-110,statusColor(a.getString("State")));
-                progress(g,a,x+10,y+65,w-116);
-                line(g,tr("received_count",a.getLong("Delivered"),a.getLong("Amount"),a.getLong("InFlight")),x+10,y+81,w-20,MUTED);
+                CcecStatusUi.render(g,font,status(a),x+10,y+42,w-116,false);
+                progress(g,a,x+10,y+82,w-116);
+                line(g,tr("received_count",a.getLong("Delivered"),a.getLong("Amount"),a.getLong("InFlight")),x+10,y+97,w-20,MUTED);
                 button(x+w-96,y+48,86,tr("details"),false,()->open(View.SHIPMENT,a.getUUID("Subject")));
-                hit(x,y,w,100,()->open(View.SHIPMENT,a.getUUID("Subject")));y+=107;
+                hit(x,y,w,116,()->open(View.SHIPMENT,a.getUUID("Subject")));y+=123;
             }
         }
         return y;
@@ -309,11 +330,13 @@ public final class LogisticsScreen extends Screen {
 
     private int registration(GuiGraphics g,int y) {
         int x=layout.left(),w=layout.width();
-        y=section(g,tr("setup.title"),tr("setup.step",step+1,3),y);
-        for(int i=0;i<3;i++)if(g!=null)g.fill(x+i*(w/3),y,x+(i+1)*(w/3)-3,y+3,i<=step?GOLD:BORDER);
+        int steps=rebinding?1:3;
+        y=section(g,tr(rebinding?"rebind.title":"setup.title"),
+                tr(rebinding?"rebind.step":"setup.step",rebinding?1:step+1,steps),y);
+        for(int i=0;i<steps;i++)if(g!=null)g.fill(x+i*(w/steps),y,x+(i+1)*(w/steps)-3,y+3,i<=step?GOLD:BORDER);
         y+=16;
         if(step==0){
-            y+=wrap(g,tr("setup.infrastructure"),x,y,w,TEXT)+14;
+            y+=wrap(g,tr(rebinding?"rebind.help":"setup.infrastructure"),x,y,w,TEXT)+14;
             if(candidates.isEmpty()){
                 y+=wrap(g,tr("setup.not_found"),x,y,w,MUTED)+16;
                 button(x,y,Math.min(w,240),tr("refresh"),true,this::request);return y+34;
@@ -327,7 +350,11 @@ public final class LogisticsScreen extends Screen {
                 button(x+w-140,y+48,130,tr(chosen?"selected":"select"),chosen,()->{chosenPair=c.copy();rebuild();});
                 hit(x,y,w,44,()->{chosenPair=c.copy();rebuild();});y+=82;
             }
-            button(x,y,Math.min(w,300),tr("next"),true,()->chosenPair!=null&&!chosenPair.getString("Station").isBlank(),()->{step=1;scroll=0;rebuild();});
+            if(registrationFailed)y+=wrap(g,tr(rebinding?"rebind.failed":"setup.failed"),x,y,w,RED)+12;
+            boolean ready=chosenPair!=null&&!chosenPair.getString("Station").isBlank();
+            button(x,y,Math.min(w,300),tr(rebinding?"rebind_confirm":"next"),true,() -> ready,()->{
+                if(rebinding)submitRebind();else{step=1;scroll=0;rebuild();}
+            });
             return y+34;
         }
         if(step==1) {
@@ -363,7 +390,8 @@ public final class LogisticsScreen extends Screen {
     private int pointDetails(GuiGraphics g,int y) {
         FreightPoint p=point(selected);if(p==null)return empty(g,y,"points",()->changePage(1),"show_all");
         int x=layout.left(),w=layout.width();
-        y=section(g,Component.literal(p.name),FreightUi.tr(p.status),y);
+        CcecStatus pointStatus=FreightUi.status(p);
+        y=section(g,Component.literal(p.name),CcecStatusUi.title(pointStatus),y);
         if(view==View.RENAME){
             if(building&&y>=layout.top()&&y+22<=layout.bottom()){
                 nameBox=new EditBox(font,x,y,w,22,FreightUi.tr("name"));nameBox.setMaxLength(64);
@@ -376,21 +404,25 @@ public final class LogisticsScreen extends Screen {
             y+=wrap(g,tr("remove_warning"),x,y,w,RED)+16;
             button(x,y,Math.min(w,320),tr("confirm_remove"),true,()->{manage("remove","");open(View.POINT,selected);});return y+34;
         }
+        CcecStatusUi.render(g,font,pointStatus,x,y,w,true);y+=60;
         line(g,FreightUi.tr("station",p.stationName.isBlank()?tr("unlinked").getString():p.stationName),x,y,w,TEXT);y+=20;
         line(g,FreightUi.tr("mode."+p.mode.name().toLowerCase(Locale.ROOT)),x,y,w,MUTED);y+=22;
         String[] icons={"create:package_postbox","create:packager","create:track_station"};
         String[] keys={"check.postbox","check.packager","check.station"};
-        boolean[] ok={p.postboxPresent,p.packagerPresent,p.stationPresent};
+        boolean[] ok={p.postboxPresent,p.packagerPresent,p.stationPresent&&p.stationMatched};
         for(int i=0;i<3;i++){
             panel(g,x,y,w,30,PANEL);icon(g,icons[i],x+8,y+7);
             line(g,tr(keys[i]),x+32,y+10,w-82,TEXT);
-            line(g,tr(ok[i]?"check.ok":"check.missing"),x+w-72,y+10,64,ok[i]?GREEN:RED);y+=34;
+            String verdict=ok[i]?"check.ok":(i==2&&p.stationPresent?"check.mismatch":"check.missing");
+            line(g,tr(verdict),x+w-72,y+10,64,ok[i]?GREEN:RED);y+=34;
         }
+        if(p.stationPresent&&!p.stationMatched)y+=wrap(g,tr("station_mismatch_at",BlockPos.of(p.stationPos==null?0:p.stationPos).toShortString()),x,y,w,RED)+8;
         y+=8;
         int bw=(w-8)/2;
         button(x,y,bw,FreightUi.tr("rename"),false,()->{draft=p.name;open(View.RENAME,p.id);});
         button(x+bw+8,y,bw,tr(p.enabled&&!p.removed?"disable":"enable"),false,()->manage("toggle",""));y+=30;
-        button(x,y,w,FreightUi.tr("default"),p.defaultReceive,()->p.enabled&&!p.removed&&p.mode.receives(),()->manage("default",""));y+=30;
+        button(x,y,bw,FreightUi.tr("default"),p.defaultReceive,()->p.enabled&&!p.removed&&p.mode.receives(),()->manage("default",""));
+        button(x+bw+8,y,bw,tr("rebind"),false,()->!p.removed,this::startRebind);y+=30;
         button(x,y,bw,tr("diagnostics"),false,()->{diagnostics=!diagnostics;rebuild();});
         button(x+bw+8,y,bw,FreightUi.tr("remove"),false,()->!p.removed,()->open(View.REMOVE,p.id));y+=34;
         if(diagnostics){
@@ -400,6 +432,13 @@ public final class LogisticsScreen extends Screen {
         }
         return y;
     }
+    private void submitRebind() {
+        if(selected==null||chosenPair==null)return;
+        waitingRegistration=true;registrationFailed=false;submittedAt=ticks;
+        send(EconomyCommandPayload.Action.MANAGE_FREIGHT,selected,null,
+                chosenPair.getLong("Postbox"),chosenPair.getLong("Packager"),0,"","rebind");
+        rebuild();
+    }
     private void manage(String operation,String name) {
         if(selected!=null)send(EconomyCommandPayload.Action.MANAGE_FREIGHT,selected,null,0,0,0,name,operation);
     }
@@ -407,7 +446,15 @@ public final class LogisticsScreen extends Screen {
     private int shipmentDetails(GuiGraphics g,int y) {
         CompoundTag a=assignment();if(a==null)return empty(g,y,page==3?"incoming":"outgoing",()->changePage(page),"show_all");
         int x=layout.left(),w=layout.width();
-        y=section(g,FreightUi.tr("cargo",a.getLong("Amount"),item(a.getString("Item")).getHoverName()),FreightUi.tr(a.getString("State")),y);
+        y=section(g,FreightUi.tr("cargo",a.getLong("Amount"),item(a.getString("Item")).getHoverName()),CcecStatusUi.title(status(a)),y);
+        if(view==View.REVOKE){
+            y+=wrap(g,tr("revoke_warning"),x,y,w,RED)+16;
+            y+=wrap(g,tr("revoke_help"),x,y,w,MUTED)+14;
+            button(x,y,Math.min(w,320),tr("confirm_revoke"),true,() -> {
+                send(EconomyCommandPayload.Action.REVOKE_FREIGHT,selected,null,0,0,0,"","");
+                open(View.SHIPMENT,selected);
+            });return y+34;
+        }
         if(view==View.SOURCE){
             y+=wrap(g,tr("source_help"),x,y,w,MUTED)+12;
             var choices=sourceChoices();
@@ -422,7 +469,14 @@ public final class LogisticsScreen extends Screen {
                 open(View.SHIPMENT,selected);
             });return y+34;
         }
+        if(view==View.TRAIN){
+            y+=wrap(g,tr("train_select_help"),x,y,w,MUTED)+12;List<CompoundTag> trains=tags(a,"TrainCandidates");
+            if(trains.isEmpty())y+=wrap(g,tr("no_freight_train"),x,y,w,RED)+12;
+            for(CompoundTag train:trains){boolean available=train.getBoolean("Available");Component label=Component.literal(train.getString("Name")).append(" · ").append(tr("train_type."+train.getString("Type").toLowerCase(Locale.ROOT))).append(" · ").append(tr(available?"train_ready":"train_not_ready"));button(x,y,w,label,train.hasUUID("Id")&&train.getUUID("Id").equals(chosenTrain),()->available,()->{chosenTrain=train.getUUID("Id");send(EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES,selected,chosenTrain,0,0,0,"","");});y+=29;}
+            return y+12;
+        }
         FreightPoint source=endpoint(a,"Source"),destination=endpoint(a,"Destination");
+        CcecStatusUi.render(g,font,status(a),x,y,w,true);y+=60;
         y+=wrap(g,FreightUi.tr("source",pointName(source)),x,y,w,TEXT)+10;
         y+=wrap(g,FreightUi.tr("destination",pointName(destination)),x,y,w,TEXT)+10;
         progress(g,a,x,y,w);y+=16;
@@ -430,14 +484,22 @@ public final class LogisticsScreen extends Screen {
         String route=source==null||destination==null?"unknown":FreightUi.route(snapshot,source.id,destination.id);
         y+=wrap(g,FreightUi.tr("route."+route),x,y,w,route.equals("connected")?GREEN:GOLD)+8;
         if(source!=null&&destination!=null)y+=wrap(g,Component.literal(source.stationName+" → "+destination.stationName),x,y,w,MUTED)+10;
+        if(a.hasUUID("Train")){y+=wrap(g,tr("selected_train",a.getString("TrainName")),x,y,w,TEXT)+8;if(a.contains("RouteStrategy")){y+=wrap(g,tr("selected_route",tr("route_strategy."+a.getString("RouteStrategy").toLowerCase(Locale.ROOT)),String.format(Locale.ROOT,"%.0f",a.getDouble("RouteDistance")),a.getLong("RouteCost"),formatEta(a.getLong("RouteEta"))),x,y,w,MUTED)+10;}}
         y+=wrap(g,tr(a.getBoolean("Outgoing")?"dispatch_help":"receipt_help"),x,y,w,MUTED)+14;
         if(a.getBoolean("Outgoing")&&!terminal(a)){
+            button(x,y,w,tr(a.hasUUID("Train")?"change_train_route":"select_train_route"),!a.hasUUID("Train"),()->{chosenTrain=a.hasUUID("Train")?a.getUUID("Train"):null;open(View.TRAIN,selected);});y+=30;
             int bw=(w-8)/2;
             button(x,y,bw,FreightUi.tr("start"),true,()->source!=null&&source.online()&&destination!=null&&destination.online()&&route.equals("connected")&&!a.getBoolean("Running"),
                     ()->send(EconomyCommandPayload.Action.CONTROL_DISPATCH,selected,null,0,0,1,"",""));
             button(x+bw+8,y,bw,FreightUi.tr("pause"),false,()->a.getBoolean("Running"),
                     ()->send(EconomyCommandPayload.Action.CONTROL_DISPATCH,selected,null,0,0,0,"",""));y+=30;
             button(x,y,w,FreightUi.tr("change_source"),false,()->{chosenSource=source==null?null:source.id;open(View.SOURCE,selected);});y+=34;
+            boolean revocable=a.getBoolean("Revocable");
+            button(x,y,w,tr("revoke"),false,()->revocable,()->open(View.REVOKE,selected));y+=29;
+            if(!revocable){
+                String reason=a.contains("RevokeReason",Tag.TAG_STRING)?a.getString("RevokeReason"):"freight_revoke_unknown";
+                y+=wrap(g,Component.translatable("message.createcityexpansioncore.economy."+reason),x,y,w,MUTED)+8;
+            }
         }
         button(x,y,Math.min(w,260),tr("diagnostics"),false,()->{diagnostics=!diagnostics;rebuild();});y+=34;
         if(diagnostics){
@@ -446,6 +508,7 @@ public final class LogisticsScreen extends Screen {
         }
         return y;
     }
+    private static String formatEta(long ticks){long seconds=ticks/20;return seconds<60?seconds+"s":(seconds/60)+"m "+(seconds%60)+"s";}
     private int legacySetup(GuiGraphics g,int y) {
         int x=layout.left(),w=layout.width();
         y=section(g,tr("legacy_title"),tr("legacy_help"),y);

@@ -82,6 +82,7 @@ public final class WorldMapScreen extends Screen {
         this.map.setRailwayData(this.menu.getRailwayStations(), this.menu.getRailwayTrains());
         if (this.menu.getEconomyState() != null) {
             this.map.setEconomyInfrastructure(this.menu.getEconomyState().infrastructure());
+            this.map.setFreightData(this.menu.getEconomyState().logistics());
         }
     }
 

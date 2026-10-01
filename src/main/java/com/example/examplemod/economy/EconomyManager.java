@@ -23,8 +23,9 @@ import java.math.BigInteger;
 import java.util.*;
 
 public final class EconomyManager extends SavedData {
+    public record TransportPayout(boolean cityAccount, UUID ownerId, long amount) {}
     private static final String DATA_NAME = "createcityexpansioncore_economy";
-    private static final int FORMAT_VERSION = 6;
+    private static final int FORMAT_VERSION = 7;
     private final FreightLogistics freight = new FreightLogistics(this);
     public FreightLogistics freight() { return freight; }
     public synchronized boolean createFreightSale(UUID city,UUID creator,ResourceLocation item,long amount,long price,long deadline,String title,String description){
@@ -53,6 +54,8 @@ public final class EconomyManager extends SavedData {
 
     private final Map<UUID, Long> wallets = new LinkedHashMap<>();
     private final Map<UUID, Long> treasuries = new LinkedHashMap<>();
+    private final Map<UUID, Long> transportReserves = new LinkedHashMap<>();
+    private final Set<UUID> settledTransportTrips = new LinkedHashSet<>();
     private final Map<UUID, IndustrialContract> contracts = new LinkedHashMap<>();
     private final Map<UUID, PrivateListing> listings = new LinkedHashMap<>();
     private final Map<UUID, IndustrialShipment> shipments = new LinkedHashMap<>();
@@ -121,6 +124,37 @@ public final class EconomyManager extends SavedData {
     public boolean adminSetTreasury(UUID cityId, long amount) {
         if (amount < 0L || amount > Config.ECONOMY_MAX_TRANSACTION.get()) return false;
         putBalance(treasuries, cityId, amount); setDirty(); return true;
+    }
+
+    public synchronized boolean reserveTransport(UUID tripId, boolean cityAccount, UUID payerId, long amount) {
+        if (amount < 0 || amount > Config.ECONOMY_MAX_TRANSACTION.get() || transportReserves.containsKey(tripId) || settledTransportTrips.contains(tripId)) return false;
+        if (!debit(cityAccount ? treasuries : wallets, payerId, amount)) return false;
+        transportReserves.put(tripId, amount);
+        setDirty(); return true;
+    }
+
+    /** Settles an already debited reserve atomically; unused CR returns to the payer. */
+    public synchronized boolean settleTransport(UUID tripId, boolean payerCity, UUID payerId, long reserved,
+                                                List<TransportPayout> payouts) {
+        if (reserved < 0 || settledTransportTrips.contains(tripId) || !Objects.equals(transportReserves.get(tripId), reserved)) return false;
+        long paid = 0;
+        Map<UUID,Long> walletCredits = new LinkedHashMap<>(), cityCredits = new LinkedHashMap<>();
+        try {
+            for (TransportPayout payout : payouts) {
+                if (payout.amount() < 0) return false;
+                paid = Math.addExact(paid, payout.amount());
+                (payout.cityAccount() ? cityCredits : walletCredits).merge(payout.ownerId(), payout.amount(), Math::addExact);
+            }
+        } catch (ArithmeticException ex) { return false; }
+        if (paid > reserved) return false;
+        long refund = reserved - paid;
+        (payerCity ? cityCredits : walletCredits).merge(payerId, refund, Math::addExact);
+        for (var entry : walletCredits.entrySet()) if (!canCredit(wallets, entry.getKey(), entry.getValue())) return false;
+        for (var entry : cityCredits.entrySet()) if (!canCredit(treasuries, entry.getKey(), entry.getValue())) return false;
+        walletCredits.forEach((id, amount) -> credit(wallets, id, amount));
+        cityCredits.forEach((id, amount) -> credit(treasuries, id, amount));
+        transportReserves.remove(tripId); settledTransportTrips.add(tripId);
+        setDirty(); return true;
     }
 
     public boolean pay(UUID sender, UUID receiver, long amount) {
@@ -402,6 +436,92 @@ public final class EconomyManager extends SavedData {
         setDirty(); return true;
     }
 
+    /**
+     * Cancel a freight dispatch that is still open — the repair counterpart to rebind.
+     *
+     * <p>Only legal while the trade can still move back without rolling back cargo the receiving
+     * city already accepted. Escrow returns through the same path {@link #processTimeouts} uses and
+     * {@link IndustrialContract#takeEscrow()} zeroes it, so a replay refunds nothing; unused
+     * ShipmentTokens and the shipping manifest are invalidated, which is what makes a late or
+     * replayed package after a revoke fail validation instead of settling twice.
+     *
+     * @return a translation-safe message key under {@code message.createcityexpansioncore.economy.}
+     */
+    public synchronized String revokeDispatch(UUID subject, UUID cityId) {
+        if (subject == null || cityId == null) return "freight_revoke_unknown";
+        IndustrialContract contract = contracts.get(subject);
+        if (contract != null) return revokeContract(contract, cityId);
+        MarketOffer offer = marketOffers.get(subject);
+        if (offer != null) return revokeImport(offer, cityId);
+        return "freight_revoke_unknown";
+    }
+
+    private String revokeContract(IndustrialContract contract, UUID cityId) {
+        FreightAssignment assignment = freight.assignments.get(contract.id());
+        FreightPoint source = assignment == null ? null : freight.point(assignment.source);
+        FreightPoint destination = assignment == null ? null : freight.point(assignment.destination);
+        boolean issuer = cityId.equals(contract.issuerCityId());
+        boolean endpoint = source != null && cityId.equals(source.cityId) || destination != null && cityId.equals(destination.cityId);
+        if (!issuer && !endpoint) return "freight_revoke_denied";
+        // Terminal already: escrow was taken by a previous revoke/settlement, so this is a no-op.
+        if (contract.state() == EconomyTypes.ContractState.DELIVERED
+                || contract.state() == EconomyTypes.ContractState.DISPUTED) return "freight_revoke_state";
+        if (contract.state().terminal()) return "freight_revoke_already";
+        if (!contract.revoke()) return "freight_revoke_state";
+        releaseContractEscrow(contract);
+        failActiveShipments(contract.id());
+        invalidateContractLogistics(contract.id(), EconomyTypes.ManifestState.INVALID);
+        freight.stopDispatch(contract.id());
+        freight.markChanged();
+        setDirty();
+        return "freight_revoked";
+    }
+
+    private String revokeImport(MarketOffer offer, UUID cityId) {
+        if (offer.direction() != EconomyTypes.MarketDirection.BUY_FROM_MASTER
+                || offer.acceptedCity() == null || !offer.acceptedCity().equals(cityId)) return "freight_revoke_denied";
+        // Reserved offers have nothing dispatched yet; already-terminal ones refunded on their own path.
+        if (offer.status().terminal()) return "freight_revoke_already";
+        if (offer.status() == EconomyTypes.MarketOfferStatus.OPEN) return "freight_revoke_state";
+        MarketDefinition definition = marketDefinition(offer.definitionId());
+        ExternalMarketState state = marketStates.get(offer.definitionId());
+        long cancelled = offer.remaining();
+        if (definition != null && state != null && cancelled > 0L) state.release(offer.direction(), cancelled, definition);
+        if (cancelled > 0L) {
+            long refund;
+            try { refund = EconomyMath.multiplyExactPositive(cancelled, offer.unitPrice()); }
+            catch (RuntimeException ex) { refund = 0L; }
+            refund = EconomyMath.saturatingAdd(refund, offer.bond(), Long.MAX_VALUE);
+            credit(treasuries, offer.acceptedCity(), refund);
+        }
+        offer.restore(offer.remaining(), offer.acceptedCity(), offer.acceptedBy(),
+                EconomyTypes.MarketOfferStatus.FAILED, offer.acceptedQuantity(), offer.dispatchedAmount());
+        invalidateImportTokens(offer.id());
+        freight.stopDispatch(offer.id());
+        freight.markChanged();
+        setDirty();
+        return "freight_revoked";
+    }
+
+    /** Releases escrow exactly once, mirroring the existing contract-timeout refund branch. */
+    private void releaseContractEscrow(IndustrialContract contract) {
+        MarketOffer linked = offerByContract.get(contract.id()) == null ? null : marketOffers.get(offerByContract.get(contract.id()));
+        long refund = contract.takeEscrow();
+        if (linked != null) {
+            procurementReserved = Math.max(0L, procurementReserved - refund);
+            procurementAvailable = EconomyMath.saturatingAdd(procurementAvailable, refund, procurementCap());
+            MarketDefinition definition = marketDefinition(linked.definitionId());
+            ExternalMarketState state = marketStates.get(linked.definitionId());
+            if (definition != null && state != null) state.release(linked.direction(), linked.remaining(), definition);
+            linked.restore(linked.remaining(), linked.acceptedCity(), linked.acceptedBy(), EconomyTypes.MarketOfferStatus.FAILED);
+        } else if (contract.kind() == EconomyTypes.ContractKind.MASTER_SMART) {
+            procurementReserved = Math.max(0L, procurementReserved - refund);
+            procurementAvailable = EconomyMath.saturatingAdd(procurementAvailable, refund, procurementCap());
+        } else if (refund > 0L) {
+            credit(treasuries, contract.issuerCityId(), refund);
+        }
+    }
+
     public long recordIntakeFlow(UUID registrationId, ResourceLocation itemId, long amount, ServerLevel level) {
         EconomyInfrastructureRegistration intake = infrastructure.get(registrationId);
         if (intake == null || !intake.available() || intake.type() != EconomyTypes.InfrastructureType.CONTRACT_INTAKE)
@@ -453,7 +573,7 @@ public final class EconomyManager extends SavedData {
         if(!applied){physical.rollback();return EconomyTypes.IntakeAttributionError.CONTRACT_INVALID;}
         token.consume(now);
         if(token.manifestId()!=null){ShippingManifest manifest=manifests.get(token.manifestId());if(manifest!=null&&manifest.acceptedAmount()>=manifest.authorizedAmount())manifest.complete();}
-        if(intake!=null)intake.attributionError(EconomyTypes.IntakeAttributionError.NONE,now);setDirty();
+        if(intake!=null)intake.attributionError(EconomyTypes.IntakeAttributionError.NONE,now);freight.markChanged();setDirty();
         return EconomyTypes.IntakeAttributionError.NONE;
     }
 
@@ -899,6 +1019,7 @@ public final class EconomyManager extends SavedData {
         manager.lastProcurementTick = Math.max(0L, root.getLong("LastProcurementTick"));
         readUuidLongMap(root, "Wallets", "Player", manager.wallets);
         readUuidLongMap(root, "Treasuries", "City", manager.treasuries);
+        if(version>=7){readUuidLongMap(root,"TransportReserves","Trip",manager.transportReserves);for(Tag raw:root.getList("SettledTransportTrips",Tag.TAG_COMPOUND)){CompoundTag tag=(CompoundTag)raw;if(tag.hasUUID("Trip"))manager.settledTransportTrips.add(tag.getUUID("Trip"));}}
         readResourceLongMap(root, "Warehouse", manager.warehouseStock);
         for (Tag raw : root.getList("Infrastructure", Tag.TAG_COMPOUND)) {
             try {
@@ -974,7 +1095,7 @@ public final class EconomyManager extends SavedData {
         root.put("FreightLogistics",freight.save());
         root.putInt("FormatVersion",FORMAT_VERSION);if(masterCityId!=null)root.putUUID("MasterCity",masterCityId);
         root.putLong("ProcurementAvailable",procurementAvailable);root.putLong("ProcurementReserved",procurementReserved);root.putLong("LastProcurementTick",lastProcurementTick);
-        root.put("Wallets",writeUuidLongMap(wallets,"Player"));root.put("Treasuries",writeUuidLongMap(treasuries,"City"));root.put("Warehouse",writeResourceLongMap(warehouseStock));
+        root.put("Wallets",writeUuidLongMap(wallets,"Player"));root.put("Treasuries",writeUuidLongMap(treasuries,"City"));root.put("TransportReserves",writeUuidLongMap(transportReserves,"Trip"));ListTag settledTrips=new ListTag();for(UUID id:settledTransportTrips){CompoundTag tag=new CompoundTag();tag.putUUID("Trip",id);settledTrips.add(tag);}root.put("SettledTransportTrips",settledTrips);root.put("Warehouse",writeResourceLongMap(warehouseStock));
         ListTag infrastructureTags=new ListTag();for(var value:infrastructure.values()){CompoundTag tag=new CompoundTag();tag.putUUID("RegistrationId",value.registrationId());tag.putUUID("PhysicalId",value.physicalInstanceId());tag.putUUID("RegisteredBy",value.registeredBy());tag.putString("Type",value.type().name());if(value.cityId()!=null)tag.putUUID("CityId",value.cityId());tag.putString("Dimension",value.dimension().toString());tag.put("Pos",NbtUtils.writeBlockPos(value.pos()));tag.putBoolean("Available",value.available());if(value.stationRegistrationId()!=null)tag.putUUID("StationId",value.stationRegistrationId());tag.putString("LastError",value.lastAttributionError().name());tag.putLong("LastErrorAt",value.lastAttributionErrorAt());infrastructureTags.add(tag);}root.put("Infrastructure",infrastructureTags);
         ListTag contractTags=new ListTag();for(var value:contracts.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.id());tag.putString("Kind",value.kind().name());tag.putString("Mode",value.mode().name());tag.putUUID("IssuerCity",value.issuerCityId());tag.putUUID("CreatedBy",value.createdBy());tag.putString("Title",value.title());tag.putString("Description",value.description());tag.putString("Item",value.itemId().toString());tag.putLong("Amount",value.amount());tag.putLong("Reward",value.reward());tag.putUUID("Destination",value.destinationRegistrationId());if(value.stationRegistrationId()!=null)tag.putUUID("Station",value.stationRegistrationId());tag.putLong("CreatedAt",value.createdAt());tag.putLong("DeadlineDuration",value.deadlineDurationTicks());tag.putString("State",value.state().name());if(value.contractorCityId()!=null)tag.putUUID("ContractorCity",value.contractorCityId());if(value.acceptedByPlayerId()!=null)tag.putUUID("AcceptedBy",value.acceptedByPlayerId());tag.putLong("Delivered",value.deliveredAmount());tag.putLong("AcceptedAt",value.acceptedAt());tag.putLong("DeliveredAt",value.deliveredAt());tag.putLong("Escrow",value.escrow());tag.put("Contributions",writeUuidLongMap(value.contributions(),"City"));ListTag participants=new ListTag();for(UUID city:value.participants()){CompoundTag participant=new CompoundTag();participant.putUUID("City",city);participants.add(participant);}tag.put("Participants",participants);contractTags.add(tag);}root.put("Contracts",contractTags);
         ListTag listingTags=new ListTag();for(var value:listings.values()){CompoundTag tag=new CompoundTag();tag.putUUID("Id",value.id());tag.putString("Type",value.type().name());tag.putUUID("Creator",value.creator());if(value.counterparty()!=null)tag.putUUID("Counterparty",value.counterparty());tag.putString("Item",value.itemId().toString());tag.putLong("Amount",value.amount());tag.putLong("Price",value.price());tag.putString("Meeting",value.meetingText());tag.putLong("CreatedAt",value.createdAt());tag.putString("State",value.state().name());tag.putLong("Escrow",value.escrow());if(value.requestedItemId()!=null)tag.putString("RequestedItem",value.requestedItemId().toString());listingTags.add(tag);}root.put("Listings",listingTags);

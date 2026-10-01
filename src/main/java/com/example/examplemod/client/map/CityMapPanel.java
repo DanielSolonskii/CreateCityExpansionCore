@@ -7,6 +7,9 @@ import com.example.examplemod.network.RequestCityMapTilePayload;
 import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.EconomyStatePayload;
+import com.example.examplemod.economy.FreightPoint;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTrainSnapshot;
 import net.minecraft.client.Minecraft;
@@ -76,9 +79,14 @@ public final class CityMapPanel {
     private int territorySize;
     private List<CityProjectSnapshot> projects;
     private List<RailwayMapPayload.TrackSegment> railwayTracks = List.of();
+    private List<RailwayMapPayload.NetworkView> railwayNetworks = List.of();
+    private List<RailwayMapPayload.SectionView> railwaySections = List.of();
+    private List<RailwayMapPayload.RouteView> railwayRoutes = List.of();
     private List<RailwayStationSnapshot> railwayStations = List.of();
     private List<RailwayTrainSnapshot> railwayTrains = List.of();
     private List<EconomyStatePayload.InfrastructureView> economyInfrastructure = List.of();
+    private List<FreightPoint> freightPoints = List.of();
+    private List<FreightLink> freightLinks = List.of();
     /**
      * Соседние города, полученные с сервера один раз при открытии пилона.
      * Хранятся как есть и переиспользуются каждый кадр — никаких
@@ -125,6 +133,8 @@ public final class CityMapPanel {
     private final ItemStack trainIcon = item("create:controls");
     private final ItemStack contractIcon = item("createcityexpansioncore:contract_intake");
     private final ItemStack warehouseIcon = item("createcityexpansioncore:warehouse_gateway");
+    private final ItemStack freightIcon = item("create:postbox");
+    private final ItemStack networkIcon = item("create:track");
     private final ItemStack playerIcon = item("minecraft:compass");
 
     /*
@@ -291,6 +301,7 @@ public final class CityMapPanel {
             if (this.dimensionId.equals(value.dimension())
                     && name.getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(infrastructureSelection(value));
         }
+        for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId)&&point.name.toLowerCase(Locale.ROOT).contains(query))matches.add(freightSelection(point));
         return matches.size() <= 6 ? List.copyOf(matches) : List.copyOf(matches.subList(0, 6));
     }
 
@@ -305,6 +316,13 @@ public final class CityMapPanel {
             return;
         }
         this.economyInfrastructure = List.copyOf(values);
+    }
+
+    public void setFreightData(CompoundTag logistics) {
+        if (logistics == null) { this.freightPoints=List.of();this.freightLinks=List.of();return; }
+        List<FreightPoint> points=new ArrayList<>();for(Tag raw:logistics.getList("Points",Tag.TAG_COMPOUND))try{FreightPoint point=FreightPoint.load((CompoundTag)raw);if(!point.removed)points.add(point);}catch(RuntimeException ignored){}
+        List<FreightLink> links=new ArrayList<>();for(Tag raw:logistics.getList("Assignments",Tag.TAG_COMPOUND)){CompoundTag value=(CompoundTag)raw;if(value.hasUUID("Subject")&&value.hasUUID("Source")&&value.hasUUID("Destination"))links.add(new FreightLink(value.getUUID("Subject"),value.getUUID("Source"),value.getUUID("Destination"),value.getString("State")));}
+        this.freightPoints=List.copyOf(points);this.freightLinks=List.copyOf(links);
     }
 
     public void setRailwayData(
@@ -333,6 +351,7 @@ public final class CityMapPanel {
             return false;
         }
         this.railwayTracks = List.copyOf(payload.segments());
+        this.railwayNetworks=List.copyOf(payload.networks());this.railwaySections=List.copyOf(payload.sections());this.railwayRoutes=List.copyOf(payload.routes());
         return true;
     }
 
@@ -479,6 +498,7 @@ public final class CityMapPanel {
     }
 
     private Selection findSelection(double mouseX, double mouseY) {
+        if(this.showTracks){Selection route=findRouteSelection(mouseX,mouseY);if(route!=null)return route;Selection section=findSectionSelection(mouseX,mouseY);if(section!=null)return section;}
         Selection player = playerSelection();
         if (player != null) {
             ScreenPoint point = markerPoint(player.kind(), player.id(), player.pos());
@@ -490,6 +510,7 @@ public final class CityMapPanel {
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
+        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightPoint point:this.freightPoints){if(point.dimension.equals(this.dimensionId)){Selection candidate=freightSelection(point);ScreenPoint marker=markerPoint(candidate.kind(),candidate.id(),candidate.pos());if(inside(mouseX,mouseY,marker.x()-11,marker.y()-11,22,22))return candidate;}}
         if (this.showTrains && this.zoom >= CLOSE_DETAIL_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
             if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
             Selection candidate = trainSelection(train);
@@ -531,7 +552,7 @@ public final class CityMapPanel {
             addMarker(entries, SelectionKind.CITY, null, this.pylonPos,
                     this.pylonPos.getX() + 0.5, this.pylonPos.getZ() + 0.5, 80);
             for (CityMapPeersPayload.Peer peer : this.peers) {
-                if (!peer.own()) addMarker(entries, SelectionKind.CITY, null,
+                if (!peer.own()) addMarker(entries, SelectionKind.CITY, peer.cityId(),
                         new BlockPos(peer.pylonX(), this.pylonPos.getY(), peer.pylonZ()),
                         peer.pylonX() + 0.5, peer.pylonZ() + 0.5, 80);
             }
@@ -568,6 +589,7 @@ public final class CityMapPanel {
                         value.pos().getX() + 0.5, value.pos().getZ() + 0.5, 60);
             }
         }
+        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId))addMarker(entries,SelectionKind.FREIGHT_POINT,point.id,point.postbox,point.postbox.getX()+.5,point.postbox.getZ()+.5,65);
 
         entries.sort(Comparator.comparingInt(MarkerEntry::priority).reversed()
                 .thenComparingInt(entry -> entry.key().kind().ordinal())
@@ -824,7 +846,7 @@ public final class CityMapPanel {
             int viewportH = this.viewportHeight;
 
             BlockPos peerPos = new BlockPos(peer.pylonX(), this.pylonPos.getY(), peer.pylonZ());
-            ScreenPoint marker = markerPoint(SelectionKind.CITY, null, peerPos);
+            ScreenPoint marker = markerPoint(SelectionKind.CITY, peer.cityId(), peerPos);
             int markerX = marker.x();
             int markerY = marker.y();
 
@@ -857,7 +879,7 @@ public final class CityMapPanel {
             if (!this.showCities) continue;
             drawMarkerLeader(guiGraphics, markerX, markerY,
                     worldToScreenX(peer.pylonX() + 0.5), worldToScreenY(peer.pylonZ() + 0.5));
-            MapMarkerRenderer.render(guiGraphics, markerX, markerY, this.cityIcon, peer.own(), false,
+            MapMarkerRenderer.render(guiGraphics, markerX, markerY, this.cityIcon, peer.own(), peer.master(),
                     matchesTargetAt(this.hoveredSelection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()),
                     matchesTargetAt(this.selection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()));
 
@@ -888,7 +910,7 @@ public final class CityMapPanel {
                             name,
                             textX,
                             textY,
-                            0xFFC4CDD2,
+                            peer.master() ? 0xFFFFC766 : 0xFFC4CDD2,
                             false
                     );
                 }
@@ -988,6 +1010,7 @@ public final class CityMapPanel {
                     Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",
                             value.pos().getX(), value.pos().getZ()));
         }
+        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.render(guiGraphics,point.x(),point.y(),this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.literal(freight.address),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
     }
 
     private void deferTooltip(int mouseX, int mouseY, Component... lines) {
@@ -1022,6 +1045,9 @@ public final class CityMapPanel {
                         x2, y2 + (this.focus == Focus.RAILWAY ? 1 : 0),
                         this.focus == Focus.RAILWAY ? 0xFFE0AD59 : 0xFF9A7040);
             }
+            for(var section:this.railwaySections){var network=network(section.networkId());int color=network!=null&&network.access()==com.example.examplemod.railway.RailwayOwnershipTypes.Access.PRIVATE?0xFFC56F69:0xFF70A8B8;if(section.status()!=com.example.examplemod.railway.RailwayOwnershipTypes.SectionStatus.ONLINE)color=0xFF76595B;drawSegments(graphics,section.segments(),color,2);}
+            for(var route:this.railwayRoutes)drawSegments(graphics,route.segments(),route.selected()?0xFFFFFF76:route.status().equals("active")?0xFF61E6B0:0xFFE48C54,3);
+            if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawLine(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
         }
         if (this.showStations && this.zoom >= MEDIUM_DETAIL_ZOOM) {
             for (RailwayStationSnapshot station : this.railwayStations) {
@@ -1210,7 +1236,7 @@ public final class CityMapPanel {
 
     public enum Focus { WORLD, RAILWAY, TRADE, ENERGY }
 
-    public enum SelectionKind { PLAYER, CITY, STATION, TRAIN, INDUSTRY, TRADE_INFRASTRUCTURE }
+    public enum SelectionKind { PLAYER, CITY, STATION, TRAIN, INDUSTRY, TRADE_INFRASTRUCTURE, FREIGHT_POINT, RAILWAY_SECTION, ROUTE }
 
     public record Selection(SelectionKind kind, UUID id, Component title, BlockPos pos,
                             boolean own, List<Component> details, ItemStack icon, boolean warning) {
@@ -1228,12 +1254,13 @@ public final class CityMapPanel {
     }
 
     private record MarkerEntry(MarkerKey key, double worldX, double worldZ, int priority) {}
+    private record FreightLink(UUID id,UUID source,UUID destination,String status) {}
 
     private Selection peerSelection(CityMapPeersPayload.Peer peer) {
-        return new Selection(SelectionKind.CITY, null, Component.literal(peer.name()),
+        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.context.territory",peer.territorySize()));if(peer.master())details.add(Component.translatable("gui.createcityexpansioncore.world_map.master_city"));
+        return new Selection(SelectionKind.CITY, peer.cityId(), Component.literal(peer.name()),
                 new BlockPos(peer.pylonX(), this.pylonPos.getY(), peer.pylonZ()), peer.own(),
-                List.of(Component.translatable("gui.createcityexpansioncore.world_map.context.territory",
-                        peer.territorySize())), this.cityIcon, false);
+                details, this.cityIcon, peer.master());
     }
 
     private Selection playerSelection() {
@@ -1253,12 +1280,9 @@ public final class CityMapPanel {
     }
 
     private Selection stationSelection(RailwayStationSnapshot station) {
+        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.railway.station_type."+station.type().name().toLowerCase(Locale.ROOT)));details.add(Component.translatable("status.createcityexpansioncore.railway."+(station.available()?"available":"missing")));this.freightPoints.stream().filter(point->station.name().equals(point.stationName)).findFirst().ifPresent(point->details.add(Component.translatable("gui.createcityexpansioncore.world_map.station.freight",point.name)));
         return new Selection(SelectionKind.STATION, station.registrationId(), Component.literal(station.name()),
-                station.pos(), station.cityOwned(), List.of(
-                Component.translatable("gui.createcityexpansioncore.railway.station_type."
-                        + station.type().name().toLowerCase(Locale.ROOT)),
-                Component.translatable("status.createcityexpansioncore.railway."
-                        + (station.available() ? "available" : "missing"))),
+                station.pos(), station.cityOwned(), details,
                 this.stationIcon, !station.available());
     }
 
@@ -1289,6 +1313,19 @@ public final class CityMapPanel {
                 value.type() == com.example.examplemod.economy.EconomyTypes.InfrastructureType.CONTRACT_INTAKE
                         ? this.contractIcon : this.warehouseIcon, !value.available());
     }
+
+    private Selection freightSelection(FreightPoint point){String city=cityName(point.cityId);List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.city",city));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.station",point.stationName.isBlank()?"—":point.stationName));details.add(Component.literal(point.address));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight."+(point.online()?"online":"offline")));return new Selection(SelectionKind.FREIGHT_POINT,point.id,Component.literal(point.name),point.postbox,point.cityId.equals(ownCityId()),details,this.freightIcon,!point.online());}
+    private Selection findSectionSelection(double mouseX,double mouseY){for(var section:this.railwaySections)if(hitSegments(section.segments(),mouseX,mouseY,5)){var network=network(section.networkId());String owner=network==null?"?":network.ownerName();List<Component> details=List.of(Component.translatable("gui.createcityexpansioncore.world_map.rail.owner",owner),Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type."+network.ownerType().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.length",String.format(Locale.ROOT,"%.1f",section.length())),Component.translatable("gui.createcityexpansioncore.world_map.rail.access",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.access."+network.access().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.tariff",network==null?0:network.tariff()),Component.translatable("gui.createcityexpansioncore.world_map.rail.status",Component.translatable("gui.createcityexpansioncore.world_map.rail.status."+section.status().name().toLowerCase(Locale.ROOT))));return new Selection(SelectionKind.RAILWAY_SECTION,section.id(),Component.literal(network==null?shortId(section.networkId()):network.name()),midpoint(section.segments()),network!=null&&network.ownerId().equals(ownCityId()),details,this.networkIcon,section.status()!=com.example.examplemod.railway.RailwayOwnershipTypes.SectionStatus.ONLINE);}return null;}
+    private Selection findRouteSelection(double mouseX,double mouseY){for(var route:this.railwayRoutes)if(hitSegments(route.segments(),mouseX,mouseY,6)){List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.distance",String.format(Locale.ROOT,"%.1f",route.distance())));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.price",route.price()));if(route.etaTicks()>0)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.eta",route.etaTicks()/20));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.status",route.status()));return new Selection(SelectionKind.ROUTE,route.id(),Component.translatable(route.selected()?"gui.createcityexpansioncore.world_map.route.selected":"gui.createcityexpansioncore.world_map.route.active"),midpoint(route.segments()),true,details,this.networkIcon,!route.status().equals("active")&&!route.selected());}return null;}
+    private boolean hitSegments(List<RailwayMapPayload.TrackSegment> segments,double mouseX,double mouseY,double radius){for(var s:segments)if(distanceToSegment(mouseX,mouseY,worldToScreenX(s.x1()),worldToScreenY(s.z1()),worldToScreenX(s.x2()),worldToScreenY(s.z2()))<=radius)return true;return false;}
+    private static double distanceToSegment(double px,double py,double x1,double y1,double x2,double y2){double dx=x2-x1,dy=y2-y1;if(dx==0&&dy==0)return Math.hypot(px-x1,py-y1);double t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy)));return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));}
+    private static BlockPos midpoint(List<RailwayMapPayload.TrackSegment> values){if(values.isEmpty())return BlockPos.ZERO;var s=values.get(values.size()/2);return BlockPos.containing((s.x1()+s.x2())/2,0,(s.z1()+s.z2())/2);}
+    private void drawSegments(GuiGraphics graphics,List<RailwayMapPayload.TrackSegment> values,int color,int width){for(var s:values){int x1=worldToScreenX(s.x1()),y1=worldToScreenY(s.z1()),x2=worldToScreenX(s.x2()),y2=worldToScreenY(s.z2());for(int offset=0;offset<width;offset++)drawLine(graphics,x1,y1+offset,x2,y2+offset,color);}}
+    private RailwayMapPayload.NetworkView network(UUID id){return railwayNetworks.stream().filter(value->value.id().equals(id)).findFirst().orElse(null);}
+    private FreightPoint freight(UUID id){return freightPoints.stream().filter(value->value.id.equals(id)).findFirst().orElse(null);}
+    private UUID ownCityId(){return peers.stream().filter(CityMapPeersPayload.Peer::own).map(CityMapPeersPayload.Peer::cityId).findFirst().orElse(null);}
+    private String cityName(UUID id){return peers.stream().filter(peer->peer.cityId().equals(id)).map(CityMapPeersPayload.Peer::name).findFirst().orElse(shortId(id));}
+    private static String shortId(UUID id){return id==null?"?":id.toString().substring(0,8);}
 
     private static Component infrastructureName(EconomyStatePayload.InfrastructureView value) {
         return Component.translatable(value.type()
