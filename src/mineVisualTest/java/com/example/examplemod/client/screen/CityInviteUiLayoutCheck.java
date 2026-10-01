@@ -81,9 +81,6 @@ public final class CityInviteUiLayoutCheck {
             require(CityInviteUiLayout.panelWidth(width) <= width - CityInviteUiLayout.EDGE * 2,
                     "the panel fits the screen at " + width);
             require(CityInviteUiLayout.panelLeft(width) >= 0, "the panel never starts off screen at " + width);
-            CityInviteUiLayout.Rect invite = CityInviteUiLayout.inviteButton(width, 380);
-            require(invite.right() <= width - CityInviteUiLayout.EDGE, "the invite CTA fits at " + width);
-            require(invite.contains(invite.x() + 1, invite.y() + 1), "the invite CTA hitbox matches at " + width);
         }
         require(CityInviteUiLayout.panelWidth(320) > 0, "the panel is usable on the narrowest width");
         require(CityInviteUiLayout.panelWidth(1280) <= 340, "the panel does not stretch on a wide screen");
@@ -178,7 +175,108 @@ public final class CityInviteUiLayoutCheck {
                     "the invite screen never renders the literal '" + literal + "' to the player");
         }
 
+        // ------------------------------------------------------- members list: rows, actions, scroll
+        for (int width : WIDTHS) {
+            for (int height : HEIGHTS) {
+                int top = 120;
+                // Derived the way the screen derives it, from the space actually left below the list.
+                int rows = CityInviteUiLayout.memberVisibleRows(top, height - 40);
+                require(rows >= 1, "there is always room for at least one member row at " + width + "x" + height);
+
+                CityInviteUiLayout.Rect clip =
+                        CityInviteUiLayout.memberClip(width, top, rows, 40);
+                require(WorldMapUiLayoutShim.withinScreen(width, height, clip),
+                        "the member clip stays on screen at " + width + "x" + height);
+
+                for (int index = 0; index < rows + 3; index++) {
+                    CityInviteUiLayout.Rect row = CityInviteUiLayout.memberRow(width, top, index, 40);
+                    CityInviteUiLayout.Rect action = CityInviteUiLayout.memberAction(width, top, index, 40);
+                    require(row.contains(row.x() + 1, row.y() + 1),
+                            "member row hitbox matches its render bounds at " + width);
+                    require(action.overlaps(row), "the action sits inside its own row at " + width);
+                    require(action.contains(action.x() + 1, action.y() + 1),
+                            "the member action hitbox matches its render bounds at " + width);
+                    if (index > 0) {
+                        CityInviteUiLayout.Rect previous = CityInviteUiLayout.memberRow(width, top, index - 1, 40);
+                        require(!previous.overlaps(row), "member rows never overlap at " + width);
+                        require(!previous.overlaps(action), "an action never reaches the neighbouring row at " + width);
+                        require(action.y() >= row.y(), "an action never belongs to the row above at " + width);
+                    }
+                }
+            }
+        }
+
+        // One clamp for the wheel, the keyboard and the render pass.
+        for (int total = 0; total <= 40; total += 7) {
+            for (int rows = 1; rows <= 12; rows++) {
+                require(CityInviteUiLayout.clampMemberScroll(-5, total, rows) == 0,
+                        "scrolling above the first row clamps to zero at total=" + total);
+                require(CityInviteUiLayout.clampMemberScroll(999, total, rows)
+                                == Math.max(0, total - rows),
+                        "scrolling below the last row clamps to the end at total=" + total + " rows=" + rows);
+                require(CityInviteUiLayout.clampMemberScroll(3, total, rows) >= 0
+                                && CityInviteUiLayout.clampMemberScroll(3, total, rows) <= Math.max(0, total - rows),
+                        "an in-range scroll is never moved at total=" + total);
+            }
+        }
+
+        // The scrollbar is derived from the same model, so it cannot disagree with the list.
+        for (int width : WIDTHS) {
+            for (int total : new int[]{ 1, 5, 40 }) {
+                for (int scroll : new int[]{ 0, 3, 99 }) {
+                    CityInviteUiLayout.Rect thumb =
+                            CityInviteUiLayout.memberScrollThumb(width, 120, 6, total, scroll);
+                    CityInviteUiLayout.Rect clip = CityInviteUiLayout.memberClip(width, 120, 6, total);
+                    require(thumb.x() >= clip.right(), "the scrollbar sits beside the list at " + width);
+                    require(thumb.y() >= clip.y() && thumb.bottom() <= clip.bottom() + 1,
+                            "the thumb stays inside the scrollbar track at " + width + " total=" + total);
+                    require(thumb.height() >= 12, "the thumb is always grabbable at " + width);
+                }
+            }
+        }
+
+        // Exactly one invite entry point: the members list keeps its pre-existing button widget, so the
+        // layout must not define a second invite rectangle that nothing draws.
+        require(CityInviteUiLayoutShim.hasNoInviteButton(),
+                "the members list does not define a second invite geometry");
+        String screenSource = Files.readString(
+                sourceRoot().resolve(
+                        "src/main/java/com/example/examplemod/client/screen/CityPylonScreen.java"));
+        int openCalls = countOccurrences(screenSource, "new CityInvitePlayerScreen(");
+        require(openCalls == 1, "the members screen opens the invite screen exactly once, found " + openCalls);
+
         System.out.println("PASS: " + checks + " city invite UI layout and presentation checks");
+    }
+
+    /** Tests run with a build/checks working directory, so the source root has to be found by walking up. */
+    private static int countOccurrences(String text, String needle) {
+        int count = 0;
+        int at = text.indexOf(needle);
+        while (at >= 0) {
+            count++;
+            at = text.indexOf(needle, at + needle.length());
+        }
+        return count;
+    }
+
+    /** Screen-bounds helper, kept local so the check owns its own contract. */
+    private static final class WorldMapUiLayoutShim {
+        static boolean withinScreen(int width, int height, CityInviteUiLayout.Rect rect) {
+            return rect.x() >= 0 && rect.y() >= 0
+                    && rect.right() <= width && rect.bottom() <= height;
+        }
+    }
+
+    /** The layout must not hand out an invite rectangle the members screen no longer draws. */
+    private static final class CityInviteUiLayoutShim {
+        static boolean hasNoInviteButton() {
+            for (java.lang.reflect.Method method : CityInviteUiLayout.class.getDeclaredMethods()) {
+                if (method.getName().equals("inviteButton")) {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     private static Path sourceRoot() {

@@ -53,10 +53,14 @@ public class CityInviteClientHandler {
 
     private static boolean FEEDBACK_OK = false;
 
-    /** Set when a member joined, so an open members list can refresh instead of waiting for a reopen. */
-    private static boolean MEMBERS_STALE = false;
-
+    /** Pylon the current search results belong to, so another city's answers can never leak in. */
     private static BlockPos RESULTS_PYLON = null;
+
+    /**
+     * Presentation state for the invite screen only. No membership decision is ever taken here:
+     * accept, removal and role change each push their own authoritative payload straight to the
+     * client and the pylon repaints itself, so there is deliberately no "members are stale" flag.
+     */
 
     public static List<CityPlayerSearchResultPayload.Entry> results() {
         return RESULTS;
@@ -160,20 +164,19 @@ public class CityInviteClientHandler {
         }
     }
 
-    /** The sender learns how their invite ended. A success is never a problem, so never the Problem Center. */
+    /**
+     * The sender learns how their invite ended. A success is never a problem, so never the Problem
+     * Center.
+     *
+     * <p>No "members are stale" flag is kept here: accept, removal and role change each push their
+     * own authoritative payload straight to the client and the pylon repaints itself, so a second
+     * unread flag would only be a second thing to forget.
+     */
     public static void receiveOutcome(CityInviteOutcomePayload payload) {
-        MEMBERS_STALE = true;
         String key = payload.accepted()
                 ? "gui.createcityexpansioncore.city.invite.outcome.accepted"
                 : "gui.createcityexpansioncore.city.invite.outcome.declined";
         toast(Component.translatable(key, payload.invitedName()));
-    }
-
-    /** Consumed by an open members screen so it refreshes the moment somebody joins. */
-    public static boolean consumeMembersStale() {
-        boolean stale = MEMBERS_STALE;
-        MEMBERS_STALE = false;
-        return stale;
     }
 
     private static void toast(Component message) {

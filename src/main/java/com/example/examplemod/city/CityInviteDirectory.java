@@ -251,23 +251,35 @@ public final class CityInviteDirectory {
      * problem, so it never reaches the Problem Center.
      */
     /**
- * Pushes the authoritative member list to one viewer.
+ * Pushes the authoritative member list to every viewer of this pylon.
  *
- * <p>Sent only where membership actually changed: accepting an invite, a role change, a removal. A
- * declined invite deliberately does not go through here, because it leaves the member list
- * untouched — invite and search state belong to the invite system that already owns them.
+ * <p>Sent only where membership actually changed: accepting an invite. A declined invite
+ * deliberately does not go through here, because it leaves the member list untouched — invite and
+ * search state belong to the invite system that already owns them.
+ *
+ * <p>Reaches every player who currently has this exact pylon open, not just the inviter: the removal
+ * and role-change deltas already broadcast exactly this way, and a second admin watching the same
+ * city must not be left with a stale list until they reopen the screen. The open menu is the only
+ * signal used, so nothing is polled and no viewer has to be remembered.
  */
-    public static void publishMembers(MinecraftServer server, City city, ServerPlayer viewer) {
-        if (viewer == null) {
-            return;
-        }
+    public static void publishMembers(MinecraftServer server, City city) {
         List<com.example.examplemod.network.SyncCityMembersPayload.Entry> entries = new ArrayList<>();
         for (CityMember member : city.getMembers()) {
             entries.add(new com.example.examplemod.network.SyncCityMembersPayload.Entry(
                     member.getPlayerId(), member.getRole().ordinal()));
         }
-        PacketDistributor.sendToPlayer(viewer,
-                new com.example.examplemod.network.SyncCityMembersPayload(city.getPylonPos(), entries));
+        // One payload instance, sent once to every viewer of this very pylon — the same rule the
+        // removal and role-change deltas already use. Sending to the inviter alone left a second
+        // admin looking at the same city with a stale list until they reopened the screen, and
+        // sending to everyone online would leak one city's roster to unrelated players.
+        com.example.examplemod.network.SyncCityMembersPayload snapshot =
+                new com.example.examplemod.network.SyncCityMembersPayload(city.getPylonPos(), entries);
+        for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
+            if (viewer.containerMenu instanceof com.example.examplemod.menu.CityPylonMenu menu
+                    && menu.getPylonPos().equals(city.getPylonPos())) {
+                PacketDistributor.sendToPlayer(viewer, snapshot);
+            }
+        }
     }
 
     /**

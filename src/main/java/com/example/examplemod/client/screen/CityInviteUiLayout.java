@@ -87,12 +87,47 @@ final class CityInviteUiLayout {
         return Math.max(24, bounds.width() - reserved);
     }
 
-    /** The single invite CTA under a members list. */
-    static Rect inviteButton(int screenWidth, int screenHeight) {
-        int left = panelLeft(screenWidth);
-        int width = panelWidth(screenWidth);
-        return new Rect(left + EDGE, screenHeight - EDGE - 24, width - EDGE * 2, 24);
+    /** The single management control of a member row; its hitbox can never reach a neighbouring row. */
+    static Rect memberAction(int screenWidth, int top, int index, int count) {
+        Rect row = memberRow(screenWidth, top, index, count);
+        return new Rect(row.right() - ROW_HEIGHT + 4, row.y() + 3, ROW_HEIGHT - 8, row.height() - 6);
     }
+
+    /** The visible window of the member list; anything outside is clipped rather than drawn. */
+    static Rect memberClip(int screenWidth, int top, int rows, int count) {
+        Rect first = memberRow(screenWidth, top, 0, count);
+        return new Rect(first.x(), first.y(), first.width(), Math.max(ROW_HEIGHT, rows * ROW_HEIGHT));
+    }
+
+    /** How many whole rows fit between {@code top} and {@code bottom}. */
+    static int memberVisibleRows(int top, int bottom) {
+        return Math.max(1, (bottom - top) / ROW_HEIGHT);
+    }
+
+    /** One clamp, shared by the wheel, the keyboard and the render pass so they cannot disagree. */
+    static int clampMemberScroll(int scroll, int total, int rows) {
+        return Math.max(0, Math.min(scroll, Math.max(0, total - rows)));
+    }
+
+    /** Scrollbar thumb, derived so the render and the hit-test share one computation. */
+    static Rect memberScrollThumb(int screenWidth, int top, int rows, int total, int scroll) {
+        Rect clip = memberClip(screenWidth, top, rows, total);
+        int x = clip.right() + NORMAL;
+        if (total <= rows) {
+            return new Rect(x, clip.y(), 4, clip.height());
+        }
+        int thumbHeight = Math.max(12, clip.height() * rows / total);
+        int available = clip.height() - thumbHeight;
+        int offset = clampMemberScroll(scroll, total, rows) * available
+                / Math.max(1, total - rows);
+        return new Rect(x, clip.y() + offset, 4, thumbHeight);
+    }
+
+    /**
+     * The member list keeps the pre-existing invite button widget: it already carries the permission
+     * check and the on-screen placement, so there is deliberately no second invite geometry here and
+     * no second clickable zone.
+     */
 
     /** Inline success or error line directly under the search field. */
     static Rect feedback(int screenWidth, int top) {

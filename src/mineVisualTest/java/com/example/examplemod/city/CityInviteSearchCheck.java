@@ -298,6 +298,31 @@ public final class CityInviteSearchCheck {
         require(manager.contains("getUUID(\"Inviter\")"),
                 "and read back, so a pending invite keeps its sender across a restart");
 
+        // ---------------------------- the member snapshot reaches every viewer of that pylon, exactly once
+        String directory3 = Files.readString(sourceRoot()
+                .resolve("src/main/java/com/example/examplemod/city/CityInviteDirectory.java"));
+        // Scope to publishMembers only: reportOutcome legitimately checks the inviter for a toast.
+        int publishStart = directory3.indexOf("public static void publishMembers(");
+        require(publishStart > 0, "publishMembers exists");
+        String publish = directory3.substring(publishStart,
+                directory3.indexOf("public static void reportOutcome(", publishStart));
+        require(publish.contains("viewer.containerMenu instanceof com.example.examplemod.menu.CityPylonMenu menu"),
+                "a viewer is recognised by having this pylon's menu open, like the removal delta");
+        require(publish.contains("menu.getPylonPos().equals(city.getPylonPos())"),
+                "only viewers of this very pylon are included");
+        require(publish.contains("for (ServerPlayer viewer : server.getPlayerList().getPlayers())"),
+                "every online player is considered, so a second admin is not left stale");
+        require(publish.contains("PacketDistributor.sendToPlayer(viewer, snapshot)"),
+                "the same snapshot instance goes to each viewer, so nobody receives it twice");
+        require(!publish.contains("inviterId"),
+                "the member sync no longer depends on the inviter at all, online or not");
+        require(!publish.contains("if (viewer == null)"),
+                "there is no single designated viewer that could silently drop the sync");
+        require(publish.contains("for (CityMember member : city.getMembers())"),
+                "the snapshot is the complete member list");
+        require(directory3.contains("getPlayer(inviterId)"),
+                "the inviter is still looked up for the toast, which is the only place it matters");
+
         System.out.println("PASS: " + checks + " city invite search, state and persistence checks");
     }
 

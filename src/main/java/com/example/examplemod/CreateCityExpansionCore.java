@@ -2109,14 +2109,7 @@ public class CreateCityExpansionCore {
 
                         CityInviteDirectory.publishMembers(
                                 player.server,
-                                city,
-                                inviterId == null
-                                        ? null
-                                        : player.server
-                                                .getPlayerList()
-                                                .getPlayer(
-                                                        inviterId
-                                                )
+                                city
                         );
 
                         /*
