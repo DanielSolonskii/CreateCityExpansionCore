@@ -1411,4 +1411,5 @@
   ,"gui.createcityexpansioncore.city.invite.state.city_gone": "The city no longer exists"
   ,"gui.createcityexpansioncore.city.invite.state.invite": "Invite"
   ,"gui.createcityexpansioncore.city.invites.title": "You were invited to join %s"
+  ,"gui.createcityexpansioncore.city.hub.open_map": "OPEN MAP"
 }

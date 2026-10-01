@@ -1411,4 +1411,5 @@
   ,"gui.createcityexpansioncore.city.invite.state.city_gone": "Город больше не существует"
   ,"gui.createcityexpansioncore.city.invite.state.invite": "Пригласить"
   ,"gui.createcityexpansioncore.city.invites.title": "Вас пригласили в город %s"
+  ,"gui.createcityexpansioncore.city.hub.open_map": "ОТКРЫТЬ КАРТУ"
 }

@@ -888,7 +888,7 @@ private String managementTabName(int tab) {
         if (this.activeTab == 2
                 && this.menu.hasCity()) {
 
-            int listTop = memberListTop() + 28;
+            int listTop = managementBodyTop(this.contentTop());
 
             CityInviteUiLayout.Rect clip =
                     CityInviteUiLayout.memberClip(
@@ -1179,18 +1179,9 @@ private String managementTabName(int tab) {
         }
 
         if (button == 0 && isManagementTab(this.activeTab)) {
-            int[] tabs = {1, 2, 3, 5, -1, 6};
-            // Measured columns instead of a fixed width: Russian labels are far wider than their
-            // English originals and a fixed column made them touch or truncate.
-            int[] labelWidths = new int[tabs.length];
+            int[] tabs = MANAGEMENT_TABS;
             for (int i = 0; i < tabs.length; i++) {
-                labelWidths[i] = this.font.width(managementTabName(tabs[i]));
-            }
-            int width = CityPylonUiLayout.columnWidth(CONTENT_WIDTH, tabs.length, labelWidths);
-            int rows = CityPylonUiLayout.rows(CONTENT_WIDTH, tabs.length, labelWidths);
-            for (int i = 0; i < tabs.length; i++) {
-                CityPylonUiLayout.Rect cell = CityPylonUiLayout.tab(
-                        this.contentLeft(), this.contentTop() + 22, i, width, tabs.length, rows);
+                CityPylonUiLayout.Rect cell = managementTabRect(this.contentLeft(), CityPylonUiLayout.navTop(this.contentTop()), i);
                 if (cell.contains(mouseX, mouseY)) {
                     if (i == 4) {
                         if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this));
@@ -1284,7 +1275,7 @@ private String managementTabName(int tab) {
                 && button == 0) {
 
             int cardY =
-                    this.contentTop() + MEMBER_LIST_OFFSET;
+                    managementBodyTop(this.contentTop());
 
             int visibleCount = MEMBER_ROWS;
 
@@ -1725,19 +1716,6 @@ private String managementTabName(int tab) {
         int emblemX =
                 left + PANEL_WIDTH - OUTER_PADDING - HEADER_EMBLEM_SIZE;
 
-        guiGraphics.blit(
-                HEADER_EMBLEM,
-                emblemX,
-                top + HEADER_EMBLEM_Y,
-                HEADER_EMBLEM_SIZE,
-                HEADER_EMBLEM_SIZE,
-                0.0F,
-                0.0F,
-                HEADER_EMBLEM_TEXTURE_SIZE,
-                HEADER_EMBLEM_TEXTURE_SIZE,
-                HEADER_EMBLEM_TEXTURE_SIZE,
-                HEADER_EMBLEM_TEXTURE_SIZE
-        );
 
         guiGraphics.drawString(
                 this.font,
@@ -1865,14 +1843,14 @@ private String managementTabName(int tab) {
 
         guiGraphics.fill(
                 contentLeft,
-                contentTop + 16,
+                CityPylonUiLayout.divider(contentLeft, contentTop, this.imageWidth - 20).y(),
                 left + this.imageWidth - 20,
-                contentTop + 18,
+                CityPylonUiLayout.divider(contentLeft, contentTop, this.imageWidth - 20).bottom(),
                 0xFFD09A3A
         );
 
         if (isManagementTab(this.activeTab)) {
-            renderManagementNav(guiGraphics, contentLeft, contentTop, mouseX, mouseY);
+            renderManagementNav(guiGraphics, contentLeft, CityPylonUiLayout.navTop(contentTop), mouseX, mouseY);
         }
 
         switch (this.activeTab) {
@@ -1881,7 +1859,9 @@ private String managementTabName(int tab) {
                     renderOverview(
                             guiGraphics,
                             contentLeft,
-                            contentTop
+                            contentTop,
+                            mouseX,
+                            mouseY
                     );
 
             case 1 ->
@@ -2157,19 +2137,6 @@ private String managementTabName(int tab) {
             ResourceLocation skinTexture =
                     skin.texture();
 
-            guiGraphics.blit(
-                    skinTexture,
-                    listX + 4,
-                    currentY + 2,
-                    28,
-                    28,
-                    8,
-                    8,
-                    8,
-                    8,
-                    64,
-                    64
-            );
 
             /*
              * Имя
@@ -2212,7 +2179,9 @@ private String managementTabName(int tab) {
     private void renderOverview(
             GuiGraphics guiGraphics,
             int left,
-            int top
+            int top,
+            int mouseX,
+            int mouseY
     ) {
 
         EconomyStatePayload economy = this.menu.getEconomyState();
@@ -2242,7 +2211,21 @@ private String managementTabName(int tab) {
         hubKpi(guiGraphics, left, top + 156, 98, Component.translatable("gui.createcityexpansioncore.city.hub.level"), Integer.toString(this.menu.getCityLevel()));
         hubKpi(guiGraphics, left + 108, top + 156, 98, Component.translatable("gui.createcityexpansioncore.city.hub.members"), Integer.toString(this.menu.getMemberCount()));
 
+        this.mapPanel.setDrawInternalControls(false);
         this.mapPanel.render(guiGraphics, left + 216, top + 27, 224, 171, -1000, -1000);
+
+        // The overview map is a calm preview. Its own layer chips (TER / PR / PUTI / ST / PZ) and
+        // "k centru" belonged to the old cut-down GIS panel and are gone with the internal controls;
+        // the full World Map keeps them off too and owns the real modes.
+        int openMapX = left + 216, openMapY = top + 202;
+        boolean openMapHover = inside(mouseX, mouseY, openMapX, openMapY, 224, 18);
+        guiGraphics.fill(openMapX, openMapY, openMapX + 224, openMapY + 18,
+                openMapHover ? 0xFF4A3A20 : 0xFF292E30);
+        guiGraphics.renderOutline(openMapX, openMapY, 224, 18, 0xFF596064);
+        guiGraphics.drawCenteredString(this.font,
+                Component.translatable("gui.createcityexpansioncore.city.hub.open_map"),
+                openMapX + 112, openMapY + 5, openMapHover ? 0xFFFFD59A : 0xFFB9C1C3);
+
         guiGraphics.fill(left + 406, top + 32, left + 435, top + 55, 0xDD20282A);
         guiGraphics.renderOutline(left + 406, top + 32, 29, 23, 0xFFD09A3A);
         guiGraphics.drawCenteredString(this.font, "?", left + 420, top + 39, 0xFFFFFFFF);
@@ -2263,16 +2246,55 @@ private String managementTabName(int tab) {
         graphics.drawString(this.font, value, x + 7, y + 19, 0xFFF0F2F2, false);
     }
 
+    /** Ids of the secondary management tabs; {@code -1} is the relations entry with its own screen. */
+    private static final int[] MANAGEMENT_TABS = {1, 2, 3, 5, -1, 6};
+
+    /**
+     * The geometry actually used for one management tab.
+     *
+     * <p>Both the painting and the hit test go through here. They used to be two independent pieces of
+     * arithmetic, which is why the previous fix looked correct in its unit test and still overlapped
+     * on screen: only the hitboxes had moved to the measured layout.
+     */
+    private int managementRows() {
+        int[] labels = new int[MANAGEMENT_TABS.length];
+        for (int i = 0; i < MANAGEMENT_TABS.length; i++) {
+            labels[i] = this.font.width(managementTabName(MANAGEMENT_TABS[i]));
+        }
+        return CityPylonUiLayout.rows(CONTENT_WIDTH, MANAGEMENT_TABS.length, labels);
+    }
+
+    /** Top of the management body, derived from how many rows the tabs really need. */
+    private int managementBodyTop(int contentTop) {
+        return CityPylonUiLayout.bodyTop(contentTop, managementRows());
+    }
+
+    private CityPylonUiLayout.Rect managementTabRect(int left, int top, int index) {
+        int[] labels = new int[MANAGEMENT_TABS.length];
+        for (int i = 0; i < MANAGEMENT_TABS.length; i++) {
+            labels[i] = this.font.width(managementTabName(MANAGEMENT_TABS[i]));
+        }
+        int width = CityPylonUiLayout.columnWidth(CONTENT_WIDTH, MANAGEMENT_TABS.length, labels);
+        int rows = CityPylonUiLayout.rows(CONTENT_WIDTH, MANAGEMENT_TABS.length, labels);
+        return CityPylonUiLayout.tab(left, top, index, width, MANAGEMENT_TABS.length, rows);
+    }
+
     private void renderManagementNav(GuiGraphics graphics, int left, int top, int mouseX, int mouseY) {
-        int[] tabs = {1, 2, 3, 5, -1, 6};
-        String[] keys = {"territory", "members", "projects", "development", "relations", "railway"};
-        int width = (CONTENT_WIDTH - 12) / tabs.length;
-        for (int i = 0; i < tabs.length; i++) {
-            int x = left + i * (width + 3), y = top + 22;
-            boolean hover = inside(mouseX, mouseY, x, y, width, 18);
-            graphics.fill(x, y, x + width, y + 18, this.activeTab == tabs[i] ? 0xFF4A3A20 : hover ? 0xFF34393B : 0xFF292E30);
-            graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.tab." + keys[i]), x + width / 2, y + 5,
-                    this.activeTab == tabs[i] ? 0xFFFFD59A : 0xFFB9C1C3);
+        for (int i = 0; i < MANAGEMENT_TABS.length; i++) {
+            CityPylonUiLayout.Rect cell = managementTabRect(left, top, i);
+            boolean active = this.activeTab == MANAGEMENT_TABS[i];
+            boolean hover = cell.contains(mouseX, mouseY);
+            graphics.fill(cell.x(), cell.y(), cell.right(), cell.bottom(),
+                    active ? 0xFF4A3A20 : hover ? 0xFF34393B : 0xFF292E30);
+            // Truncated to the cell so a long label can never paint over its neighbour.
+            String full = managementTabName(MANAGEMENT_TABS[i]);
+            String fitted = this.font.plainSubstrByWidth(full, Math.max(1, cell.width() - 8));
+            if (!fitted.equals(full) && fitted.length() > 1) {
+                fitted = this.font.plainSubstrByWidth(full, Math.max(1, cell.width() - 14)) + "…";
+            }
+            graphics.drawCenteredString(this.font, fitted,
+                    cell.x() + cell.width() / 2, cell.y() + 5,
+                    active ? 0xFFFFD59A : 0xFFB9C1C3);
         }
     }
 
@@ -2328,7 +2350,7 @@ private String managementTabName(int tab) {
     ) {
 
         int row =
-                top + 45;
+                managementBodyTop(top);
 
         guiGraphics.drawString(
                 this.font,
@@ -2452,7 +2474,7 @@ private String managementTabName(int tab) {
     ) {
 
         int row =
-                top + 45;
+                managementBodyTop(top);
 
         /*
          * Заголовок
@@ -2503,7 +2525,7 @@ private String managementTabName(int tab) {
                 left;
 
         int cardY =
-                row + 28;
+                managementBodyTop(top);
 
         int visibleCount =
                 MEMBER_ROWS;
@@ -2670,12 +2692,16 @@ private String managementTabName(int tab) {
             ResourceLocation skinTexture =
                     skin.texture();
 
+            // Sized from the row; the old 40px head came from the retired 48px member card.
+            int avatarSize = Math.max(8, Math.min(20, cardHeight - 4));
+            int avatarX = cardX + 6;
+            int avatarY = cardY + (cardHeight - avatarSize) / 2;
             guiGraphics.blit(
                     skinTexture,
-                    cardX + 8,
-                    cardY + 4,
-                    40,
-                    40,
+                    avatarX,
+                    avatarY,
+                    avatarSize,
+                    avatarSize,
                     8,
                     8,
                     8,
@@ -2687,10 +2713,10 @@ private String managementTabName(int tab) {
         } else {
 
             guiGraphics.fill(
-                    cardX + 8,
-                    cardY + 4,
-                    cardX + 48,
-                    cardY + 44,
+                    cardX + 6,
+                    cardY + 2,
+                    cardX + 24,
+                    cardY + cardHeight - 2,
                     0xFF252525
             );
         }

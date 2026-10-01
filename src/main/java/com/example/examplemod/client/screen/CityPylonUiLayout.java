@@ -94,6 +94,42 @@ final class CityPylonUiLayout {
         return Math.max(1, shared);
     }
 
+    /**
+ * Vertical rhythm of one management section, in the order it is painted:
+ * title, divider, navigation, then the body. The body top is derived from how many rows the
+ * navigation actually needs, so nothing has to guess whether the tabs wrapped.
+ */
+static final int SECTION_TITLE_H = 12;
+    static final int SECTION_GAP = 6;
+    static final int DIVIDER_H = 2;
+    static final int BODY_GAP = 8;
+
+    static Rect sectionTitle(int left, int contentTop, int width) {
+        return new Rect(left, contentTop, width, SECTION_TITLE_H);
+    }
+
+    /** First navigation row; strictly below the title, so the two can never share a line. */
+    static int navTop(int contentTop) {
+        return contentTop + SECTION_TITLE_H + SECTION_GAP;
+    }
+
+    static Rect divider(int left, int contentTop, int width) {
+        return new Rect(left, navTop(contentTop) - 3, width, DIVIDER_H);
+    }
+
+    /** Height the navigation occupies for a given number of wrapped rows. */
+    static int navHeight(int rows) {
+        return rows <= 0 ? 0 : rows * ROW_HEIGHT + (rows - 1) * ROW_GAP;
+    }
+
+    /**
+     * Where the body starts. This is the single value every management body must use: it rises again
+     * automatically when the tabs fit on one row and drops when they wrap to two.
+     */
+    static int bodyTop(int contentTop, int rows) {
+        return navTop(contentTop) + navHeight(rows) + BODY_GAP;
+    }
+
     /** One tab's rectangle: exactly one column wide, so a neighbour can never be covered. */
     static Rect tab(int x, int top, int index, int columnWidth, int count, int rows) {
         int perRow = rows == 1 ? count : (count + 1) / 2;
