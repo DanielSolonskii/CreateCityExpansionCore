@@ -1121,6 +1121,10 @@
   ,"message.createcityexpansioncore.railway.marker_track_selected": "Путь выбран; установите маркер рядом"
   ,"message.createcityexpansioncore.railway.marker_select_track": "Сначала выберите путь Create"
   ,"message.createcityexpansioncore.railway.marker_too_far": "Маркер должен быть не дальше 16 блоков от выбранного пути"
+  ,"message.createcityexpansioncore.server.welcome": "Добро пожаловать на RE:CREATED:ALPHA, %s!"
+  ,"message.createcityexpansioncore.server.welcome_back": "С возвращением, %s!"
+  ,"message.createcityexpansioncore.server.alpha_notice": "Сервер RE:CREATED находится в альфе, и могут быть некоторые ошибки — пишите %s, что бы зафиксировать проблему."
+
   ,"message.createcityexpansioncore.railway.marker_first_selected": "Первый железнодорожный маркер выбран"
   ,"message.createcityexpansioncore.railway.marker_selection_cleared": "Выбор железнодорожного маркера сброшен"
   ,"message.createcityexpansioncore.railway.marker_different_dimension": "Оба маркера должны быть в одном измерении"

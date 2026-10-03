@@ -1130,6 +1130,11 @@
   ,"message.createcityexpansioncore.railway.marker_track_selected": "Track selected; place the marker nearby"
   ,"message.createcityexpansioncore.railway.marker_select_track": "Select a Create track first"
   ,"message.createcityexpansioncore.railway.marker_too_far": "The marker must be placed within 16 blocks of the selected track"
+
+  ,"message.createcityexpansioncore.server.welcome": "Welcome to RE:CREATED:ALPHA, %s!"
+  ,"message.createcityexpansioncore.server.welcome_back": "Welcome back, %s!"
+  ,"message.createcityexpansioncore.server.alpha_notice": "The RE:CREATED server is in alpha, so some bugs are expected. Use %s to report a problem."
+
   ,"message.createcityexpansioncore.railway.marker_first_selected": "First railway marker selected"
   ,"message.createcityexpansioncore.railway.marker_selection_cleared": "Railway marker selection cleared"
   ,"message.createcityexpansioncore.railway.marker_different_dimension": "Both markers must be in the same dimension"
