@@ -38,44 +38,53 @@
 ## 🏭 Реализованные системы
 
 ### 🏙 Городская система
-- **City Pylon** — центральный блок города с анимированной моделью (Blockbench), FACING, лампами статуса
-- **CityPylonScreen** — большой интерфейс (620×345) с 8 вкладками: Обзор, Территория, Участники, Проекты, Карта, Развитие, Ж/Д, Рынок
+- **City Pylon** — центральный блок города и единый hub для Overview, Economy, Logistics, Management, Railway и World Map
+- Роли, приглашения, проекты, развитие I → II, односторонний Trusted и взаимный Partner
 - Роли: Owner / Admin / Builder / Resident — с правами и UI для управления
 - Приглашения игроков, проекты развития, уровни города (I → II)
 - Сохранение в `CityManager` (SavedData), перенос пилона через предмет
 
-### ⛏ Промышленная шахта (Industrial Mine)
+### ⛏ Промышленная шахта и Geology v3
 - Мультиблок **10×3×10**: Mine Frame, Technical Block, Drill Unit, Controller, Power Port, Gateway
 - Питание от **Electro Energetics** (вольты, амперы, ватты, перегрузки)
-- Геологические залежи: стадии, качество, глубина, устойчивая добыча
-- Magnetic Analyzer — сканирование регионов (мгновенное, серверное)
+- Процедурные пространственные залежи радиусом 150–480 блоков, общий reserve и локальный potential
+- Magnetic Analyzer — поиск аномалии и локальный замер; ПКМ в воздухе и по блоку, server-authoritative cooldown
+- Bulk iron с Fe-equivalent accounting и цепочкой raw ore → crushed → concentrate → ingot
 - Звуковой контроллер: бурильщики, запуск/остановка, аварийная остановка
 - Комиссионирование под город, привязка к Ж/Д станции
 
 ### 🚂 Железные дороги
-- **Dispatcher Key** — регистрация поездов и станций
+- Регистрация/управление станциями и поездами через City Pylon; Dispatcher Key сохранён как физический/legacy инструмент
 - **RailLine** — расписания (Create schedules), типы линий, цикличность
 - **RailwayLineEditorScreen** — компактный редактор линий с остановками, режимами, таймингами
-- Флот города, автоматизация, привязка к проектам шахт и экономике
+- Persistent ownership сетей/участков, PUBLIC/PRIVATE, freight tariff
+- Trip reserve/settlement, Route Planner, RouteReservation и RouteGuard
 
 ### 💰 Экономика
 - Личные кошельки, **City Treasury**, закупки (Procurement Budget, Smart Orders)
 - **Marketplace** — частные листинги (продажа/покупка/бартер) + городские контракты
 - **Contract Intake** / **Warehouse Gateway** — инфраструктура ввода/вывода ресурсов
-- Эскроу, штрафы, доставки, подтверждения, мастер-город (Master City)
+- Эскроу, physical delivery settlement и Master City warehouse/procurement
 - Экономический интерфейс с вкладками: Рынок, Моя шахта, Создать, Инфраструктура, Мастер
 
-### 🧭 Карта (CityMapPanel)
+### 📦 Freight Logistics
+- Единые SEND/RECEIVE/BOTH Freight Points поверх Create Station + Postbox + Packager
+- P2P и оба направления Master City используют один physical Package pipeline
+- Автоматический Create address + ShipmentToken; cargo не телепортируется
+- Успешная валидированная распаковка является proof of delivery
+
+### 🧭 World Map
 - Тайловый рендеринг рельефа (кэширование, LOD, запрос по вьюпорту)
 - **Соседние города** — получаются один раз с сервера, фильтруются по дистанции (≤512 блоков), рисуются с viewport culling
 - Собственный город — яркий акцент, чужие — приглушённые цвета (инфраструктурная карта, не политическая)
-- Ж/Д слои: пути, станции, поезда (интерполяция), проекты шахт, экономическая инфраструктура
+- Ж/Д слои: ownership, sections, tariff/access, stations, trains, selected routes и active reservations
+- Freight Points, Master City, relation links, context cards и Problem Center
 - Зум 0.5×–4×, панорамирование, кнопки слоёв
 
-### 📊 Геология
-- Детерминированная генерация залежей по чанкам (RegionSnapshot)
-- Magnetic Analyzer — мгновенный анализ региона сервером
-- Сохранение остатков залежей между сканами
+### 📊 Статусы и persistence
+- Общий `CcecStatus`: SUCCESS / ACTION_REQUIRED / BLOCKED / WARNING
+- SavedData для города, relations, Geology v3, Economy/Freight и Railway v5
+- Restart-safe escrow, reserves, shipment tokens, ownership, trips и reservations
 
 ---
 
@@ -141,10 +150,10 @@ com.example.examplemod
 │   ├── screen/         # CityPylonScreen, MagneticAnalyzerScreen, MineControllerScreen, ModalOverlayScreen...
 │   ├── gui/            # CityButton
 │   └── sound/          # PylonSoundController, MineSoundController, LoopSoundManager
-├── economy/            # EconomyManager, Contract, Listing, Infrastructure, Treasury
-├── geology/            # RegionSnapshot, DepositSnapshot, MagneticAnalyzer
+├── economy/            # Economy v2, Freight Points, contracts, Master City, tokens
+├── geology/            # Spatial deposits, Geology v3, survey/analyzer
 ├── mine/               # MineController, MineMultiblock, Electrical, State
-├── railway/            # RailLine, Station, Train, DispatcherKey, Fleet
+├── railway/            # Fleet, ownership, planner, trips, reservations/guard
 ├── network/            # Payloadы (City, Economy, Mine, Railway, Geology)
 ├── recipe/             # DependencyRecipeOverride (datapack registration)
 └── sound/              # ModSounds, WorldSoundHelper

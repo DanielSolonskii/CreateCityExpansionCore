@@ -41,6 +41,25 @@ public final class IndustrialCreativeTab {
 
     /*
      * =========================================
+     * TIER 1 — BULK-СЫРЬЁ ИЗ НЕДР
+     * =========================================
+     *
+     * Массовые commodities железной цепочки Alpha v1.
+     * Идут первыми: это то, что реально выдаёт
+     * Industrial Mine и что перегружают Create factory.
+     *
+     * Уголь, известняк и медь собственных bulk-предметов
+     * не получают — см. комментарии в IndustrialMaterials.
+     */
+
+    private static final List<ItemLike> BULK_ORE = List.of(
+            IndustrialMaterials.IRON_ORE_RAW.get(),
+            IndustrialMaterials.CRUSHED_IRON_ORE.get(),
+            IndustrialMaterials.IRON_CONCENTRATE.get()
+    );
+
+    /*
+     * =========================================
      * TIER 2 — ПРОМЫШЛЕННЫЕ МАТЕРИАЛЫ
      * =========================================
      *
@@ -132,6 +151,7 @@ public final class IndustrialCreativeTab {
             CreativeModeTab.Output output
     ) {
         acceptAll(output, TIER1_DERIVED);
+        acceptAll(output, BULK_ORE);
         acceptAll(output, TIER2);
         acceptAll(output, TIER3);
         acceptAll(output, MINING_MACHINES);

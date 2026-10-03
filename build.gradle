@@ -373,7 +373,39 @@ tasks.register('checkCityPylonUiLayout', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkCityPylonUiLayout') }
 
+tasks.register('checkCityPylonMembersLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.CityPylonMembersLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityPylonMembersLayout') }
+
 def ccecProductionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+tasks.register('checkGeologyProcedural', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.geology.GeologyProceduralCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkGeologyProcedural') }
+
+tasks.register('checkMagneticAnalyzerContract', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.geology.MagneticAnalyzerContractCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkMagneticAnalyzerContract') }
+
+tasks.register('checkMagneticAnalyzerUi', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.MagneticAnalyzerUiCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkMagneticAnalyzerUi') }
+
 tasks.register('checkNoCreateSplitPackage') {
     dependsOn tasks.named('jar')
     inputs.file(ccecProductionJar)
@@ -392,7 +424,7 @@ tasks.named('check') { dependsOn tasks.named('checkNoCreateSplitPackage') }
 
 // Each headless JVM owns its log directory even when Gradle runs checks in parallel.
 tasks.withType(JavaExec).configureEach {
-    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkCityMapTerrainColor', 'checkTerrainPixelPacking', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout']) {
+    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkCityMapTerrainColor', 'checkTerrainPixelPacking', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout', 'checkCityPylonMembersLayout']) {
         workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
         doFirst { workingDir.mkdirs() }
     }

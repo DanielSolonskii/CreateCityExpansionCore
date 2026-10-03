@@ -20,11 +20,15 @@ public record GeologyRegionSnapshot(
         deposits = List.copyOf(Objects.requireNonNull(deposits, "deposits"));
     }
 
-    public static GeologyRegionSnapshot from(GeologicalRegion region) {
+    public static GeologyRegionSnapshot from(
+            GeologicalRegion region,
+            int viewerX,
+            int viewerZ
+    ) {
         Objects.requireNonNull(region, "region");
         List<GeologyDepositSnapshot> snapshots = region.getDeposits()
                 .stream()
-                .map(GeologyDepositSnapshot::from)
+                .map(deposit -> GeologyDepositSnapshot.from(deposit, viewerX, viewerZ))
                 .sorted(Comparator.comparing(snapshot -> snapshot.depositId().toString()))
                 .toList();
         return new GeologyRegionSnapshot(

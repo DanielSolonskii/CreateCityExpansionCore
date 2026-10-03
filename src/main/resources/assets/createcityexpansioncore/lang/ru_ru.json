@@ -166,7 +166,8 @@
   "gui.createcityexpansioncore.magnetic_analyzer.subtitle": "ГЕОЛОГИЧЕСКИЙ СКАНЕР",
 
   "gui.createcityexpansioncore.magnetic_analyzer.initializing": "ИНИЦИАЛИЗАЦИЯ",
-  "gui.createcityexpansioncore.magnetic_analyzer.scanning": "СКАНИРОВАНИЕ",
+  "gui.createcityexpansioncore.magnetic_analyzer.scanning": "СКАНИРОВАНИЕ...",
+  "gui.createcityexpansioncore.magnetic_analyzer.complete": "АНАЛИЗ ЗАВЕРШЁН",
   "gui.createcityexpansioncore.magnetic_analyzer.analyzing": "АНАЛИЗ",
   "gui.createcityexpansioncore.magnetic_analyzer.complete": "АНАЛИЗ ЗАВЕРШЁН",
 
@@ -200,6 +201,44 @@
   "gui.createcityexpansioncore.magnetic_analyzer.iron": "ЖЕЛЕЗО",
   "gui.createcityexpansioncore.magnetic_analyzer.coal": "УГОЛЬ",
   "gui.createcityexpansioncore.magnetic_analyzer.zinc": "ЦИНК",
+  "gui.createcityexpansioncore.magnetic_analyzer.mode.outside": "БЛИЖАЙШАЯ АНОМАЛИЯ",
+  "gui.createcityexpansioncore.magnetic_analyzer.mode.inside": "ЗАМЕР НА МЕСТЕ",
+  "gui.createcityexpansioncore.magnetic_analyzer.mode.none": "АНОМАЛИЙ НЕТ",
+  "gui.createcityexpansioncore.magnetic_analyzer.reading": "Чтение данных сервера...",
+  "gui.createcityexpansioncore.magnetic_analyzer.sector": "Сектор %s, %s",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal": "Сигнал",
+  "gui.createcityexpansioncore.magnetic_analyzer.uses": "Осталось зарядов: %s",
+  "gui.createcityexpansioncore.magnetic_analyzer.resource": "Ресурс",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction": "Направление",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance": "Дистанция",
+  "gui.createcityexpansioncore.magnetic_analyzer.size": "Размер",
+  "gui.createcityexpansioncore.magnetic_analyzer.local_potential": "Локальный потенциал",
+  "gui.createcityexpansioncore.magnetic_analyzer.peak_potential": "Пик залежи",
+  "gui.createcityexpansioncore.magnetic_analyzer.remaining": "Остаток",
+  "gui.createcityexpansioncore.magnetic_analyzer.lifetime": "Ресурс",
+  "gui.createcityexpansioncore.magnetic_analyzer.lifetime_hours": "~%s ч здесь",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_anomaly": "АНОМАЛИЙ НЕТ В 200 БЛОКАХ",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_anomaly_hint": "Отойдите дальше и повторите замер.",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_core_hint": "Координаты ядра не раскрываются. Следуйте перепаду.",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_core_hint_footer": "Максимум находится перемещением и сравнением замеров.",
+  "gui.createcityexpansioncore.magnetic_analyzer.search_hint": "Перемещайтесь и повторяйте замер, чтобы найти богатый участок.",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.east": "В",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.east_northeast": "СВ",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.north": "С",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.north_northwest": "СЗ",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.west": "З",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.west_southwest": "ЮЗ",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.south": "Ю",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.south_southeast": "ЮВ",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.unknown": "?",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.very_close": "менее 50 блоков",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.close": "50-100 блоков",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.medium": "100-150 блоков",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.far": "150-200 блоков",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.small": "Малое",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.normal": "Обычное",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.large": "Крупное",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.giant": "Гигантское",
 
   "block.createcityexpansioncore.mine_power_port": "Энергетический порт шахты",
 
@@ -330,6 +369,7 @@
   "resource.createcityexpansioncore.coal": "УГОЛЬ",
   "resource.createcityexpansioncore.zinc": "ЦИНК",
   "resource.createcityexpansioncore.gold": "ЗОЛОТО",
+  "resource.createcityexpansioncore.limestone": "ИЗВЕСТНЯК",
   "stage.createcityexpansioncore.deposit.fresh": "НОВАЯ",
   "stage.createcityexpansioncore.deposit.peak": "ПИКОВАЯ",
   "stage.createcityexpansioncore.deposit.mature": "ЗРЕЛАЯ",
@@ -408,7 +448,7 @@
   "gui.createcityexpansioncore.mine.structure": "КОНСТРУКЦИЯ",
   "gui.createcityexpansioncore.mine.structure_valid": "МУЛЬТИБЛОК СОБРАН",
   "gui.createcityexpansioncore.mine.structure_invalid": "ОШИБКА МУЛЬТИБЛОКА",
-  "gui.createcityexpansioncore.mine.region": "РЕГИОН",
+  "gui.createcityexpansioncore.mine.region": "МАКРОЯЧЕЙКА",
   "gui.createcityexpansioncore.mine.deposit_count": "Залежей: %s",
   "gui.createcityexpansioncore.mine.no_geology_data": "НЕТ ДАННЫХ ГЕОЛОГИИ",
   "gui.createcityexpansioncore.mine.live_extraction": "ДОБЫЧА В РЕАЛЬНОМ ВРЕМЕНИ",
@@ -803,7 +843,10 @@
 "gui.createcityexpansioncore.item_selector.search": "Поиск",
 "gui.createcityexpansioncore.item_selector.search_hint": "Поиск по названию",
 "gui.createcityexpansioncore.item_selector.title": "Выбор предмета",
-  "item.createcityexpansioncore.industrial_coke": "Промышленный кокс"
+  "item.createcityexpansioncore.iron_ore_raw": "Железорудное сырьё"
+  ,"item.createcityexpansioncore.crushed_iron_ore": "Дроблёное железорудное сырьё"
+  ,"item.createcityexpansioncore.iron_concentrate": "Железорудный концентрат"
+  ,"item.createcityexpansioncore.industrial_coke": "Промышленный кокс"
   ,"item.createcityexpansioncore.crushed_limestone": "Дроблёный известняк"
   ,"item.createcityexpansioncore.steel_billet": "Стальная заготовка"
   ,"item.createcityexpansioncore.steel_plate": "Стальная плита"
@@ -820,7 +863,7 @@
   ,"item.createcityexpansioncore.industrial_control_unit": "Промышленный блок управления"
   ,"item.createcityexpansioncore.power_distribution_module": "Силовой распределительный модуль"
   ,"block.createcityexpansioncore.reinforced_concrete": "Железобетон",
-  "itemGroup.createcityexpansioncore": "CreateCityExpansionCore",
+  "itemGroup.createcityexpansioncore": "Create: Городское Расширение",
   "item.createcityexpansioncore.incomplete_industrial_control_unit": "Незавершённый промышленный блок управления"
   ,"item.createcityexpansioncore.incomplete_heavy_machine_frame": "Незавершённая рама тяжёлой машины"
   ,"block.createcityexpansioncore.refractory_block": "Огнеупорный блок"
@@ -837,7 +880,7 @@
   ,"status.createcityexpansioncore.coke_battery.output_blocked": "Выход заполнен"
   ,"status.createcityexpansioncore.coke_battery.no_power": "Нет питания"
   ,"status.createcityexpansioncore.coke_battery.running": "Работает"
-  ,"key.categories.createcityexpansioncore": "CreateCityExpansionCore"
+  ,"key.categories.createcityexpansioncore": "Create: Городское Расширение"
   ,"key.createcityexpansioncore.coke_guide.next_layer": "Гайд коксовой батареи: следующий слой"
   ,"key.createcityexpansioncore.coke_guide.previous_layer": "Гайд коксовой батареи: предыдущий слой"
   ,"key.createcityexpansioncore.coke_guide.all_layers": "Гайд коксовой батареи: все слои"
@@ -1353,7 +1396,7 @@
   ,"gui.createcityexpansioncore.railway.routes.return_hint": "Вернитесь в логистику, исправьте условие и пересчитайте маршрут."
   ,"block.createcityexpansioncore.example_block": "Пример блока"
   ,"item.createcityexpansioncore.example_item": "Пример предмета"
-  ,"createcityexpansioncore.configuration.title": "Настройки Create City Expansion Core"
+  ,"createcityexpansioncore.configuration.title": "Настройки Create: Городское Расширение"
   ,"createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml": "Общие настройки"
   ,"createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml.title": "Общие настройки"
   ,"createcityexpansioncore.configuration.items": "Предметы"

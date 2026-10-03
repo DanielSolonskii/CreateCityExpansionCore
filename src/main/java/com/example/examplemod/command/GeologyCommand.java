@@ -21,6 +21,7 @@ public class GeologyCommand {
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "copper"),
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "iron"),
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "coal"),
+            ResourceLocation.fromNamespaceAndPath(MOD_ID, "limestone"),
             ResourceLocation.fromNamespaceAndPath(MOD_ID, "zinc")
     );
 
@@ -135,6 +136,13 @@ public class GeologyCommand {
                                     region,
                                     "coal",
                                     "Уголь"
+                            );
+
+                            sendResource(
+                                    player,
+                                    region,
+                                    "limestone",
+                                    "Известняк"
                             );
 
                             sendResource(
@@ -348,6 +356,8 @@ public class GeologyCommand {
             case "iron" -> "Железо";
 
             case "coal" -> "Уголь";
+
+            case "limestone" -> "Известняк";
 
             case "zinc" -> "Цинк";
 

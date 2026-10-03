@@ -166,10 +166,17 @@ public final class IndustrialMineService {
         }
         GatewayMineOutputPort output = outputPort(level, validation.gateway());
         GeologicalDeposit deposit = selected.get();
-        MineProductionProfile profile = MineProductionProfile.from(deposit);
+        MineProductionProfile profile = MineProductionProfile.from(
+                deposit,
+                controllerPos.getX(),
+                controllerPos.getZ()
+        );
         long planned = Math.min(
                 profile.outputPerCycle(),
-                deposit.getRemainingReserve()
+                MineOutputMapping.physicalAmountFor(
+                        deposit.getResourceId(),
+                        deposit.getRemainingReserve()
+                )
         );
         if (!output.available() || !output.supports(deposit.getResourceId())
                 || !output.canAccept(deposit.getResourceId(), planned)) {
@@ -254,8 +261,18 @@ public final class IndustrialMineService {
                     "Выбранная залежь недоступна или истощена.", false);
             return;
         }
-        MineProductionProfile profile = MineProductionProfile.from(selected.get());
-        long planned = Math.min(profile.outputPerCycle(), selected.get().getRemainingReserve());
+        MineProductionProfile profile = MineProductionProfile.from(
+                selected.get(),
+                controllerPos.getX(),
+                controllerPos.getZ()
+        );
+        long planned = Math.min(
+                profile.outputPerCycle(),
+                MineOutputMapping.physicalAmountFor(
+                        selected.get().getResourceId(),
+                        selected.get().getRemainingReserve()
+                )
+        );
         GatewayMineOutputPort output = outputPort(level, validation.gateway());
         if (!output.available()
                 || !output.supports(selected.get().getResourceId())
@@ -316,8 +333,18 @@ public final class IndustrialMineService {
                     "Выбранная залежь недоступна или истощена.", false);
             return;
         }
-        MineProductionProfile profile = MineProductionProfile.from(selected.get());
-        long planned = Math.min(profile.outputPerCycle(), selected.get().getRemainingReserve());
+        MineProductionProfile profile = MineProductionProfile.from(
+                selected.get(),
+                controllerPos.getX(),
+                controllerPos.getZ()
+        );
+        long planned = Math.min(
+                profile.outputPerCycle(),
+                MineOutputMapping.physicalAmountFor(
+                        selected.get().getResourceId(),
+                        selected.get().getRemainingReserve()
+                )
+        );
         GatewayMineOutputPort output = outputPort(level, validation.gateway());
         if (!output.available()
                 || !output.supports(selected.get().getResourceId())
@@ -352,7 +379,11 @@ public final class IndustrialMineService {
                     "Выбранная залежь недоступна или истощена.", false);
             return;
         }
-        MineProductionProfile profile = MineProductionProfile.from(selected.get());
+        MineProductionProfile profile = MineProductionProfile.from(
+                selected.get(),
+                controllerPos.getX(),
+                controllerPos.getZ()
+        );
         MineOperationResult result = MineProductionOperation.execute(
                 validation.assembled(),
                 validation.message(),
@@ -399,7 +430,9 @@ public final class IndustrialMineService {
         }
         IndustrialMineOperation.Selection selection = IndustrialMineOperation.selectDeposit(
                 region,
-                controller.getDisplayDepositId()
+                controller.getDisplayDepositId(),
+                controllerPos.getX(),
+                controllerPos.getZ()
         );
         if (selection.changed()) {
             selection.deposit().ifPresent(deposit -> controller.setPreviewDepositId(deposit.getId()));
@@ -462,14 +495,22 @@ public final class IndustrialMineService {
         Optional<GeologicalDeposit> selectedDeposit = Optional.empty();
         if (validation.assembled() && GeologyManager.get(level).isStorageAvailable()) {
             GeologicalRegion authoritative = GeologyManager.getRegion(level, controllerPos);
-            region = Optional.of(GeologyRegionSnapshot.from(authoritative));
+            region = Optional.of(GeologyRegionSnapshot.from(
+                    authoritative,
+                    controllerPos.getX(),
+                    controllerPos.getZ()
+            ));
             selected = controller.getDisplayDepositId().filter(id -> authoritative.getDeposit(id).isPresent());
             selectedDeposit = selected.flatMap(authoritative::getDeposit);
         }
         long requested = controller.getLastResult().map(MineOperationResult::requestedAmount).orElse(0L);
         long extracted = controller.getLastResult().map(MineOperationResult::extractedAmount).orElse(0L);
         MineProductionProfile profile = selectedDeposit
-                .map(MineProductionProfile::from)
+                .map(deposit -> MineProductionProfile.from(
+                        deposit,
+                        controllerPos.getX(),
+                        controllerPos.getZ()
+                ))
                 .orElseGet(MineProductionProfile::unavailable);
         return new MineControllerSnapshot(
                 controllerPos,

@@ -138,3 +138,108 @@ Cutting -> Structural Beam. Rail Profile получается из Structural Be
 Это НЕ снижение стоимости шахты пропорционально росту output: batch 24
 производится через Mechanical Crafting, то есть естественно автоматизируется.
 Полная материальная стоимость мультиблока сохранена.
+
+## D-013. Freight Point — единый пользовательский endpoint логистики
+
+**Решение.** P2P contracts, Sell to Master City и Buy from Master City используют
+одну persistent модель Freight Point поверх Create Station + Postbox + Packager.
+ShipmentToken, ShippingManifest и intake validation остаются внутренними механизмами.
+
+**Причина.** Игрок должен мыслить физическими точками отправки/приёма, а не
+ledger-объектами и координатами Contract Intake. Единый pipeline исключает три
+несовместимых логистических реализации.
+
+## D-014. Физическая распаковка является proof of delivery
+
+**Решение.** Правильная Package, принятая и атомарно распакованная на назначенной
+Freight Point после server-authoritative token/cargo validation, автоматически
+засчитывает delivery и settlement. Ручное подтверждение покупателем не требуется.
+
+**Причина.** Получатель не должен удерживать escrow после фактического получения
+товара; физическое событие Create является более сильным доказательством.
+
+## D-015. Master City переиспользует Economy/Freight игроков
+
+**Решение.** Master City — системный город с warehouse, procurement budget и
+обычными SEND/RECEIVE Freight Points. Он не имеет отдельной master-only логистики.
+
+**Причина.** Одинаковые физические и финансовые правила упрощают accounting,
+migration и runtime-диагностику. Offers ограничены stock/budget/demand/saturation.
+
+## D-016. Railway ownership не равно City Territory
+
+**Решение.** Railway networks/sections имеют самостоятельного владельца PLAYER
+или CITY. Физическое подключение к чужой ветке разрешено; экономический доступ
+контролируется PUBLIC/PRIVATE policy и permissions.
+
+**Причина.** Железная дорога — линейная инфраструктура, которая естественно
+пересекает территории. Territory не является корректной моделью владения track edges.
+
+## D-017. Trip accounting следует фактически пройденной инфраструктуре
+
+**Решение.** Перед departure резервируется snapshot ожидаемых тарифов. Settlement
+идёт по actual foreign owned length; own infrastructure бесплатна, остаток reserve
+возвращается, owner получает долю. Snapshot не меняется от последующей смены тарифа.
+
+**Причина.** Это обеспечивает предсказуемость отправления, корректность restart и
+защиту от изменения цены задним числом.
+
+## D-018. Выбранный маршрут фиксируется и охраняется
+
+**Решение.** Route Planner использует реальные Create TrackGraph restrictions.
+Выбор превращается в persistent RouteReservation; RouteGuard не принимает silent
+reroute или исчезновение topology, а переводит trip в ROUTE_INVALIDATED.
+
+**Причина.** Иначе Create может провести поезд по экономически неразрешённой или
+неоценённой инфраструктуре после расчёта стоимости.
+
+## D-019. City relations остаются лёгким permission layer
+
+**Решение.** Relation A → B означает TRUSTED; взаимный trust отображается как
+PARTNER. Это может разрешить private railway/service access, но не создаёт
+магических бонусов и пока не вводит автоматические скидки.
+
+**Причина.** Для совместной инфраструктуры нужен reusable access hook без войн,
+treaties, reputation и отдельной геополитической игры.
+
+## D-020. Geology v3: macro-cell — индекс, deposit — сущность
+
+**Решение.** Процедурный мир делится на 768×768 macro-cell только для bounded
+lookup. Deposit имеет собственный стабильный ID и пространственную форму,
+пересекающую границы ячеек. Генерация зависит от seed/dimension/cell/resource/index.
+
+**Причина.** Старые независимые 100×100 deposits создавали почти сплошное
+покрытие и разные reserves у визуально единой залежи. Новая модель создаёт
+крупные месторождения, пустые зоны и стабильное расширение мира.
+
+## D-021. Quality и size месторождения независимы
+
+**Решение.** Quality определяет peak/local production potential, size — геометрию
+и ориентировочный lifetime/reserve. Один класс не выводится из другого.
+
+**Причина.** Должны существовать богатые малые и бедные гигантские залежи;
+это создаёт разные решения для размещения шахт и логистики.
+
+## D-022. Один depositId — один общий reserve
+
+**Решение.** `GeologyManager` канонизирует materialized deposits в `depositsById`.
+Все spatial lookup и extraction возвращают/изменяют один объект.
+
+**Причина.** Несколько шахт на одной пространственной залежи обязаны конкурировать
+за общий физический запас, включая restart и расширение карты.
+
+## D-023. Bulk iron использует Fe-equivalent accounting
+
+**Решение.** Physical output железной цепочки ×2 отделён от geology reserve units:
+5 reserve → 10 items, а обратное списание 10 items → 5 reserve units.
+
+**Причина.** Batch output не должен вдвое ускорять истощение месторождения или
+обрезать последнюю производственную порцию из-за сравнения разных единиц.
+
+## D-024. UI status является проекцией server state
+
+**Решение.** Railway, Logistics, Freight Point cards, Problem Center и toast
+используют общий `CcecStatus`. Клиент не строит отдельную эвристику проблемы.
+
+**Причина.** Одно физическое состояние не должно одновременно быть ONLINE в
+Logistics и BROKEN в уведомлениях. Toast создаётся только на значимый transition.

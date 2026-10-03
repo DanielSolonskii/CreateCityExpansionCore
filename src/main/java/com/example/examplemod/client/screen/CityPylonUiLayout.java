@@ -67,34 +67,6 @@ final class CityPylonUiLayout {
     }
 
     /**
-     * Splits {@code availableWidth} between {@code count} tabs, giving every tab at least the width
-     * its own label needs and handing any leftover space to the widest ones. Tabs therefore never
-     * overlap, and a long label is never squeezed into a neighbour's column.
-     *
-     * @param labelWidths measured pixel width of each label, in tab order
-     * @return one column width shared by the whole row
-     */
-    static int columnWidth(int availableWidth, int count, int[] labelWidths) {
-        if (count <= 0) {
-            return Math.max(1, availableWidth);
-        }
-        int padding = 12;
-        int needed = 0;
-        int widest = 0;
-        for (int index = 0; index < count; index++) {
-            int want = (index < labelWidths.length ? labelWidths[index] : 0) + padding;
-            needed += want;
-            widest = Math.max(widest, want);
-        }
-        int shared = (availableWidth - GAP * (count - 1)) / count;
-        if (shared >= widest) {
-            return shared;
-        }
-        // Not enough room for the widest label: the row wraps instead of overlapping.
-        return Math.max(1, shared);
-    }
-
-    /**
  * Vertical rhythm of one management section, in the order it is painted:
  * title, divider, navigation, then the body. The body top is derived from how many rows the
  * navigation actually needs, so nothing has to guess whether the tabs wrapped.
@@ -130,27 +102,187 @@ static final int SECTION_TITLE_H = 12;
         return navTop(contentTop) + navHeight(rows) + BODY_GAP;
     }
 
-    /** One tab's rectangle: exactly one column wide, so a neighbour can never be covered. */
-    static Rect tab(int x, int top, int index, int columnWidth, int count, int rows) {
-        int perRow = rows == 1 ? count : (count + 1) / 2;
-        int rowIndex = index / perRow;
-        int column = index % perRow;
-        return new Rect(x + column * (columnWidth + GAP),
-                top + rowIndex * (ROW_HEIGHT + ROW_GAP),
-                columnWidth,
-                ROW_HEIGHT);
+    /** Horizontal padding inside one tab, so the label is never flush against its border. */
+    static final int TAB_PAD_X = 6;
+
+    /**
+     * The width one tab needs for its own label, never wider than {@code availableWidth}.
+     *
+     * <p>This is the heart of the change: a tab is as wide as its text plus padding, so
+     * "ТЕРРИТОРИЯ" and "ЖЕЛЕЗНАЯ ДОРОГА" get their full names instead of sharing a narrow column
+     * with "ПРОЕКТЫ" and being cut off.
+     */
+    static int tabWidth(int labelWidth, int availableWidth) {
+        return Math.max(1, Math.min(labelWidth + TAB_PAD_X * 2, Math.max(1, availableWidth)));
     }
 
-    /** How many rows the measured labels need at {@code availableWidth}. */
-    static int rows(int availableWidth, int count, int[] labelWidths) {
-        return columnWidth(availableWidth, count, labelWidths) >= widestNeed(count, labelWidths) ? 1 : 2;
-    }
-
-    private static int widestNeed(int count, int[] labelWidths) {
-        int widest = 0;
-        for (int index = 0; index < count; index++) {
-            widest = Math.max(widest, (index < labelWidths.length ? labelWidths[index] : 0) + 12);
+    /**
+     * Content-aware flow layout for the secondary management tabs.
+     *
+     * <p>Tabs are placed left to right at their own measured width. When the next tab would not fit
+     * in the remaining space it moves to a new row instead of being squeezed, so tabs never
+     * overlap and a long label is never truncated by a neighbour.
+     *
+     * <p>A plain greedy wrap is not enough here: with six Russian tabs it filled the first row with
+     * five and left "ЖЕЛЕЗНАЯ ДОРОГА" alone on the second. When greedy needs exactly two rows and the
+     * tabs can be split into two halves that both genuinely fit, the split is balanced instead. Every
+     * tab keeps its own measured width, so this is a better break point, never a return to equal
+     * columns.
+     *
+     * @param labelWidths measured pixel width of each label, in tab order
+     * @return one rectangle per tab, in reading order; the same value paints and hit-tests
+     */
+    static Rect[] flow(int left, int top, int availableWidth, int[] labelWidths) {
+        if (labelWidths == null || labelWidths.length == 0) {
+            return new Rect[0];
         }
-        return widest;
+        int width = Math.max(1, availableWidth);
+
+        // Greedy first: when everything fits on one row this is the answer, and when the balanced
+        // split would not fit it is the fallback.
+        int[] greedyEnds = greedyRowEnds(labelWidths, width);
+        int[] rowEnds = greedyEnds;
+
+        int greedyRows = greedyEnds.length;
+        if (greedyRows == 2 && labelWidths.length % 2 == 0) {
+            int half = labelWidths.length / 2;
+            if (fitsRow(labelWidths, 0, half, width) && fitsRow(labelWidths, half, labelWidths.length, width)) {
+                rowEnds = new int[]{ half, labelWidths.length };
+            }
+        }
+
+        return place(left, top, width, labelWidths, rowEnds);
+    }
+
+    /** Exclusive end index of each greedy row, i.e. where the single-pass wrap broke the line. */
+    private static int[] greedyRowEnds(int[] labelWidths, int availableWidth) {
+        int[] ends = new int[labelWidths.length + 1];
+        int rowStart = 0;
+        int used = 0;
+        int rows = 0;
+
+        for (int index = 0; index < labelWidths.length; index++) {
+            int tab = tabWidth(labelWidths[index], availableWidth);
+            int candidate = used == 0 ? tab : used + GAP + tab;
+            if (index > rowStart && candidate > availableWidth) {
+                // The row ends at the tab that would not fit, which starts the next one.
+                ends[rows++] = index;
+                rowStart = index;
+                used = tab;
+            } else {
+                used = candidate;
+            }
+        }
+        ends[rows++] = labelWidths.length;
+
+        int[] result = new int[rows];
+        System.arraycopy(ends, 0, result, 0, rows);
+        return result;
+    }
+
+    /** Whether tabs {@code [from, to)} genuinely fit on one row, without any truncation. */
+    private static boolean fitsRow(int[] labelWidths, int from, int to, int availableWidth) {
+        if (to <= from) {
+            return false;
+        }
+        int total = 0;
+        for (int index = from; index < to; index++) {
+            int tab = tabWidth(labelWidths[index], availableWidth);
+            // A tab that had to be clamped is already truncated, so this row is not a clean fit.
+            if (tab != labelWidths[index] + TAB_PAD_X * 2) {
+                return false;
+            }
+            total = total == 0 ? tab : total + GAP + tab;
+        }
+        return total <= availableWidth;
+    }
+
+    /** Places the tabs onto the rows described by {@code rowEnds}. */
+    private static Rect[] place(int left, int top, int availableWidth, int[] labelWidths, int[] rowEnds) {
+        Rect[] tabs = new Rect[labelWidths.length];
+        int index = 0;
+        int rowTop = top;
+
+        for (int end : rowEnds) {
+            int cursorX = left;
+            while (index < end && index < labelWidths.length) {
+                int tab = tabWidth(labelWidths[index], availableWidth);
+                tabs[index] = new Rect(cursorX, rowTop, tab, ROW_HEIGHT);
+                cursorX += tab + GAP;
+                index++;
+            }
+            rowTop += ROW_HEIGHT + ROW_GAP;
+        }
+        return tabs;
+    }
+
+    /**
+     * How many rows the measured labels really need at {@code availableWidth}.
+     *
+     * <p>Derived from {@link #flow}, so the row count and the painted rectangles can never disagree
+     * — which is exactly what {@link #bodyTop} needs to stay correct.
+     */
+    static int rows(int availableWidth, int count, int[] labelWidths) {
+        int length = Math.min(count, labelWidths == null ? 0 : labelWidths.length);
+        if (length <= 0) {
+            return 0;
+        }
+        Rect[] tabs = flow(0, 0, availableWidth, java.util.Arrays.copyOf(labelWidths, length));
+
+        // Count distinct rows, not tabs off the first row: a wrapped row can hold several tabs, so
+        // counting every non-first-row tab over-reports the height and would push the body too far
+        // down.
+        int rows = 1;
+        int previousTop = tabs[0].y();
+        for (int index = 1; index < tabs.length; index++) {
+            if (tabs[index].y() != previousTop) {
+                rows++;
+                previousTop = tabs[index].y();
+            }
+        }
+        return rows;
+    }
+
+    /** Bottom edge of the navigation, measured from the tabs themselves rather than a row count. */
+    static int navBottom(int top, Rect[] tabs) {
+        if (tabs == null || tabs.length == 0) {
+            return top;
+        }
+        int bottom = tabs[0].bottom();
+        for (Rect tab : tabs) {
+            bottom = Math.max(bottom, tab.bottom());
+        }
+        return bottom;
+    }
+
+    /**
+     * Where the body starts for tabs that were actually flowed.
+     *
+     * <p>The same value as {@link #bodyTop}, but derived from the painted rectangles' real bottom
+     * edge instead of a row count, so a wrapped tab can never be painted over by the body.
+     */
+    static int bodyTop(int contentTop, Rect[] tabs) {
+        return navBottom(navTop(contentTop), tabs) + BODY_GAP;
+    }
+
+    /**
+     * The one vertical frame every management body shares.
+     *
+     * <p>Five of the six management tabs anchored themselves to the raw {@code contentTop} plus their
+     * own magic offsets, which silently assumed a single navigation row. When the Russian tabs wrap
+     * onto two rows those bodies started inside the navigation and painted over it. Now every body is
+     * measured inside this frame: {@link #top()} is the real bottom of the tabs plus
+     * {@link #BODY_GAP}, while {@link #bottom()} stays the panel's content bottom, so a taller
+     * navigation shrinks the body instead of pushing its footer off the panel.
+     */
+    record ManagementBody(int top, int bottom) {
+        int height() {
+            return bottom - top;
+        }
+    }
+
+    static ManagementBody managementBody(int contentTop, int contentHeight, int managementTabRows) {
+        int top = bodyTop(contentTop, managementTabRows);
+        return new ManagementBody(top, Math.max(top + 1, contentTop + contentHeight));
     }
 }

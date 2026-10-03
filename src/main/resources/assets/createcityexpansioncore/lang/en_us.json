@@ -158,13 +158,13 @@
   "gui.createcityexpansioncore.freight.duplicate": "Postbox or Packager is already registered.",
   "gui.createcityexpansioncore.freight.limit": "Limit reached: 64 points per city.",
   "gui.createcityexpansioncore.freight.ok": "Freight point registered.",
-  "itemGroup.createcityexpansioncore": "CreateCityExpansionCore",
+  "itemGroup.createcityexpansioncore": "Create: City Expansion",
   "block.createcityexpansioncore.example_block": "Example Block",
   "item.createcityexpansioncore.example_item": "Example Item",
 
-  "createcityexpansioncore.configuration.title": "CreateCityExpansionCore Configs",
-  "createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml": "CreateCityExpansionCore Configs",
-  "createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml.title": "CreateCityExpansionCore Configs",
+  "createcityexpansioncore.configuration.title": "Create: City Expansion Configs",
+  "createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml": "Create: City Expansion Configs",
+  "createcityexpansioncore.configuration.section.createcityexpansioncore.common.toml.title": "Create: City Expansion Configs",
   "createcityexpansioncore.configuration.items": "Item List",
   "createcityexpansioncore.configuration.logDirtBlock": "Log Dirt Block",
   "createcityexpansioncore.configuration.magicNumberIntroduction": "Magic Number Text",
@@ -177,7 +177,8 @@
   "gui.createcityexpansioncore.magnetic_analyzer.subtitle": "GEOLOGICAL SURVEY UNIT",
 
   "gui.createcityexpansioncore.magnetic_analyzer.initializing": "INITIALIZING",
-  "gui.createcityexpansioncore.magnetic_analyzer.scanning": "SCANNING",
+  "gui.createcityexpansioncore.magnetic_analyzer.scanning": "SCANNING...",
+  "gui.createcityexpansioncore.magnetic_analyzer.complete": "ANALYSIS COMPLETE",
   "gui.createcityexpansioncore.magnetic_analyzer.analyzing": "ANALYZING",
   "gui.createcityexpansioncore.magnetic_analyzer.complete": "ANALYSIS COMPLETE",
 
@@ -211,6 +212,44 @@
   "gui.createcityexpansioncore.magnetic_analyzer.iron": "IRON",
   "gui.createcityexpansioncore.magnetic_analyzer.coal": "COAL",
   "gui.createcityexpansioncore.magnetic_analyzer.zinc": "ZINC",
+  "gui.createcityexpansioncore.magnetic_analyzer.mode.outside": "NEAREST ANOMALY",
+  "gui.createcityexpansioncore.magnetic_analyzer.mode.inside": "IN-SITU READING",
+  "gui.createcityexpansioncore.magnetic_analyzer.mode.none": "NO ANOMALY",
+  "gui.createcityexpansioncore.magnetic_analyzer.reading": "Reading server data...",
+  "gui.createcityexpansioncore.magnetic_analyzer.sector": "Sector %s, %s",
+  "gui.createcityexpansioncore.magnetic_analyzer.signal": "Signal",
+  "gui.createcityexpansioncore.magnetic_analyzer.uses": "Uses left: %s",
+  "gui.createcityexpansioncore.magnetic_analyzer.resource": "Resource",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction": "Direction",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance": "Distance",
+  "gui.createcityexpansioncore.magnetic_analyzer.size": "Size",
+  "gui.createcityexpansioncore.magnetic_analyzer.local_potential": "Local potential",
+  "gui.createcityexpansioncore.magnetic_analyzer.peak_potential": "Deposit peak",
+  "gui.createcityexpansioncore.magnetic_analyzer.remaining": "Remaining",
+  "gui.createcityexpansioncore.magnetic_analyzer.lifetime": "Lifetime",
+  "gui.createcityexpansioncore.magnetic_analyzer.lifetime_hours": "~%s h here",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_anomaly": "NO ANOMALY WITHIN 200 BLOCKS",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_anomaly_hint": "Walk further and scan again.",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_core_hint": "Core coordinates are not revealed. Follow the gradient.",
+  "gui.createcityexpansioncore.magnetic_analyzer.no_core_hint_footer": "Maxima are found by walking and comparing readings.",
+  "gui.createcityexpansioncore.magnetic_analyzer.search_hint": "Move and re-scan to hunt the richest ground.",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.east": "E",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.east_northeast": "NE",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.north": "N",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.north_northwest": "NW",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.west": "W",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.west_southwest": "SW",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.south": "S",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.south_southeast": "SE",
+  "gui.createcityexpansioncore.magnetic_analyzer.direction.unknown": "?",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.very_close": "< 50 blocks",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.close": "50-100 blocks",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.medium": "100-150 blocks",
+  "gui.createcityexpansioncore.magnetic_analyzer.distance.far": "150-200 blocks",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.small": "Small",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.normal": "Normal",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.large": "Large",
+  "gui.createcityexpansioncore.magnetic_analyzer.size_class.giant": "Giant",
 
   "block.createcityexpansioncore.mine_power_port": "Mine Power Port",
 
@@ -340,6 +379,7 @@
   "resource.createcityexpansioncore.coal": "COAL",
   "resource.createcityexpansioncore.zinc": "ZINC",
   "resource.createcityexpansioncore.gold": "GOLD",
+  "resource.createcityexpansioncore.limestone": "LIMESTONE",
   "stage.createcityexpansioncore.deposit.fresh": "FRESH",
   "stage.createcityexpansioncore.deposit.peak": "PEAK",
   "stage.createcityexpansioncore.deposit.mature": "MATURE",
@@ -418,7 +458,7 @@
   "gui.createcityexpansioncore.mine.structure": "STRUCTURE",
   "gui.createcityexpansioncore.mine.structure_valid": "MULTIBLOCK ASSEMBLED",
   "gui.createcityexpansioncore.mine.structure_invalid": "MULTIBLOCK ERROR",
-  "gui.createcityexpansioncore.mine.region": "REGION",
+  "gui.createcityexpansioncore.mine.region": "MACRO CELL",
   "gui.createcityexpansioncore.mine.deposit_count": "Deposits: %s",
   "gui.createcityexpansioncore.mine.no_geology_data": "NO GEOLOGY DATA",
   "gui.createcityexpansioncore.mine.live_extraction": "LIVE EXTRACTION",
@@ -813,7 +853,10 @@
 "gui.createcityexpansioncore.item_selector.search": "Search",
 "gui.createcityexpansioncore.item_selector.search_hint": "Search by name",
 "gui.createcityexpansioncore.item_selector.title": "Choose an item",
-  "item.createcityexpansioncore.industrial_coke": "Industrial Coke"
+  "item.createcityexpansioncore.iron_ore_raw": "Raw Iron Ore"
+  ,"item.createcityexpansioncore.crushed_iron_ore": "Crushed Raw Iron Ore"
+  ,"item.createcityexpansioncore.iron_concentrate": "Iron Ore Concentrate"
+  ,"item.createcityexpansioncore.industrial_coke": "Industrial Coke"
   ,"item.createcityexpansioncore.crushed_limestone": "Crushed Limestone"
   ,"item.createcityexpansioncore.steel_billet": "Steel Billet"
   ,"item.createcityexpansioncore.steel_plate": "Steel Plate"
@@ -846,7 +889,7 @@
   ,"status.createcityexpansioncore.coke_battery.output_blocked": "Output Blocked"
   ,"status.createcityexpansioncore.coke_battery.no_power": "No Power"
   ,"status.createcityexpansioncore.coke_battery.running": "Running"
-  ,"key.categories.createcityexpansioncore": "CreateCityExpansionCore"
+  ,"key.categories.createcityexpansioncore": "Create: City Expansion"
   ,"key.createcityexpansioncore.coke_guide.next_layer": "Coke guide: next layer"
   ,"key.createcityexpansioncore.coke_guide.previous_layer": "Coke guide: previous layer"
   ,"key.createcityexpansioncore.coke_guide.all_layers": "Coke guide: toggle all layers"

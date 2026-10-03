@@ -1,0 +1,28 @@
+{
+  "type": "create:mixing",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:crushed_iron_ore"
+    },
+    {
+      "item": "createcityexpansioncore:crushed_iron_ore"
+    },
+    {
+      "item": "createcityexpansioncore:crushed_iron_ore"
+    },
+    {
+      "item": "createcityexpansioncore:crushed_iron_ore"
+    },
+    {
+      "type": "neoforge:single",
+      "amount": 250,
+      "fluid": "minecraft:water"
+    }
+  ],
+  "processing_time": 100,
+  "results": [
+    {
+      "id": "createcityexpansioncore:iron_concentrate"
+    }
+  ]
+}

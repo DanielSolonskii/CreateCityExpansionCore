@@ -1,5 +1,7 @@
 package com.example.examplemod.network;
 
+import com.example.examplemod.geology.DepositQualityClass;
+import com.example.examplemod.geology.DepositSizeClass;
 import com.example.examplemod.geology.DepositStage;
 import com.example.examplemod.geology.GeologyDepositSnapshot;
 import com.example.examplemod.geology.GeologyRegionSnapshot;
@@ -57,6 +59,10 @@ final class GeologySnapshotCodecs {
         buffer.writeInt(deposit.depth());
         buffer.writeDouble(deposit.hardness());
         buffer.writeDouble(deposit.sustainableExtractionRate());
+        buffer.writeEnum(deposit.qualityClass());
+        buffer.writeEnum(deposit.sizeClass());
+        buffer.writeDouble(deposit.peakPotentialPerHour());
+        buffer.writeDouble(deposit.localPotentialPerHour());
     }
 
     private static GeologyDepositSnapshot decodeDeposit(
@@ -70,6 +76,10 @@ final class GeologySnapshotCodecs {
                 buffer.readEnum(DepositStage.class),
                 buffer.readDouble(),
                 buffer.readInt(),
+                buffer.readDouble(),
+                buffer.readDouble(),
+                buffer.readEnum(DepositQualityClass.class),
+                buffer.readEnum(DepositSizeClass.class),
                 buffer.readDouble(),
                 buffer.readDouble()
         );

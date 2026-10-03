@@ -528,9 +528,14 @@ public final class MineControllerScreen extends Screen {
         drawPanel(graphics, x, y + 115, 180, 95, tr("gui.createcityexpansioncore.mine.region"));
         if (snapshot.region().isPresent()) {
             GeologyRegionSnapshot region = snapshot.region().get();
-            graphics.drawString(
+            graphics./*
+             * Это индексный macro-cell, а не идентичность
+             * месторождения: залежи, видимые шахтой, могут
+             * принадлежать соседним ячейкам и пересекать границу.
+             */
+            drawString(
                     font,
-                    "X " + region.regionX() + "  Z " + region.regionZ(),
+                    "CELL " + region.regionX() + ", " + region.regionZ(),
                     x + 12,
                     y + 158,
                     TEXT,

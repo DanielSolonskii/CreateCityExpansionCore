@@ -85,7 +85,11 @@ public final class GeologicalRegion {
     }
 
     /**
-     * Возвращает богатство конкретного ресурса.
+     * Извлекаемый потенциал залежи в шкале 0-100.
+     *
+     * Считается от пикового потенциала, а не от усреднённого
+     * grade: усреднение по всей залежи ничего не говорит о том,
+     * насколько богато то место, где фактически стоит шахта.
      *
      * 0  = ресурса практически нет
      * 100 = очень богатое месторождение
@@ -107,8 +111,10 @@ public final class GeologicalRegion {
     }
 
     private static int getLegacyRichness(GeologicalDeposit deposit) {
+        double ceiling = DepositQualityClass.PEAK_POTENTIAL_CEILING;
         return (int) Math.round(
-                deposit.getGrade()
+                deposit.getPeakPotentialPerHour()
+                        / ceiling
                         * deposit.getRemainingRatio()
                         * 100.0
         );
