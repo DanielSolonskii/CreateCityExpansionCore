@@ -437,3 +437,77 @@ idea {
         downloadJavadoc = true
     }
 }
+
+tasks.register('checkCityTerritory', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityTerritoryCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityTerritory') }
+
+tasks.register('checkCityTerritoryDelivery', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityTerritoryDeliveryCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityTerritoryDelivery') }
+
+tasks.register('checkCityMapTextLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.CityMapTextLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityMapTextLayout') }
+
+tasks.register('checkCityMapReadAccess', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.policy.CityMapReadAccessCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityMapReadAccess') }
+
+tasks.register('checkCityWorldMapSession', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.CityWorldMapSessionCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityWorldMapSession') }
+
+tasks.register('checkWorldMapPanelLifecycle', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.WorldMapPanelLifecycleCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkWorldMapPanelLifecycle') }
+
+tasks.register('checkMapPresentation', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.MapPresentationCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkMapPresentation') }
+
+tasks.register('checkAtlasExperience', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.AtlasExperienceCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkAtlasExperience') }
+
+tasks.register('checkCityIdentity', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityIdentityCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkCityIdentity').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityIdentity') }

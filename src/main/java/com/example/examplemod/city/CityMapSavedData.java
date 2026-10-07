@@ -40,7 +40,9 @@ import java.util.UUID;
  *
  * <p>The atlas is sampled once per world block ({@link CityMapTilePayload#SAMPLE_STEP} is 1) with a
  * light slope shading baked in from the sampled surface heights, so the terrain reads as relief
- * instead of flat confetti.
+ * instead of flat confetti. Height is additionally reduced to elevation isolines: the server marks
+ * the samples a contour passes through, and the client draws those as ink. Sending the decision
+ * rather than the height keeps a tile at 128 extra bytes instead of 4096.
  *
  * <p><b>Refresh.</b> A chunk load is the only capture trigger, and this class never asks a level for
  * a chunk: it only records what is already in memory. Every tile that actually changed is marked
@@ -75,6 +77,14 @@ public final class CityMapSavedData extends SavedData {
     /** Pushes are throttled and budgeted so a burst of chunk loads cannot flood a client. */
     private static final int PUSH_INTERVAL_TICKS = 20;
     private static final int MAX_TILES_PER_PASS = 16;
+    /**
+     * Высота горизонтали в блоках.
+     *
+     * <p>Четыре блока — компромисс из двух требований. Чаще: на равнине горизонтали сливаются в
+     * плотную сетку, неотличимую от сетки координат, и начинают спорить с линиями городов.
+     * Реже: пологий склон перестаёт читаться как рельеф.
+     */
+    public static final int CONTOUR_INTERVAL_BLOCKS = 4;
 
     private final Map<Long, KnownTile> tiles = new HashMap<>();
     /** Tiles whose samples changed and still have to reach whoever is holding them. */
@@ -106,29 +116,30 @@ public final class CityMapSavedData extends SavedData {
             return;
         }
         List<ServerPlayer> mappers = new ArrayList<>();
-        for (ServerPlayer player : level.players()) {
-            if (player.containerMenu instanceof CityPylonMenu) mappers.add(player);
+        for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
+            if (level.dimension().location().equals(CityMapNetworkHandlers.viewerDimension(player))) mappers.add(player);
         }
         if (mappers.isEmpty()) {
             return;
         }
         CityMapSavedData data = get(level);
-        data.pruneWatchers(level.players());
+        data.pruneWatchers(level.getServer().getPlayerList().getPlayers());
         List<Long> batch = data.drainDirty(MAX_TILES_PER_PASS);
         if (batch.isEmpty()) {
             return;
         }
         for (ServerPlayer player : mappers) {
-            CityPylonMenu menu = (CityPylonMenu) player.containerMenu;
+            BlockPos anchor = CityMapNetworkHandlers.viewerPylon(player);
+            if (anchor == null) continue;
             for (Long key : batch) {
                 if (!data.isWatched(player.getUUID(), key)) {
                     continue;
                 }
                 TileSnapshot snapshot = data.tile(ChunkPos.getX(key), ChunkPos.getZ(key));
                 PacketDistributor.sendToPlayer(player,
-                        new CityMapTilePayload(menu.getPylonPos(), menu.getDimensionId(),
+                        new CityMapTilePayload(anchor, level.dimension().location(),
                                 ChunkPos.getX(key), ChunkPos.getZ(key),
-                                snapshot.complete(), snapshot.colors()));
+                                snapshot.complete(), snapshot.colors(), snapshot.contours()));
             }
         }
     }
@@ -176,7 +187,7 @@ public final class CityMapSavedData extends SavedData {
         if (tile == null) {
             int[] colors = new int[CityMapTilePayload.COLOR_COUNT];
             Arrays.fill(colors, UNKNOWN_COLOR);
-            return new TileSnapshot(colors, false);
+            return new TileSnapshot(colors, new BitSet(CityMapTilePayload.COLOR_COUNT), false);
         }
         int[] colors = tile.colors().clone();
         for (int index = tile.known().nextClearBit(0);
@@ -184,7 +195,17 @@ public final class CityMapSavedData extends SavedData {
              index = tile.known().nextClearBit(index + 1)) {
             colors[index] = UNKNOWN_COLOR;
         }
-        return new TileSnapshot(colors, tile.known().cardinality() == colors.length);
+        /*
+         * Горизонтали за неизведанной зоной убираются тем же проходом, что и цвет: карта не
+         * должна рисовать линии там, где игрок ничего не видел.
+         */
+        BitSet contours = (BitSet) tile.contours().clone();
+        for (int index = tile.known().nextClearBit(0);
+             index >= 0 && index < contours.size();
+             index = tile.known().nextClearBit(index + 1)) {
+            contours.clear(index);
+        }
+        return new TileSnapshot(colors, contours, tile.known().cardinality() == colors.length);
     }
 
     /**
@@ -197,8 +218,10 @@ public final class CityMapSavedData extends SavedData {
         int tileX = Math.floorDiv(chunkPos.getMinBlockX(), CityMapTilePayload.WORLD_SIZE);
         int tileZ = Math.floorDiv(chunkPos.getMinBlockZ(), CityMapTilePayload.WORLD_SIZE);
         long tileKey = ChunkPos.asLong(tileX, tileZ);
-        KnownTile tile = this.tiles.computeIfAbsent(tileKey, ignored ->
-                new KnownTile(new int[CityMapTilePayload.COLOR_COUNT], new BitSet(CityMapTilePayload.COLOR_COUNT)));
+        KnownTile tile = this.tiles.computeIfAbsent(tileKey, ignored -> new KnownTile(
+                new int[CityMapTilePayload.COLOR_COUNT],
+                new BitSet(CityMapTilePayload.COLOR_COUNT),
+                new BitSet(CityMapTilePayload.COLOR_COUNT)));
 
         int tileOriginX = tileX * CityMapTilePayload.WORLD_SIZE;
         int tileOriginZ = tileZ * CityMapTilePayload.WORLD_SIZE;
@@ -227,6 +250,12 @@ public final class CityMapSavedData extends SavedData {
         // Slope shading from the sampled heights: a multiplicative tint, so grass stays grass and
         // water stays blue instead of turning into grey mush.
         shade(heights, perChunk, flat);
+        /*
+         * Горизонтали помечаются здесь, а не на клиенте: высота известна только в момент
+         * выборки, и отправлять её целиком ради признака «здесь проходит линия» было бы
+         * расточительно.
+         */
+        BitSet chunkContours = markContours(heights, perChunk);
         for (int localSample = 0; localSample < perChunk * perChunk; localSample++) {
             flat[localSample] = normalize(flat[localSample]);
         }
@@ -243,12 +272,77 @@ public final class CityMapSavedData extends SavedData {
                     tile.known().set(index);
                     changed = true;
                 }
+                /*
+                 * Горизонталь обновляется независимо от цвета: пересобранный рельеф может
+                 * оставить цвет тем же и одновременно снять линию — и наоборот.
+                 */
+                if (chunkContours.get(local)) {
+                    if (!tile.contours().get(index)) {
+                        tile.contours().set(index);
+                        changed = true;
+                    }
+                } else if (tile.contours().get(index)) {
+                    tile.contours().clear(index);
+                    changed = true;
+                }
             }
         }
         if (changed) {
             this.dirty.add(tileKey);
             setDirty();
         }
+    }
+
+    /**
+     * Marks the samples an elevation isoline passes through.
+     *
+     * <p>A sample belongs to a contour when its own height or any of its four neighbours sits on a
+     * different side of an {@link #CONTOUR_INTERVAL_BLOCKS} boundary than the sample does. Testing
+     * the neighbours as well as the centre is what turns a staircase of single marked blocks into a
+     * continuous line: without it, a contour crossing a diagonal slope leaves gaps exactly where the
+     * eye expects a line to be.
+     *
+     * <p>Neighbours outside the chunk are treated as the same height as the border sample, so a
+     * contour that leaves the chunk simply ends there instead of drawing a false step. The adjacent
+     * chunk marks its own side when it loads.
+     */
+    public static BitSet markContours(int[] heights, int size) {
+        BitSet marked = new BitSet(size * size);
+        for (int z = 0; z < size; z++) {
+            for (int x = 0; x < size; x++) {
+                int index = z * size + x;
+                int height = heights[index];
+                if (crossesInterval(height, height)
+                        || crossesInterval(height, heights[z * size + Math.max(0, x - 1)])
+                        || crossesInterval(height, heights[z * size + Math.min(size - 1, x + 1)])
+                        || crossesInterval(height, heights[Math.max(0, z - 1) * size + x])
+                        || crossesInterval(height, heights[Math.min(size - 1, z + 1) * size + x])) {
+                    marked.set(index);
+                }
+            }
+        }
+        return marked;
+    }
+
+    /**
+     * True when a contour level lies strictly between two heights.
+     *
+     * <p>A level exactly equal to one of the heights does not count: every flat surface would then
+     * be drawn as a contour, which is precisely the case contours are supposed to leave empty.
+     */
+    public static boolean crossesInterval(int from, int to) {
+        if (from == to) {
+            return false;
+        }
+        /*
+         * Сравниваются полосы, а не сами высоты. Полоса — это интервал между соседними
+         * уровнями, поэтому шаг с 63 на 64 пересекает уровень 64 и рисуется, а шаг с 64 на 65
+         * остаётся внутри полосы и не рисуется. Сравнение «уровень лежит строго между
+         * высотами» давало бы обратный ответ на обоих шагах: склон, дошедший ровно до
+         * отметки, не получил бы линии — а это как раз тот склон, который игрок и ищет.
+         */
+        return Math.floorDiv(from, CONTOUR_INTERVAL_BLOCKS)
+                != Math.floorDiv(to, CONTOUR_INTERVAL_BLOCKS);
     }
 
     /**
@@ -372,6 +466,7 @@ public final class CityMapSavedData extends SavedData {
                 biomeTint(level, pos, classifyTint(BuiltInRegistries.BLOCK.getKey(block))),
                 BIOME_TINT_STRENGTH);
     }
+
     static int normalize(int rgb) {
         int red = rgb >> 16 & 0xFF;
         int green = rgb >> 8 & 0xFF;
@@ -410,8 +505,16 @@ public final class CityMapSavedData extends SavedData {
             int[] colors = entry.getIntArray("Colors");
             if (colors.length != CityMapTilePayload.COLOR_COUNT) continue;
             BitSet known = BitSet.valueOf(entry.getLongArray("Known"));
+            /*
+             * Горизонтали читаются как пустое множество, если их нет в файле. Старая карта
+             * поэтому грузится без ошибок и просто остаётся без горизонталей там, где её блоки
+             * ещё ни разу не пересобирались — обновятся сами, когда игрок пройдёт рядом.
+             */
+            BitSet contours = entry.contains("Contours", Tag.TAG_LONG_ARRAY)
+                    ? BitSet.valueOf(entry.getLongArray("Contours"))
+                    : new BitSet(CityMapTilePayload.COLOR_COUNT);
             data.tiles.put(ChunkPos.asLong(entry.getInt("X"), entry.getInt("Z")),
-                    new KnownTile(colors, known));
+                    new KnownTile(colors, known, contours));
         }
         return data;
     }
@@ -425,12 +528,17 @@ public final class CityMapSavedData extends SavedData {
             entry.putInt("Z", ChunkPos.getZ(key));
             entry.putIntArray("Colors", tile.colors());
             entry.putLongArray("Known", tile.known().toLongArray());
+            entry.putLongArray("Contours", tile.contours().toLongArray());
             list.add(entry);
         });
         tag.put("Tiles", list);
         return tag;
     }
 
-    public record TileSnapshot(int[] colors, boolean complete) {}
-    private record KnownTile(int[] colors, BitSet known) {}
+    /**
+     * @param contours one bit per sample: true when a contour line crosses this sample.
+     */
+    public record TileSnapshot(int[] colors, BitSet contours, boolean complete) {}
+
+    private record KnownTile(int[] colors, BitSet known, BitSet contours) {}
 }

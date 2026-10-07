@@ -218,7 +218,7 @@ final class WorldMapUiLayout {
 
     static int contextPanelWidth(int screenWidth) {
         if (screenWidth < 420) return Math.max(180, screenWidth - EDGE * 2);
-        return Math.min(288, Math.max(216, screenWidth / 3));
+        return screenWidth < 560 ? Math.max(136, screenWidth * 2 / 5) : Math.min(288, Math.max(216, screenWidth / 3));
     }
 
     /**
@@ -265,12 +265,12 @@ final class WorldMapUiLayout {
     static Rect searchPopover(int screenWidth, int[] modeLabelWidths, int[] globalLabelWidths, int rows, int contentWidth) {
         return new Rect(Math.max(EDGE, screenWidth - popoverWidth(screenWidth, contentWidth) - EDGE),
                 popoverY(screenWidth, modeLabelWidths, globalLabelWidths), popoverWidth(screenWidth, contentWidth),
-                31 + Math.max(1, rows) * 25);
+                68 + Math.max(1, rows) * 25 + 20);
     }
 
     static Rect searchRow(int screenWidth, int[] modeLabelWidths, int[] globalLabelWidths, int index, int contentWidth) {
         Rect panel = searchPopover(screenWidth, modeLabelWidths, globalLabelWidths, 99, contentWidth);
-        return new Rect(panel.x() + MICRO, panel.y() + 31 + index * 25, panel.width() - NORMAL, 23);
+        return new Rect(panel.x() + MICRO, panel.y() + 68 + index * 25, panel.width() - NORMAL, 23);
     }
 
     // ------------------------------------------------------------ status strip (bottom)
@@ -289,11 +289,11 @@ final class WorldMapUiLayout {
     }
 
     static Rect problemModal(int screenWidth, int screenHeight) {
-        return modal(screenWidth, screenHeight, 360, 148);
+        return modal(screenWidth, screenHeight, 360, 340);
     }
 
     static Rect guideModal(int screenWidth, int screenHeight) {
-        return modal(screenWidth, screenHeight, 420, 132);
+        return modal(screenWidth, screenHeight, 420, 260);
     }
 
     static Rect tutorialStrip(int screenWidth, int screenHeight, int textWidth) {

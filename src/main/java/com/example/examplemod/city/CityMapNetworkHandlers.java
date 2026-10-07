@@ -24,17 +24,10 @@ public final class CityMapNetworkHandlers {
             ServerPlayer player,
             RequestCityMapTilePayload request
     ) {
-        if (!(player.containerMenu instanceof CityPylonMenu menu)
-                || !menu.getPylonPos().equals(request.pylonPos())
-                || !menu.getDimensionId().equals(request.dimensionId())
-                || !player.serverLevel().dimension().location().equals(request.dimensionId())
-                || player.distanceToSqr(
-                        request.pylonPos().getX() + 0.5,
-                        request.pylonPos().getY() + 0.5,
-                        request.pylonPos().getZ() + 0.5
-                ) > 64.0
-                || CityManager.get(player.getServer().overworld())
-                .getCityByPylon(request.dimensionId(), request.pylonPos()) == null
+        BlockPos anchor = viewerPylon(player);
+        if (!com.example.examplemod.policy.AtlasTileAccess.allowed(anchor != null,
+                anchor != null && anchor.equals(request.pylonPos()),
+                request.dimensionId().equals(viewerDimension(player)))
                 || !allowRequest(player)) {
             return;
         }
@@ -48,7 +41,10 @@ public final class CityMapNetworkHandlers {
             return;
         }
 
-        CityMapSavedData atlas = CityMapSavedData.get(player.serverLevel());
+        ServerLevel mapLevel = player.getServer().getLevel(net.minecraft.resources.ResourceKey.create(
+                net.minecraft.core.registries.Registries.DIMENSION, request.dimensionId()));
+        if (mapLevel == null) return;
+        CityMapSavedData atlas = CityMapSavedData.get(mapLevel);
         // The player is about to hold this tile, so later changes to it are pushed instead of
         // waiting for a reopen that may never happen.
         atlas.watch(player.getUUID(), request.tileX(), request.tileZ());
@@ -59,8 +55,38 @@ public final class CityMapNetworkHandlers {
                 request.tileX(),
                 request.tileZ(),
                 tile.complete(),
-                tile.colors()
+                tile.colors(),
+                tile.contours()
         ));
+    }
+
+    /** Read-only atlas access; the server chooses the anchor, never the packet. */
+    public static BlockPos viewerPylon(ServerPlayer player) {
+        CityManager manager = CityManager.get(player.getServer().overworld());
+        var dimension = player.serverLevel().dimension().location();
+        if (player.containerMenu instanceof CityPylonMenu menu
+                && dimension.equals(menu.getDimensionId())
+                && player.distanceToSqr(menu.getPylonPos().getCenter()) <= 64.0
+                && manager.getCityByPylon(dimension, menu.getPylonPos()) != null) {
+            return menu.getPylonPos();
+        }
+        City city = manager.getMemberCity(player.getUUID());
+        var publicView = CityPublicAtlas.view(player);
+        if (publicView != null) return publicView.anchor();
+        return city != null && city.hasMember(player.getUUID()) ? city.getPylonPos() : null;
+    }
+
+    public static net.minecraft.resources.ResourceLocation viewerDimension(ServerPlayer player) {
+        var anchor = viewerPylon(player);
+        if (anchor == null) return null;
+        if (player.containerMenu instanceof CityPylonMenu menu && anchor.equals(menu.getPylonPos())
+                && menu.getDimensionId().equals(player.serverLevel().dimension().location())
+                && player.distanceToSqr(menu.getPylonPos().getCenter()) <= 64.0
+                && CityManager.get(player.getServer().overworld()).getCityByPylon(menu.getDimensionId(), menu.getPylonPos()) != null) return menu.getDimensionId();
+        var publicView = CityPublicAtlas.view(player);
+        if (publicView != null) return publicView.dimension();
+        City city = CityManager.get(player.getServer().overworld()).getMemberCity(player.getUUID());
+        return city != null && city.hasMember(player.getUUID()) ? city.getPylonDimension() : null;
     }
 
     private static boolean allowRequest(ServerPlayer player) {

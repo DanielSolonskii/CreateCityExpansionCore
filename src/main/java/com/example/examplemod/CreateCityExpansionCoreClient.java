@@ -1,7 +1,9 @@
 package com.example.examplemod;
 
 import com.example.examplemod.client.CityBoundaryRenderer;
+import com.example.examplemod.client.CityWorldMapKey;
 import com.example.examplemod.client.CityInviteClientHandler;
+import com.example.examplemod.client.CityTerritorySnapshot;
 import com.example.examplemod.client.CokeBatteryGuideRenderer;
 import com.example.examplemod.client.BlastFurnaceGuideRenderer;
 import com.example.examplemod.client.SteelConverterGuideRenderer;
@@ -101,6 +103,7 @@ public class CreateCityExpansionCoreClient {
                 this::registerClientPayloads
         );
         modEventBus.addListener(BuildGuideKeyMappings::register);
+        modEventBus.addListener(CityWorldMapKey::register);
         modEventBus.addListener(ModFluidClientExtensions::register);
 
 
@@ -115,6 +118,7 @@ public class CreateCityExpansionCoreClient {
         NeoForge.EVENT_BUS.register(
                 CityBoundaryRenderer.class
         );
+        NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
         NeoForge.EVENT_BUS.register(CokeBatteryGuideRenderer.class);
         NeoForge.EVENT_BUS.register(BlastFurnaceGuideRenderer.class);
         NeoForge.EVENT_BUS.register(SteelConverterGuideRenderer.class);
@@ -195,12 +199,7 @@ public class CreateCityExpansionCoreClient {
         };
 
         CreateCityExpansionCore.CITY_MAP_PEERS_HANDLER = (payload, context) -> {
-            invokeEnqueueWork(context, () -> {
-                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen
-                        && screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
-                    screen.getMapPanel().receivePeers(payload.peers());
-                }
-            });
+            invokeEnqueueWork(context, () -> CityTerritorySnapshot.accept(payload));
         };
 
         CreateCityExpansionCore.SYNC_CITY_MEMBER_REMOVAL_HANDLER = (payload, context) -> {

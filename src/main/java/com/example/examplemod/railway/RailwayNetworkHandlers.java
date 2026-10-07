@@ -282,6 +282,29 @@ public final class RailwayNetworkHandlers {
                                  List<RailwayMapPayload.TrackSegment> segments) {}
 
     private static Context context(ServerPlayer p,net.minecraft.core.BlockPos pos){if(!(p.containerMenu instanceof CityPylonMenu menu)||!menu.getPylonPos().equals(pos)||p.distanceToSqr(pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5)>64||!(p.serverLevel().getBlockState(pos).getBlock() instanceof CityPylonBlock))return null;CityManager cm=CityManager.get(p.getServer().overworld());City city=cm.getCityByPylon(p.serverLevel().dimension().location(),pos);return city==null||!city.hasMember(p.getUUID())?null:new Context(p,city,RailwayManager.get(p.serverLevel()),pos);}
+
+    /**
+     * Sends railway state and map for the player's own city, with no pylon in reach.
+     *
+     * <p>The pylon-bound {@link #context} checks an open container, a distance limit
+     * and the block itself. None of that can hold when the map is opened from a
+     * key binding anywhere on the map, and none of it is the property that grants
+     * access: membership is. So the context is rebuilt from the member's city and
+     * the city pylon is used purely as the anchor the client already expects.
+     *
+     * <p>The distance and block checks are dropped, not relaxed: no command is
+     * reachable through this path, only the two read-only snapshots.
+     */
+    public static boolean sendMemberView(ServerPlayer player) {
+        City city = CityManager.get(player.getServer().overworld()).getMemberCity(player.getUUID());
+        if (city == null) {
+            return false;
+        }
+        Context c = new Context(player, city, RailwayManager.get(player.serverLevel()), city.getPylonPos());
+        sendState(player, c);
+        sendMap(player, c);
+        return true;
+    }
     private static void feedback(ServerPlayer p,String key){p.displayClientMessage(Component.translatable("message.createcityexpansioncore.railway."+key),true);}
     private static <T>T enumAt(T[]v,int i,T f){return i>=0&&i<v.length?v[i]:f;}
     private record Context(ServerPlayer player,City city,RailwayManager railway,net.minecraft.core.BlockPos pylonPos){}

@@ -1,6 +1,7 @@
 package com.example.examplemod.client.screen;
 
 import com.example.examplemod.network.CityMapPeersPayload;
+import com.example.examplemod.network.ClaimCityPlotPayload;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.CityMember;
 import com.example.examplemod.client.CityBoundaryRenderer;
@@ -18,6 +19,7 @@ import com.example.examplemod.network.SyncCityMembersPayload;
 import com.example.examplemod.network.CityDevelopmentPayload;
 import com.example.examplemod.network.CityRelationsCommandPayload;
 import com.example.examplemod.network.DecommissionCityProjectPayload;
+import com.example.examplemod.network.RequestCityTerritoriesPayload;
 import com.example.examplemod.network.RailwayCommandPayload;
 import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.EconomyCommandPayload;
@@ -29,12 +31,15 @@ import com.example.examplemod.railway.RailwayTrainCandidate;
 import com.example.examplemod.railway.RailwayOwnershipSnapshot;
 import com.example.examplemod.railway.RailwayOwnershipTypes;
 import com.example.examplemod.railway.RailwayTypes;
+import com.example.examplemod.city.CityColors;
+import com.example.examplemod.city.CityPlot;
 import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.city.CityDevelopmentRequirementSnapshot;
 import com.example.examplemod.city.CityDevelopmentRequirements;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.client.gui.GuiGraphics;
@@ -269,6 +274,9 @@ public class CityPylonScreen
      */
     private static final int TERRITORY_CHECKBOX_TOP = 110;
 
+    /** Смещение кнопки «Изменить» относительно образца цвета. */
+    private static final int COLOR_BUTTON_OFFSET = 74;
+
     /*
      * Развитие: шапка и требования — от bodyTop, полоса прогресса и
      * кнопки — от нижней границы контента, поэтому перенос navigation
@@ -431,6 +439,92 @@ public class CityPylonScreen
         return this.mapPanel;
     }
 
+    /**
+     * Последний известный набор участков своего города.
+     *
+     * <p>Берётся из снимка территорий, а не из меню: снимок приходит с
+     * сервера целиком и обновляется после каждого claim, тогда как меню
+     * хранит только число участков. Нужен вкладке «Территория» и границе
+     * в мире, чтобы обе показывали ровно то же, что показывает карта.
+     */
+    private Set<CityPlot> ownTerritoryPlots() {
+        CityMapPeersPayload.Peer own = null;
+        for (CityMapPeersPayload.Peer peer : this.ownTerritoryCache) {
+            if (peer.own()) {
+                own = peer;
+                break;
+            }
+        }
+        return own != null ? own.plots() : Set.of();
+    }
+
+    /** Кеш последнего снимка территорий для своей карты. Обновляется серверным пакетом. */
+    private List<CityMapPeersPayload.Peer> ownTerritoryCache = List.of();
+
+    /**
+     * Принимает снимок территорий и сразу обновляет границу в мире.
+     *
+     * <p>Снимок — единственный источник участков на клиенте, поэтому
+     * карта, вкладка «Территория» и рендерер границы читают одно и то же
+     * значение и не могут разойтись.
+     */
+    public void receiveTerritories(List<CityMapPeersPayload.Peer> peers) {
+        this.ownTerritoryCache = List.copyOf(peers);
+        /*
+         * Граница обновляется сразу, а не в следующем тике: игрок сменил
+         * цвет и ждёт реакции на экране, а не через 50 ms. Если граница
+         * выключена, состояние всё равно запоминается, чтобы включение
+         * позже показало актуальный цвет, а не тот, что был при последнем
+         * обновлении снимка.
+         */
+        CityBoundaryRenderer.setVisible(
+                this.showTerritory, ownTerritoryPlots(), this.menu.getColorRgb());
+    }
+
+    /**
+     * Просит у сервера снимок территорий для этого пилона.
+     *
+     * <p>Вызывается при создании экрана и при переходе на вкладку «Карта»:
+     * первое гарантирует данные для сетки и границы в мире, второе — свежие
+     * данные, если город расширили, пока экран был открыт на другой вкладке.
+     */
+    private void requestTerritories() {
+        PacketDistributor.sendToServer(new RequestCityTerritoriesPayload(this.menu.getPylonPos()));
+    }
+
+    /**
+     * Стабильная ссылка на обработчик claim для панели карты.
+     *
+     * <p>Поле, а не новая лямбда в каждом тике: панель сравнивает
+     * переданную ссылку с текущей, чтобы пересчитывать фронтир доступных
+     * участков только при смене права. Лямбда каждый кадр сравнивалась бы
+     * как «новая» и пересчитывала бы обход участков 20 раз в секунду.
+     */
+    private final java.util.function.LongConsumer plotClaimHandler = this::requestPlotClaim;
+
+    /**
+     * Отправка подтверждённого claim на сервер.
+     *
+     * <p>Панель вызывает это только после явного подтверждения игроком, и
+     * именно отсюда уходит пакет. Само подтверждение панель рисует сама:
+     * отдельный экран закрывал собой ровно ту карту, ради которой игрок и
+     * подтверждал участок.
+     *
+     * <p>Допустимость участка решает сервер: клиент рисует фронтир по
+     * снимку, но не является источником правды.
+     */
+    private void requestPlotClaim(long packedPlot) {
+        if (this.minecraft == null || this.minecraft.getConnection() == null) {
+            return;
+        }
+        this.minecraft.getConnection().send(new ClaimCityPlotPayload(
+                this.menu.getPylonPos(),
+                this.menu.getDimensionId(),
+                (int) (packedPlot >> 32),
+                (int) packedPlot
+        ));
+    }
+
     /** Context-only entry point: railway management no longer occupies a hub tab. */
     public void openRailwayManagement() {
         this.activeTab = 6;
@@ -473,9 +567,23 @@ public class CityPylonScreen
         this.mapPanel = new CityMapPanel(
                 menu.getPylonPos(),
                 menu.getDimensionId(),
-                menu.getTerritorySize(),
                 menu.getProjects()
         );
+        /*
+         * Снимок территорий мог прийти до создания экрана: сервер шлёт его
+         * сразу после openMenu, а меню и пакет идут разными каналами. Без
+         * этого карта осталась бы без заливки и фронтира до переоткрытия
+         * пилона, а значит и ПКМ по участку нечего было бы принимать.
+         */
+        com.example.examplemod.client.CityTerritorySnapshot.applyPending(this);
+        /*
+         * Снимок территорий переспрашивается при открытии экрана, а не
+         * только принимается один раз при openMenu. Экран к этому моменту
+         * уже существует, поэтому ответ придёт в гарантированном порядке
+         * и гонки «пакет раньше экрана» не будет: без неё карта оставалась
+         * без заливки и без фронтира, то есть ПКМ было нечего принимать.
+         */
+        requestTerritories();
         this.lastObservedCityLevel = menu.getCityLevel();
 
         /*
@@ -1025,6 +1133,33 @@ private String managementTabName(int tab) {
      * =========================================
      */
 
+    /**
+     * Escape снимает открытое подтверждение claim, не закрывая экран.
+     *
+     * <p>Подтверждение — намерение внутри карты, а не отдельное окно, поэтому
+     * Escape должен отменять именно его. Раньше Escape закрывал City Pylon
+     * целиком, и случайно нажатый Escape терял подготовленный claim.
+     */
+    @Override
+    public boolean keyPressed(int key, int scanCode, int modifiers) {
+        if (this.mapPanel.hasPendingClaim()) {
+            boolean cancel = key == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE
+                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_Q;
+            boolean confirm = key == org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER
+                    || key == org.lwjgl.glfw.GLFW.GLFW_KEY_KP_ENTER;
+            if (cancel) {
+                this.mapPanel.cancelPendingClaim();
+                return true;
+            }
+            if (confirm) {
+                this.mapPanel.confirmPendingClaim();
+                return true;
+            }
+            return true;
+        }
+        return super.keyPressed(key, scanCode, modifiers);
+    }
+
     @Override
     public boolean mouseClicked(
             double mouseX,
@@ -1160,12 +1295,33 @@ private String managementTabName(int tab) {
                 this.showTerritory =
                         !this.showTerritory;
 
+                /*
+                 * Граница рисуется по тем же участкам, что и карта:
+                 * снимок территорий, а не старый квадрат вокруг пилона.
+                 */
                 CityBoundaryRenderer.setVisible(
                         this.showTerritory,
-                        this.menu.getPylonPos(),
-                        this.menu.getTerritorySize()
+                        ownTerritoryPlots(),
+                        this.menu.getColorRgb()
                 );
 
+                return true;
+            }
+
+            /*
+             * Палитра цвета города. Кнопка есть только у OWNER/ADMIN —
+             * тем же условием, что и на сервере, поэтому клик не может
+             * привести к заведомо отклонённому запросу. Право приходит с
+             * сервером в состоянии города и обновляется при каждом
+             * изменении, а не вычисляется на клиенте.
+             */
+            if (this.menu.canManageTerritory()
+                    && inside(mouseX, mouseY,
+                    colorPaletteButtonX + COLOR_BUTTON_OFFSET, colorPaletteButtonY - 1, 96, 16)) {
+                if (this.minecraft != null) {
+                    this.minecraft.setScreen(new CityColorPaletteScreen(
+                            this, this.menu.getPylonPos(), this.menu.getColorRgb()));
+                }
                 return true;
             }
         }
@@ -1223,7 +1379,14 @@ private String managementTabName(int tab) {
                     } else if (i == 5) {
                         openTrainManagement();
                     } else {
-                        this.activeTab = tabs[i]; updateTabButtons(); updateInviteButton();
+                        this.activeTab = tabs[i];
+                        // На карте запрашиваем снимок заново: пока игрок
+                        // ходил по другим вкладкам, город мог расшириться,
+                        // и фронтир обязан быть актуальным к моменту ПКМ.
+                        if (this.activeTab == 4) {
+                            requestTerritories();
+                        }
+                        updateTabButtons(); updateInviteButton();
                     }
                     return true;
                 }
@@ -1684,7 +1847,6 @@ private String managementTabName(int tab) {
             this.mapPanel.receive(railwayMap);
         }
         this.mapPanel.setProjects(this.menu.getProjects());
-        this.mapPanel.setTerritorySize(this.menu.getTerritorySize());
         if(this.menu.getEconomyState()!=null){
             this.mapPanel.setEconomyInfrastructure(this.menu.getEconomyState().infrastructure());
             this.mapPanel.setFreightData(this.menu.getEconomyState().logistics());
@@ -1893,7 +2055,9 @@ private String managementTabName(int tab) {
                     renderTerritory(
                             guiGraphics,
                             contentLeft,
-                            contentTop
+                            contentTop,
+                            mouseX,
+                            mouseY
                     );
 
             case 2 ->
@@ -2438,7 +2602,9 @@ private String managementTabName(int tab) {
     private void renderTerritory(
             GuiGraphics guiGraphics,
             int left,
-            int top
+            int top,
+            int mouseX,
+            int mouseY
     ) {
 
         int row =
@@ -2446,7 +2612,7 @@ private String managementTabName(int tab) {
 
         guiGraphics.drawString(
                 this.font,
-                Component.translatable("gui.createcityexpansioncore.city.current_size"),
+                Component.translatable("gui.createcityexpansioncore.city.plots_label"),
                 left,
                 row,
                 0xAAAAAA
@@ -2454,13 +2620,32 @@ private String managementTabName(int tab) {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        this.menu.getTerritorySize()
-                                + " × "
-                                + this.menu.getTerritorySize()
-                ),
+                Component.translatable("gui.createcityexpansioncore.city.plots_value",
+                        this.menu.getPlotCount()),
                 left + 220,
                 row,
+                0xFFFFFF
+        );
+
+        /*
+         * Площадь в блоках — производная от числа участков. Старое
+         * «N × N» исчезло намеренно: квадрат вокруг пилона больше не
+         * является территорией, и показывать его размер значило бы
+         * показывать то, чего у города нет.
+         */
+        guiGraphics.drawString(
+                this.font,
+                Component.translatable("gui.createcityexpansioncore.city.territory_blocks"),
+                left,
+                row + 17,
+                0xAAAAAA
+        );
+
+        guiGraphics.drawString(
+                this.font,
+                Component.literal(formatCount(this.menu.getPlotCount() * 2500L)),
+                left + 220,
+                row + 17,
                 0xFFFFFF
         );
 
@@ -2484,26 +2669,47 @@ private String managementTabName(int tab) {
                 0xFFFFFF
         );
 
+        /*
+         * Собственный цвет города: тот же, что рисует карта и граница
+         * в мире. Кнопка палитры есть только у OWNER/ADMIN, поэтому
+         * интерфейс не предлагает действие, которое сервер отклонит.
+         */
         guiGraphics.drawString(
                 this.font,
-                Component.translatable("gui.createcityexpansioncore.city.next_expansion"),
+                Component.translatable("gui.createcityexpansioncore.city.color_label"),
                 left,
                 row + 70,
                 0xAAAAAA
         );
 
-        int nextSize =
-                getNextTerritorySize();
-
+        colorPaletteButtonX = left + 220;
+        colorPaletteButtonY = row + 64;
+        int swatchColor = this.menu.getColorRgb();
+        guiGraphics.fill(colorPaletteButtonX, colorPaletteButtonY,
+                colorPaletteButtonX + 18, colorPaletteButtonY + 14,
+                CityColors.argb(swatchColor, 0xFF));
+        guiGraphics.renderOutline(colorPaletteButtonX - 1, colorPaletteButtonY - 1, 20, 16, 0xFFD09A3A);
         guiGraphics.drawString(
                 this.font,
-                this.menu.getCityLevel() >= 2
-                        ? Component.translatable("gui.createcityexpansioncore.city.maximum_level")
-                        : Component.literal(nextSize + " × " + nextSize),
-                left + 220,
-                row + 70,
+                Component.literal(String.format(java.util.Locale.ROOT, "#%06X", swatchColor)),
+                colorPaletteButtonX + 24,
+                colorPaletteButtonY + 3,
                 0xFFFFFF
         );
+
+        if (this.menu.canManageTerritory()) {
+            int buttonX = colorPaletteButtonX + COLOR_BUTTON_OFFSET;
+            boolean hovered = inside(mouseX, mouseY, buttonX, colorPaletteButtonY - 1, 96, 16);
+            guiGraphics.fill(buttonX, colorPaletteButtonY - 1,
+                    buttonX + 96, colorPaletteButtonY + 15,
+                    hovered ? 0xFF4A3A20 : 0xFF303638);
+            guiGraphics.renderOutline(buttonX, colorPaletteButtonY - 1, 96, 16,
+                    hovered ? 0xFFD09A3A : 0xFF596064);
+            guiGraphics.drawCenteredString(this.font,
+                    Component.translatable("gui.createcityexpansioncore.city.color.change"),
+                    buttonX + 48, colorPaletteButtonY + 3,
+                    hovered ? 0xFFFFFFFF : 0xFFD3D8DA);
+        }
 
         int checkboxX =
                 left;
@@ -2549,7 +2755,21 @@ private String managementTabName(int tab) {
                         ? 0xFFFFFF
                         : 0xAAAAAA
         );
+
+        if (this.menu.canManageTerritory()) {
+            guiGraphics.drawString(
+                    this.font,
+                    Component.translatable("gui.createcityexpansioncore.city.claim_hint"),
+                    checkboxX,
+                    checkboxY + 22,
+                    0xAAAAAA
+            );
+        }
     }
+
+    /** Границы кнопки палитры считаются при отрисовке и переиспользуются обработкой клика. */
+    private int colorPaletteButtonX;
+    private int colorPaletteButtonY;
 
     /*
      * =========================================
@@ -4268,7 +4488,24 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
             developmentAnimationTicks = -1;
         }
         this.mapPanel.setProjects(this.menu.getProjects());
-        this.mapPanel.setTerritorySize(this.menu.getTerritorySize());
+        /*
+         * Правая кнопка по карте имеет смысл только пока City Pylon —
+         * верхний экран: вложенные экраны используют ту же панель и не
+         * должны предлагать claim от имени города. Право приходит с
+         * сервера вместе с состоянием города.
+         */
+        boolean mapIsInteractive = this.minecraft != null && this.minecraft.screen == this
+                && this.menu.hasCity() && this.menu.canManageTerritory();
+        /*
+         * Ссылка на метод, а не новая лямбда каждый тик: setPlotClaimRequest
+         * сравнивает по ссылке и пересчитывает фронтир доступных участков
+         * только при реальном изменении права, а не 20 раз в секунду.
+         */
+        this.mapPanel.setPlotClaimRequest(mapIsInteractive ? this.plotClaimHandler : null);
+        if (this.showTerritory) {
+            CityBoundaryRenderer.setVisible(
+                    true, ownTerritoryPlots(), this.menu.getColorRgb());
+        }
         if ((this.activeTab == 4 || this.activeTab == 6) && ++this.railwayRefreshTicks >= 20) {
             this.railwayRefreshTicks = 0;
             requestRailwayState();
@@ -4364,19 +4601,12 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
      * =========================================
      * СЛЕДУЮЩИЙ УРОВЕНЬ
      * =========================================
+     *
+     * Размер территории больше не зависит от уровня города: площадь —
+     * это число занятых участков 50×50, и растёт оно только через
+     * claim с карты. Поэтому «следующего размера» у города больше нет,
+     * и метод удалён вместе со старым квадратом.
      */
-
-    private int getNextTerritorySize() {
-
-        return switch (
-                this.menu.getCityLevel()
-                ) {
-
-            case 1 -> 150;
-
-            default -> 150;
-        };
-    }
 
     /*
      * =========================================

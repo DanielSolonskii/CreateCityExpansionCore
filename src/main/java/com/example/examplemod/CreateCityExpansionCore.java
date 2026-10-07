@@ -3,6 +3,7 @@ import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityInvite;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityMapNetworkHandlers;
+import com.example.examplemod.city.CityTerritoryHandlers;
 import com.example.examplemod.city.CityInviteDirectory;
 import com.example.examplemod.city.CityMapSavedData;
 import com.example.examplemod.city.CityProjectNetworkHandlers;
@@ -64,6 +65,11 @@ import com.example.examplemod.sound.WorldSoundHelper;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.CityMapPeersPayload;
+import com.example.examplemod.network.ClaimCityPlotPayload;
+import com.example.examplemod.network.RequestCityTerritoriesPayload;
+import com.example.examplemod.network.RequestCityWorldMapPayload;
+import com.example.examplemod.client.CityWorldMapSession;
+import com.example.examplemod.network.SetCityColorPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
@@ -789,6 +795,7 @@ public class CreateCityExpansionCore {
          */
         IndustrialMaterials.INDUSTRIAL_COKE.getClass();
 
+
         ModElectricalDevices.register(modEventBus);
         ModFluids.register(modEventBus);
         modEventBus.addListener(
@@ -1062,6 +1069,23 @@ public class CreateCityExpansionCore {
         PayloadRegistrar registrar =
                 event.registrar("1");
 
+        registrar.playToServer(com.example.examplemod.network.RequestCityDirectoryPayload.TYPE,
+                com.example.examplemod.network.RequestCityDirectoryPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.city.CityPublicAtlas.request(player, payload);
+                }));
+        registrar.playToServer(com.example.examplemod.network.SetCityIdentityPayload.TYPE,
+                com.example.examplemod.network.SetCityIdentityPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.city.CityPublicAtlas.edit(player, payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.CityDirectoryPayload.TYPE,
+                com.example.examplemod.network.CityDirectoryPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.CityPublicDirectory.accept(payload)));
+        registrar.playToClient(com.example.examplemod.network.CityIdentityResultPayload.TYPE,
+                com.example.examplemod.network.CityIdentityResultPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.CityIdentityEditorScreen.accept(payload)));
+
         registrar.playToServer(
                 com.example.examplemod.network.EconomyCommandPayload.TYPE,
                 com.example.examplemod.network.EconomyCommandPayload.STREAM_CODEC,
@@ -1077,6 +1101,8 @@ public class CreateCityExpansionCore {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.applyEconomyState(payload);
+                    } else {
+                        CityWorldMapSession.INSTANCE.applyEconomyState(payload);
                     }
                 })
         );
@@ -1094,6 +1120,7 @@ public class CreateCityExpansionCore {
                 com.example.examplemod.network.CityRelationsStatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) menu.applyRelationsState(payload);
+                    else CityWorldMapSession.INSTANCE.applyRelationsState(payload);
                 })
         );
         registrar.playToServer(
@@ -1131,6 +1158,8 @@ public class CreateCityExpansionCore {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.applyRailwayState(payload);
+                    } else {
+                        CityWorldMapSession.INSTANCE.applyRailwayState(payload);
                     }
                 })
         );
@@ -1141,6 +1170,8 @@ public class CreateCityExpansionCore {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.acceptRailwayMap(payload);
+                    } else {
+                        CityWorldMapSession.INSTANCE.acceptRailwayMap(payload);
                     }
                 })
         );
@@ -1207,6 +1238,8 @@ public class CreateCityExpansionCore {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.applyState(payload);
+                    } else {
+                        CityWorldMapSession.INSTANCE.applyState(payload);
                     }
                 })
         );
@@ -1217,6 +1250,8 @@ public class CreateCityExpansionCore {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.acceptMapTile(payload);
+                    } else {
+                        CityWorldMapSession.INSTANCE.acceptMapTile(payload);
                     }
                 })
         );
@@ -2212,6 +2247,75 @@ public class CreateCityExpansionCore {
                 CityMapPeersPayload.TYPE,
                 CityMapPeersPayload.STREAM_CODEC,
                 (payload, context) -> CITY_MAP_PEERS_HANDLER.handle(payload, context)
+        );
+
+        /*
+         * =====================================
+         * ТЕРРИТОРИЯ: УЧАСТКИ И ЦВЕТ ГОРОДА
+         * =====================================
+         *
+         * Оба пакета — запросы, а не команды: сервер находит город по
+         * пилону и проверяет права сам. Клиент не присылает ни город,
+         * ни факт успеха, поэтому подделать расширение территории или
+         * смену цвета на клиенте нельзя.
+         */
+
+        registrar.playToServer(
+                ClaimCityPlotPayload.TYPE,
+                ClaimCityPlotPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        CityTerritoryHandlers.claim(player, payload);
+                    }
+                })
+        );
+
+        registrar.playToServer(
+                SetCityColorPayload.TYPE,
+                SetCityColorPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        CityTerritoryHandlers.setColor(player, payload);
+                    }
+                })
+        );
+
+        /*
+         * Запрос снимка территорий: экран переспрашивает его сам, когда
+         * открывает карту. Одноразовая отправка при openMenu остаётся
+         * быстрым первым кадром, но она ненадёжна — пакет может прийти
+         * раньше экрана.
+         */
+        registrar.playToServer(
+                RequestCityTerritoriesPayload.TYPE,
+                RequestCityTerritoriesPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        CityTerritoryHandlers.requestTerritories(player, payload);
+                    }
+                })
+        );
+
+        /*
+         * Карта по клавише. Запрос пустой: сервер сам определяет город по
+         * членству игрока. Координата пилона в запросе была бы
+         * непроверяемым вводом и позволила бы запросить чужой город.
+         */
+        registrar.playToServer(
+                RequestCityWorldMapPayload.TYPE,
+                RequestCityWorldMapPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) {
+                        com.example.examplemod.city.CityWorldMapHandlers.openForMember(player);
+                    }
+                })
+        );
+
+        registrar.playToClient(
+                com.example.examplemod.network.CityWorldMapDeniedPayload.TYPE,
+                com.example.examplemod.network.CityWorldMapDeniedPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.example.examplemod.client.CityWorldMapSession.INSTANCE.deny())
         );
 
         registrar.playToClient(

@@ -2,11 +2,12 @@ package com.example.examplemod.block;
 
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.City;
+import com.example.examplemod.city.CityClaims;
+import com.example.examplemod.city.CityColors;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityDevelopmentRequirements;
 import com.example.examplemod.mine.MineControllerBlockEntity;
 import com.example.examplemod.menu.CityPylonMenu;
-import com.example.examplemod.network.CityMapPeersPayload;
 import com.mojang.serialization.MapCodec;
 import com.example.examplemod.city.CityMember;
 
@@ -67,7 +68,7 @@ public class CityPylonBlock extends BaseEntityBlock {
      * чтобы он мог попасть в кадр карты. Совпадает с
      * MAX_PAN_DISTANCE панели карты.
      */
-    private static final int MAP_PEER_RANGE = 512;
+    public static final int MAP_PEER_RANGE = 512;
 
     /**
      * Габариты collision/selection из integration_manifest.json.
@@ -300,14 +301,33 @@ public class CityPylonBlock extends BaseEntityBlock {
 
                         /*
                          * =================================
-                         * ТЕРРИТОРИЯ
+                         * ТЕРРИТОРИЯ И ЦВЕТ
                          * =================================
+                         *
+                         * Старый квадратный territorySize больше не
+                         * передаётся: вкладка «Территория» показывает
+                         * реальное число участков 50×50, собственный
+                         * цвет города и право им управлять.
                          */
 
                         data.writeVarInt(
                                 city != null
-                                        ? city.getTerritorySize()
-                                        : 100
+                                        ? city.getClaimedPlotCount()
+                                        : 0
+                        );
+
+                        data.writeVarInt(
+                                city != null
+                                        ? city.getColorRgb()
+                                        : CityColors.defaultColor(
+                                        CityClaims.pylonPlot(
+                                                serverPlayer.serverLevel().dimension().location(),
+                                                pos
+                                        ).packedXZ())
+                        );
+
+                        data.writeBoolean(
+                                city != null && city.isAdmin(serverPlayer.getUUID())
                         );
 
                         /*
@@ -417,14 +437,17 @@ public class CityPylonBlock extends BaseEntityBlock {
              * игрока, а карта интересует всем, кто на неё смотрит.
              *
              * Передаётся ТОЛЬКО визуальная информация: имя, позиция
-             * пилона и размер территории. Ни прав, ни экономики, ни
-             * проектов чужих городов клиент не получает.
+             * пилона, цвет и реально заявленные участки 50×50. Ни прав,
+             * ни экономики, ни проектов чужих городов клиент не
+             * получает.
              *
              * Список строится один раз из CityManager.getCities(),
              * то есть из канонического хранилища городов. Собственного
-             * хранилища «соседей» не заводится.
+             * хранилища «соседей» не заводится. Тот же снимок
+             * пересылается после каждого claim участка и смены цвета,
+             * поэтому карта обновляется без повторного открытия пилона.
              */
-            sendMapPeers(serverPlayer, city, pos);
+            com.example.examplemod.city.CityTerritoryHandlers.sendTerritories(serverPlayer, city);
         }
 
         return InteractionResult.sidedSuccess(
@@ -433,69 +456,12 @@ public class CityPylonBlock extends BaseEntityBlock {
     }
 
     /**
-     * Шлёт клиенту список соседних городов в пределах карты.
-     *
-     * <p>Фильтрует по измерению и по удалённости от текущего пилона,
-     * чтобы не отправлять города, которые игрок всё равно не увидит.
-     * Это же ограничивает объём пакета без обхода чанков.
+     * Список соседних городов отправляется общим обработчиком
+     * {@link com.example.examplemod.city.CityTerritoryHandlers#sendTerritories}:
+     * при открытии пилона и после каждого изменения территории он
+     * собирается одинаково, поэтому карта не может показать одно, а
+     * сервер считать другое.
      */
-    private static void sendMapPeers(
-            ServerPlayer player,
-            City ownCity,
-            BlockPos ownPos
-    ) {
-        var dimension = player.serverLevel().dimension().location();
-
-        var peers = new ArrayList<CityMapPeersPayload.Peer>();
-
-        for (City other : CityManager.get(player.serverLevel().getServer().overworld())
-                .getCities()) {
-
-            if (other.getPylonDimension() == null
-                    || !other.getPylonDimension().equals(dimension)) {
-                continue;
-            }
-
-            BlockPos otherPos = other.getPylonPos();
-            int distance = (int) Math.max(
-                    Math.abs(otherPos.getX() - ownPos.getX()),
-                    Math.abs(otherPos.getZ() - ownPos.getZ())
-            );
-
-            /*
-             * Карта физически показывает область вокруг пилона.
-             * Города дальше максимальной дистанции не попадут
-             * в кадр, поэтому и не отправляются.
-             */
-            if (distance > MAP_PEER_RANGE) {
-                continue;
-            }
-
-            boolean own = ownCity != null
-                    && other.getId().equals(ownCity.getId());
-
-            peers.add(new CityMapPeersPayload.Peer(
-                    other.getId(),
-                    other.getName(),
-                    otherPos.getX(),
-                    otherPos.getZ(),
-                    other.getTerritorySize(),
-                    own,
-                    other.getId().equals(com.example.examplemod.economy.EconomyManager.get(player.serverLevel()).masterCityId())
-            ));
-
-            if (peers.size() >= CityMapPeersPayload.MAX_PEERS) {
-                break;
-            }
-        }
-
-        PacketDistributor.sendToPlayer(player, new CityMapPeersPayload(
-                ownPos,
-                dimension,
-                peers
-        ));
-    }
-
     @Override
     public void setPlacedBy(
             Level level,

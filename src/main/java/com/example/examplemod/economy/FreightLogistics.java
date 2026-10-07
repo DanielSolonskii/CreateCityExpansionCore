@@ -3,6 +3,7 @@ package com.example.examplemod.economy;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
+import com.example.examplemod.city.CityPlot;
 import com.example.examplemod.railway.*;
 import com.example.examplemod.economy.block.EconomyThroughputBlockEntity;
 import com.simibubi.create.AllDataComponents;
@@ -270,9 +271,38 @@ public final class FreightLogistics {
     }
     private boolean trainBusy(UUID train,UUID except){return assignments.values().stream().anyMatch(a->train.equals(a.train)&&!a.subject.equals(except)&&!terminal(a.subject));}
     private static void clearDispatch(FreightAssignment a,RailwayManager railway){if(a.train!=null)railway.consumeSelectedRoute(a.train);a.train=null;a.routeSelection=null;a.running=false;a.dispatchError="";a.handedOff=false;}
+    /**
+     * Принадлежит ли блок территории города.
+     *
+     * <p>Раньше это был квадрат вокруг пилона, посчитанный от
+     * territorySize. Теперь территория — это участки 50×50, и ответ
+     * берётся из набора участков самого города: одна проверка в
+     * хеш-таблице без поиска CityManager, потому что этот метод
+     * зовётся на каждой сверке логистики, то есть каждый тик.
+     *
+     * <p>Совпадает с {@code CityManager.getCityAt(...) == city}:
+     * участок может принадлежать только одному городу, иначе он не
+     * попал бы в индекс и не был бы сохранён.
+     */
     public static boolean inside(City city,ServerLevel level,BlockPos pos){
-        int half=city.getTerritorySize()/2;return city.getPylonDimension().equals(level.dimension().location())&&Math.abs((long)pos.getX()-city.getPylonPos().getX())<=half&&Math.abs((long)pos.getZ()-city.getPylonPos().getZ())<=half;
+        if(city==null||level==null||pos==null)return false;
+        return city.ownsBlock(level.dimension().location(),pos.getX(),pos.getZ());
     }
+
+    /**
+     * Чанки, которые покрывают заявленные участки города.
+     *
+     * <p>Перебор участков, а не квадрата вокруг пилона: у города
+     * может быть territory-анклав далеко от столицы, и старый
+     * квадрат его бы просто не увидел. Ключи уникальны, поэтому
+     * соседние участки не заставляют читать один чанк дважды.
+     */
+    private static Set<Long> claimedChunks(City city){
+        Set<Long> chunks=new HashSet<>();
+        for(CityPlot plot:city.getClaimedPlots())for(int cx=plot.minChunkX();cx<=plot.maxChunkX();cx++)for(int cz=plot.minChunkZ();cz<=plot.maxChunkZ();cz++)chunks.add(((long)cx<<32)|(cz&0xFFFFFFFFL));
+        return chunks;
+    }
+
     private static GlobalStation station(ServerLevel level,PostboxBlockEntity box){
         if(!(box.target instanceof PackagePortTarget.TrainStationFrogportTarget))return null;
         return CreateRailwayAdapter.stationAt(level.dimension(),box.getBlockPos().offset(box.target.relativePos));
@@ -752,8 +782,9 @@ public final class FreightLogistics {
             CompoundTag r=new CompoundTag();r.putUUID("Source",p.id);r.putUUID("Destination",d.id);r.putString("State",route(p,d));routes.add(r);
             CompoundTag reverse=new CompoundTag();reverse.putUUID("Source",d.id);reverse.putUUID("Destination",p.id);reverse.putString("State",route(d,p));routes.add(reverse);
         }
-        List<PostboxBlockEntity> boxes=new ArrayList<>();List<PackagerBlockEntity> packagers=new ArrayList<>();int half=city.getTerritorySize()/2;
-        for(int x=(city.getPylonPos().getX()-half)>>4;x<=(city.getPylonPos().getX()+half)>>4;x++)for(int z=(city.getPylonPos().getZ()-half)>>4;z<=(city.getPylonPos().getZ()+half)>>4;z++){
+        List<PostboxBlockEntity> boxes=new ArrayList<>();List<PackagerBlockEntity> packagers=new ArrayList<>();
+        for(long key:claimedChunks(city)){
+            int x=(int)(key>>32),z=(int)key;
             var chunk=level.getChunkSource().getChunkNow(x,z);if(chunk==null)continue;
             for(var be:chunk.getBlockEntities().values())if(inside(city,level,be.getBlockPos())){if(be instanceof PostboxBlockEntity b)boxes.add(b);if(be instanceof PackagerBlockEntity p&&compatiblePackager(level,p.getBlockPos()))packagers.add(p);}
         }

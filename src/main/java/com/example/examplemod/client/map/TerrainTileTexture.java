@@ -20,6 +20,11 @@ import net.minecraft.util.FastColor;
  * <p>The texture is derived data — it is rebuilt from the cached samples whenever the level of
  * detail changes — and {@link #close()} hands it back to the {@link net.minecraft.client.renderer.texture.TextureManager},
  * which both unregisters and closes it, so a tile that leaves the cache never leaks a GPU texture.
+ *
+ * <p>Samples reach the GPU already run through {@link MapSurveyTransform}, so the terrain arrives on
+ * screen as drafting paper rather than as a photograph. The transform is applied per texel after
+ * averaging rather than per sample before it: averaging first and transforming second keeps the level
+ * of detail stable, because a transformed average is not the average of transformed samples.
  */
 final class TerrainTileTexture {
     /** Texels per side; one texel per sample, so the texture always maps 1:1 onto the sample grid. */
@@ -48,7 +53,7 @@ final class TerrainTileTexture {
      * area-average LOD rather than a point sample — no shimmer while panning, and no squares
      * appearing when a biome boundary lands between two samples.
      */
-    void build(int[] colors, int stride) {
+    void build(int[] colors, java.util.BitSet contours, int stride) {
         int step = Math.max(1, Math.min(stride, SIZE));
         if (this.texture == null) {
             this.pixels = new NativeImage(SIZE, SIZE, false);
@@ -59,11 +64,64 @@ final class TerrainTileTexture {
             int baseZ = (z / step) * step;
             for (int x = 0; x < SIZE; x++) {
                 int baseX = (x / step) * step;
-                this.pixels.setPixelRGBA(x, z, toNativeImageColor(areaAverage(colors, baseX, baseZ, step)));
+                this.pixels.setPixelRGBA(x, z, toNativeImageColor(
+                        MapSurveyTransform.survey(
+                                areaAverage(colors, baseX, baseZ, step)
+                        )
+                ));
             }
         }
+        /*
+         * Горизонтали ложатся поверх бумаги, а не смешиваются с ней.
+         *
+         * Смешивание убило бы ровно то, ради чего они нужны: на отдалённом зуме соседние
+         * сэмплы усредняются в один тексель, и разбавленная линия перестаёт читаться как
+         * линия. Поэтому линия рисуется последним проходом и в полную силу, а на сильном
+         * укрупнении сглаживается по площади — иначе на одном блоке высоты она выглядела бы
+         * как щетина.
+         */
+        drawContours(contours, step);
         this.texture.upload();
         this.builtStride = step;
+    }
+
+    /**
+     * Рисует горизонтали как чернила поверх уже готовой подложки.
+     *
+     * <p>Покрытие считается по той же области текселя, что и усреднение цвета, поэтому линия
+     * всегда попадает в те же блоки, что и рельеф, который она описывает. Тексель, где линия
+     * занимает меньше половины, остаётся бумагой: половинка линии — это уже размытая полоса,
+     * а не линия.
+     */
+    private void drawContours(java.util.BitSet contours, int step) {
+        if (contours == null || contours.isEmpty()) {
+            return;
+        }
+        for (int z = 0; z < SIZE; z++) {
+            int baseZ = (z / step) * step;
+            for (int x = 0; x < SIZE; x++) {
+                int baseX = (x / step) * step;
+                int marked = 0;
+                int limitX = Math.min(SIZE, baseX + step);
+                int limitZ = Math.min(SIZE, baseZ + step);
+                int samples = (limitX - baseX) * (limitZ - baseZ);
+                for (int z1 = baseZ; z1 < limitZ; z1++) {
+                    int row = z1 * SIZE;
+                    for (int x1 = baseX; x1 < limitX; x1++) {
+                        if (contours.get(row + x1)) {
+                            marked++;
+                        }
+                    }
+                }
+                if (marked * 2 < samples) {
+                    continue;
+                }
+                int existing = this.pixels.getPixelRGBA(x, z);
+                this.pixels.setPixelRGBA(x, z, toNativeImageColor(
+                        MapSurveyTransform.surveyInk(fromNativeImageColor(existing))
+                ));
+            }
+        }
     }
 
     /**
@@ -114,6 +172,19 @@ final class TerrainTileTexture {
         int green = argb >> 8 & 0xFF;
         int blue = argb & 0xFF;
         return FastColor.ABGR32.color(alpha, blue, green, red);
+    }
+
+    /**
+     * The exact inverse of {@link #toNativeImageColor}, needed because the contour pass reads a
+     * texel back out of the image it just wrote. Round-tripping through the inverse instead of
+     * mixing in the packed layout keeps the packing bug documented above from having a second,
+     * silent version inside the overlay pass.
+     */
+    static int fromNativeImageColor(int packed) {
+        return FastColor.ABGR32.alpha(packed) << 24
+                | FastColor.ABGR32.red(packed) << 16
+                | FastColor.ABGR32.green(packed) << 8
+                | FastColor.ABGR32.blue(packed);
     }
 
     /** Hands the texture back to the texture manager, which unregisters and closes it. */

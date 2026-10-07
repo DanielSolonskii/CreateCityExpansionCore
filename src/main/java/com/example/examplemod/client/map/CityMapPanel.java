@@ -4,6 +4,8 @@ import com.example.examplemod.network.CityMapPeersPayload;
 
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.network.RequestCityMapTilePayload;
+import com.example.examplemod.city.CityColors;
+import com.example.examplemod.city.CityPlot;
 import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.EconomyStatePayload;
@@ -27,12 +29,15 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
 
@@ -59,22 +64,40 @@ public final class CityMapPanel {
     private static final double MEDIUM_DETAIL_ZOOM = 0.80;
     private static final double CLOSE_DETAIL_ZOOM = 1.20;
 
-    private static final int FRAME_COLOR = 0xFF596064;
-    private static final int ACCENT_COLOR = 0xFFD09A3A;
-    private static final int TERRITORY_FILL = 0x0837A6D1;
-    private static final int TERRITORY_BORDER = 0xFF58AAC4;
+    private static final int FRAME_COLOR = MapPalette.INK_SOFT;
+    private static final int ACCENT_COLOR = MapPalette.OWN;
+
+    /**
+     * Правая граница, которую карта не перекрывает.
+     *
+     * <p>World Map держит справа контекстную колонку. Приборная
+     * обвязка обязана её уважать: иначе легенда и миникарта
+     * оказываются наполовину под чужой панелью. Экран сообщает
+     * границу один раз на кадр; по умолчанию справа от карты
+     * ничего нет.
+     */
+    private int chromeAvoidRight = Integer.MAX_VALUE;
+
+    /**
+     * Границы приборной обвязки на текущем кадре.
+     *
+     * <p>Нужны экрану-атласу, чтобы повесить легенду рядом с
+     * картой, не угадывая её размер.
+     */
+    private CityMapFrame.Geometry chromeGeometry;
 
     /*
-     * Соседние города.
-     *
-     * Свой город — основной акцентный цвет, чужие — приглушённый
-     * и заметно менее насыщенный, чтобы территории не сливались
-     * в одну пеструю пятнистую массу. Это инфраструктурная карта,
-     * а не политическая: чужие города показываются как факт
-     * существования, без какой-либо детализации.
+     * Территория рисуется по реальным участкам 50×50, а не по
+     * квадрату вокруг пилона. Свой город заливается заметно плотнее
+     * и обводится контуром, чужие — в собственном цвете города, но
+     * приглушённо: карта остаётся инфраструктурной, а не политической.
      */
-    private static final int PEER_TERRITORY_FILL = 0x068E9BA6;
-    private static final int PEER_TERRITORY_BORDER = 0xFF657C84;
+    private static final int OWN_FILL_ALPHA = MapPalette.OWN_FILL_ALPHA;
+    private static final int PEER_FILL_ALPHA = MapPalette.PEER_FILL_ALPHA;
+    /** Цвет подсветки участка под курсором, когда его можно занять. */
+    private static final int CLAIMABLE_HINT = 0xFFE8C87A;
+    /** Сетка участков видна только когда участок достаточно велик на экране. */
+    private static final double MIN_PLOT_GRID_PX = 14.0;
     private static final int MARKER_SPACING = 22;
     private static final int[][] MARKER_OFFSETS = {
             {0, 0}, {0, -24}, {24, 0}, {0, 24}, {-24, 0},
@@ -84,8 +107,18 @@ public final class CityMapPanel {
     };
 
     private final BlockPos pylonPos;
+    private List<CityMapPeersPayload.Peer> territoryPeers = List.of();
+    private List<com.example.examplemod.city.CityPublicProfile> publicCities = List.of();
+    private boolean publicDirectoryActive;
+    private boolean publicAnchor;
+    private boolean hasCityAnchor() { return !publicDirectoryActive || publicAnchor; }
+    private boolean atAnchor(CityMapPeersPayload.Peer peer) { return peer.pylonX() == pylonPos.getX() && peer.pylonZ() == pylonPos.getZ(); }
+    public void receivePublicCities(List<com.example.examplemod.city.CityPublicProfile> cities) {
+        publicDirectoryActive = true; publicCities = List.copyOf(cities);
+        publicAnchor = publicCities.stream().anyMatch(c -> c.pos().getX() == pylonPos.getX() && c.pos().getZ() == pylonPos.getZ());
+        receivePeers(territoryPeers);
+    }
     private final ResourceLocation dimensionId;
-    private int territorySize;
     private List<CityProjectSnapshot> projects;
     private List<RailwayMapPayload.TrackSegment> railwayTracks = List.of();
     private List<RailwayMapPayload.NetworkView> railwayNetworks = List.of();
@@ -106,6 +139,92 @@ public final class CityMapPanel {
      * вычислений и обходов мира в цикле отрисовки.
      */
     private List<CityMapPeersPayload.Peer> peers = List.of();
+
+    /**
+     * Кого просить о подтверждении claim участка.
+     *
+     * <p>Панель карты ничего не знает о городах: она только ловит
+     * правый клик, переводит его в участок мировой сетки 50×50 и
+     * сообщает координаты. Решение о claim принимает экран, а данные
+     * меняет сервер. Поле {@code null} означает «правый клик по
+     * карте ничего не делает» — так ведёт себя карта, открытая не
+     * из City Pylon.
+     */
+    private java.util.function.LongConsumer plotClaimRequest;
+
+    /** Участок под курсором в текущем кадре. Только для подсветки, без кеширования между кадрами. */
+    private CityPlot hoveredPlot;
+    private boolean hoveredPlotClaimable;
+
+    /**
+     * Участки, которые можно занять прямо сейчас: свободные и примыкающие стороной к своей
+     * территории.
+     *
+     * <p>Считается один раз на снимок с сервера, а не каждый кадр: набор зависит только от
+     * территории, а пересчёт на кадре означал бы обход участков в цикле отрисовки.
+     *
+     * <p>Без этой подсветки игрок не видит, куда вообще можно расширяться, и вынужден угадывать,
+     * кликая по карте. Правило смежности становится видимым правилом, а не загадкой.
+     */
+    private List<CityPlot> claimableFrontier = List.of();
+
+    /** Тот же набор для проверки попадания за O(1) в кадре. */
+    private Set<CityPlot> claimableLookup = Set.of();
+
+    /**
+     * Участок, ожидающий подтверждения, или {@code null}.
+     *
+     * <p>Подтверждение живёт внутри карты, а не отдельным экраном: игрок должен
+     * видеть участок и соседнюю территорию, пока решает. Отдельный экран
+     * закрывал собой ровно то, ради чего игрок открыл подтверждение.
+     */
+    private CityPlot pendingClaim;
+
+    /**
+     * Геометрия подтверждения. Заполняется {@link #layoutClaimOverlay()} и
+     * служит единственным источником и для отрисовки, и для проверки клика.
+     */
+    private int confirmX, confirmY, cancelX, cancelY;
+    private int overlayX, overlayY, overlayW, overlayH, buttonW;
+    private String overlayTitle = "";
+    private List<String> overlayLines = List.of();
+
+    /** Открыто ли подтверждение claim. */
+    public boolean hasPendingClaim() {
+        return this.pendingClaim != null;
+    }
+
+    /** Снимает подтверждение без отправки запроса. */
+    public void cancelPendingClaim() {
+        setPendingClaim(null);
+    }
+
+    /** Подтверждает открытый участок — то же, что нажатие кнопки. */
+    public void confirmPendingClaim() {
+        CityPlot plot = this.pendingClaim;
+        if (plot == null) {
+            return;
+        }
+        // Сначала снимаем, потом отправляем: отправка вызывает обработчик
+        // экрана, и при обратном порядке подтверждение мигнуло бы на кадр.
+        setPendingClaim(null);
+        if (this.plotClaimRequest != null) {
+            this.plotClaimRequest.accept(plot.packedXZ());
+            LOGGER.info("City plot claim requested: plot=({},{})", plot.plotX(), plot.plotZ());
+        }
+    }
+
+    /**
+     * Единственная точка смены подтверждения.
+     *
+     * <p>Геометрия сбрасывается вместе с участком: показывать её заново
+     * каждый кадр незачем, но оставлять старую нельзя — при следующем
+     * открытии кнопки на секунду оказались бы на месте прошлого участка.
+     */
+    private void setPendingClaim(CityPlot plot) {
+        this.pendingClaim = plot;
+        this.overlayLines = List.of();
+    }
     private final Map<UUID, TrainPosition> previousTrainPositions = new HashMap<>();
     private long railwaySnapshotAtMillis;
     private boolean showTracks = true;
@@ -144,6 +263,15 @@ public final class CityMapPanel {
     private int layerButtonsX;
     private int layerButtonsY;
 
+    private boolean showCoordinateGrid;
+    private boolean showOverview;
+    private boolean placingPin;
+    private boolean measuring;
+    private BlockPos measureStart, measureEnd;
+    private final List<AtlasPreferences.Pin> personalPins = new ArrayList<>();
+    private final Set<TileKey> failedTiles = new HashSet<>();
+    private final Map<TileKey, Integer> tileAttempts = new HashMap<>();
+
     private final ItemStack cityIcon = item("createcityexpansioncore:city_pylon");
     private final ItemStack mineIcon = item("createcityexpansioncore:mine_controller");
     private final ItemStack stationIcon = item("create:track_station");
@@ -163,15 +291,22 @@ public final class CityMapPanel {
     private int pendingTooltipX;
     private int pendingTooltipY;
 
+    /**
+     * Подсказка уже отложена в этом кадре.
+     *
+     * <p>Нужна, чтобы не дублировать текст: подпись у маркера и подсказка
+     * начинаются с одного и того же названия, и оно оказывалось на экране
+     * дважды. Обнуляется в начале отрисовки вместе с {@link #pendingTooltip}.
+     */
+    private boolean tooltipShown;
+
     public CityMapPanel(
             BlockPos pylonPos,
             ResourceLocation dimensionId,
-            int territorySize,
             List<CityProjectSnapshot> projects
     ) {
         this.pylonPos = pylonPos.immutable();
         this.dimensionId = dimensionId;
-        this.territorySize = territorySize;
         this.projects = List.copyOf(projects);
         centerOnPylon();
     }
@@ -183,8 +318,56 @@ public final class CityMapPanel {
         this.projects = List.copyOf(projects);
     }
 
-    public void setTerritorySize(int territorySize) {
-        this.territorySize = territorySize;
+    /**
+     * Разрешает или запрещает правый клик по карте как запрос на участок.
+     *
+     * <p>Слушатель ставится только пока City Pylon — верхний экран:
+     * вложенные экраны (Атлас мира, Управление) используют ту же панель
+     * и не должны предлагать claim от имени города.
+     */
+    public void setPlotClaimRequest(java.util.function.LongConsumer request) {
+        if (this.plotClaimRequest == request) {
+            return;
+        }
+        this.plotClaimRequest = request;
+        // Право меняется по тику, а снимок приходит отдельным пакетом: без
+        // пересчёта фронтир остался бы от предыдущего права и предлагал
+        // участок, который сервер уже не примет.
+        rebuildClaimableFrontier();
+    }
+
+    /** Участки, доступные для расширения прямо сейчас. Пусто, если claim недоступен. */
+    public List<CityPlot> claimableFrontier() {
+        return this.claimableFrontier;
+    }
+
+    /** Собственный город по последнему снимку, или {@code null}. */
+    private CityMapPeersPayload.Peer ownPeer() {
+        for (CityMapPeersPayload.Peer peer : this.peers) {
+            if (peer.own()) {
+                return peer;
+            }
+        }
+        return null;
+    }
+
+    /** Пришёл ли хоть один снимок. Отличить «ещё не пришёл» от «город без участков». */
+    public boolean hasTerritorySnapshot() {
+        return !this.peers.isEmpty();
+    }
+
+    /** Участков в последнем снимке для проверки вручную и в headless-проверках. */
+    public int receivedPlotCount() {
+        int total = 0;
+        for (CityMapPeersPayload.Peer peer : this.peers) {
+            total += peer.plots().size();
+        }
+        return total;
+    }
+
+    /** Участок под курсором в последнем отрисованном кадре. */
+    public CityPlot hoveredPlot() {
+        return this.hoveredPlot;
     }
 
     /**
@@ -194,7 +377,115 @@ public final class CityMapPanel {
      * отрисовки нет ни аллокаций, ни работы со словарём.
      */
     public void receivePeers(List<CityMapPeersPayload.Peer> peers) {
-        this.peers = List.copyOf(peers);
+        this.territoryPeers = List.copyOf(peers);
+        this.peers = CityMapCities.merge(peers, publicCities, publicDirectoryActive);
+        if (selection != null && selection.kind() == SelectionKind.CITY && selection.id() != null) {
+            var selectedPeer = this.peers.stream().filter(peer -> peer.cityId().equals(selection.id())).findFirst().orElse(null);
+            selection = selectedPeer == null ? null : peerSelection(selectedPeer);
+        }
+        rebuildClaimableFrontier();
+        /*
+         * Диагностика, а не отладка: «город без территорий» и «снимок не
+         * пришёл» выглядят на карте одинаково, и без этой строки в логе
+         * невозможно понять, какой из двух случаев перед нами. Строка
+         * печатается только при смене числа участков, то есть не каждый
+         * кадр.
+         */
+        int plots = receivedPlotCount();
+        if (plots != this.lastReportedPlotCount) {
+            this.lastReportedPlotCount = plots;
+            LOGGER.info(
+                    "City map snapshot: {} cities, {} plots, own={}, claimable={}",
+                    this.peers.size(), plots, ownPeer() != null, this.claimableFrontier.size());
+        }
+    }
+
+    /**
+     * Диагностика состояния claim: вызывается из обработчика ПКМ.
+     *
+     * <p>Каждый отказ должен быть виден в логе с причиной. «ПКМ не работает»
+     * без лога невозможно отличить от «нечего брать», «нет права» и «снимок не
+     * пришёл» — а это четыре разные ошибки.
+     */
+    private void logClaimAttempt(CityPlot plot, boolean claimable, boolean accepted) {
+        if (accepted || !TERRITORY_DIAGNOSTICS) {
+            return;
+        }
+        LOGGER.info(
+                "City plot claim rejected: plot=({},{}) claimable={} listener={} cities={} own={} plots={} frontier={} zoom={}",
+                plot == null ? null : plot.plotX(),
+                plot == null ? null : plot.plotZ(),
+                claimable,
+                this.plotClaimRequest != null,
+                this.peers.size(),
+                ownPeer() != null,
+                receivedPlotCount(),
+                this.claimableFrontier.size(),
+                String.format(java.util.Locale.ROOT, "%.2f", this.zoom));
+    }
+
+    /**
+     * Диагностика включается системным свойством и по умолчанию выключена:
+     * лог нужен при разборе, а не каждому игроку на production-сервере.
+     */
+    private static final boolean TERRITORY_DIAGNOSTICS =
+            Boolean.getBoolean("ccec.territory.diagnostics") || System.getenv("CCEC_TERRITORY_DIAG") != null;
+
+    private static final org.slf4j.Logger LOGGER =
+            com.mojang.logging.LogUtils.getLogger();
+    private int lastReportedPlotCount = -1;
+
+    /**
+     * Пересчитывает набор участков, доступных для расширения.
+     *
+     * <p>Берётся ровно тот же предикат, что и у сервера — свободен и смежен по стороне — поэтому
+     * подсветка не может предложить то, что сервер затем отклонит. Расходиться может только
+     * ситуация «свободен, но занят между двумя кадрами», и это честно: подсветка — подсказка,
+     * а решение принимает сервер.
+     *
+     * <p>Обход ограничен территорией города и её ближайшим кольцом, а не всей картой: у каждого
+     * занятого участка всего четыре соседа, поэтому работа линейна от размера территории.
+     */
+    private void rebuildClaimableFrontier() {
+        CityMapPeersPayload.Peer own = ownPeer();
+        if (own == null || this.plotClaimRequest == null) {
+            /*
+             * Фронтир рисуется только когда claim действительно доступен.
+             * Иначе это обещание, которое сервер не выполнит.
+             */
+            this.claimableFrontier = List.of();
+            this.claimableLookup = Set.of();
+            return;
+        }
+        Set<CityPlot> owned = own.plots();
+        Set<CityPlot> blocked = new java.util.HashSet<>();
+        for (CityPlot neighbour : owned) {
+            for (CityPlot adjacent : neighbour.neighbours()) {
+                if (!owned.contains(adjacent)) {
+                    blocked.add(adjacent);
+                }
+            }
+        }
+        /*
+         * Участок занят чужим городом — он не в blocked, потому что
+         * blocked строится только из своей территории. Такие участки
+         * убираются через снимок соседей: участок без владельца и без
+         * смежности со своей землёй заявлен быть не может.
+         */
+        Set<CityPlot> occupiedByPeers = new java.util.HashSet<>();
+        for (CityMapPeersPayload.Peer peer : this.peers) {
+            if (!peer.own()) {
+                occupiedByPeers.addAll(peer.plots());
+            }
+        }
+        blocked.removeAll(occupiedByPeers);
+
+        List<CityPlot> frontier = new ArrayList<>(blocked.size());
+        for (CityPlot candidate : blocked) {
+            frontier.add(candidate);
+        }
+        this.claimableFrontier = List.copyOf(frontier);
+        this.claimableLookup = Set.copyOf(frontier);
     }
 
     public void setDrawInternalControls(boolean drawInternalControls) {
@@ -320,10 +611,10 @@ public final class CityMapPanel {
 
     public List<Selection> search(String rawQuery) {
         String query = rawQuery == null ? "" : rawQuery.trim().toLowerCase(Locale.ROOT);
-        if (query.isEmpty()) return List.of();
+
         List<Selection> matches = new ArrayList<>();
-        for (CityMapPeersPayload.Peer peer : this.peers) {
-            if (peer.name().toLowerCase(Locale.ROOT).contains(query)) matches.add(peerSelection(peer));
+        for (CityMapPeersPayload.Peer peer : CityMapCities.matching(this.peers, query)) {
+            matches.add(peerSelection(peer));
         }
         for (RailwayStationSnapshot station : this.railwayStations) {
             if (station.dimension().equals(this.dimensionId)
@@ -348,7 +639,25 @@ public final class CityMapPanel {
                     && name.getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(infrastructureSelection(value));
         }
         for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId)&&point.name.toLowerCase(Locale.ROOT).contains(query))matches.add(freightSelection(point));
-        return matches.size() <= 6 ? List.copyOf(matches) : List.copyOf(matches.subList(0, 6));
+        for (var section : this.railwaySections) {
+            Selection value = sectionSelection(section);
+            if (!section.segments().isEmpty() && value.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(value);
+        }
+        for (var route : this.railwayRoutes) {
+            Selection value = routeSelection(route);
+            if (!route.segments().isEmpty() && value.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(value);
+        }
+        for (var candidate : this.freightCandidates) {
+            Selection value = discoverySelection(candidate);
+            if (value.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(value);
+        }
+        for (int index = 0; index < this.personalPins.size(); index++) {
+            Selection pin = pinSelection(index);
+            if (pin.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(pin);
+        }
+        matches.sort(Comparator.comparing((Selection value) -> value.title().getString().toLowerCase(Locale.ROOT))
+                .thenComparing(value -> value.kind().name()).thenComparingLong(value -> value.pos().asLong()));
+        return List.copyOf(matches);
     }
 
     public void centerOn(BlockPos pos) {
@@ -442,9 +751,14 @@ public final class CityMapPanel {
         this.layerButtonsY = y + 4;
         layoutMarkers();
         updateHover(insideViewport(mouseX, mouseY) ? findSelection(mouseX, mouseY) : null);
+        this.hoveredPlot = plotAtScreen(mouseX, mouseY);
+        this.hoveredPlotClaimable = canRequestPlot(this.hoveredPlot);
+        // Флаг сбрасывается здесь, а не в конце отрисовки: слои идут после
+        // этой точки, и именно они наводят подсказку.
+        this.tooltipShown = false;
 
         guiGraphics.fill(x - 1, y - 1, x + width + 1, y + viewportHeight + 1, FRAME_COLOR);
-        guiGraphics.fill(x, y, x + width, y + viewportHeight, 0xFF101719);
+        guiGraphics.fill(x, y, x + width, y + viewportHeight, MapPalette.PAPER);
 
         requestVisibleTiles();
 
@@ -470,13 +784,20 @@ public final class CityMapPanel {
                 } else if (this.focus == Focus.ENERGY) {
                     guiGraphics.fill(x, y, x + width, y + this.viewportHeight, 0x32101618);
                 }
-                renderGrid(guiGraphics);
+                if (this.showCoordinateGrid) renderGrid(guiGraphics);
+                renderSnapshotNotice(guiGraphics);
+                if (this.showTerritory && this.showCoordinateGrid && this.plotClaimRequest != null) renderPlotGrid(guiGraphics);
                 // Соседи рисуются ДО своей территории: собственный город
                 // остаётся главным акцентом, чужие — фоном.
-                if (this.showTerritory || this.showCities) renderPeers(guiGraphics);
-                if (this.showTerritory) renderTerritory(guiGraphics);
+                if (this.showTerritory || this.showCities) renderPeers(guiGraphics, mouseX, mouseY);
+                if (this.showTerritory) {
+                    renderTerritory(guiGraphics);
+                    renderClaimHint(guiGraphics);
+                }
+                renderCityTooltips(guiGraphics, mouseX, mouseY);
                 renderRailway(guiGraphics, mouseX, mouseY);
                 renderMarkers(guiGraphics, mouseX, mouseY);
+                renderPersonalTools(guiGraphics);
             });
         } finally {
             guiGraphics.disableScissor();
@@ -487,16 +808,48 @@ public final class CityMapPanel {
         }
 
         /*
+         * Приборная обвязка рисуется после снятия scissor: её
+         * элементы лежат на полях вьюпорта и не должны обрезаться
+         * по его границе. Геометрия считается здесь же, поэтому
+         * экран-атлас может поднять легенду, зная её размер.
+         */
+        this.chromeGeometry = CityMapFrame.Geometry.of(
+                x,
+                y,
+                viewportWidth,
+                viewportHeight,
+                this.chromeAvoidRight,
+                frameLegendEntries().size()
+        );
+        CityMapFrame.render(
+                guiGraphics,
+                this.chromeGeometry,
+                frameContext(), this.drawInternalControls, this.drawInternalControls || this.showOverview
+        );
+
+        /*
          * Подсказки рисуются после снятия scissor:
          * их не режет область карты и они всегда поверх карты.
+         *
+         * <p>Раньше они рисовались только вместе с внутренними элементами
+         * управления. Но атлас отключает их (у него своя панель), и вместе с
+         * ними пропадали все подсказки: наведение на чужой город не давало
+         * ничего. Подсказка — часть карты, а не её приборной панели, поэтому
+         * она рисуется всегда.
          */
-        if (this.drawInternalControls && this.pendingTooltip != null) {
+        if (this.pendingTooltip != null) {
             Component[] lines = this.pendingTooltip;
             this.pendingTooltip = null;
             renderClampedTooltip(guiGraphics, lines);
         } else {
             this.pendingTooltip = null;
         }
+
+        /*
+         * Подтверждение claim рисуется последним: оно поверх подсказки,
+         * иначе подсказка перекрывала бы кнопки.
+         */
+        renderClaimOverlay(guiGraphics, mouseX, mouseY);
     }
 
     public boolean receive(CityMapTilePayload payload) {
@@ -507,8 +860,11 @@ public final class CityMapPanel {
 
         TileKey key = new TileKey(payload.dimensionId(), payload.tileX(), payload.tileZ());
         this.requestedTiles.remove(key);
+        this.failedTiles.remove(key);
+        this.tileAttempts.remove(key);
         this.tileCache.put(key, new CachedTile(
                 payload.colors(),
+                payload.contours(),
                 payload.complete(),
                 System.currentTimeMillis()
         ));
@@ -523,8 +879,60 @@ public final class CityMapPanel {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        /*
+         * Подтверждение claim владеет кликами, пока открыто: карта под ним
+         * не панорамируется и не выбирает объекты, иначе подтверждение
+         * можно было бы случайно отменить перетаскиванием.
+         */
+        if (this.pendingClaim != null) {
+            return handleClaimOverlayClick(mouseX, mouseY, button);
+        }
+        if (button == 1) {
+            /*
+             * Правая кнопка на карте — это запрос участка, а не панорама.
+             *
+             * <p>Запрос открывает подтверждение ВНУТРИ карты: игрок видит
+             * участок и соседнюю территорию, пока решает. Раньше
+             * открывался отдельный экран поверх всей игры, и участок на
+             * карте переставал быть виден.
+             *
+             * <p>Ограничения проверяются на клике, но окончательное
+             * решение принимает сервер.
+             */
+            if (!insideViewport(mouseX, mouseY)) {
+                LOGGER.info("City plot claim ignored: click outside the map viewport");
+                return false;
+            }
+            CityPlot plot = plotAtScreen(mouseX, mouseY);
+            boolean claimable = canRequestPlot(plot);
+            if (this.plotClaimRequest == null || plot == null || !claimable) {
+                logClaimAttempt(plot, claimable, false);
+                return false;
+            }
+            setPendingClaim(plot);
+            return true;
+        }
         if (button != 0) {
             return false;
+        }
+        if (insideViewport(mouseX, mouseY) && (this.placingPin || this.measuring)) {
+            BlockPos point = BlockPos.containing(screenToWorldX(mouseX), 0, screenToWorldZ(mouseY));
+            if (this.placingPin) {
+                if (this.personalPins.size() < AtlasPreferences.MAX_PINS) {
+                    this.personalPins.add(new AtlasPreferences.Pin(point.getX(), point.getZ()));
+                    setSelection(pinSelection(this.personalPins.size() - 1));
+                }
+                this.placingPin = false;
+            } else if (this.measureStart == null || this.measureEnd != null) {
+                this.measureStart = point;
+                this.measureEnd = null;
+            } else this.measureEnd = point;
+            return true;
+        }
+        for (int index = 0; insideViewport(mouseX, mouseY) && index < this.personalPins.size(); index++) {
+            Selection pin = pinSelection(index);
+            if (inside(mouseX, mouseY, worldToScreenX(pin.pos().getX()) - 8,
+                    worldToScreenY(pin.pos().getZ()) - 8, 16, 16)) { setSelection(pin); return true; }
         }
         Selection hit = findSelection(mouseX, mouseY);
         if (hit != null) {
@@ -570,62 +978,73 @@ public final class CityMapPanel {
             ScreenPoint point = markerPoint(player.kind(), player.id(), player.pos());
             if (inside(mouseX, mouseY, point.x() - 13, point.y() - 13, 26, 26)) return player;
         }
-        if (this.showTradeInfrastructure && this.zoom >= CLOSE_DETAIL_ZOOM) for (EconomyStatePayload.InfrastructureView value : this.economyInfrastructure) {
+        if (this.showTradeInfrastructure && this.zoom >= MIN_ZOOM) for (EconomyStatePayload.InfrastructureView value : this.economyInfrastructure) {
             if (!value.cityOwned() || !this.dimensionId.equals(value.dimension())) continue;
             Selection candidate = infrastructureSelection(value);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
-        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightPoint point:this.freightPoints){if(point.dimension.equals(this.dimensionId)){Selection candidate=freightSelection(point);ScreenPoint marker=markerPoint(candidate.kind(),candidate.id(),candidate.pos());if(inside(mouseX,mouseY,marker.x()-11,marker.y()-11,22,22))return candidate;}}
-        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightCandidate value:this.freightCandidates){int x=worldToScreenX(value.postbox.getX()+.5),y=worldToScreenY(value.postbox.getZ()+.5);if(inside(mouseX,mouseY,x-8,y-9,16,18))return discoverySelection(value);}
-        if (this.showTrains && this.zoom >= CLOSE_DETAIL_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint point:this.freightPoints){if(point.dimension.equals(this.dimensionId)){Selection candidate=freightSelection(point);ScreenPoint marker=markerPoint(candidate.kind(),candidate.id(),candidate.pos());if(inside(mouseX,mouseY,marker.x()-11,marker.y()-11,22,22))return candidate;}}
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate value:this.freightCandidates){int x=worldToScreenX(value.postbox.getX()+.5),y=worldToScreenY(value.postbox.getZ()+.5);if(inside(mouseX,mouseY,x-8,y-9,16,18))return discoverySelection(value);}
+        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
             if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
             Selection candidate = trainSelection(train);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
-        if (this.showTrains && this.zoom >= CLOSE_DETAIL_ZOOM) for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
+        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
             if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
             Selection candidate = unregisteredTrainSelection(train);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
-        if (this.showStations && this.zoom >= MEDIUM_DETAIL_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
+        if (this.showStations && this.zoom >= MIN_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
             if (!station.dimension().equals(this.dimensionId)) continue;
             Selection candidate = stationSelection(station);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
-        if (this.showProjects && this.zoom >= CLOSE_DETAIL_ZOOM) for (CityProjectSnapshot project : this.projects) {
+        if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : this.projects) {
             if (!this.dimensionId.equals(project.dimensionId())) continue;
             Selection candidate = projectSelection(project);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
         if (this.showCities) for (CityMapPeersPayload.Peer peer : this.peers) {
-            if (peer.own()) continue;
+            if (atAnchor(peer)) continue;
             Selection candidate = peerSelection(peer);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
         }
         ScreenPoint ownPoint = markerPoint(SelectionKind.CITY, null, this.pylonPos);
-        if (this.showCities && inside(mouseX, mouseY, ownPoint.x() - 11, ownPoint.y() - 11, 22, 22)) {
+        if (this.showCities && hasCityAnchor() && inside(mouseX, mouseY, ownPoint.x() - 11, ownPoint.y() - 11, 22, 22)) {
+            for (var peer : this.peers) if (atAnchor(peer)) return peerSelection(peer);
+            if (ownPeer() != null) return peerSelection(ownPeer());
             return new Selection(SelectionKind.CITY, null,
                     Component.translatable("gui.createcityexpansioncore.map.city_pylon"), this.pylonPos, true,
-                    List.of(Component.translatable("gui.createcityexpansioncore.world_map.context.territory",
-                            this.territorySize)), this.cityIcon, false);
+                    List.of(ownTerritoryDetails()), this.cityIcon, false);
         }
         return null;
+    }
+
+    /** Карточка своего города: участки и их площадь вместо старого размера квадрата. */
+    private Component ownTerritoryDetails() {
+        CityMapPeersPayload.Peer own = ownPeer();
+        if (own == null) {
+            return Component.translatable("gui.createcityexpansioncore.world_map.context.plots", 0);
+        }
+        return Component.translatable("gui.createcityexpansioncore.world_map.context.plots",
+                own.plots().size());
     }
 
     /** Repositions only screen markers. Their world positions and all map data remain untouched. */
     private void layoutMarkers() {
         List<MarkerEntry> entries = new ArrayList<>();
         if (this.showCities) {
-            addMarker(entries, SelectionKind.CITY, null, this.pylonPos,
+            if (hasCityAnchor()) addMarker(entries, SelectionKind.CITY, null, this.pylonPos,
                     this.pylonPos.getX() + 0.5, this.pylonPos.getZ() + 0.5, 80);
             for (CityMapPeersPayload.Peer peer : this.peers) {
-                if (!peer.own()) addMarker(entries, SelectionKind.CITY, peer.cityId(),
+                if (!atAnchor(peer)) addMarker(entries, SelectionKind.CITY, peer.cityId(),
                         new BlockPos(peer.pylonX(), this.pylonPos.getY(), peer.pylonZ()),
                         peer.pylonX() + 0.5, peer.pylonZ() + 0.5, 80);
             }
@@ -633,12 +1052,12 @@ public final class CityMapPanel {
         Selection player = playerSelection();
         if (player != null) addMarker(entries, player.kind(), player.id(), player.pos(),
                 player.pos().getX() + 0.5, player.pos().getZ() + 0.5, 75);
-        if (this.showStations && this.zoom >= MEDIUM_DETAIL_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
+        if (this.showStations && this.zoom >= MIN_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
             if (station.dimension().equals(this.dimensionId)) addMarker(entries, SelectionKind.STATION,
                     station.registrationId(), station.pos(), station.pos().getX() + 0.5,
                     station.pos().getZ() + 0.5, 70);
         }
-        if (this.showTrains && this.zoom >= CLOSE_DETAIL_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
+        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
             if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
             TrainPosition previous = this.previousTrainPositions.get(train.fleetTrainId());
             double progress = Math.min(1.0,
@@ -650,24 +1069,24 @@ public final class CityMapPanel {
             addMarker(entries, SelectionKind.TRAIN, train.fleetTrainId(),
                     BlockPos.containing(train.x(), 0, train.z()), x, z, 40);
         }
-        if (this.showTrains && this.zoom >= CLOSE_DETAIL_ZOOM) for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
+        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
             if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
             addMarker(entries, SelectionKind.TRAIN_UNREGISTERED, train.createTrainId(),
                     BlockPos.containing(train.x(), 0, train.z()), train.x(), train.z(), 41);
         }
-        if (this.showProjects && this.zoom >= CLOSE_DETAIL_ZOOM) for (CityProjectSnapshot project : this.projects) {
+        if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : this.projects) {
             if (this.dimensionId.equals(project.dimensionId())) addMarker(entries, SelectionKind.INDUSTRY,
                     project.projectId(), project.controllerPos(), project.controllerPos().getX() + 0.5,
                     project.controllerPos().getZ() + 0.5, 50);
         }
-        if (this.showTradeInfrastructure && this.zoom >= CLOSE_DETAIL_ZOOM) {
+        if (this.showTradeInfrastructure && this.zoom >= MIN_ZOOM) {
             for (EconomyStatePayload.InfrastructureView value : this.economyInfrastructure) {
                 if (value.cityOwned() && this.dimensionId.equals(value.dimension())) addMarker(entries,
                         SelectionKind.TRADE_INFRASTRUCTURE, value.id(), value.pos(),
                         value.pos().getX() + 0.5, value.pos().getZ() + 0.5, 60);
             }
         }
-        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId))addMarker(entries,SelectionKind.FREIGHT_POINT,point.id,point.postbox,point.postbox.getX()+.5,point.postbox.getZ()+.5,65);
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId))addMarker(entries,SelectionKind.FREIGHT_POINT,point.id,point.postbox,point.postbox.getX()+.5,point.postbox.getZ()+.5,65);
 
         entries.sort(Comparator.comparingInt(MarkerEntry::priority).reversed()
                 .thenComparingInt(entry -> entry.key().kind().ordinal())
@@ -801,7 +1220,7 @@ public final class CityMapPanel {
                 if (!texture.matches(stride)) {
                     if (budget > 0) {
                         budget--;
-                        texture.build(tile.colors(), stride);
+                        texture.build(tile.colors(), tile.contours(), stride);
                     } else if (texture.id() == null) {
                         // Nothing to draw yet and no budget left this frame: skip rather than blit an
                         // unbuilt texture. A tile whose texture exists is still drawn at its previous
@@ -905,9 +1324,12 @@ public final class CityMapPanel {
         int right = worldToScreenX(originX + CityMapTilePayload.WORLD_SIZE);
         int bottom = worldToScreenY(originZ + CityMapTilePayload.WORLD_SIZE);
         int parity = (key.tileX() + key.tileZ()) & 1;
-        int color = requested
-                ? (parity == 0 ? 0xFF182529 : 0xFF152125)
-                : (parity == 0 ? 0xFF131A1C : 0xFF101719);
+        /*
+         * Незаведённый тайл — это бумага, а не пустота: по нему
+         * видно, что «сюда ещё не смотрели», и он не спорит с
+         * линиями, которые на нём нарисованы.
+         */
+        int color = MapSurveyTransform.unexploredPaper(parity);
         guiGraphics.fill(left, top, right, bottom, color);
     }
 
@@ -921,11 +1343,11 @@ public final class CityMapPanel {
 
         for (int worldX = firstX; worldX <= maxWorldX; worldX += 32) {
             int screenX = worldToScreenX(worldX);
-            guiGraphics.vLine(screenX, viewportY, viewportY + viewportHeight, 0x243F565D);
+            guiGraphics.vLine(screenX, viewportY, viewportY + viewportHeight, MapPalette.INK_GRID);
         }
         for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += 32) {
             int screenY = worldToScreenY(worldZ);
-            guiGraphics.hLine(viewportX, viewportX + viewportWidth, screenY, 0x243F565D);
+            guiGraphics.hLine(viewportX, viewportX + viewportWidth, screenY, MapPalette.INK_GRID);
         }
     }
 
@@ -941,7 +1363,7 @@ public final class CityMapPanel {
      * сервером по дистанции, поэтому ни обхода мира, ни выборки
      * чанков в цикле кадра не происходит.
      */
-    private void renderPeers(GuiGraphics guiGraphics) {
+    private void renderPeers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         if (this.showRelations) for (CityMapPeersPayload.Peer peer : this.peers) {
             CityRelationSnapshot.Status status = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
             if (status == CityRelationSnapshot.Status.NONE || peer.own()) continue;
@@ -952,7 +1374,7 @@ public final class CityMapPanel {
         }
         for (CityMapPeersPayload.Peer peer : this.peers) {
             // Свой город рисуется отдельно и ярче.
-            if (peer.own()) {
+            if (atAnchor(peer)) {
                 continue;
             }
 
@@ -974,30 +1396,30 @@ public final class CityMapPanel {
                 continue;
             }
 
-            double half = peer.territorySize() / 2.0;
-            int left = worldToScreenX(peer.pylonX() - half);
-            int top = worldToScreenY(peer.pylonZ() - half);
-            int right = worldToScreenX(peer.pylonX() + half);
-            int bottom = worldToScreenY(peer.pylonZ() + half);
-
-            // Территория рисуется, только если хоть часть её в кадре.
-            if (this.showTerritory && right >= viewportX
-                    && left <= viewportX + viewportW
-                    && bottom >= viewportY
-                    && top <= viewportY + viewportH) {
-                guiGraphics.fill(left, top, right, bottom, PEER_TERRITORY_FILL);
-                guiGraphics.hLine(left, right, top, PEER_TERRITORY_BORDER);
-                guiGraphics.hLine(left, right, bottom, PEER_TERRITORY_BORDER);
-                guiGraphics.vLine(left, top, bottom, PEER_TERRITORY_BORDER);
-                guiGraphics.vLine(right, top, bottom, PEER_TERRITORY_BORDER);
+            /*
+             * Территория рисуется по реальным участкам 50×50 в
+             * собственном цвете города. Раньше здесь был квадрат
+             * вокруг пилона серого цвета, и одинаковый серый для всех
+             * чужих городов делал соседние территории неразличимыми.
+             */
+            if (this.showTerritory) {
+                renderClaims(guiGraphics, peer, PEER_FILL_ALPHA, false);
             }
 
             if (!this.showCities) continue;
             drawMarkerLeader(guiGraphics, markerX, markerY,
                     worldToScreenX(peer.pylonX() + 0.5), worldToScreenY(peer.pylonZ() + 0.5));
-            MapMarkerRenderer.render(guiGraphics, markerX, markerY, this.cityIcon, peer.own(), peer.master(),
+            MapMarkerRenderer.renderMap(guiGraphics, this.zoom, markerX, markerY, this.cityIcon, peer.own(), false,
                     matchesTargetAt(this.hoveredSelection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()),
                     matchesTargetAt(this.selection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()));
+            /*
+             * Подсказка с фактами о городе — как при наведении очками Create.
+             * Без неё наведение на чужой город давало только квадрат вокруг
+             * маркера: ни названия, ни размера территории.
+             */
+            if (inside(mouseX, mouseY, markerX - 11, markerY - 11, 22, 22)) {
+                deferCityTooltip(mouseX, mouseY, peer);
+            }
             CityRelationSnapshot.Status relation = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
             if (relation != CityRelationSnapshot.Status.NONE) guiGraphics.renderOutline(markerX - 7, markerY - 7, 14, 14,
                     relation == CityRelationSnapshot.Status.PARTNER ? 0xFF65D8AF : relation == CityRelationSnapshot.Status.TRUSTED ? 0xFF79BBD8 : 0xFF9D8BC2);
@@ -1008,7 +1430,12 @@ public final class CityMapPanel {
             boolean emphasized = matchesTargetAt(this.hoveredSelection, SelectionKind.CITY,
                     peer.pylonX(), peer.pylonZ())
                     || matchesTargetAt(this.selection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ());
-            if (emphasized && name != null && !name.isEmpty()) {
+            /*
+             * Под подсказкой подпись не рисуется: она начинается с того же
+             * названия, и на экране оно оказывалось дважды — у маркера и в
+             * окошке в паре пикселей от него.
+             */
+            if (emphasized && !tooltipShown && name != null && !name.isEmpty()) {
                 int textX = markerX + 7;
                 int textY = markerY - 4;
                 var font = Minecraft.getInstance().font;
@@ -1037,37 +1464,555 @@ public final class CityMapPanel {
         }
     }
 
+    /**
+     * Показывает, что снимок территорий ещё не пришёл.
+     *
+     * <p>Без этой подсказки карта без территорий выглядит как «город пустой» и
+     * наведение отвечает красной рамкой на любом участке — то есть на отказ,
+     * который на самом деле означает «данных ещё нет». Подсказка отделяет
+     * «ещё загружается» от «нельзя», чтобы отказ был читаемым.
+     */
+    private void renderSnapshotNotice(GuiGraphics guiGraphics) {
+        if (this.peers.isEmpty() || !this.showTerritory) {
+            return;
+        }
+        /*
+         * Снимок без участков бывает у города без территории, и это не
+         * ошибка доставки — молчать нужно только когда не пришёл ни один
+         * город вовсе.
+         */
+        if (ownPeer() != null) {
+            return;
+        }
+        Component notice = Component.translatable("gui.createcityexpansioncore.map.territory_pending");
+        int width = Minecraft.getInstance().font.width(notice);
+        int x = this.viewportX + (this.viewportWidth - width) / 2;
+        int y = this.viewportY + 6;
+        guiGraphics.fill(x - 4, y - 2, x + width + 4, y + 11, 0xC0101719);
+        guiGraphics.drawString(Minecraft.getInstance().font, notice, x, y, 0xFFD09A3A, false);
+    }
+
+    /**
+     * Сетка участков 50×50.
+     *
+     * <p>Тонкие линии по границам мировой сетки участков: без них игрок
+     * не может мысленно выбрать участок, потому что заливка территории
+     * рисуется без внутренних границ. Как только участок на экране
+     * становится меньше {@link #MIN_PLOT_GRID_PX}, сетка исчезает: она
+     * нужна для выбора, а не для украшения, и на мелком масштабе только
+     * бы превращалась в муар.
+     */
+    private void renderPlotGrid(GuiGraphics guiGraphics) {
+        if (this.zoom * CityPlot.PLOT_SIZE < MIN_PLOT_GRID_PX) {
+            return;
+        }
+        double minWorldX = screenToWorldX(viewportX);
+        double maxWorldX = screenToWorldX(viewportX + viewportWidth);
+        double minWorldZ = screenToWorldZ(viewportY);
+        double maxWorldZ = screenToWorldZ(viewportY + viewportHeight);
+        int firstX = (int) Math.floor(minWorldX / CityPlot.PLOT_SIZE) * CityPlot.PLOT_SIZE;
+        int firstZ = (int) Math.floor(minWorldZ / CityPlot.PLOT_SIZE) * CityPlot.PLOT_SIZE;
+        for (int worldX = firstX; worldX <= maxWorldX; worldX += CityPlot.PLOT_SIZE) {
+            guiGraphics.vLine(worldToScreenX(worldX), viewportY, viewportY + viewportHeight, 0x1FFFFFFF);
+        }
+        for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += CityPlot.PLOT_SIZE) {
+            guiGraphics.hLine(viewportX, viewportX + viewportWidth, worldToScreenY(worldZ), 0x1FFFFFFF);
+        }
+    }
+
+    /**
+     * Подсветка участка под курсором, если его можно занять.
+     *
+     * <p>Это единственная обратная связь при выборе участка: игрок видит,
+     * какой именно участок 50×50 сейчас под мышью, до того как нажал
+     * правую кнопку. Проверки занятости и смежности всё равно делает
+     * сервер — здесь только визуальный отказ от обещания.
+     */
+    private void renderClaimHint(GuiGraphics guiGraphics) {
+        CityPlot plot = this.hoveredPlot;
+        if (plot == null) {
+            return;
+        }
+        int left = worldToScreenX(plot.minX());
+        int top = worldToScreenY(plot.minZ());
+        int right = worldToScreenX(plot.maxX() + 1);
+        int bottom = worldToScreenY(plot.maxZ() + 1);
+        if (right <= viewportX || left >= viewportX + viewportWidth
+                || bottom <= viewportY || top >= viewportY + viewportHeight) {
+            return;
+        }
+        boolean own = plotOwnedBy(plot, ownPeer());
+        int color = this.hoveredPlotClaimable
+                ? CLAIMABLE_HINT
+                : own ? 0x80FFFFFF : 0x60C86A62;
+        if (this.hoveredPlotClaimable) {
+            // Заливка только у активного участка: рамки фронтира уже
+            // показывают, где можно взять, лишняя заливка muddies карту.
+            guiGraphics.fill(left, top, right, bottom, 0x30E8C87A);
+        }
+        guiGraphics.renderOutline(left, top, right - left, bottom - top, color);
+    }
+
+    private static boolean plotOwnedBy(CityPlot plot, CityMapPeersPayload.Peer peer) {
+        return peer != null && peer.plots().contains(plot);
+    }
+
+    /** Участок под экранными координатами мыши. */
+    private CityPlot plotAtScreen(double mouseX, double mouseY) {
+        if (!insideViewport(mouseX, mouseY)) {
+            return null;
+        }
+        return CityPlot.at(this.dimensionId,
+                (int) Math.floor(screenToWorldX(mouseX)),
+                (int) Math.floor(screenToWorldZ(mouseY)));
+    }
+
+    /**
+     * Можно ли предложить claim этого участка.
+     *
+     * <p>Та же логика, что и на сервере, но только для показа подсказки:
+     * участок должен быть свободен и примыкать стороной к своей
+     * территории. Ответ сервера остаётся окончательным.
+     */
+    private boolean canRequestPlot(CityPlot plot) {
+        return plot != null && this.claimableLookup.contains(plot);
+    }
+
+    /**
+     * Геометрия подтверждения claim.
+     *
+     * <p>Ширина панели никогда не превышает вьюпорт, кнопки сжимаются вместе
+     * с ней, а текст переносится и обрезается под остаток. Все три условия
+     * нужны одновременно: перенос без ограничения ширины панели всё равно
+     * выпустил бы кнопки за экран на узком окне.
+     */
+    private void layoutClaimOverlay() {
+        Font font = Minecraft.getInstance().font;
+        /*
+         * Ширина никогда не превышает вьюпорт. Минимальная ширина — 140, но
+         * если вьюпорту уже меньше, берётся он: панель шире карты вышла бы
+         * за её пределы, а узкая панель — единственное, что помещается.
+         */
+        this.overlayW = Math.min(this.viewportWidth,
+                Math.max(140, Math.min(300, this.viewportWidth - 16)));
+        int innerWidth = Math.max(20, this.overlayW - 2 * OVERLAY_PADDING);
+
+        /*
+         * Бюджет строк по высоте. Без него на низком экране панель с
+         * заголовком, текстом и кнопками не поместилась бы по высоте и
+         * кнопки ушли бы за нижний край. Лишние строки обрезаются с
+         * многоточием, а не теряют кнопки.
+         */
+        int lineBudget = (this.viewportHeight - OVERLAY_MIN_CHROME_H) / font.lineHeight;
+        int maxLines = Math.max(1, Math.min(OVERLAY_MAX_LINES, lineBudget));
+
+        this.overlayTitle = CityMapTextLayout.truncateWithEllipsis(
+                Component.translatable("gui.createcityexpansioncore.city.plot.claim_title").getString(),
+                innerWidth, font::width);
+        this.overlayLines = CityMapTextLayout.fit(List.of(
+                Component.translatable("gui.createcityexpansioncore.city.plot.plot_label").getString()
+                        + "  " + pendingClaim.plotX() + " : " + pendingClaim.plotZ(),
+                Component.translatable("gui.createcityexpansioncore.city.plot.blocks_label").getString()
+                        + "  " + pendingClaim.minX() + "…" + pendingClaim.maxX()
+                        + "  /  " + pendingClaim.minZ() + "…" + pendingClaim.maxZ(),
+                /*
+                 * Правило примыкания показывается в подтверждении, а не только
+                 * в подсказке вкладки: игрок смотрит в это окно в момент
+                 * решения, и именно здесь «нужно стороной, по диагонали нельзя»
+                 * отвечает на вопрос «почему сервер отказал».
+                 */
+                Component.translatable("gui.createcityexpansioncore.city.plot.claim_note").getString()),
+                innerWidth, maxLines, font::width);
+
+        // Высота считается по уже обрезанным строкам, иначе панель была бы
+        // на отброшенные строки выше, чем её содержимое.
+        this.overlayH = Math.min(this.viewportHeight, OVERLAY_TITLE_H + 2
+                + this.overlayLines.size() * font.lineHeight
+                + OVERLAY_PADDING + BUTTON_H + OVERLAY_PADDING);
+
+        this.overlayX = this.viewportX + (this.viewportWidth - this.overlayW) / 2;
+        this.overlayY = this.viewportY + Math.max(0,
+                Math.min(OVERLAY_TOP_GAP, (this.viewportHeight - this.overlayH) / 2));
+
+        this.buttonW = Math.max(20, (innerWidth - OVERLAY_BUTTON_GAP) / 2);
+        this.confirmX = this.overlayX + OVERLAY_PADDING;
+        this.cancelX = this.confirmX + this.buttonW + OVERLAY_BUTTON_GAP;
+        this.confirmY = this.overlayY + this.overlayH - BUTTON_H - OVERLAY_PADDING;
+        this.cancelY = this.confirmY;
+    }
+
+    private static final int OVERLAY_PADDING = 10;
+    private static final int OVERLAY_TITLE_H = 16;
+    private static final int OVERLAY_BUTTON_GAP = 8;
+    private static final int BUTTON_H = 18;
+    private static final int OVERLAY_TOP_GAP = 8;
+
+    /**
+     * Высота панели без единой строки текста: заголовок, кнопки, отступы.
+     *
+     * <p>Вычитается из высоты вьюпорта, чтобы узнать, сколько строк вообще
+     * помещается.
+     */
+    private static final int OVERLAY_MIN_CHROME_H =
+            OVERLAY_TITLE_H + 2 + OVERLAY_PADDING + BUTTON_H + OVERLAY_PADDING;
+
+    /**
+     * Максимум строк в подтверждении до обрезки многоточием.
+     *
+     * <p>Четыре строки — это номер участка, диапазон блоков и правило
+     * примыкания. Больше не нужно, а лишние строки вытеснили бы кнопки за
+     * нижний край окна на невысоком экране.
+     */
+    private static final int OVERLAY_MAX_LINES = 4;
+
+    /** Подтверждение claim поверх карты. Ничего не отправляет сама. */
+    private void renderClaimOverlay(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        if (this.pendingClaim == null) {
+            return;
+        }
+        Font font = Minecraft.getInstance().font;
+        layoutClaimOverlay();
+
+        int x = this.overlayX;
+        int y = this.overlayY;
+        guiGraphics.fill(x - 2, y - 2,
+                x + this.overlayW + 2, y + this.overlayH + 2, 0xF0101719);
+        guiGraphics.renderOutline(x - 2, y - 2, this.overlayW + 4, this.overlayH + 4, ACCENT_COLOR);
+
+        guiGraphics.drawString(font, this.overlayTitle, x + OVERLAY_PADDING, y + 4, 0xFFFFD08A);
+
+        int textY = y + OVERLAY_TITLE_H + 2;
+        for (String line : this.overlayLines) {
+            guiGraphics.drawString(font, line, x + OVERLAY_PADDING, textY, 0xFFD1D5D6);
+            textY += font.lineHeight;
+        }
+
+        renderOverlayButton(guiGraphics, font, this.confirmX, this.confirmY, this.buttonW,
+                Component.translatable("gui.createcityexpansioncore.city.plot.claim_confirm"),
+                true, inside(mouseX, mouseY, this.confirmX, this.confirmY, this.buttonW, BUTTON_H));
+        renderOverlayButton(guiGraphics, font, this.cancelX, this.cancelY, this.buttonW,
+                Component.translatable("gui.createcityexpansioncore.common.cancel"),
+                false, inside(mouseX, mouseY, this.cancelX, this.cancelY, this.buttonW, BUTTON_H));
+    }
+
+    private static void renderOverlayButton(
+            GuiGraphics graphics, Font font, int x, int y, int width, Component label,
+            boolean primary, boolean hovered
+    ) {
+        graphics.fill(x, y, x + width, y + BUTTON_H,
+                hovered ? 0xFF4A3A20 : primary ? 0xFF3A2F18 : 0xFF252A2C);
+        graphics.renderOutline(x, y, width, BUTTON_H,
+                hovered ? ACCENT_COLOR : FRAME_COLOR);
+        graphics.drawCenteredString(font, label, x + width / 2, y + 5,
+                hovered ? 0xFFFFFFFF : primary ? 0xFFFFD08A : 0xFFD1D5D6);
+    }
+
+    /**
+     * Клик по подтверждению.
+     *
+     * <p>Клик мимо кнопок ничего не делает и не закрывает окно: случайное
+     * нажатие мимо не должно отменять намерение игрока. Отмена — только
+     * явной кнопкой или Escape.
+     */
+    private boolean handleClaimOverlayClick(double mouseX, double mouseY, int button) {
+        /*
+         * Геометрия обычно уже посчитана отрисовкой, но клик может прийти
+         * раньше первого кадра с подтверждением: правый щелчок и следующий
+         * левый попадают в один тик, когда окно ещё ни разу не рисовали.
+         * Без досчёта прямо здесь кнопки лежали бы в нуле и клик пропадал бы.
+         */
+        if (this.overlayLines.isEmpty()) {
+            layoutClaimOverlay();
+        }
+        if (button == 0) {
+            if (inside(mouseX, mouseY, this.confirmX, this.confirmY, this.buttonW, BUTTON_H)) {
+                confirmPendingClaim();
+                return true;
+            }
+            if (inside(mouseX, mouseY, this.cancelX, this.cancelY, this.buttonW, BUTTON_H)) {
+                setPendingClaim(null);
+                return true;
+            }
+            return true;
+        }
+        if (button == 1) {
+            // Правая кнопка отменяет: привычное «назад» правым щелчком.
+            setPendingClaim(null);
+            return true;
+        }
+        return true;
+    }
+
+    /**
+     * Подсказка при наведении на город: название, жители и территория.
+     *
+     * <p>В стиле очков Create: короткая карточка у курсора с фактами о
+     * объекте. Данные только визуальные — состав участников, роли и экономика
+     * чужих городов не отправляются.
+     */
+    private void deferCityTooltip(int mouseX, int mouseY, CityMapPeersPayload.Peer peer) {
+        Component title = Component.literal(peer.name());
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.translatable(
+                "gui.createcityexpansioncore.map.city_residents", peer.residents()));
+        lines.add(Component.translatable(
+                "gui.createcityexpansioncore.world_map.context.plots", peer.plots().size()));
+        if (peer.master()) {
+            lines.add(Component.translatable("gui.createcityexpansioncore.world_map.master_city"));
+        }
+        CityRelationSnapshot.Status relation =
+                this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
+        if (relation != CityRelationSnapshot.Status.NONE) {
+            lines.add(Component.translatable("gui.createcityexpansioncore.world_map.relation",
+                    Component.translatable("gui.createcityexpansioncore.relations.status."
+                            + relation.name().toLowerCase(Locale.ROOT))));
+        }
+        if (peer.own()) {
+            lines.add(Component.translatable("gui.createcityexpansioncore.map.city_own"));
+        }
+        deferTooltip(mouseX, mouseY, prepend(title, lines));
+    }
+
+    private static Component[] prepend(Component first, List<Component> rest) {
+        Component[] result = new Component[rest.size() + 1];
+        result[0] = first;
+        for (int index = 0; index < rest.size(); index++) {
+            result[index + 1] = rest.get(index);
+        }
+        return result;
+    }
+
     private void renderTerritory(GuiGraphics guiGraphics) {
-        double half = this.territorySize / 2.0;
-        int left = worldToScreenX(this.pylonPos.getX() - half);
-        int top = worldToScreenY(this.pylonPos.getZ() - half);
-        int right = worldToScreenX(this.pylonPos.getX() + half);
-        int bottom = worldToScreenY(this.pylonPos.getZ() + half);
-        guiGraphics.fill(left, top, right, bottom, TERRITORY_FILL);
-        guiGraphics.hLine(left, right, top, TERRITORY_BORDER);
-        guiGraphics.hLine(left, right, bottom, TERRITORY_BORDER);
-        guiGraphics.vLine(left, top, bottom, TERRITORY_BORDER);
-        guiGraphics.vLine(right, top, bottom, TERRITORY_BORDER);
+        CityMapPeersPayload.Peer own = ownPeer();
+        if (own == null) {
+            return;
+        }
+        renderClaimableFrontier(guiGraphics, own);
+        renderClaims(guiGraphics, own, OWN_FILL_ALPHA, true);
+    }
+
+    /**
+     * Подсказка города, на который наведён курсор.
+     *
+     * <p>Свой город проверяется здесь, а не в {@code renderPeers}: тот
+     * пропускает его намеренно — свой город рисуется отдельным, более ярким
+     * слоем. Без этой проверки наведение на собственный пилон на карте не
+     * давало ничего, хотя на чужие города подсказка появилась.
+     *
+     * <p>Подсказка не зависит от слоя территорий: слой можно выключить,
+     * а вопрос «сколько у меня участков» всё равно задаётся.
+     */
+    private void renderCityTooltips(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        if (!this.showCities) {
+            return;
+        }
+        ScreenPoint ownPoint = markerPoint(SelectionKind.CITY, null, this.pylonPos);
+        if (inside(mouseX, mouseY, ownPoint.x() - 11, ownPoint.y() - 11, 22, 22)) {
+            CityMapPeersPayload.Peer own = ownPeer();
+            if (own != null) {
+                deferOwnCityTooltip(mouseX, mouseY, own);
+            }
+        }
+    }
+
+    /**
+     * Подсказка своего города: тот же формат, что у чужих.
+     *
+     * <p>Формат общий, чтобы игрок не гадал, где смотреть: наведение на любой
+     * город даёт одну и ту же карточку, различается только пометка «ваш».
+     */
+    private void deferOwnCityTooltip(int mouseX, int mouseY, CityMapPeersPayload.Peer own) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.translatable("gui.createcityexpansioncore.map.city_residents", own.residents()));
+        lines.add(Component.translatable(
+                "gui.createcityexpansioncore.world_map.context.plots", own.plots().size()));
+        if (own.master()) {
+            lines.add(Component.translatable("gui.createcityexpansioncore.world_map.master_city"));
+        }
+        lines.add(Component.translatable("gui.createcityexpansioncore.map.city_own"));
+        deferTooltip(mouseX, mouseY, prepend(Component.literal(own.name()), lines));
+    }
+
+    /**
+     * Подсвечивает участки, которые можно занять следующим шагом.
+     *
+     * <p>Рисуется ДО заливки своей территории, иначе фронтир оказался бы под ней и пропал бы.
+     *
+     * <p>Это тонкая штриховая рамка без заливки: она читается как «здесь можно», но не
+     * конкурирует с заливкой уже принадлежащей земли. Диагональные углы не рисуются — фронтир
+     * повторяет ровно то смежное кольцо, которое сервер примет.
+     *
+     * <p>Внутренние стороны, обращённые к своей территории, не рисуются: иначе каждая заявленная
+     * земля была бы обведена со всех сторон и карта превращалась бы в сетку.
+     */
+    private void renderClaimableFrontier(GuiGraphics guiGraphics, CityMapPeersPayload.Peer own) {
+        if (this.claimableFrontier.isEmpty()) {
+            return;
+        }
+        /*
+         * На мелком масштабе рамка в несколько пикселей превращается в
+         * сплошную заливку и ничего не сообщает. Ниже порога фронтир не
+         * рисуется вовсе — это молчание полезнее шума.
+         */
+        if (this.zoom * CityPlot.PLOT_SIZE < MIN_PLOT_GRID_PX) {
+            return;
+        }
+        int color = CityColors.argb(CityColors.lift(own.colorRgb(), 150), 0xB0);
+        Set<CityPlot> owned = own.plots();
+
+        for (CityPlot plot : this.claimableFrontier) {
+            int left = worldToScreenX(plot.minX());
+            int top = worldToScreenY(plot.minZ());
+            int right = worldToScreenX(plot.maxX() + 1);
+            int bottom = worldToScreenY(plot.maxZ() + 1);
+            if (right <= viewportX || left >= viewportX + viewportWidth
+                    || bottom <= viewportY || top >= viewportY + viewportHeight) {
+                continue;
+            }
+            // Только внешние стороны: сторона, обращённая к своей
+            // территории, — это уже граница города, а не предложение.
+            if (!owned.contains(plot.offset(0, -1))) {
+                drawDashedLine(guiGraphics, left, top, right, top, color);
+            }
+            if (!owned.contains(plot.offset(0, 1))) {
+                drawDashedLine(guiGraphics, left, bottom, right, bottom, color);
+            }
+            if (!owned.contains(plot.offset(-1, 0))) {
+                drawDashedLine(guiGraphics, left, top, left, bottom, color);
+            }
+            if (!owned.contains(plot.offset(1, 0))) {
+                drawDashedLine(guiGraphics, right, top, right, bottom, color);
+            }
+        }
+    }
+
+    /**
+     * Пунктирная линия через равные промежутки.
+     *
+     * <p>Сплошная линия отличалась бы от контура территории только цветом
+     * и читалась бы как уже занятая земля. Пунктир говорит «ещё можно» без
+     * подписи, а стоит ровно столько же, сколько сплошная.
+     */
+    private static void drawDashedLine(
+            GuiGraphics graphics, int x0, int y0, int x1, int y1, int color
+    ) {
+        int length = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+        if (length == 0) {
+            return;
+        }
+        int stepX = Integer.signum(x1 - x0);
+        int stepY = Integer.signum(y1 - y0);
+        for (int offset = 0; offset < length; offset++) {
+            // Ровно половина сегмента нарисована: 4 px метка, 4 px пауза.
+            if (((offset >> 2) & 1) != 0) {
+                continue;
+            }
+            int x = x0 + stepX * offset;
+            int y = y0 + stepY * offset;
+            graphics.fill(x, y, x + 1, y + 1, color);
+        }
+    }
+
+    /**
+     * Рисует территорию города по его реальным участкам 50×50.
+     *
+     * <p>Сначала заливка каждого участка цветом города, затем внешний
+     * контур: ребро участка рисуется, только если соседний участок не
+     * занят этим же городом. Поэтому большая территория читается как
+     * одна земля с чёткой границей, а не как шахматная доска.
+     *
+     * <p>Каждый участок один {@code fill} и не более четырёх линий,
+     * а всё целиком отсекается вьюпортом: за кадром не рисуется
+     * ничего, и обход мировых данных в кадре не происходит.
+     */
+    private void renderClaims(
+            GuiGraphics guiGraphics,
+            CityMapPeersPayload.Peer peer,
+            int fillAlpha,
+            boolean emphasize
+    ) {
+        Set<CityPlot> owned = peer.plots();
+        if (owned.isEmpty()) {
+            return;
+        }
+
+        int border = CityColors.argb(CityColors.lift(peer.colorRgb(), emphasize ? 110 : 70),
+                emphasize ? 0xFF : 0xC0);
+        int fill = CityColors.argb(peer.colorRgb(), fillAlpha);
+
+        for (CityPlot plot : owned) {
+            int left = worldToScreenX(plot.minX());
+            int top = worldToScreenY(plot.minZ());
+            int right = worldToScreenX(plot.maxX() + 1);
+            int bottom = worldToScreenY(plot.maxZ() + 1);
+            if (right <= viewportX || left >= viewportX + viewportWidth
+                    || bottom <= viewportY || top >= viewportY + viewportHeight) {
+                continue;
+            }
+            guiGraphics.fill(left, top, right, bottom, fill);
+        }
+
+        /*
+         * Контур рисуется по линиям сетки, а не по каждому участку:
+         * линия вдоль границы сетки на всём видимом диапазоне дешевле
+         * и не оставляет швов на стыке соседних участков.
+         *
+         * Линия сетки рисуется, только если с одной из её сторон есть
+         * хотя бы один занятый участок, то есть она проходит по
+         * внешнему краю территории, а не по её середине. Внутренние
+         * границы между своими же участками не рисуются, поэтому
+         * большая территория не превращается в шахматную доску.
+         */
+        if (this.zoom * CityPlot.PLOT_SIZE < MIN_PLOT_GRID_PX) {
+            return;
+        }
+        Set<Integer> columns = new java.util.HashSet<>();
+        Set<Integer> rows = new java.util.HashSet<>();
+        for (CityPlot plot : owned) {
+            columns.add(plot.plotX());
+            rows.add(plot.plotZ());
+        }
+        double minWorldX = screenToWorldX(viewportX);
+        double maxWorldX = screenToWorldX(viewportX + viewportWidth);
+        double minWorldZ = screenToWorldZ(viewportY);
+        double maxWorldZ = screenToWorldZ(viewportY + viewportHeight);
+        int firstX = (int) Math.floor(minWorldX / CityPlot.PLOT_SIZE) * CityPlot.PLOT_SIZE;
+        int firstZ = (int) Math.floor(minWorldZ / CityPlot.PLOT_SIZE) * CityPlot.PLOT_SIZE;
+
+        for (int worldX = firstX; worldX <= maxWorldX; worldX += CityPlot.PLOT_SIZE) {
+            if (columns.contains(CityPlot.plotXOf(worldX))
+                    || columns.contains(CityPlot.plotXOf(worldX - 1))) {
+                guiGraphics.vLine(worldToScreenX(worldX), viewportY, viewportY + viewportHeight, border);
+            }
+        }
+        for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += CityPlot.PLOT_SIZE) {
+            if (rows.contains(CityPlot.plotZOf(worldZ))
+                    || rows.contains(CityPlot.plotZOf(worldZ - 1))) {
+                guiGraphics.hLine(viewportX, viewportX + viewportWidth, worldToScreenY(worldZ), border);
+            }
+        }
     }
 
     private void renderMarkers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        if (hasCityAnchor()) {
         ScreenPoint ownMarker = markerPoint(SelectionKind.CITY, null, this.pylonPos);
         int markerX = ownMarker.x();
         int markerY = ownMarker.y();
         drawMarkerLeader(guiGraphics, markerX, markerY,
                 worldToScreenX(this.pylonPos.getX() + 0.5), worldToScreenY(this.pylonPos.getZ() + 0.5));
-        if (this.showCities) MapMarkerRenderer.render(guiGraphics, markerX, markerY, this.cityIcon, true, false,
+        boolean ownedAnchor = this.peers.stream().anyMatch(peer -> atAnchor(peer) && peer.own());
+        if (this.showCities) MapMarkerRenderer.renderMap(guiGraphics, this.zoom, markerX, markerY, this.cityIcon, ownedAnchor, false,
                 matchesTarget(this.hoveredSelection, SelectionKind.CITY, null, this.pylonPos),
                 matchesTarget(this.selection, SelectionKind.CITY, null, this.pylonPos));
-        if (this.showCities && (matchesTarget(this.hoveredSelection, SelectionKind.CITY, null, this.pylonPos)
-                || matchesTarget(this.selection, SelectionKind.CITY, null, this.pylonPos))) guiGraphics.drawString(
+        if (this.showCities) guiGraphics.drawString(
                 Minecraft.getInstance().font,
-                Component.translatable("gui.createcityexpansioncore.map.city_pylon"),
+                this.peers.stream().filter(this::atAnchor).findFirst().map(peer -> Component.literal(peer.name())).orElse(Component.translatable("gui.createcityexpansioncore.map.city_pylon")),
                 markerX + 7,
                 markerY - 4,
                 0xFFF4D49A,
                 true
         );
+        }
 
         BlockPos playerPos = playerPos();
         if (playerPos != null) {
@@ -1082,7 +2027,7 @@ public final class CityMapPanel {
                     matchesTarget(this.selection, SelectionKind.PLAYER, playerId));
         }
 
-        if (this.showProjects && this.zoom >= CLOSE_DETAIL_ZOOM) for (CityProjectSnapshot project : projects) {
+        if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : projects) {
             if (!dimensionId.equals(project.dimensionId())) {
                 continue;
             }
@@ -1092,7 +2037,7 @@ public final class CityMapPanel {
             drawMarkerLeader(guiGraphics, projectX, projectY,
                     worldToScreenX(project.controllerPos().getX() + 0.5),
                     worldToScreenY(project.controllerPos().getZ() + 0.5));
-            MapMarkerRenderer.render(guiGraphics, projectX, projectY, this.mineIcon, true,
+            MapMarkerRenderer.renderMap(guiGraphics, this.zoom, projectX, projectY, this.mineIcon, true,
                     !"RUNNING".equals(project.status()),
                     matchesTarget(this.hoveredSelection, SelectionKind.INDUSTRY, project.projectId()),
                     matchesTarget(this.selection, SelectionKind.INDUSTRY, project.projectId()));
@@ -1110,7 +2055,7 @@ public final class CityMapPanel {
                                 project.controllerPos().getX(), project.controllerPos().getZ()));
             }
         }
-        if (this.showTradeInfrastructure && this.zoom >= CLOSE_DETAIL_ZOOM) for (EconomyStatePayload.InfrastructureView value : economyInfrastructure) {
+        if (this.showTradeInfrastructure && this.zoom >= MIN_ZOOM) for (EconomyStatePayload.InfrastructureView value : economyInfrastructure) {
             if (!value.cityOwned() || !dimensionId.equals(value.dimension())) continue;
             ScreenPoint point = markerPoint(SelectionKind.TRADE_INFRASTRUCTURE, value.id(), value.pos());
             int x = point.x(), y = point.y();
@@ -1118,7 +2063,7 @@ public final class CityMapPanel {
                     worldToScreenX(value.pos().getX() + .5), worldToScreenY(value.pos().getZ() + .5));
             ItemStack icon = value.type() == com.example.examplemod.economy.EconomyTypes.InfrastructureType.CONTRACT_INTAKE
                     ? this.contractIcon : this.warehouseIcon;
-            MapMarkerRenderer.render(guiGraphics, x, y, icon, value.cityOwned(), !value.available(),
+            MapMarkerRenderer.renderMap(guiGraphics, this.zoom, x, y, icon, value.cityOwned(), !value.available(),
                     matchesTarget(this.hoveredSelection, SelectionKind.TRADE_INFRASTRUCTURE, value.id()),
                     matchesTarget(this.selection, SelectionKind.TRADE_INFRASTRUCTURE, value.id()));
             if (inside(mouseX, mouseY, x - 11, y - 11, 22, 22)) deferTooltip(mouseX, mouseY,
@@ -1129,14 +2074,15 @@ public final class CityMapPanel {
                     Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",
                             value.pos().getX(), value.pos().getZ()));
         }
-        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.render(guiGraphics,point.x(),point.y(),this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.literal(freight.address),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
-        if(this.showTradeInfrastructure&&this.zoom>=MEDIUM_DETAIL_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=(int)(24+18*Math.sin(System.currentTimeMillis()/180.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.renderMap(guiGraphics, this.zoom,point.x(),point.y(),this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.literal(freight.address),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=(int)(24+18*Math.sin(System.currentTimeMillis()/180.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
     }
 
     private void deferTooltip(int mouseX, int mouseY, Component... lines) {
         this.pendingTooltip = lines;
         this.pendingTooltipX = mouseX;
         this.pendingTooltipY = mouseY;
+        this.tooltipShown = true;
     }
 
     private static void drawMarkerLeader(GuiGraphics graphics, int x, int y, int anchorX, int anchorY) {
@@ -1175,7 +2121,7 @@ public final class CityMapPanel {
             }
             if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawLine(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
         }
-        if (this.showStations && this.zoom >= MEDIUM_DETAIL_ZOOM) {
+        if (this.showStations && this.zoom >= MIN_ZOOM) {
             for (RailwayStationSnapshot station : this.railwayStations) {
                 if (!station.dimension().equals(this.dimensionId)) continue;
                 ScreenPoint point = markerPoint(SelectionKind.STATION, station.registrationId(), station.pos());
@@ -1183,7 +2129,7 @@ public final class CityMapPanel {
                 int y = point.y();
                 drawMarkerLeader(graphics, x, y,
                         worldToScreenX(station.pos().getX() + 0.5), worldToScreenY(station.pos().getZ() + 0.5));
-                MapMarkerRenderer.render(graphics, x, y, this.stationIcon, station.cityOwned(),
+                MapMarkerRenderer.renderMap(graphics, this.zoom, x, y, this.stationIcon, station.cityOwned(),
                         !station.available(),
                         matchesTarget(this.hoveredSelection, SelectionKind.STATION, station.registrationId()),
                         matchesTarget(this.selection, SelectionKind.STATION, station.registrationId()));
@@ -1202,7 +2148,7 @@ public final class CityMapPanel {
                 }
             }
         }
-        if (this.showTrains && this.zoom >= CLOSE_DETAIL_ZOOM) {
+        if (this.showTrains && this.zoom >= MIN_ZOOM) {
             double progress = Math.min(1.0,
                     Math.max(0.0, (System.currentTimeMillis() - this.railwaySnapshotAtMillis) / 1000.0));
             for (RailwayTrainSnapshot train : this.railwayTrains) {
@@ -1218,7 +2164,7 @@ public final class CityMapPanel {
                 int x = point.x();
                 int y = point.y();
                 drawMarkerLeader(graphics, x, y, worldToScreenX(xPos), worldToScreenY(zPos));
-                MapMarkerRenderer.render(graphics, x, y, this.trainIcon, train.cityOwned(),
+                MapMarkerRenderer.renderMap(graphics, this.zoom, x, y, this.trainIcon, train.cityOwned(),
                         train.automationSuspended(),
                         matchesTarget(this.hoveredSelection, SelectionKind.TRAIN, train.fleetTrainId()),
                         matchesTarget(this.selection, SelectionKind.TRAIN, train.fleetTrainId()));
@@ -1242,7 +2188,7 @@ public final class CityMapPanel {
                 int x = point.x();
                 int y = point.y();
                 drawMarkerLeader(graphics, x, y, worldToScreenX(train.x()), worldToScreenY(train.z()));
-                MapMarkerRenderer.render(graphics, x, y, this.trainIcon, false, true,
+                MapMarkerRenderer.renderMap(graphics, this.zoom, x, y, this.trainIcon, false, true,
                         matchesTarget(this.hoveredSelection, SelectionKind.TRAIN_UNREGISTERED, train.createTrainId()),
                         matchesTarget(this.selection, SelectionKind.TRAIN_UNREGISTERED, train.createTrainId()));
                 if (inside(mouseX, mouseY, x - 11, y - 11, 22, 22)) {
@@ -1296,39 +2242,61 @@ public final class CityMapPanel {
      * <p>
      * Вызывается уже после снятия scissor, поэтому её не режет
      * область карты и она гарантированно поверх остальных слоёв.
+     *
+     * <p><b>Текст переносится под ширину окна.</b> Раньше ширина бралась как
+     * «самая длинная строка», поэтому название города или станции длиннее
+     * карты расширяло подсказку за её пределы, и кламп по левому краю
+     * превращался в обрезку. Теперь содержимое сначала переносится и
+     * ограничивается по высоте, и только потом рисуется — так что подсказка
+     * всегда целиком внутри карты.
      */
     private void renderClampedTooltip(GuiGraphics graphics, Component[] lines) {
         Font font = Minecraft.getInstance().font;
-        int width = 0;
-        int visible = 0;
-        for (Component line : lines) {
-            if (line.getString().isEmpty()) continue;
-            width = Math.max(width, font.width(line));
-            visible++;
-        }
-        if (visible == 0) return;
-
-        int boxWidth = width + 8;
-        int boxHeight = visible * 11 + 6;
-        int left = this.pendingTooltipX + 8;
-        int top = this.pendingTooltipY + 8;
         /*
-         * Кламп по обеим осям: подсказка не вылезает за карту
-         * ни вправо, ни вниз, ни вверх у края экрана.
+         * Ширина и высота окна подсказки берутся от вьюпорта, а не только
+         * ограничиваются им. clampTo прижимает окно к левому краю, когда
+         * оно шире вьюпорта, и правый край уезжал за карту. Здесь ширина
+         * просто не может превысить вьюпорт, потому что текст под неё
+         * переносится.
          */
-        left = clampTo(left, boxWidth, viewportX, viewportX + viewportWidth);
-        top = clampTo(top, boxHeight, viewportY, viewportY + viewportHeight);
+        int contentWidth = Math.max(20, this.viewportWidth - 16 - TOOLTIP_PADDING * 2);
+
+        List<String> text = new ArrayList<>(lines.length);
+        for (Component line : lines) {
+            text.add(line.getString());
+        }
+        // Бюджет строк по высоте вьюпорта: подсказка не должна
+        // превращаться в колонку во весь экран.
+        int maxLines = Math.max(1,
+                (this.viewportHeight - 8 - TOOLTIP_PADDING * 2) / font.lineHeight);
+        List<String> fitted = CityMapTextLayout.fit(text, contentWidth, maxLines, font::width);
+        if (fitted.isEmpty() || (fitted.size() == 1 && fitted.get(0).isEmpty())) {
+            return;
+        }
+
+        int boxWidth = Math.min(this.viewportWidth,
+                CityMapTextLayout.widest(fitted, font::width) + TOOLTIP_PADDING * 2);
+        int boxHeight = Math.min(this.viewportHeight,
+                fitted.size() * font.lineHeight + TOOLTIP_PADDING * 2);
+        int left = clampTo(this.pendingTooltipX + 8, boxWidth, viewportX, viewportX + viewportWidth);
+        int top = clampTo(this.pendingTooltipY + 8, boxHeight, viewportY, viewportY + viewportHeight);
 
         graphics.fill(left, top, left + boxWidth, top + boxHeight, 0xE8101719);
         graphics.renderOutline(left, top, boxWidth, boxHeight, ACCENT_COLOR);
         int row = 0;
-        for (Component line : lines) {
-            if (line.getString().isEmpty()) continue;
-            graphics.drawString(font, line, left + 4, top + 4 + row * 11,
-                    row == 0 ? 0xFFFFD08A : 0xFFD1D5D6, false);
+        for (String line : fitted) {
+            if (!line.isEmpty()) {
+                graphics.drawString(font, line,
+                        left + TOOLTIP_PADDING,
+                        top + TOOLTIP_PADDING + row * font.lineHeight,
+                        row == 0 ? 0xFFFFD08A : 0xFFD1D5D6, false);
+            }
             row++;
         }
     }
+
+    /** Отступ текста подсказки от рамки, он же настолько же с каждой стороны. */
+    private static final int TOOLTIP_PADDING = 4;
 
     private static int clampTo(int value, int size, int min, int max) {
         if (max - min < size) {
@@ -1378,6 +2346,107 @@ public final class CityMapPanel {
 
     private record TrainPosition(ResourceLocation dimension, double x, double z) {}
 
+    /**
+ * Сообщает карте, где заканчивается доступная область.
+ *
+     * <p>Правая контекстная колонка World Map лежит поверх карты, и
+     * обвязка, посчитанная без этой границы, уезжала бы под неё
+     * наполовину. Экран вызывает это перед отрисовкой кадра.
+     */
+    public void setChromeAvoidRight(int screenX) {
+        this.chromeAvoidRight = screenX;
+    }
+
+    /** Границы обвязки текущего кадра; {@code null} до первой отрисовки. */
+    public CityMapFrame.Geometry chromeGeometry() {
+        return this.chromeGeometry;
+    }
+
+    /**
+     * Легенда слоёв: подпись, счётчик и включён ли слой.
+     *
+     * <p>Собирается из того же состояния, которым рисуется сама
+     * карта, поэтому легенда не может разойтись с содержимым:
+     * выключенный слой здесь гаснет ровно так же, как исчезает с
+     * карты.
+     */
+    private List<CityMapFrame.LegendEntry> frameLegendEntries() {
+        List<CityMapFrame.LegendEntry> entries = new ArrayList<>();
+        for (Overlay overlay : Overlay.values()) {
+            entries.add(new CityMapFrame.LegendEntry(
+                    Component.translatable(
+                            "gui.createcityexpansioncore.world_map.overlay."
+                                    + overlay.name().toLowerCase(Locale.ROOT)
+                    ).getString(),
+                    Integer.toString(overlayCount(overlay)),
+                    isOverlayEnabled(overlay)
+            ));
+        }
+        return entries;
+    }
+
+    /**
+     * Сколько объектов реально лежит под слоем в этом измерении.
+     *
+     * <p>Считается из того же состояния, которым слой рисуется. Отдельный набор чисел в легенде
+     * рано или поздно разошёлся бы с картой, и игрок искал бы отсутствующий объект.
+     */
+    public int overlayCount(Overlay overlay) {
+        return switch (overlay) {
+            case CITIES -> this.peers.size();
+            case TERRITORIES -> plotCount();
+            case PROJECTS -> (int) this.projects.stream().filter(p -> this.dimensionId.equals(p.dimensionId())).count();
+            case TRACKS -> this.railwayTracks.size();
+            case STATIONS -> (int) this.railwayStations.stream().filter(p -> this.dimensionId.equals(p.dimension())).count();
+            case TRAINS -> (int) this.railwayTrains.stream().filter(p -> this.dimensionId.equals(p.dimension())).count();
+            case TRADE -> freightPointCount();
+            case RELATIONS -> (int) this.peers.stream().filter(p -> !p.own() && this.relations.getOrDefault(p.cityId(), CityRelationSnapshot.Status.NONE) != CityRelationSnapshot.Status.NONE).count();
+        };
+    }
+
+    private int plotCount() {
+        CityMapPeersPayload.Peer own = ownPeer();
+        return own == null ? 0 : own.plots().size();
+    }
+
+    /** Данные обвязки на текущий кадр. */
+    private CityMapFrame.Context frameContext() {
+        BlockPos player = playerPos();
+        List<CityMapFrame.MapMark> marks = new ArrayList<>();
+
+        for (CityMapPeersPayload.Peer peer : this.peers) {
+            marks.add(new CityMapFrame.MapMark(
+                    peer.name(),
+                    peer.pylonX(),
+                    peer.pylonZ(),
+                    peer.own() ? MapPalette.OWN : MapPalette.NEUTRAL,
+                    peer.own()
+            ));
+        }
+        if (player != null) {
+            marks.add(new CityMapFrame.MapMark(
+                    "player",
+                    player.getX(),
+                    player.getZ(),
+                    MapPalette.GOOD,
+                    true
+            ));
+        }
+
+        return new CityMapFrame.Context(
+                this.centerX,
+                this.centerZ,
+                this.zoom,
+                player == null ? (int) Math.floor(this.centerX) : player.getX(),
+                player == null ? (int) Math.floor(this.centerZ) : player.getZ(),
+                this.pylonPos.getX(),
+                this.pylonPos.getZ(),
+                marks,
+                frameLegendEntries(),
+                this.dimensionId.getPath().toUpperCase(Locale.ROOT)
+        );
+    }
+
     /** Counts for the World Map overview panel; filtered to this dimension so the numbers mean something. */
     public int freightPointCount() {
         int total = 0;
@@ -1388,11 +2457,95 @@ public final class CityMapPanel {
     /** Unregistered Postbox/Packager pairs the player could still turn into a Freight Point. */
     public int freightCandidateCount() { return this.freightCandidates.size(); }
 
+    public void setPresentation(boolean grid, boolean overview) { this.showCoordinateGrid = grid; this.showOverview = overview; }
+    public boolean coordinateGrid() { return this.showCoordinateGrid; }
+    public boolean overviewVisible() { return this.showOverview; }
+    public double centerX() { return this.centerX; }
+    public double centerZ() { return this.centerZ; }
+    public double zoom() { return this.zoom; }
+    public void restoreView(double x, double z, double zoom) {
+        if (!Double.isFinite(x) || !Double.isFinite(z) || !Double.isFinite(zoom)) return;
+        this.centerX = x; this.centerZ = z; this.zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM); clampCenter();
+    }
+    public void centerOnPlayer() { BlockPos player = playerPos(); if (player != null) centerOn(player); }
+    public void fitCity() {
+        CityMapPeersPayload.Peer own = ownPeer();
+        if (own == null || own.plots().isEmpty()) { centerOnPylon(); return; }
+        int minX = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        for (CityPlot plot : own.plots()) {
+            minX = Math.min(minX, plot.plotX() * 50); minZ = Math.min(minZ, plot.plotZ() * 50);
+            maxX = Math.max(maxX, (plot.plotX() + 1) * 50); maxZ = Math.max(maxZ, (plot.plotZ() + 1) * 50);
+        }
+        this.centerX = (minX + (double) maxX) / 2; this.centerZ = (minZ + (double) maxZ) / 2;
+        this.zoom = clamp(Math.min(Math.max(1, this.viewportWidth - 48) / (double) Math.max(1, maxX - minX),
+                Math.max(1, this.viewportHeight - 48) / (double) Math.max(1, maxZ - minZ)), MIN_ZOOM, MAX_ZOOM);
+        clampCenter();
+    }
+    public void setPersonalPins(List<AtlasPreferences.Pin> pins) { this.personalPins.clear(); this.personalPins.addAll(pins.stream().limit(AtlasPreferences.MAX_PINS).toList()); }
+    public List<AtlasPreferences.Pin> personalPins() { return List.copyOf(this.personalPins); }
+    public void togglePinTool() { this.placingPin = !this.placingPin; this.measuring = false; }
+    public void toggleMeasureTool() { this.measuring = !this.measuring; this.placingPin = false; this.measureStart = null; this.measureEnd = null; }
+    public boolean pinToolActive() { return this.placingPin; }
+    public boolean measureToolActive() { return this.measuring; }
+    public boolean cancelPersonalTools() {
+        boolean active = this.placingPin || this.measuring;
+        this.placingPin = false; this.measuring = false; this.measureStart = null; this.measureEnd = null; return active;
+    }
+    public void removeSelectedPin() {
+        if (this.selection == null || this.selection.kind() != SelectionKind.WAYPOINT) return;
+        this.personalPins.removeIf(pin -> pin.x() == this.selection.pos().getX() && pin.z() == this.selection.pos().getZ());
+        clearSelection();
+    }
+    private Selection pinSelection(int index) {
+        AtlasPreferences.Pin pin = this.personalPins.get(index);
+        return new Selection(SelectionKind.WAYPOINT, UUID.nameUUIDFromBytes((this.dimensionId + ":pin:" + pin.x() + ":" + pin.z()).getBytes(StandardCharsets.UTF_8)),
+                Component.translatable("gui.createcityexpansioncore.world_map.pin", index + 1), new BlockPos(pin.x(), 0, pin.z()),
+                true, List.of(Component.translatable("gui.createcityexpansioncore.world_map.pin.local")), this.cityIcon, false);
+    }
+    private void renderPersonalTools(GuiGraphics graphics) {
+        for (int index = 0; index < this.personalPins.size(); index++) {
+            Selection pin = pinSelection(index);
+            int x = worldToScreenX(pin.pos().getX()), y = worldToScreenY(pin.pos().getZ());
+            graphics.fill(x - 4, y - 5, x + 5, y + 4, MapPalette.PAPER_SUNK);
+            graphics.renderOutline(x - 3, y - 4, 7, 7, MapPalette.SELECTED);
+            graphics.vLine(x, y + 3, y + 9, MapPalette.SELECTED);
+        }
+        if (this.measuring && this.measureStart != null) {
+            int x = worldToScreenX(this.measureStart.getX()), y = worldToScreenY(this.measureStart.getZ());
+            graphics.renderOutline(x - 3, y - 3, 6, 6, MapPalette.SELECTED);
+            if (this.measureEnd != null) {
+                int ex = worldToScreenX(this.measureEnd.getX()), ey = worldToScreenY(this.measureEnd.getZ());
+                drawLine(graphics, x, y, ex, ey, MapPalette.SELECTED);
+                double distance = Math.hypot(this.measureEnd.getX() - (double) this.measureStart.getX(), this.measureEnd.getZ() - (double) this.measureStart.getZ());
+                Component label = Component.translatable("gui.createcityexpansioncore.world_map.measure.distance", String.format(Locale.ROOT, "%.1f", distance));
+                var font = Minecraft.getInstance().font;
+                int lx = Math.max(this.viewportX + 4, Math.min(this.viewportX + this.viewportWidth - font.width(label) - 4, (x + ex) / 2));
+                int ly = Math.max(this.viewportY + 4, Math.min(this.viewportY + this.viewportHeight - 12, (y + ey) / 2));
+                graphics.fill(lx - 2, ly - 2, lx + font.width(label) + 2, ly + 10, MapPalette.PAPER_SUNK);
+                graphics.drawString(font, label, lx, ly, MapPalette.TEXT, false);
+            }
+        }
+    }
+    public Component terrainStatus() {
+        boolean failed = false, loading = false, unknown = false;
+        int minX = worldToTile(screenToWorldX(this.viewportX)), maxX = worldToTile(screenToWorldX(this.viewportX + this.viewportWidth));
+        int minZ = worldToTile(screenToWorldZ(this.viewportY)), maxZ = worldToTile(screenToWorldZ(this.viewportY + this.viewportHeight));
+        for (int z = minZ; z <= maxZ; z++) for (int x = minX; x <= maxX; x++) {
+            TileKey key = new TileKey(this.dimensionId, x, z);
+            CachedTile tile = this.tileCache.get(key);
+            failed |= this.failedTiles.contains(key);
+            loading |= this.requestedTiles.containsKey(key);
+            unknown |= tile == null || !tile.complete();
+        }
+        return Component.translatable("gui.createcityexpansioncore.world_map.terrain." + (failed ? "failed" : loading ? "loading" : unknown ? "unknown" : "ready"));
+    }
+    public void retryTerrain() { this.failedTiles.clear(); this.tileAttempts.clear(); this.requestedTiles.clear(); }
+
     public enum Overlay { CITIES, TERRITORIES, PROJECTS, TRACKS, STATIONS, TRAINS, TRADE, RELATIONS }
 
     public enum Focus { WORLD, RAILWAY, TRADE, ENERGY }
 
-    public enum SelectionKind { PLAYER, CITY, STATION, TRAIN, TRAIN_UNREGISTERED, INDUSTRY, TRADE_INFRASTRUCTURE, FREIGHT_POINT, DISCOVERY, RAILWAY_SECTION, ROUTE }
+    public enum SelectionKind { WAYPOINT, PLAYER, CITY, STATION, TRAIN, TRAIN_UNREGISTERED, INDUSTRY, TRADE_INFRASTRUCTURE, FREIGHT_POINT, DISCOVERY, RAILWAY_SECTION, ROUTE }
 
     public record Selection(SelectionKind kind, UUID id, Component title, BlockPos pos,
                             boolean own, List<Component> details, ItemStack icon, boolean warning) {
@@ -1417,7 +2570,8 @@ public final class CityMapPanel {
     private Selection discoverySelection(FreightCandidate value){return new Selection(SelectionKind.DISCOVERY,discoveryId(value),Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),value.postbox,true,List.of(Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(value.station.isBlank()?value.postbox.toShortString():value.station),Component.translatable("gui.createcityexpansioncore.world_map.discovery.setup_hint")),this.freightIcon,true);}
 
     private Selection peerSelection(CityMapPeersPayload.Peer peer) {
-        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.context.territory",peer.territorySize()));if(peer.master())details.add(Component.translatable("gui.createcityexpansioncore.world_map.master_city"));
+        var profile = com.example.examplemod.client.CityPublicDirectory.profile(peer.cityId());
+        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.context.plots",profile == null ? peer.plots().size() : profile.plots()));if(peer.master())details.add(Component.translatable("gui.createcityexpansioncore.world_map.master_city"));
         CityRelationSnapshot.Status relation = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
         if (!peer.own()) details.add(Component.translatable("gui.createcityexpansioncore.world_map.relation",
                 Component.translatable("gui.createcityexpansioncore.relations.status." + relation.name().toLowerCase(Locale.ROOT))));
@@ -1426,7 +2580,7 @@ public final class CityMapPanel {
         else if (!peer.own()) details.add(Component.translatable("gui.createcityexpansioncore.world_map.relation.public_only"));
         return new Selection(SelectionKind.CITY, peer.cityId(), Component.literal(peer.name()),
                 new BlockPos(peer.pylonX(), this.pylonPos.getY(), peer.pylonZ()), peer.own(),
-                details, this.cityIcon, peer.master());
+                details, this.cityIcon, false);
     }
 
     private Selection playerSelection() {
@@ -1513,8 +2667,22 @@ public final class CityMapPanel {
     }
 
     private Selection freightSelection(FreightPoint point){String city=cityName(point.cityId);List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.city",city));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.station",point.stationName.isBlank()?"—":point.stationName));details.add(Component.literal(point.address));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight."+(point.online()?"online":"offline")));return new Selection(SelectionKind.FREIGHT_POINT,point.id,Component.literal(point.name),point.postbox,point.cityId.equals(ownCityId()),details,this.freightIcon,!point.online());}
-    private Selection findSectionSelection(double mouseX,double mouseY){for(var section:this.railwaySections)if(hitSegments(section.segments(),mouseX,mouseY,5)){var network=network(section.networkId());String owner=network==null?"?":network.ownerName();List<Component> details=List.of(Component.translatable("gui.createcityexpansioncore.world_map.rail.owner",owner),Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type."+network.ownerType().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.length",String.format(Locale.ROOT,"%.1f",section.length())),Component.translatable("gui.createcityexpansioncore.world_map.rail.access",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.access."+network.access().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.tariff",network==null?0:network.tariff()),Component.translatable("gui.createcityexpansioncore.world_map.rail.status",Component.translatable("gui.createcityexpansioncore.world_map.rail.status."+section.status().name().toLowerCase(Locale.ROOT))));return new Selection(SelectionKind.RAILWAY_SECTION,section.id(),Component.literal(network==null?shortId(section.networkId()):network.name()),midpoint(section.segments()),ownsNetwork(network),details,this.networkIcon,section.status()!=com.example.examplemod.railway.RailwayOwnershipTypes.SectionStatus.ONLINE);}return null;}
-    private Selection findRouteSelection(double mouseX,double mouseY){for(var route:this.railwayRoutes)if(hitSegments(route.segments(),mouseX,mouseY,6)){List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.distance",String.format(Locale.ROOT,"%.1f",route.distance())));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.price",route.price()));if(route.etaTicks()>0)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.eta",route.etaTicks()/20));String strategy=this.routeStrategies.get(route.id());if(strategy!=null)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.strategy",Component.translatable("gui.createcityexpansioncore.railway.route.strategy."+strategy.toLowerCase(Locale.ROOT))));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.status",route.status()));return new Selection(SelectionKind.ROUTE,route.id(),Component.translatable(route.selected()?"gui.createcityexpansioncore.world_map.route.selected":"gui.createcityexpansioncore.world_map.route.active"),midpoint(route.segments()),true,details,this.networkIcon,!route.status().equals("active")&&!route.selected());}return null;}
+    private Selection findSectionSelection(double mouseX, double mouseY) {
+        for (var section : this.railwaySections)
+            if (hitSegments(section.segments(), mouseX, mouseY, 5)) return sectionSelection(section);
+        return null;
+    }
+    private Selection sectionSelection(RailwayMapPayload.SectionView section) {
+        var network=network(section.networkId());String owner=network==null?"?":network.ownerName();List<Component> details=List.of(Component.translatable("gui.createcityexpansioncore.world_map.rail.owner",owner),Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type."+network.ownerType().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.length",String.format(Locale.ROOT,"%.1f",section.length())),Component.translatable("gui.createcityexpansioncore.world_map.rail.access",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.access."+network.access().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.tariff",network==null?0:network.tariff()),Component.translatable("gui.createcityexpansioncore.world_map.rail.status",Component.translatable("gui.createcityexpansioncore.world_map.rail.status."+section.status().name().toLowerCase(Locale.ROOT))));return new Selection(SelectionKind.RAILWAY_SECTION,section.id(),Component.literal(network==null?shortId(section.networkId()):network.name()),midpoint(section.segments()),ownsNetwork(network),details,this.networkIcon,section.status()!=com.example.examplemod.railway.RailwayOwnershipTypes.SectionStatus.ONLINE);
+    }
+    private Selection findRouteSelection(double mouseX, double mouseY) {
+        for (var route : this.railwayRoutes)
+            if (hitSegments(route.segments(), mouseX, mouseY, 6)) return routeSelection(route);
+        return null;
+    }
+    private Selection routeSelection(RailwayMapPayload.RouteView route) {
+        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.distance",String.format(Locale.ROOT,"%.1f",route.distance())));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.price",route.price()));if(route.etaTicks()>0)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.eta",route.etaTicks()/20));String strategy=this.routeStrategies.get(route.id());if(strategy!=null)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.strategy",Component.translatable("gui.createcityexpansioncore.railway.route.strategy."+strategy.toLowerCase(Locale.ROOT))));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.status",route.status()));return new Selection(SelectionKind.ROUTE,route.id(),Component.translatable(route.selected()?"gui.createcityexpansioncore.world_map.route.selected":"gui.createcityexpansioncore.world_map.route.active"),midpoint(route.segments()),true,details,this.networkIcon,!route.status().equals("active")&&!route.selected());
+    }
     private boolean hitSegments(List<RailwayMapPayload.TrackSegment> segments,double mouseX,double mouseY,double radius){for(var s:segments)if(distanceToSegment(mouseX,mouseY,worldToScreenX(s.x1()),worldToScreenY(s.z1()),worldToScreenX(s.x2()),worldToScreenY(s.z2()))<=radius)return true;return false;}
     private static double distanceToSegment(double px,double py,double x1,double y1,double x2,double y2){double dx=x2-x1,dy=y2-y1;if(dx==0&&dy==0)return Math.hypot(px-x1,py-y1);double t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy)));return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));}
     private static BlockPos midpoint(List<RailwayMapPayload.TrackSegment> values){if(values.isEmpty())return BlockPos.ZERO;var s=values.get(values.size()/2);return BlockPos.containing((s.x1()+s.x2())/2,0,(s.z1()+s.z2())/2);}
@@ -1583,7 +2751,7 @@ public final class CityMapPanel {
         drawSegments(graphics, section.segments(), railInnerColor(kind), 0, inner);
         // A tariff is never spelled out along the line; a repeating tick at close zoom says it
         // without turning the map into text.
-        if (kind == RailClass.PUBLIC_PAID && this.zoom >= CLOSE_DETAIL_ZOOM) {
+        if (kind == RailClass.PUBLIC_PAID && this.zoom >= MIN_ZOOM) {
             int spacing = Math.max(24, (int) (14 / Math.max(0.35, this.zoom)));
             for (var segment : section.segments()) {
                 int x1 = worldToScreenX(segment.x1()), y1 = worldToScreenY(segment.z1());
@@ -1641,6 +2809,11 @@ public final class CityMapPanel {
     }
 
     private void requestVisibleTiles() {
+        if (this.tileAttempts.size() > MAX_CACHED_TILES) {
+            this.tileAttempts.keySet().removeIf(key -> Math.abs(key.tileX() - worldToTile(this.centerX)) > 32
+                    || Math.abs(key.tileZ() - worldToTile(this.centerZ)) > 32);
+            this.failedTiles.retainAll(this.tileAttempts.keySet());
+        }
         long now = System.currentTimeMillis();
         this.requestedTiles.entrySet().removeIf(
                 entry -> now - entry.getValue() >= REQUEST_TIMEOUT_MILLIS
@@ -1658,7 +2831,7 @@ public final class CityMapPanel {
         for (int tileZ = minTileZ; tileZ <= maxTileZ; tileZ++) {
             for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
                 TileKey key = new TileKey(this.dimensionId, tileX, tileZ);
-                if (!this.tileCache.containsKey(key)
+                if (!this.tileCache.containsKey(key) && !this.failedTiles.contains(key)
                         && !this.requestedTiles.containsKey(key)) {
                     missing.add(key);
                 }
@@ -1677,6 +2850,8 @@ public final class CityMapPanel {
         int requestCount = Math.min(MAX_REQUESTS_PER_RENDER, missing.size());
         for (int index = 0; index < requestCount; index++) {
             TileKey key = missing.get(index);
+            int attempts = this.tileAttempts.merge(key, 1, Integer::sum);
+            if (attempts > 3) { this.failedTiles.add(key); continue; }
             this.requestedTiles.put(key, now);
             PacketDistributor.sendToServer(new RequestCityMapTilePayload(
                     this.pylonPos,
@@ -1755,6 +2930,11 @@ public final class CityMapPanel {
     private record TileKey(ResourceLocation dimensionId, int tileX, int tileZ) {
     }
 
-    private record CachedTile(int[] colors, boolean complete, long receivedAtMillis) {
+    private record CachedTile(
+            int[] colors,
+            BitSet contours,
+            boolean complete,
+            long receivedAtMillis
+    ) {
     }
 }

@@ -7,13 +7,26 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.BitSet;
+
+/**
+ * One tile of the survey atlas.
+ *
+ * @param colors    flat {@code 0xAARRGGBB} sample colours, {@code SAMPLE_COUNT × SAMPLE_COUNT}
+ * @param contours  one bit per sample: true when the ground crosses an elevation isoline here.
+ *                  Sent as a bit set rather than as heights because the client never needs the
+ *                  height itself — only whether a line belongs here. That is 128 bytes per tile
+ *                  instead of 1024, and it cannot go stale against the colour underneath it the
+ *                  way a second, separately interpolated channel eventually would.
+ */
 public record CityMapTilePayload(
         BlockPos pylonPos,
         ResourceLocation dimensionId,
         int tileX,
         int tileZ,
         boolean complete,
-        int[] colors
+        int[] colors,
+        BitSet contours
 ) implements CustomPacketPayload {
 
     /**
@@ -44,6 +57,7 @@ public record CityMapTilePayload(
                         for (int color : payload.colors()) {
                             buffer.writeInt(color);
                         }
+                        buffer.writeBitSet(payload.contours());
                     },
                     buffer -> {
                         BlockPos pylonPos = BlockPos.STREAM_CODEC.decode(buffer);
@@ -55,13 +69,21 @@ public record CityMapTilePayload(
                         for (int index = 0; index < colors.length; index++) {
                             colors[index] = buffer.readInt();
                         }
+                        /*
+                         * readBitSet() has no size argument in this MC version and reads exactly as
+                         * many bits as writeBitSet() wrote. The length is therefore taken from the
+                         * tile's own colour count, which is fixed, and any surplus bits the decoder
+                         * hands back are dropped by the canonical constructor below.
+                         */
+                        BitSet contours = buffer.readBitSet();
                         return new CityMapTilePayload(
                                 pylonPos,
                                 dimension,
                                 tileX,
                                 tileZ,
                                 complete,
-                                colors
+                                colors,
+                                contours
                         );
                     }
             );
@@ -71,6 +93,13 @@ public record CityMapTilePayload(
             throw new IllegalArgumentException("Invalid city map tile color count");
         }
         colors = colors.clone();
+        if (contours == null) {
+            contours = new BitSet(COLOR_COUNT);
+        } else if (contours.length() > COLOR_COUNT) {
+            throw new IllegalArgumentException("Invalid city map tile contour count");
+        } else {
+            contours = (BitSet) contours.clone();
+        }
     }
 
     @Override

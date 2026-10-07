@@ -44,6 +44,24 @@ public abstract class ModalOverlayScreen extends Screen {
     }
 
     /**
+     * Рисует ли родительский экран под модалкой.
+     *
+     * <p>По умолчанию да: размытый силуэт интерфейса читается как «это окно поверх
+     * того же экрана», а не как отдельное приложение.
+     *
+     * <p>Однако {@code processBlurEffect} размывает уже нарисованный кадр, и
+     * мелкий текст под вкладками после blur остаётся читаемым — особенно при
+     * высоком GUI Scale, где шрифт крупный. Для компактных окон вроде палитры
+     * цвета это выглядит как дефект: подписи вкладок просвечивают сквозь панель.
+     * Такие окна переопределяют метод и возвращают {@code false}: подложкой
+     * становится затемнённый мир, и никакой чужой текст под панелью не возможен
+     * в принципе.
+     */
+    protected boolean drawsUnderlyingScreen() {
+        return true;
+    }
+
+    /**
      * Рисует модальный слой: размытый родитель, затемнение, содержимое.
      *
      * <p>Подклассам не нужно вызывать {@code super.render()} и не нужно
@@ -57,30 +75,40 @@ public abstract class ModalOverlayScreen extends Screen {
             int mouseY,
             float partialTick
     ) {
+        boolean underlying = drawsUnderlyingScreen() && this.underlying != null;
+
         /*
          * 1. Родительский экран целиком, вместе со своими виджетами.
          *    Он рисуется один раз и больше не перерисовывается.
          */
-        if (this.underlying != null) {
+        if (underlying) {
             this.underlying.render(guiGraphics, mouseX, mouseY, partialTick);
         }
 
         /*
-         * 2. Blur применяется ко всему, что уже есть в кадре,
-         *    то есть к родительскому интерфейсу, а не к пустому миру.
+         * 2. Blur применяется ко всему, что уже есть в кадре.
+         *
+         * <p>Вызывается в обоих случаях. Раньше blur был только в ветке с
+         * родителем, и окно, которое родителя не рисует, оставляло под собой
+         * резкий несurдлённый кадр мира — панель «плавала» поверх него.
          */
-        this.minecraft.gameRenderer.processBlurEffect(partialTick);
-        this.minecraft.getMainRenderTarget().bindWrite(false);
+        if (this.minecraft != null) {
+            this.minecraft.gameRenderer.processBlurEffect(partialTick);
+            this.minecraft.getMainRenderTarget().bindWrite(false);
+        }
 
         /*
          * 3. Затемнение и содержимое модалки поверх.
+         *
+         * <p>Без родителя затемнение плотное: под панелью не должно читаться
+         * ничего, иначе панель выглядит дырявой.
          */
         guiGraphics.fill(
                 0,
                 0,
                 this.width,
                 this.height,
-                0xB0000000
+                underlying ? 0xB0000000 : 0xF2101719
         );
 
         this.renderModalContent(guiGraphics, mouseX, mouseY, partialTick);

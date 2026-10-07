@@ -130,6 +130,34 @@ public final class EconomyNetworkHandlers {
         EconomyManager manager=EconomyManager.get(player.serverLevel());boolean master=city.getId().equals(manager.masterCityId());
         return new Context(player,city,cities,manager,city.getLevel()>=2||master,master);
     }
+
+    /**
+     * Sends the economy snapshot for the player's own city, with no pylon in reach.
+     *
+     * <p>Same reasoning as the railway counterpart: the pylon-bound context needs
+     * an open container and a distance limit, neither of which can hold for a map
+     * opened from a key binding, and neither of which is what grants access.
+     * Membership is. The city pylon stays only as the anchor the client matches
+     * snapshots against.
+     *
+     * <p>Only {@link EconomyNetworkHandlers#sendState} is reachable from here, so
+     * this path cannot authorise a transaction — contract, listing or shipment
+     * actions stay behind the container check in {@link #context}.
+     */
+    public static boolean sendMemberView(ServerPlayer player) {
+        CityManager cities = CityManager.get(player.getServer().overworld());
+        City city = cities.getMemberCity(player.getUUID());
+        if (city == null) {
+            return false;
+        }
+        EconomyManager manager = EconomyManager.get(player.serverLevel());
+        boolean master = city.getId().equals(manager.masterCityId());
+        Context c = new Context(player, city, cities, manager,
+                city.getLevel() >= 2 || master, master);
+        sendState(c);
+        return true;
+    }
+
     private static void feedback(ServerPlayer player,String key){player.displayClientMessage(Component.translatable("message.createcityexpansioncore.economy."+key),true);}
     private static String contractCreationFailure(Context context,EconomyCommandPayload payload,ServerPlayer player,boolean masterContract){
         if(!validItem(payload.itemId()))return "contract_invalid_item";

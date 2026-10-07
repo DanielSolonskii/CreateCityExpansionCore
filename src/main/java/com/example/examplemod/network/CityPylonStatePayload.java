@@ -14,13 +14,28 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Состояние города для открытого экрана City Pylon.
+ *
+ * <p>Уровень, проекты, развитие и — с переходом на участки —
+ * реальное число занятых участков, собственный цвет города и право
+ * открывшего игрока управлять территорией.
+ *
+ * <p>Все три последних поля нужны вкладке «Территория», которая
+ * показывает площадь и цвет, и карте, которая решает, можно ли
+ * вообще предложить claim. Значения приходят с сервера и только
+ * отображаются: подделать их на клиенте нельзя.
+ */
 public record CityPylonStatePayload(
         BlockPos pylonPos,
         int cityLevel,
         int projectCapacity,
         List<CityProjectSnapshot> projects,
         ResourceLocation primaryResource,
-        List<CityDevelopmentRequirementSnapshot> developmentRequirements
+        List<CityDevelopmentRequirementSnapshot> developmentRequirements,
+        int plotCount,
+        int colorRgb,
+        boolean canManageTerritory
 ) implements CustomPacketPayload {
     public static final Type<CityPylonStatePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(CreateCityExpansionCore.MODID, "city_pylon_state")
@@ -57,6 +72,9 @@ public record CityPylonStatePayload(
             buffer.writeVarLong(requirement.current());
             buffer.writeVarLong(requirement.required());
         }
+        buffer.writeVarInt(payload.plotCount());
+        buffer.writeVarInt(payload.colorRgb());
+        buffer.writeBoolean(payload.canManageTerritory());
     }
 
     private static CityPylonStatePayload decode(RegistryFriendlyByteBuf buffer) {
@@ -84,8 +102,12 @@ public record CityPylonStatePayload(
                     buffer.readVarLong()
             ));
         }
+        int plotCount = Math.max(0, buffer.readVarInt());
+        int colorRgb = com.example.examplemod.city.CityColors.normalize(buffer.readVarInt());
+        boolean canManageTerritory = buffer.readBoolean();
         return new CityPylonStatePayload(
-                pylonPos, level, capacity, projects, primary, requirements
+                pylonPos, level, capacity, projects, primary, requirements,
+                plotCount, colorRgb, canManageTerritory
         );
     }
 

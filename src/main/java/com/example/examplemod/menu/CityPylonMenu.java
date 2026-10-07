@@ -31,14 +31,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class CityPylonMenu extends AbstractContainerMenu {
+public class CityPylonMenu extends AbstractContainerMenu implements com.example.examplemod.client.WorldMapDataSource {
 
     private final BlockPos pylonPos;
     private final ResourceLocation dimensionId;
     private final boolean hasCity;
     private final String cityName;
     private int cityLevel;
-    private int territorySize;
+    /**
+     * Число заявленных участков 50×50.
+     *
+     * <p>Заменило старый квадратный {@code territorySize}: площадь
+     * территории теперь определяется тем, сколько участков реально
+     * занято, а не уровнем города.
+     */
+    private int plotCount;
+    /** Собственный цвет города {@code 0xRRGGBB}. */
+    private int colorRgb = com.example.examplemod.city.CityColors.PALETTE.get(0);
+    /** OWNER или ADMIN — могут расширять территорию и менять цвет. */
+    private boolean canManageTerritory;
     private final UUID owner;
     private final List<CityMember> members;
     private int projectCapacity;
@@ -72,6 +83,8 @@ public class CityPylonMenu extends AbstractContainerMenu {
                 data.readUtf(),
                 data.readVarInt(),
                 data.readVarInt(),
+                data.readVarInt(),
+                data.readBoolean(),
                 data.readBoolean() ? data.readUUID() : null,
                 readMembers(data),
                 data.readVarInt(),
@@ -160,7 +173,9 @@ public class CityPylonMenu extends AbstractContainerMenu {
                 false,
                 "",
                 1,
-                100,
+                0,
+                com.example.examplemod.city.CityColors.PALETTE.get(0),
+                false,
                 null,
                 new ArrayList<>(),
                 1,
@@ -179,7 +194,9 @@ public class CityPylonMenu extends AbstractContainerMenu {
             boolean hasCity,
             String cityName,
             int cityLevel,
-            int territorySize,
+            int plotCount,
+            int colorRgb,
+            boolean canManageTerritory,
             UUID owner,
             List<CityMember> members,
             int projectCapacity,
@@ -198,7 +215,9 @@ public class CityPylonMenu extends AbstractContainerMenu {
         this.hasCity = hasCity;
         this.cityName = cityName;
         this.cityLevel = cityLevel;
-        this.territorySize = territorySize;
+        this.plotCount = plotCount;
+        this.colorRgb = com.example.examplemod.city.CityColors.normalize(colorRgb);
+        this.canManageTerritory = canManageTerritory;
         this.owner = owner;
         this.members = new ArrayList<>(members);
         this.projectCapacity = projectCapacity;
@@ -228,8 +247,24 @@ public class CityPylonMenu extends AbstractContainerMenu {
         return cityLevel;
     }
 
-    public int getTerritorySize() {
-        return territorySize;
+    /** Число заявленных участков 50×50. */
+    public int getPlotCount() {
+        return plotCount;
+    }
+
+    /**
+     * Собственный цвет города {@code 0xRRGGBB}.
+     *
+     * <p>Клиент только показывает это значение; менять его может
+     * исключительно сервер, поэтому подделать цвет на клиенте нельзя.
+     */
+    public int getColorRgb() {
+        return colorRgb;
+    }
+
+    /** Может ли открывший меню игрок расширять территорию и менять цвет. */
+    public boolean canManageTerritory() {
+        return canManageTerritory;
     }
 
     public UUID getOwner() {
@@ -263,11 +298,18 @@ public class CityPylonMenu extends AbstractContainerMenu {
             return;
         }
         this.cityLevel = payload.cityLevel();
-        this.territorySize = payload.cityLevel() >= 2 ? 150 : 100;
         this.projectCapacity = payload.projectCapacity();
         this.projects = new ArrayList<>(payload.projects());
         this.developmentPrimaryResource = payload.primaryResource();
         this.developmentRequirements = new ArrayList<>(payload.developmentRequirements());
+        /*
+         * Цвет и число участков — часть состояния города, поэтому
+         * обновляются здесь же: смена цвета и успешный claim приходят
+         * на открытый экран без переоткрытия пилона.
+         */
+        this.plotCount = payload.plotCount();
+        this.colorRgb = com.example.examplemod.city.CityColors.normalize(payload.colorRgb());
+        this.canManageTerritory = payload.canManageTerritory();
     }
 
     public void acceptMapTile(CityMapTilePayload payload) {

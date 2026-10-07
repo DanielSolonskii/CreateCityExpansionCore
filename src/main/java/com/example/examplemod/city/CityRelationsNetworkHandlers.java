@@ -36,6 +36,27 @@ public final class CityRelationsNetworkHandlers {
                 city.isAdmin(player.getUUID()), snapshots));
     }
 
+    /**
+     * Sends relations for the player's own city, with no pylon in reach.
+     *
+     * <p>The command path needs an open container and a distance limit, which
+     * cannot hold for a map opened from a key binding. Membership is the property
+     * that actually grants access, so it decides here.
+     *
+     * <p>{@link #sendState} marks the payload as manageable only for admins, and
+     * that flag stays computed the same way: a plain member sees the relations but
+     * cannot act on them, which is why the read-only map needs no extra check.
+     */
+    public static boolean sendMemberView(ServerPlayer player) {
+        CityManager manager = CityManager.get(player.serverLevel());
+        City city = manager.getMemberCity(player.getUUID());
+        if (city == null) {
+            return false;
+        }
+        sendState(player, manager, city);
+        return true;
+    }
+
     private static CityRelationSnapshot.Status status(CityManager manager, City city, City other) {
         boolean ours = manager.trusts(city.getId(), other.getId());
         boolean theirs = manager.trusts(other.getId(), city.getId());

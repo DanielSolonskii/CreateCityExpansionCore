@@ -97,7 +97,7 @@ public final class EconomyCommands {
             ServerPlayer player = source.getPlayer();
             if (player == null) return fail(source);
             city = cities.getCityByMember(player.getUUID());
-            if (city == null) city = cities.getCityAt(player.blockPosition());
+            if (city == null) city = cities.getCityAt(source.getLevel().dimension().location(), player.blockPosition());
         }
         if (city == null) return fail(source);
 
@@ -110,7 +110,7 @@ public final class EconomyCommands {
         for (ServerPlayer online : server.getPlayerList().getPlayers()) {
             if (online == sender || city.hasMember(online.getUUID())) {
                 net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(online,
-                        CityProjectNetworkHandlers.createState(server, city));
+                        CityProjectNetworkHandlers.createState(server, city, online));
             }
         }
 

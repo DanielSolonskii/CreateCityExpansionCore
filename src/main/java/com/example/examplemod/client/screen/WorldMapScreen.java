@@ -78,7 +78,6 @@ public final class WorldMapScreen extends Screen {
         RailwayMapPayload railwayMap = this.menu.drainRailwayMap();
         if (railwayMap != null) this.map.receive(railwayMap);
         this.map.setProjects(this.menu.getProjects());
-        this.map.setTerritorySize(this.menu.getTerritorySize());
         this.map.setRailwayData(this.menu.getRailwayStations(), this.menu.getRailwayTrains());
         this.map.setUnregisteredTrains(this.menu.getRailwayTrainCandidates());
         if (this.menu.getEconomyState() != null) {

@@ -1,31 +1,21 @@
 {
-  "type": "create:mechanical_crafting",
-  "accept_mirrored": false,
+  "type": "minecraft:crafting_shaped",
   "category": "misc",
   "key": {
-    "S": {
-      "item": "createcityexpansioncore:steel_plate"
-    },
     "I": {
-      "item": "createcityexpansioncore:industrial_control_unit"
-    },
-    "B": {
-      "item": "createcityexpansioncore:structural_beam"
-    },
-    "C": {
-      "item": "create:brass_casing"
+      "item": "create:iron_sheet"
     },
     "R": {
-      "item": "createcityexpansioncore:reinforced_concrete"
+      "item": "minecraft:redstone"
     },
-    "H": {
-      "item": "createcityexpansioncore:heavy_machine_frame"
+    "Q": {
+      "item": "create:rose_quartz"
     }
   },
   "pattern": [
-    "SBS",
-    "RHR",
-    "CIS"
+    "IRI",
+    "IQI",
+    "IRI"
   ],
   "result": {
     "count": 1,
