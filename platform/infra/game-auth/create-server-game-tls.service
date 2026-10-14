@@ -1,0 +1,23 @@
+# TEMPLATE ONLY: requires stunnel4, certificate provisioning and controlled cutover.
+[Unit]
+Description=RE:CREATED Minecraft TCP TLS gateway
+After=network-online.target create-server-minecraft.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=createserver
+Group=createserver
+LoadCredential=game-cert:/opt/create-server/secrets/game-fullchain.pem
+LoadCredential=game-key:/opt/create-server/secrets/game-private-key.pem
+ExecStart=/usr/bin/stunnel4 /opt/create-server/minecraft/stunnel-game.conf
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

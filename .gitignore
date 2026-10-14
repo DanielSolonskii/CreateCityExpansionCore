@@ -38,3 +38,20 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+# Local caches, audit scratch and generated deployment artifacts
+/.gradle-user/
+/.gitnexus/
+/tmp/
+/output/
+/logs/
+/log_*.txt
+/log_arr.txt
+/latest.log
+/imagegen.rar
+**/__pycache__/
+*.py[cod]
+/tools/**/*.jar
+/tools/**/server-evidence.json
+/platform/client-baselines/
+/platform/launcher/release-candidates/

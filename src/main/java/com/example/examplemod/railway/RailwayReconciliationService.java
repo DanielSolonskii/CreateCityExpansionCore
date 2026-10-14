@@ -20,6 +20,7 @@ public final class RailwayReconciliationService {
 
     @SubscribeEvent
     public static void serverTick(ServerTickEvent.Post event) {
+        RailwayTripAccountingService.tick(event.getServer());
         if (++ticks % INTERVAL != 0) return;
         reconcile(event.getServer());
     }
@@ -27,7 +28,7 @@ public final class RailwayReconciliationService {
     public static void reconcile(MinecraftServer server) {
         ServerLevel level = server.overworld();
         RailwayManager manager = RailwayManager.get(level);
-        boolean changed = false;
+        boolean changed = manager.reconcileOwnedSections(server);
         Set<UUID> renamedStations = new HashSet<>();
         for (CityRailStation registration : manager.stationsForCityIdsAndPersonal()) {
             var station = CreateRailwayAdapter.station(registration.createStationId());

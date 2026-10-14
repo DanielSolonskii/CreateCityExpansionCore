@@ -1,0 +1,33 @@
+/* Pixel display face only; long text/credentials remain readable and selectable. */
+.nav-link, .play-button__label, .news-primary, .settings-button, .news-categories button,
+.hero h1, .news-page h1, .article-view h1, .changelog-dialog h2, .startup-emblem strong {
+  font-family: "Press Start 2P", monospace; font-weight: 400;
+}
+.nav-link { font-size: 12px; line-height: 1.6; }
+.hero h1 { font-size: clamp(30px, 3.2vw, 46px); line-height: 1.6; letter-spacing: -.04em; }
+.play-button__label { font-size: 12px; line-height: 1.7; white-space: normal; }
+.settings-button { font-size: 11px; }
+.news-page h1, .article-view h1 { font-size: 24px; line-height: 1.7; }
+.changelog-dialog h2 { font-size: 19px; }
+.news-primary, .news-categories button { font-size: 11px; line-height: 1.7; }
+.eyebrow, .ping, .season-tag, .news-card__meta, .news-category, .news-list-item time,
+.build-info small, .build-detail, .profile-button small, .play-button small { font-size: 12px; }
+.text-button, .server-card__message, .server-card__players, .profile-button strong, .build-info strong { font-size: 14px; }
+.news-card p, .news-list-item p { font-size: 14px; line-height: 1.7; }
+.news-card h3 { font-family: "Manrope", sans-serif; font-size: 19px; line-height: 1.5; }
+.login-modal label > span { font-size: 13px; }.login-modal > p { font-size: 15px; }
+.login-modal .login-options button, .login-modal .auth-switch, .login-modal .login-note { font-size: 14px; }
+.build-info { min-width: 235px; flex-wrap: wrap; max-width: 340px; gap: 8px; }.build-detail { padding-left: 0; margin-left: 0; border: 0; }
+.news-card__meta { flex-wrap: wrap; gap: 8px; }
+.startup-intro { position: fixed; inset: 0; z-index: 1000; background: radial-gradient(ellipse at center,#22352a,#0b130f 70%); display: grid; place-items: center; pointer-events: none; animation: intro-out 1.2s ease both; }
+.startup-emblem { text-align: center; color: #e2e5d8; animation: emblem-in .55s ease both; }
+.startup-emblem strong { display: block; font-size: clamp(24px,4vw,46px); text-shadow: 3px 3px 0 #080d09; margin: 22px 0; }.startup-emblem strong span { color: #c98d50; }
+.startup-kicker { color: #a3b6a5; font-size: 13px; letter-spacing: .25em; }.startup-emblem small { font-size: 13px; color: #9cae9f; letter-spacing: .14em; }
+.startup-light { height: 3px; margin: 22px auto; width: 100%; background: #3e5843; position: relative; overflow: hidden; }
+.startup-light::after { content: ""; position: absolute; width: 40%; height: 100%; background: #ecc795; box-shadow: 0 0 16px #dca65e; animation: light-pass .85s ease-in-out both; }
+.app-shell { animation: shell-in .45s ease both; }
+@keyframes light-pass { from { transform: translateX(-110%); } to { transform: translateX(350%); } }
+@keyframes emblem-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes intro-out { 0%,65% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+@keyframes shell-in { from { opacity: .5; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .startup-intro { display: none; }.app-shell, .startup-emblem, .startup-light::after { animation: none; }.update-meter span { transition: none; } }

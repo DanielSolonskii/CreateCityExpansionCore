@@ -1,0 +1,1 @@
+{"type":"create:mechanical_crafting","pattern":["RCR","CAC","RCR"],"key":{"R":{"item":"createcityexpansioncore:refractory_block"},"C":{"item":"create:chute"},"A":{"item":"create:andesite_casing"}},"result":{"id":"createcityexpansioncore:steel_converter_item_input"},"accept_mirrored":true}

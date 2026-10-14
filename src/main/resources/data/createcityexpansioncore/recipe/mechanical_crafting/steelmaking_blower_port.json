@@ -1,0 +1,1 @@
+{"type":"create:mechanical_crafting","pattern":["ASA","SBS","ASA"],"key":{"A":{"item":"create:andesite_casing"},"S":{"item":"create:shaft"},"B":{"item":"create:brass_casing"}},"result":{"id":"createcityexpansioncore:steelmaking_blower_port"},"accept_mirrored":true}

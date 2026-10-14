@@ -1,0 +1,1 @@
+{"type":"create:mechanical_crafting","pattern":["RCR","EPE","RCR"],"key":{"R":{"item":"createcityexpansioncore:refractory_block"},"C":{"item":"create:precision_mechanism"},"E":{"item":"create:electron_tube"},"P":{"item":"createcityexpansioncore:power_distribution_module"}},"result":{"id":"createcityexpansioncore:steel_converter_controller"},"accept_mirrored":true}

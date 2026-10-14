@@ -1,0 +1,16 @@
+import {pathToFileURL} from 'node:url';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+const launcher='E:/CreateCityExpansionCore_MERGED/CreateServerPlatform/launcher';
+const {verifiedEnvelope}=await import(pathToFileURL(path.join(launcher,'scripts/release-common.mjs')));
+const [manifestFile,version,sequence,expected]=process.argv.slice(2);
+if(!/^alpha-\d+\.\d+\.\d+$/.test(version)||!/^\d+$/.test(sequence)||!/^[a-f0-9]{64}$/.test(expected))throw new Error('Invalid expected release');
+const {manifest}=await verifiedEnvelope(manifestFile,path.join(launcher,'src-tauri/release-public-key.hex'));
+if(manifest.version!==version||manifest.sequence!==Number(sequence))throw new Error('Wrong approved alpha');
+const jar=manifest.files.find(f=>f.path==='instances/alpha/mods/createcityexpansioncore-1.0.1.jar');
+if(jar.sha256!==expected)throw new Error('Client/server mismatch');
+const response=await fetch(jar.url,{redirect:'error',signal:AbortSignal.timeout(30000)});
+if(!response.ok)throw new Error('Published object unavailable');
+const bytes=Buffer.from(await response.arrayBuffer());
+if(bytes.length!==jar.size||createHash('sha256').update(bytes).digest('hex')!==expected)throw new Error('Downloaded object corrupted');
+console.log(JSON.stringify({version,sequence:manifest.sequence,signature:'verified',download:'verified',sha256:expected,size:bytes.length}));

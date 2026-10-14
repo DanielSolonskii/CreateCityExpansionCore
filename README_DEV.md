@@ -48,9 +48,32 @@ com.simibubi.create:create-1.21.1:6.0.10-280
 
 ```
 gradlew compileJava
+gradlew check
 gradlew build
 git diff --check
 ```
+
+`check` запускает не только стандартные тесты, но и headless contracts для
+Freight, Railway ownership/accounting, route guard, World Map/layout,
+City Pylon, relations, train management, Geology v3 и Magnetic Analyzer.
+Актуальный перечень задач см. в `build.gradle`.
+
+### Правило runtime-проверки
+
+Успешный `compileJava/check/build` подтверждает компиляцию, persistence contracts
+и чистые layout/domain invariants, но не подтверждает Minecraft interaction/render.
+Ручной runtime checklist выполняется отдельно владельцем проекта.
+
+Особенно после изменений геологии проверять:
+
+1. Analyzer: ПКМ в воздухе открывает survey.
+2. Analyzer: ПКМ по блоку использует тот же scan path.
+3. Первый scan проходит без ложного cooldown; повторный ограничен 60 ticks.
+4. Mine использует локальный potential и общий reserve после restart.
+5. Bulk iron выдаёт ×2 physical output без ×2 расхода reserve.
+
+После Freight/Railway изменений проверять физический путь Package, station/train
+eligibility, route selection, reserve/settlement и восстановление после restart.
 
 ## Проверка рецептов
 
@@ -72,3 +95,12 @@ Loaded 2978 recipes
 ```
 
 и НОЛЬ строк `Parsing error loading recipe`.
+
+## Канонические документы
+
+- `MASTER_CONTEXT.md` — цели, принципы и архитектурные границы.
+- `CURRENT_STATE.md` — фактически реализованные системы и ограничения.
+- `DECISIONS.md` — принятые решения и причины.
+
+Локальный MERGED worktree является source of truth. Старые chat summaries и
+GitHub-ветка не должны использоваться вместо сверки с текущим кодом.

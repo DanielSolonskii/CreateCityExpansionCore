@@ -125,6 +125,13 @@ public final class IndustrialContract {
         return true;
     }
 
+    /** Player-initiated revoke: same guards as {@link #fail()}, but reported as a cancellation. */
+    public boolean revoke() {
+        if (state.terminal() || state == EconomyTypes.ContractState.DELIVERED || state == EconomyTypes.ContractState.DISPUTED) return false;
+        state = EconomyTypes.ContractState.CANCELLED;
+        return true;
+    }
+
     public boolean dispute() {
         if (state != EconomyTypes.ContractState.DELIVERED) return false;
         state = EconomyTypes.ContractState.DISPUTED;

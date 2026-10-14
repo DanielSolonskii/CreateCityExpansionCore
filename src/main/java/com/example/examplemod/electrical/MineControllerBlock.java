@@ -78,7 +78,7 @@ public class MineControllerBlock extends Block implements EntityBlock {
                 && level.getBlockEntity(pos) instanceof MineControllerBlockEntity controller) {
             MineControllerItemData.Data data = MineControllerItemData.read(stack).orElse(null);
             if (data == null) {
-                controller.setCreator(player.getUUID(), player.getName().getString());
+                controller.setCreator(player.getUUID(), com.example.examplemod.auth.PlayerNames.name(serverLevel.getServer(), player.getUUID()));
                 return;
             }
             if (data.commissioned()

@@ -1,0 +1,21 @@
+.news-body { white-space: pre-wrap; overflow-wrap: anywhere; font: 400 16px/1.8 "Manrope", sans-serif; color: #d0d9d2; }
+.news-note { color: #9aa79e; font-size: 14px; line-height: 1.6; }
+.version-badge { display: inline-block; padding: 6px 10px; border: 1px solid #92704b; color: #efc28b; background: #c79a6115; font: 600 14px/1.5 "Manrope", sans-serif; }
+.news-primary { background: #c89057; border: 1px solid #d4a06b; color: #171d18; padding: 14px 20px; cursor: pointer; min-height: 46px; }
+.changelog-dialog { color: #e3e9e4; background: #151e19; border: 1px solid #92704b; padding: 32px; width: min(680px, 85vw); max-height: 75vh; overflow: auto; box-shadow: 0 20px 100px #000a; }
+.changelog-dialog::backdrop { background: #080e0bba; backdrop-filter: blur(5px); }
+.changelog-dialog h2 { margin: 18px 0 24px; line-height: 1.8; }
+.changelog-dialog .news-primary { display: block; margin-top: 28px; margin-left: auto; }
+.game-update-panel { position: fixed; z-index: 50; bottom: 100px; right: 24px; width: min(660px, calc(100vw - 48px)); max-height: calc(100vh - 190px); overflow: auto; padding: 24px; border: 1px solid #6c816c; background: #142019f7; box-shadow: 0 16px 65px #0009; }
+.game-update-panel header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.game-update-panel h2 { font-size: 18px; margin: 14px 0; line-height: 1.6; }
+.game-update-panel p { font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.game-update-panel .eyebrow { letter-spacing: .04em; font-size: 12px; }
+.update-steps { padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 12px; margin: 22px 0; }
+.update-steps li { color: #9aa69d; font-size: 13px; padding-bottom: 6px; border-bottom: 2px solid #34473a; }
+.update-steps .current { color: #f1c38b; border-color: #c88c4e; }.update-steps .done { color: #a2d4b1; border-color: #78a88a; }
+.update-meter { height: 8px; background: #2c3c30; overflow: hidden; }.update-meter span { display: block; height: 100%; background: linear-gradient(90deg,#739a7b,#c99a64); transition: width .3s; }
+.news-grid > button.news-card { display: block; width: 100%; text-align: left; color: inherit; cursor: pointer; }
+.news-list-item > div:first-child { flex: 1; min-width: 0; }
+.news-page .news-list-item { grid-template-columns: minmax(0, 1fr) 130px; text-align: left; }
+.news-card h3, .news-card p, .news-list-item p { overflow-wrap: anywhere; }

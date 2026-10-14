@@ -11,9 +11,11 @@ public record RequestCityMapTilePayload(
         BlockPos pylonPos,
         ResourceLocation dimensionId,
         int tileX,
-        int tileZ
+        int tileZ, int level, long revision, java.util.UUID worldId
 ) implements CustomPacketPayload {
 
+    public RequestCityMapTilePayload(BlockPos pos,ResourceLocation dimension,int x,int z){this(pos,dimension,x,z,0,0,new java.util.UUID(0,0));}
+    public RequestCityMapTilePayload {if(level<0||level>7)throw new IllegalArgumentException("terrain level");}
     public static final Type<RequestCityMapTilePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(
                     CreateCityExpansionCore.MODID,
@@ -27,13 +29,13 @@ public record RequestCityMapTilePayload(
                         BlockPos.STREAM_CODEC.encode(buffer, payload.pylonPos());
                         buffer.writeResourceLocation(payload.dimensionId());
                         buffer.writeInt(payload.tileX());
-                        buffer.writeInt(payload.tileZ());
+                        buffer.writeInt(payload.tileZ());buffer.writeByte(payload.level());buffer.writeLong(payload.revision());buffer.writeUUID(payload.worldId());
                     },
                     buffer -> new RequestCityMapTilePayload(
                             BlockPos.STREAM_CODEC.decode(buffer),
                             buffer.readResourceLocation(),
                             buffer.readInt(),
-                            buffer.readInt()
+                            buffer.readInt(),buffer.readUnsignedByte(),buffer.readLong(),buffer.readUUID()
                     )
             );
 

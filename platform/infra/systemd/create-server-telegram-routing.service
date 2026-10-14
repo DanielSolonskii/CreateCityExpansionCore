@@ -1,0 +1,11 @@
+[Unit]
+Description=Telegram service-only WireGuard policy route
+Requires=create-server-telegram-guard.service wg-quick@wgtelegram.service
+After=create-server-telegram-guard.service wg-quick@wgtelegram.service
+Before=create-server-telegram-bot.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/create-server/telegram-routing
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+uid=$(id -u createtelegram)
+if ! /usr/sbin/ip rule show | /usr/bin/grep -q "9999:.*fwmark 0xca6c"; then
+ /usr/sbin/ip rule add priority 9999 fwmark 51820 lookup main
+fi
+/usr/sbin/ip route replace unreachable default table 51821 metric 32760
+if ! /usr/sbin/ip rule show | /usr/bin/grep -q '10000:.*uidrange'; then
+ /usr/sbin/ip rule add priority 10000 uidrange "$uid-$uid" lookup 51821
+fi
+/usr/sbin/ip route replace default dev wgtelegram table 51821 metric 100

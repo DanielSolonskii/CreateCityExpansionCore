@@ -202,7 +202,7 @@ public final class ItemSelectorOverlay {
 
         graphics.fill(gx, gy, gx + gridW(), gy + gridH(), 0xE0101518);
 
-        graphics.enableScissor(gx, gy, gx + gridW(), gy + gridH());
+        CityPylonWorkspace.clip(graphics,gx, gy, gx + gridW(), gy + gridH());
         int hoverIndex = -1;
         for (int index = 0; index < filtered.size(); index++) {
             int cell = index - scroll;

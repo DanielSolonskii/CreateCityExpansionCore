@@ -1,0 +1,11 @@
+{
+  "type":"create:mechanical_crafting","accept_mirrored":true,"category":"misc",
+  "key":{
+    "R":{"item":"createcityexpansioncore:refractory_block"},
+    "S":{"item":"createcityexpansioncore:steel_plate"},
+    "B":{"item":"createcityexpansioncore:structural_beam"},
+    "F":{"item":"createcityexpansioncore:industrial_fastener_pack"}
+  },
+  "pattern":["RSR","BFB","RSR"],
+  "result":{"count":4,"id":"createcityexpansioncore:coke_oven_chamber"},"show_notification":false
+}

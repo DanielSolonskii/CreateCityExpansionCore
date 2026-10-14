@@ -1,6 +1,1 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "createcityexpansioncore:block/drill_unit"
-  }
-}
+{"parent":"minecraft:block/cube","textures":{"down":"createcityexpansioncore:block/drill_unit_side","up":"createcityexpansioncore:block/drill_unit_top","north":"createcityexpansioncore:block/drill_unit_front","south":"createcityexpansioncore:block/drill_unit_side","west":"createcityexpansioncore:block/drill_unit_side","east":"createcityexpansioncore:block/drill_unit_side","particle":"createcityexpansioncore:block/drill_unit_side"}}

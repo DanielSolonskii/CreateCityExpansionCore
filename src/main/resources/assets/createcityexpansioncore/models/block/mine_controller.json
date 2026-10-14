@@ -1,6 +1,1 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "createcityexpansioncore:block/mine_controller"
-  }
-}
+{"parent":"minecraft:block/cube","textures":{"down":"createcityexpansioncore:block/industrial_mine_controller_side","up":"createcityexpansioncore:block/industrial_mine_controller_top","north":"createcityexpansioncore:block/industrial_mine_controller_front","south":"createcityexpansioncore:block/industrial_mine_controller_side","west":"createcityexpansioncore:block/industrial_mine_controller_side","east":"createcityexpansioncore:block/industrial_mine_controller_side","particle":"createcityexpansioncore:block/industrial_mine_controller_side"}}

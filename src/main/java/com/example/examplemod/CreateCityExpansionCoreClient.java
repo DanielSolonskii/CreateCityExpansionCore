@@ -1,9 +1,18 @@
 package com.example.examplemod;
 
 import com.example.examplemod.client.CityBoundaryRenderer;
+import com.example.examplemod.client.CityWorldMapKey;
 import com.example.examplemod.client.CityInviteClientHandler;
+import com.example.examplemod.client.CityTerritorySnapshot;
+import com.example.examplemod.client.CokeBatteryGuideRenderer;
+import com.example.examplemod.client.BlastFurnaceGuideRenderer;
+import com.example.examplemod.client.SteelConverterGuideRenderer;
+import com.example.examplemod.client.BuildGuideKeyMappings;
+import com.example.examplemod.client.ModFluidClientExtensions;
 import com.example.examplemod.client.render.CityPylonModels;
 import com.example.examplemod.client.render.CityPylonRenderer;
+import com.example.examplemod.client.render.IndustrialMineModels;
+import com.example.examplemod.client.render.IndustrialMineRenderer;
 import com.example.examplemod.client.screen.CityPylonScreen;
 import com.example.examplemod.client.screen.MagneticAnalyzerScreen;
 import com.example.examplemod.client.screen.MineControllerScreen;
@@ -14,6 +23,8 @@ import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
+import com.example.examplemod.network.CokeBatteryGuidePayload;
+import com.example.examplemod.network.BlastFurnaceGuidePayload;
 import com.example.examplemod.network.SyncCityMemberRemovalPayload;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
@@ -72,6 +83,14 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(
                 CityPylonModels::onBakingCompleted
         );
+        modEventBus.addListener(IndustrialMineModels::registerAdditional);
+        modEventBus.addListener(IndustrialMineModels::onBakingCompleted);
+        com.example.examplemod.client.render.AssembledBlockVisibility.registerModels(
+                "mine_frame", "technical_block", "drill_unit", "mine_controller", "mine_power_port", "mine_gateway");
+        modEventBus.addListener(com.example.examplemod.client.render.AssembledBlockVisibility::wrapModels);
+        com.example.examplemod.mine.MineControllerBlockEntity.CLIENT_VISUAL_UPDATE =
+                com.example.examplemod.client.render.IndustrialMineVisuals::changed;
+        NeoForge.EVENT_BUS.register(com.example.examplemod.client.render.IndustrialMineVisuals.class);
 
 
         /*
@@ -83,6 +102,10 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(
                 this::registerClientPayloads
         );
+        modEventBus.addListener(BuildGuideKeyMappings::register);
+        modEventBus.addListener(CityWorldMapKey::register);
+        modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
+        modEventBus.addListener(ModFluidClientExtensions::register);
 
 
         /*
@@ -96,6 +119,11 @@ public class CreateCityExpansionCoreClient {
         NeoForge.EVENT_BUS.register(
                 CityBoundaryRenderer.class
         );
+        NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.client.PlayerProfileKey.class);
+        NeoForge.EVENT_BUS.register(CokeBatteryGuideRenderer.class);
+        NeoForge.EVENT_BUS.register(BlastFurnaceGuideRenderer.class);
+        NeoForge.EVENT_BUS.register(SteelConverterGuideRenderer.class);
     }
     private void registerRenderers(
             EntityRenderersEvent.RegisterRenderers event
@@ -103,6 +131,10 @@ public class CreateCityExpansionCoreClient {
         event.registerBlockEntityRenderer(
                 CreateCityExpansionCore.CITY_PYLON_BLOCK_ENTITY.get(),
                 CityPylonRenderer::new
+        );
+        event.registerBlockEntityRenderer(
+                CreateCityExpansionCore.MINE_CONTROLLER_BLOCK_ENTITY.get(),
+                IndustrialMineRenderer::new
         );
     }
 
@@ -154,25 +186,51 @@ public class CreateCityExpansionCoreClient {
             invokeEnqueueWork(context, () -> MineControllerScreen.receiveCommissionContext(payload));
         };
 
+        CreateCityExpansionCore.COKE_BATTERY_GUIDE_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CokeBatteryGuideRenderer.toggle(payload.controllerPos()));
+        };
+
+        CreateCityExpansionCore.BLAST_FURNACE_GUIDE_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> BlastFurnaceGuideRenderer.toggle(payload.controllerPos()));
+        };
+        CreateCityExpansionCore.STEEL_CONVERTER_GUIDE_HANDLER = (payload, context) ->
+                invokeEnqueueWork(context, () -> SteelConverterGuideRenderer.toggle(payload.controllerPos()));
+
         CreateCityExpansionCore.CITY_INVITE_NOTIFICATION_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveInvite(payload));
         };
 
         CreateCityExpansionCore.CITY_MAP_PEERS_HANDLER = (payload, context) -> {
-            invokeEnqueueWork(context, () -> {
-                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen
-                        && screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
-                    screen.getMapPanel().receivePeers(payload.peers());
-                }
-            });
+            invokeEnqueueWork(context, () -> CityTerritorySnapshot.accept(payload));
         };
 
         CreateCityExpansionCore.SYNC_CITY_MEMBER_REMOVAL_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> {
-                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen) {
+                CityPylonScreen screen = com.example.examplemod.client.screen.CityPylonWorkspace.controller();
+                if (screen != null) {
                     if (screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
                         screen.getMenu().removeMember(payload.playerId());
                     }
+                }
+            });
+        };
+
+        CreateCityExpansionCore.CITY_PLAYER_SEARCH_RESULT_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveSearchResults(payload));
+        };
+
+        CreateCityExpansionCore.CITY_INVITE_RESULT_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveInviteResult(payload));
+        };
+
+        CreateCityExpansionCore.CITY_INVITE_OUTCOME_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveOutcome(payload));
+        };
+        CreateCityExpansionCore.SYNC_CITY_MEMBERS_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> {
+                CityPylonScreen screen = com.example.examplemod.client.screen.CityPylonWorkspace.controller();
+                if (screen != null) {
+                    screen.applyMembersSnapshot(payload);
                 }
             });
         };

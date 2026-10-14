@@ -191,9 +191,21 @@ final class IndustrialMineOperation {
         };
     }
 
+    /**
+     * Выбирает залежь для шахты.
+     *
+     * Приоритет отдаётся не общему богатству залежи, а её
+     * ЛОКАЛЬНОМУ потенциалу в точке стояния шахты: залежь,
+     * богатое ядро которой находится в двухстах блоках, не должна
+     * обгонять залежь, которую шахта стоит прямо на ней.
+     * Это позволяет игроку реально искать богатые участки
+     * перемещением шахты, а не гаданием по среднему grade.
+     */
     static Selection selectDeposit(
             GeologicalRegion region,
-            Optional<ResourceLocation> activeDepositId
+            Optional<ResourceLocation> activeDepositId,
+            int mineX,
+            int mineZ
     ) {
         if (activeDepositId.isPresent()) {
             Optional<GeologicalDeposit> existing = region.getDeposit(
@@ -207,7 +219,7 @@ final class IndustrialMineOperation {
         Optional<GeologicalDeposit> selected = region.getDeposits()
                 .stream()
                 .filter(deposit -> !deposit.isDepleted())
-                .sorted(DEPOSIT_ORDER)
+                .sorted(byLocalPotential(mineX, mineZ))
                 .findFirst();
 
         if (selected.isEmpty()) {
@@ -219,6 +231,28 @@ final class IndustrialMineOperation {
 
         boolean changed = activeDepositId.isPresent() || selected.isPresent();
         return new Selection(selected, changed);
+    }
+
+    /**
+     * Совместимый путь без позиции шахты: порядок по богатству.
+     */
+    static Selection selectDeposit(
+            GeologicalRegion region,
+            Optional<ResourceLocation> activeDepositId
+    ) {
+        return selectDeposit(region, activeDepositId, 0, 0);
+    }
+
+    private static Comparator<GeologicalDeposit> byLocalPotential(
+            int mineX,
+            int mineZ
+    ) {
+        return Comparator
+                .<GeologicalDeposit>comparingDouble(
+                        deposit -> deposit.localPotentialPerHour(mineX, mineZ)
+                )
+                .reversed()
+                .thenComparing(deposit -> deposit.getId().toString());
     }
 
     static boolean isDepositSelectable(

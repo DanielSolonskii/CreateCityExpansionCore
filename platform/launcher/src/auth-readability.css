@@ -1,0 +1,35 @@
+/* Account dialogs only: readable text without scaling the rest of the Launcher. */
+.login-modal {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.login-modal.register-modal { width: min(560px, calc(100vw - 32px)); }
+.login-modal .eyebrow { font-size: 11px; }
+.login-modal > p { max-width: none; font-size: 14px; color: #a7b2ac; }
+.login-modal label > span { font-size: 11px; letter-spacing: .1em; color: #a0ada5; }
+.login-modal input { font-size: 16px; }
+.login-modal input::placeholder { color: #82918a; }
+.login-modal .login-options { flex-wrap: wrap; gap: 10px; }
+.login-modal .login-options button { font-size: 12px; }
+.login-modal .login-error {
+  height: auto;
+  min-height: 30px;
+  padding: 6px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.login-modal .login-submit { min-height: 48px; height: auto; padding: 10px; font-size: 16px; }
+.login-modal .auth-switch { font-size: 13px; line-height: 1.5; padding: 6px 0; }
+.login-modal .login-note, .login-modal small { font-size: 12px; line-height: 1.55; color: #96a59d; }
+.login-modal .mock-hint { flex-wrap: wrap; }
+.login-modal .mock-hint span { font-size: 10px; }
+.login-modal .mock-hint strong { font-size: 12px; }
+.login-modal .verification-code { font-size: 25px; }
+@media (max-width: 540px) {
+  .login-modal { padding: 26px 22px; }
+  .login-modal .register-grid { grid-template-columns: 1fr; }
+}

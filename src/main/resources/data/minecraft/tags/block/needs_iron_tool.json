@@ -3,6 +3,20 @@
   "values": [
     "createcityexpansioncore:contract_intake",
     "createcityexpansioncore:warehouse_gateway",
-    "createcityexpansioncore:reinforced_concrete"
+    "createcityexpansioncore:reinforced_concrete",
+    "createcityexpansioncore:refractory_block",
+    "createcityexpansioncore:coke_oven_chamber",
+    "createcityexpansioncore:coke_battery_controller",
+    "createcityexpansioncore:coke_battery_input_port",
+    "createcityexpansioncore:coke_battery_output_port",
+    "createcityexpansioncore:blast_furnace_core",
+    "createcityexpansioncore:blast_furnace_controller",
+    "createcityexpansioncore:blast_furnace_input_port",
+    "createcityexpansioncore:blast_furnace_output_port",
+    "createcityexpansioncore:steel_converter_controller",
+    "createcityexpansioncore:steel_converter_fluid_input",
+    "createcityexpansioncore:steel_converter_item_input",
+    "createcityexpansioncore:steel_converter_output",
+    "createcityexpansioncore:steelmaking_blower_port"
   ]
 }

@@ -1,0 +1,3 @@
+.phone-verification { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 14px 0; }
+.phone-verification svg { border-radius: 10px; background: #fff; }
+.verification-code { font-family: monospace; font-size: 23px; letter-spacing: 3px; user-select: text; }

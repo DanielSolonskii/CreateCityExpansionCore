@@ -316,7 +316,8 @@ public class CityPylonRenderer implements BlockEntityRenderer<CityPylonBlockEnti
      * У Menu есть BlockPos, дополнительная синхронизация не нужна.
      */
     private static boolean isGuiOpenFor(BlockPos pos) {
-        if (!(Minecraft.getInstance().screen instanceof CityPylonScreen screen)) {
+        CityPylonScreen screen = com.example.examplemod.client.screen.CityPylonWorkspace.controller();
+        if (screen == null) {
             return false;
         }
         return screen.getMenu().getPylonPos().equals(pos);

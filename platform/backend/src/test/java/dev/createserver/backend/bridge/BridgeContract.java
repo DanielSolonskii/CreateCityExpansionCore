@@ -1,0 +1,51 @@
+package dev.createserver.backend.bridge;
+import java.time.*;import java.time.temporal.ChronoUnit;import java.sql.Timestamp;import java.util.*;import java.util.concurrent.*;import java.net.*;import java.net.http.*;
+import org.junit.jupiter.api.*;import org.springframework.beans.factory.annotation.Autowired;import org.springframework.boot.test.web.server.LocalServerPort;import org.springframework.jdbc.core.JdbcTemplate;
+import dev.createserver.backend.account.AccountFailure;
+import static org.assertj.core.api.Assertions.*;
+abstract class BridgeContract {
+    @Autowired BridgeService service;@Autowired JdbcTemplate db;@LocalServerPort int port;
+    UUID user,mc,boot,session;Instant started;List<UUID> boots;
+    @BeforeEach void setup(){user=UUID.randomUUID();mc=UUID.randomUUID();boot=UUID.randomUUID();session=UUID.randomUUID();boots=new ArrayList<>(List.of(boot));started=Instant.now().minusSeconds(300).truncatedTo(ChronoUnit.MILLIS);String name="t"+user.toString().substring(0,8);
+        db.update("INSERT INTO platform_user(id,status,created_at,updated_at) VALUES(?,'ACTIVE',?,?)",user,Timestamp.from(started),Timestamp.from(started));
+        db.update("INSERT INTO account_credentials(platform_user_id,username,password_hash) VALUES(?,?,?)",user,name,"x".repeat(60));
+        db.update("INSERT INTO minecraft_identity(minecraft_uuid,platform_user_id,current_name,join_name) VALUES(?,?,?,?)",mc,user,name,"cs"+user.toString().replace("-","").substring(0,14));
+    }
+    @AfterEach void cleanup(){for(UUID id:boots){db.update("DELETE FROM telemetry_session WHERE boot_id=?",id);db.update("DELETE FROM telemetry_event WHERE boot_id=?",id);db.update("DELETE FROM telemetry_batch WHERE boot_id=?",id);db.update("DELETE FROM server_bridge_boot WHERE boot_id=?",id);}db.update("DELETE FROM minecraft_identity WHERE platform_user_id=?",user);db.update("DELETE FROM account_credentials WHERE platform_user_id=?",user);db.update("DELETE FROM platform_user WHERE id=?",user);}
+    BridgeService.Event event(String type,long duration){return new BridgeService.Event(UUID.randomUUID(),mc,type,session,"",started.plusSeconds(duration),duration);}
+    BridgeService.Batch batch(long rev,boolean online,List<BridgeService.Event> events){return new BridgeService.Batch(UUID.randomUUID(),"test-world",boot,started,rev,Instant.now().truncatedTo(ChronoUnit.MILLIS),online,300,online?List.of(mc):List.of(),15,"1.21.1","1.0.1","NeoForge 21.1.251",0,events);}
+    @Test void authoritativeIdentityAndPrivatePlayerList(){service.receive(batch(1,true,List.of(event("CITY_CREATED",0))));assertThat(service.status().state()).isEqualTo("ONLINE");assertThat(service.status().playerCount()).isEqualTo(1);assertThat(service.admin(111).players().getFirst().platformUserId()).isEqualTo(user);assertThat(db.queryForObject("SELECT platform_user_id FROM telemetry_event WHERE boot_id=?",UUID.class,boot)).isEqualTo(user);assertThatThrownBy(()->service.admin(222)).isInstanceOf(AccountFailure.class);}
+    @Test void existingCityEventsAreAcceptedAndHeartbeatAdvances(){
+        var events=List.of(new BridgeService.Event(UUID.randomUUID(),mc,"CITY_PLOT_CLAIMED",session,"-3:8",started,0),
+            new BridgeService.Event(UUID.randomUUID(),mc,"CITY_LEVEL_CHANGED",session,"2",started,0),
+            new BridgeService.Event(UUID.randomUUID(),mc,"CITY_COLOR_CHANGED",session,"#12ABEF",started,0));
+        service.receive(batch(1,true,events));service.receive(batch(2,true,List.of()));
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM telemetry_event WHERE boot_id=?",Integer.class,boot)).isEqualTo(3);
+        assertThat(db.queryForObject("SELECT revision FROM server_bridge_boot WHERE boot_id=?",Long.class,boot)).isEqualTo(2);
+        assertThat(service.status().state()).isEqualTo("ONLINE");
+    }
+    @Test void hashDetailIsAllowedOnlyForAnExactCityColour(){
+        for(String detail:List.of("#12345","#1234567","#GGGGGG","#12ABEF<script>")){
+            var e=new BridgeService.Event(UUID.randomUUID(),mc,"CITY_COLOR_CHANGED",session,detail,started,0);
+            assertThatThrownBy(()->service.receive(batch(1,true,List.of(e)))).isInstanceOf(AccountFailure.class);
+        }
+        var e=new BridgeService.Event(UUID.randomUUID(),mc,"CITY_JOIN",session,"#12ABEF",started,0);
+        assertThatThrownBy(()->service.receive(batch(1,true,List.of(e)))).isInstanceOf(AccountFailure.class);
+    }
+    @Test void exactBatchReplayDoesNotDuplicate(){var b=batch(1,true,List.of(event("PLAYER_JOIN",0)));service.receive(b);service.receive(b);assertThat(db.queryForObject("SELECT COUNT(*) FROM telemetry_event WHERE boot_id=?",Integer.class,boot)).isEqualTo(1);}
+    @Test void sameEventAcrossBatchesDeduplicates(){var e=event("PLAYER_JOIN",0);service.receive(batch(1,true,List.of(e)));service.receive(batch(2,true,List.of(e)));assertThat(db.queryForObject("SELECT COUNT(*) FROM telemetry_event WHERE boot_id=?",Integer.class,boot)).isEqualTo(1);}
+    @Test void staleRevisionRejected(){service.receive(batch(2,true,List.of()));assertThatThrownBy(()->service.receive(batch(1,false,List.of()))).isInstanceOf(AccountFailure.class);assertThat(service.status().state()).isEqualTo("ONLINE");}
+    @Test void cumulativePlaytimeIsNotDoubleCounted(){service.receive(batch(1,true,List.of(event("SESSION_START",0),event("SESSION_CHECKPOINT",60),event("SESSION_END",120))));assertThat(service.admin(111).playtimeSeconds()).isGreaterThanOrEqualTo(120);assertThat(db.queryForObject("SELECT duration_seconds FROM telemetry_session WHERE id=?",Long.class,session)).isEqualTo(120);}
+    @Test void staleHeartbeatIsUnknownAndHidesPlayers(){service.receive(batch(1,true,List.of()));db.update("UPDATE server_bridge_boot SET observed_at=? WHERE boot_id=?",Timestamp.from(Instant.now().minusSeconds(100)),boot);assertThat(service.status().state()).isEqualTo("UNKNOWN");assertThat(service.admin(111).players()).isEmpty();}
+    @Test void gracefulOffline(){service.receive(batch(1,true,List.of()));service.receive(batch(2,false,List.of(event("SESSION_END",100))));assertThat(service.status().state()).isEqualTo("OFFLINE");assertThat(service.status().playerCount()).isZero();}
+    @Test void olderBootCannotOverwriteNewerBoot(){service.receive(batch(1,true,List.of()));UUID old=boot;boot=UUID.randomUUID();boots.add(boot);started=started.plusSeconds(10);service.receive(batch(1,false,List.of()));boot=old;started=started.minusSeconds(10);service.receive(batch(2,true,List.of()));assertThat(service.status().state()).isEqualTo("OFFLINE");}
+    @Test void invalidEventRollsBackWholeBatch(){var bad=new BridgeService.Event(UUID.randomUUID(),mc,"RAW_CLICK",null,"",started,0);assertThatThrownBy(()->service.receive(batch(1,true,List.of(event("PLAYER_JOIN",0),bad)))).isInstanceOf(AccountFailure.class);assertThat(db.queryForObject("SELECT COUNT(*) FROM server_bridge_boot WHERE boot_id=?",Integer.class,boot)).isZero();}
+    @Test void sessionCannotChangeIdentity(){service.receive(batch(1,true,List.of(event("SESSION_START",0))));var forged=new BridgeService.Event(UUID.randomUUID(),UUID.randomUUID(),"SESSION_END",session,"",started.plusSeconds(10),10);assertThatThrownBy(()->service.receive(batch(2,true,List.of(forged)))).isInstanceOf(AccountFailure.class);assertThat(db.queryForObject("SELECT COUNT(*) FROM telemetry_event WHERE boot_id=?",Integer.class,boot)).isEqualTo(1);}
+    @Test void legacyIdentityIsExplicitlyUnmapped(){var legacy=new BridgeService.Event(UUID.randomUUID(),UUID.randomUUID(),"PLAYER_JOIN",null,"",started,0);service.receive(batch(1,true,List.of(legacy)));assertThat(db.queryForObject("SELECT platform_user_id FROM telemetry_event WHERE id=?",UUID.class,legacy.id())).isNull();}
+    @Test void concurrentRetryOneEvent()throws Exception{var b=batch(1,true,List.of(event("PLAYER_JOIN",0)));service.receive(b);try(var pool=Executors.newFixedThreadPool(2)){var a=pool.submit(()->service.receive(b));var c=pool.submit(()->service.receive(b));a.get(10,TimeUnit.SECONDS);c.get(10,TimeUnit.SECONDS);}assertThat(db.queryForObject("SELECT COUNT(*) FROM telemetry_event WHERE boot_id=?",Integer.class,boot)).isEqualTo(1);}
+    @Test void httpServiceIsolation()throws Exception{var client=HttpClient.newHttpClient();String base="http://127.0.0.1:"+port;
+        assertThat(client.send(HttpRequest.newBuilder(URI.create(base+"/api/internal/bridge/status")).GET().build(),HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+        var request=HttpRequest.newBuilder(URI.create(base+"/api/internal/bridge/admin?telegramUserId=222")).header("X-Bot-Service-Secret","test-only-bot-service-secret-at-least-32").GET().build();assertThat(client.send(request,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(403);
+        var crossed=HttpRequest.newBuilder(URI.create(base+"/api/internal/game/telemetry")).header("X-Game-Service-Secret","test-only-bot-service-secret-at-least-32").header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString("{}")).build();assertThat(client.send(crossed,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+    }
+}

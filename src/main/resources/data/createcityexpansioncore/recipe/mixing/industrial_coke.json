@@ -13,23 +13,11 @@
     },
     {
       "item": "minecraft:coal"
-    },
-    {
-      "item": "minecraft:coal"
-    },
-    {
-      "item": "minecraft:coal"
-    },
-    {
-      "item": "minecraft:coal"
-    },
-    {
-      "item": "minecraft:coal"
     }
   ],
   "results": [
     {
-      "count": 8,
+      "count": 2,
       "id": "createcityexpansioncore:industrial_coke"
     }
   ]

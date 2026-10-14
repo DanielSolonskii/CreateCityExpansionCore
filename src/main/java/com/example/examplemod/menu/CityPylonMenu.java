@@ -10,10 +10,15 @@ import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.network.CityPylonStatePayload;
 import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.RailwayStatePayload;
+import com.example.examplemod.network.RailwayRouteOptionsPayload;
 import com.example.examplemod.network.EconomyStatePayload;
+import com.example.examplemod.network.CityRelationsStatePayload;
 import com.example.examplemod.railway.RailwayLineSnapshot;
 import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTrainSnapshot;
+import com.example.examplemod.railway.RailwayTrainCandidate;
+import com.example.examplemod.railway.RailwayOwnershipSnapshot;
+import com.example.examplemod.railway.RailwaySectionSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -26,14 +31,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class CityPylonMenu extends AbstractContainerMenu {
+public class CityPylonMenu extends AbstractContainerMenu implements com.example.examplemod.client.WorldMapDataSource {
 
     private final BlockPos pylonPos;
     private final ResourceLocation dimensionId;
     private final boolean hasCity;
     private final String cityName;
     private int cityLevel;
-    private int territorySize;
+    /**
+     * Число заявленных участков 50×50.
+     *
+     * <p>Заменило старый квадратный {@code territorySize}: площадь
+     * территории теперь определяется тем, сколько участков реально
+     * занято, а не уровнем города.
+     */
+    private int plotCount;
+    /** Собственный цвет города {@code 0xRRGGBB}. */
+    private int colorRgb = com.example.examplemod.city.CityColors.PALETTE.get(0);
+    /** OWNER или ADMIN — могут расширять территорию и менять цвет. */
+    private boolean canManageTerritory;
     private final UUID owner;
     private final List<CityMember> members;
     private int projectCapacity;
@@ -44,9 +60,14 @@ public class CityPylonMenu extends AbstractContainerMenu {
     private final List<CityMapTilePayload> pendingMapTiles = new ArrayList<>();
     private List<RailwayStationSnapshot> railwayStations = new ArrayList<>();
     private List<RailwayTrainSnapshot> railwayTrains = new ArrayList<>();
+    private List<RailwayTrainCandidate> railwayTrainCandidates = new ArrayList<>();
     private List<RailwayLineSnapshot> railwayLines = new ArrayList<>();
+    private List<RailwayOwnershipSnapshot> railwayOwnership = new ArrayList<>();
+    private List<RailwaySectionSnapshot> railwayOwnedSections = new ArrayList<>();
     private RailwayMapPayload pendingRailwayMap;
+    private RailwayRouteOptionsPayload pendingRouteOptions;
     private EconomyStatePayload economyState;
+    private CityRelationsStatePayload relationsState;
 
     public CityPylonMenu(
             int containerId,
@@ -62,6 +83,8 @@ public class CityPylonMenu extends AbstractContainerMenu {
                 data.readUtf(),
                 data.readVarInt(),
                 data.readVarInt(),
+                data.readVarInt(),
+                data.readBoolean(),
                 data.readBoolean() ? data.readUUID() : null,
                 readMembers(data),
                 data.readVarInt(),
@@ -130,7 +153,7 @@ public class CityPylonMenu extends AbstractContainerMenu {
             }
 
             members.add(
-                    new CityMember(playerId, role)
+                    new CityMember(playerId, role, data.readUtf(64))
             );
         }
 
@@ -150,7 +173,9 @@ public class CityPylonMenu extends AbstractContainerMenu {
                 false,
                 "",
                 1,
-                100,
+                0,
+                com.example.examplemod.city.CityColors.PALETTE.get(0),
+                false,
                 null,
                 new ArrayList<>(),
                 1,
@@ -169,7 +194,9 @@ public class CityPylonMenu extends AbstractContainerMenu {
             boolean hasCity,
             String cityName,
             int cityLevel,
-            int territorySize,
+            int plotCount,
+            int colorRgb,
+            boolean canManageTerritory,
             UUID owner,
             List<CityMember> members,
             int projectCapacity,
@@ -188,7 +215,9 @@ public class CityPylonMenu extends AbstractContainerMenu {
         this.hasCity = hasCity;
         this.cityName = cityName;
         this.cityLevel = cityLevel;
-        this.territorySize = territorySize;
+        this.plotCount = plotCount;
+        this.colorRgb = com.example.examplemod.city.CityColors.normalize(colorRgb);
+        this.canManageTerritory = canManageTerritory;
         this.owner = owner;
         this.members = new ArrayList<>(members);
         this.projectCapacity = projectCapacity;
@@ -218,8 +247,24 @@ public class CityPylonMenu extends AbstractContainerMenu {
         return cityLevel;
     }
 
-    public int getTerritorySize() {
-        return territorySize;
+    /** Число заявленных участков 50×50. */
+    public int getPlotCount() {
+        return plotCount;
+    }
+
+    /**
+     * Собственный цвет города {@code 0xRRGGBB}.
+     *
+     * <p>Клиент только показывает это значение; менять его может
+     * исключительно сервер, поэтому подделать цвет на клиенте нельзя.
+     */
+    public int getColorRgb() {
+        return colorRgb;
+    }
+
+    /** Может ли открывший меню игрок расширять территорию и менять цвет. */
+    public boolean canManageTerritory() {
+        return canManageTerritory;
     }
 
     public UUID getOwner() {
@@ -253,11 +298,18 @@ public class CityPylonMenu extends AbstractContainerMenu {
             return;
         }
         this.cityLevel = payload.cityLevel();
-        this.territorySize = payload.cityLevel() >= 2 ? 150 : 100;
         this.projectCapacity = payload.projectCapacity();
         this.projects = new ArrayList<>(payload.projects());
         this.developmentPrimaryResource = payload.primaryResource();
         this.developmentRequirements = new ArrayList<>(payload.developmentRequirements());
+        /*
+         * Цвет и число участков — часть состояния города, поэтому
+         * обновляются здесь же: смена цвета и успешный claim приходят
+         * на открытый экран без переоткрытия пилона.
+         */
+        this.plotCount = payload.plotCount();
+        this.colorRgb = com.example.examplemod.city.CityColors.normalize(payload.colorRgb());
+        this.canManageTerritory = payload.canManageTerritory();
     }
 
     public void acceptMapTile(CityMapTilePayload payload) {
@@ -285,9 +337,16 @@ public class CityPylonMenu extends AbstractContainerMenu {
         return List.copyOf(this.railwayTrains);
     }
 
+    /** Create trains visible to this pylon that are not registered in CCEC yet. */
+    public List<RailwayTrainCandidate> getRailwayTrainCandidates() {
+        return List.copyOf(this.railwayTrainCandidates);
+    }
+
     public List<RailwayLineSnapshot> getRailwayLines() {
         return List.copyOf(this.railwayLines);
     }
+    public List<RailwayOwnershipSnapshot> getRailwayOwnership(){return List.copyOf(this.railwayOwnership);}
+    public List<RailwaySectionSnapshot> getRailwayOwnedSections(){return List.copyOf(this.railwayOwnedSections);}
 
     public void applyRailwayState(RailwayStatePayload payload) {
         if (!this.pylonPos.equals(payload.pylonPos())) {
@@ -295,7 +354,10 @@ public class CityPylonMenu extends AbstractContainerMenu {
         }
         this.railwayStations = new ArrayList<>(payload.stations());
         this.railwayTrains = new ArrayList<>(payload.trains());
+        this.railwayTrainCandidates = new ArrayList<>(payload.candidates());
         this.railwayLines = new ArrayList<>(payload.lines());
+        this.railwayOwnership = new ArrayList<>(payload.ownership());
+        this.railwayOwnedSections = new ArrayList<>(payload.ownedSections());
     }
 
     public void acceptRailwayMap(RailwayMapPayload payload) {
@@ -310,10 +372,16 @@ public class CityPylonMenu extends AbstractContainerMenu {
         this.pendingRailwayMap = null;
         return result;
     }
+    public void acceptRouteOptions(RailwayRouteOptionsPayload payload){if(payload.pylonPos().equals(this.pylonPos))this.pendingRouteOptions=payload;}
+    public RailwayRouteOptionsPayload drainRouteOptions(){RailwayRouteOptionsPayload value=pendingRouteOptions;pendingRouteOptions=null;return value;}
     public void applyEconomyState(EconomyStatePayload payload) {
         if (this.pylonPos.equals(payload.pylonPos())) this.economyState = payload;
     }
     public EconomyStatePayload getEconomyState() { return economyState; }
+    public void applyRelationsState(CityRelationsStatePayload payload) {
+        if (this.pylonPos.equals(payload.pylonPos())) this.relationsState = payload;
+    }
+    public CityRelationsStatePayload getRelationsState() { return relationsState; }
     public void updateMemberRole(
             UUID playerId,
             CityMember.Role role
@@ -328,6 +396,16 @@ public class CityPylonMenu extends AbstractContainerMenu {
             }
         }
     }
+    /**
+     * Replaces the whole member list from an authoritative snapshot. A snapshot cannot be applied
+     * twice or out of order and end up wrong, so no delta bookkeeping is needed, and applying the
+     * same snapshot twice is a no-op rather than a duplication.
+     */
+    public void replaceMembers(List<CityMember> authoritative) {
+        this.members.clear();
+        this.members.addAll(authoritative);
+    }
+
     public void removeMember(UUID playerId) {
 
         this.members.removeIf(

@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+uid=$(id -u createtelegram)
+if ! /usr/sbin/nft list table inet create_telegram_guard >/dev/null 2>&1; then
+ /usr/sbin/nft -f - <<EOF
+table inet create_telegram_guard {
+ chain output {
+  type filter hook output priority 0; policy accept;
+  meta skuid $uid oifname "lo" ip daddr 127.0.0.0/8 accept
+  meta skuid $uid oifname "lo" ip6 daddr ::1 accept
+  meta skuid $uid meta nfproto ipv4 oifname "wgtelegram" accept
+  meta skuid $uid meta mark 51820 oifname "eth0" ip daddr 37.220.83.171 udp dport 51820 accept
+  meta skuid $uid counter reject
+ }
+}
+EOF
+fi

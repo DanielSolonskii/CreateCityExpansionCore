@@ -1,6 +1,1 @@
-{
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "createcityexpansioncore:block/mine_gateway"
-  }
-}
+{"parent":"minecraft:block/cube","textures":{"down":"createcityexpansioncore:block/mine_gateway_side","up":"createcityexpansioncore:block/mine_gateway_top","north":"createcityexpansioncore:block/mine_gateway_front","south":"createcityexpansioncore:block/mine_gateway_side","west":"createcityexpansioncore:block/mine_gateway_side","east":"createcityexpansioncore:block/mine_gateway_side","particle":"createcityexpansioncore:block/mine_gateway_side"}}

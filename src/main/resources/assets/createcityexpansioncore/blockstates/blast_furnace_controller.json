@@ -1,0 +1,1 @@
+{"variants":{"facing=north":{"model":"createcityexpansioncore:block/blast_furnace_controller"},"facing=south":{"model":"createcityexpansioncore:block/blast_furnace_controller","y":180},"facing=west":{"model":"createcityexpansioncore:block/blast_furnace_controller","y":270},"facing=east":{"model":"createcityexpansioncore:block/blast_furnace_controller","y":90}}}

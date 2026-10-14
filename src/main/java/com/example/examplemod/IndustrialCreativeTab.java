@@ -41,6 +41,25 @@ public final class IndustrialCreativeTab {
 
     /*
      * =========================================
+     * TIER 1 — BULK-СЫРЬЁ ИЗ НЕДР
+     * =========================================
+     *
+     * Массовые commodities железной цепочки Alpha v1.
+     * Идут первыми: это то, что реально выдаёт
+     * Industrial Mine и что перегружают Create factory.
+     *
+     * Уголь, известняк и медь собственных bulk-предметов
+     * не получают — см. комментарии в IndustrialMaterials.
+     */
+
+    private static final List<ItemLike> BULK_ORE = List.of(
+            IndustrialMaterials.IRON_ORE_RAW.get(),
+            IndustrialMaterials.CRUSHED_IRON_ORE.get(),
+            IndustrialMaterials.IRON_CONCENTRATE.get()
+    );
+
+    /*
+     * =========================================
      * TIER 2 — ПРОМЫШЛЕННЫЕ МАТЕРИАЛЫ
      * =========================================
      *
@@ -52,6 +71,8 @@ public final class IndustrialCreativeTab {
 
     private static final List<ItemLike> TIER2 = List.of(
             IndustrialMaterials.INDUSTRIAL_COKE.get(),
+            IndustrialMaterials.CRUSHED_LIMESTONE.get(),
+            CreateCityExpansionCore.QUICKLIME.get(),
             IndustrialMaterials.STEEL_BILLET.get(),
             IndustrialMaterials.STEEL_PLATE.get(),
             IndustrialMaterials.STRUCTURAL_BEAM.get(),
@@ -102,11 +123,30 @@ public final class IndustrialCreativeTab {
     private static final List<ItemLike> ECONOMY_INFRASTRUCTURE = List.of(
             CreateCityExpansionCore.CITY_PYLON_ITEM.get(),
             CreateCityExpansionCore.CONTRACT_INTAKE_ITEM.get(),
-            CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get()
+            CreateCityExpansionCore.CONTRACT_DISPATCH_TERMINAL_ITEM.get(),
+            CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get(),
+            CreateCityExpansionCore.RAILWAY_TRACK_MARKER_ITEM.get(),
+            // Загрузчик чанка держит удалённый завод живым, поэтому идёт сразу за разметкой пути:
+            // это инфраструктура, которой в первую очередь пользуется железнодорожная сеть.
+            CreateCityExpansionCore.CHUNK_LOADER_ITEM.get()
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(
-            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get()
+            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get(),
+            CreateCityExpansionCore.REFRACTORY_BLOCK_ITEM.get(),
+            CreateCityExpansionCore.COKE_OVEN_CHAMBER_ITEM.get(),
+            CreateCityExpansionCore.COKE_BATTERY_CONTROLLER_ITEM.get(),
+            CreateCityExpansionCore.COKE_BATTERY_INPUT_PORT_ITEM.get(),
+            CreateCityExpansionCore.COKE_BATTERY_OUTPUT_PORT_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_CORE_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_CONTROLLER_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_INPUT_PORT_ITEM.get(),
+            CreateCityExpansionCore.BLAST_FURNACE_OUTPUT_PORT_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_CONTROLLER_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_FLUID_INPUT_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_ITEM_INPUT_ITEM.get()
+            ,CreateCityExpansionCore.STEEL_CONVERTER_OUTPUT_ITEM.get()
+            ,CreateCityExpansionCore.STEELMAKING_BLOWER_PORT_ITEM.get()
     );
 
     public static void populate(
@@ -114,6 +154,7 @@ public final class IndustrialCreativeTab {
             CreativeModeTab.Output output
     ) {
         acceptAll(output, TIER1_DERIVED);
+        acceptAll(output, BULK_ORE);
         acceptAll(output, TIER2);
         acceptAll(output, TIER3);
         acceptAll(output, MINING_MACHINES);

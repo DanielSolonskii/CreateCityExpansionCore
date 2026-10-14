@@ -26,9 +26,9 @@ import java.util.Locale;
  * currency→item и item→item. Технические registry id игрок не вводит:
  * предмет выбирается через {@link ItemSelectorOverlay}.
  */
-public final class EconomyCreateScreen extends Screen {
+public final class EconomyCreateScreen extends CityPylonPageScreen {
 
-    public enum Mode { PRIVATE, CITY_CONTRACT, MASTER_SPECIAL }
+    public enum Mode { PRIVATE, CITY_CONTRACT, MASTER_SPECIAL, CITY_SELL }
 
     private enum Side { ITEM, CURRENCY }
 
@@ -43,7 +43,7 @@ public final class EconomyCreateScreen extends Screen {
     private static final int PICK_WIDTH = 118;
 
     private static final int COLOR_PANEL = 0xEE151B1E;
-    private static final int COLOR_ACCENT = 0xFFD09A3A;
+    private static final int COLOR_ACCENT = 0xFFB78A43;
     private static final int COLOR_TEXT = 0xFFE2E6E7;
     private static final int COLOR_MUTED = 0xFF8F9A9E;
     private static final int COLOR_LABEL = 0xFFFFFFFF;
@@ -314,12 +314,8 @@ public final class EconomyCreateScreen extends Screen {
         return boxes;
     }
 
-    private List<EconomyStatePayload.InfrastructureView> intakes() {
-        return state.infrastructure().stream()
-                .filter(value -> value.cityOwned()
-                        && value.type() == EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                        && value.available())
-                .toList();
+    private List<com.example.examplemod.economy.FreightPoint> intakes() {
+        return FreightUi.choices(state,true);
     }
 
     // ---------------------------------------------------------------------
@@ -387,7 +383,7 @@ public final class EconomyCreateScreen extends Screen {
                 return true;
             }
             if (intakeHit.contains(mouseX, mouseY)) {
-                List<EconomyStatePayload.InfrastructureView> values = intakes();
+                List<com.example.examplemod.economy.FreightPoint> values = intakes();
                 if (!values.isEmpty()) intakeIndex = (intakeIndex + 1) % values.size();
                 return true;
             }
@@ -541,9 +537,9 @@ public final class EconomyCreateScreen extends Screen {
     }
 
     private void submitContract() {
-        List<EconomyStatePayload.InfrastructureView> values = intakes();
-        if (values.isEmpty()) {
-            error = Component.translatable("gui.createcityexpansioncore.economy.no_intake");
+        List<com.example.examplemod.economy.FreightPoint> values = intakes();
+        if (values.isEmpty() && mode != Mode.CITY_SELL) {
+            error = Component.translatable("gui.createcityexpansioncore.freight.no_receive");
             return;
         }
         if (!validItem(contractItem)) {
@@ -566,10 +562,10 @@ public final class EconomyCreateScreen extends Screen {
         }
         PacketDistributor.sendToServer(new EconomyCommandPayload(
                 pylonPos,
-                mode == Mode.MASTER_SPECIAL
+                mode == Mode.CITY_SELL ? EconomyCommandPayload.Action.CREATE_FREIGHT_SELL : mode == Mode.MASTER_SPECIAL
                         ? EconomyCommandPayload.Action.CREATE_MASTER_SPECIAL
                         : EconomyCommandPayload.Action.CREATE_CITY_CONTRACT,
-                values.get(Math.floorMod(intakeIndex, values.size())).id(),
+                mode == Mode.CITY_SELL ? null : values.get(Math.floorMod(intakeIndex, values.size())).id,
                 null, contractItem, null, amountValue, money, deadlineTicks,
                 mode == Mode.MASTER_SPECIAL ? contractMode.ordinal() : EconomyTypes.ContractMode.EXCLUSIVE.ordinal(),
                 titleBox == null ? "" : titleBox.getValue(),
@@ -704,16 +700,16 @@ public final class EconomyCreateScreen extends Screen {
                 innerX + innerW - 90, contractNoteY + 5, COLOR_MUTED, false);
 
         button(graphics, intakeHit,
-                Component.translatable("gui.createcityexpansioncore.economy.intake"), true, mouseX, mouseY);
+                Component.translatable("gui.createcityexpansioncore.freight.choose_receive"), true, mouseX, mouseY);
         if (contractModeHit != null) {
             button(graphics, contractModeHit, contractModeLabel(), true, mouseX, mouseY);
         }
 
-        List<EconomyStatePayload.InfrastructureView> values = intakes();
-        Component coords = values.isEmpty()
-                ? Component.translatable("gui.createcityexpansioncore.economy.no_intake")
-                : Component.translatable("gui.createcityexpansioncore.economy.intake_coordinates",
-                values.get(Math.floorMod(intakeIndex, values.size())).pos().toShortString());
+        List<com.example.examplemod.economy.FreightPoint> values = intakes();
+        Component coords = mode == Mode.CITY_SELL ? FreightUi.tr("after_buyer") : values.isEmpty()
+                ? Component.translatable("gui.createcityexpansioncore.freight.no_receive")
+                : Component.translatable("gui.createcityexpansioncore.freight.destination",
+                values.get(Math.floorMod(intakeIndex, values.size())).name);
         graphics.drawString(this.font, ellipsize(coords, innerW), innerX, contractCoordsY, 0xFFAEB8BB, false);
     }
 

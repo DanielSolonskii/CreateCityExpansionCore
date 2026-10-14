@@ -1,0 +1,93 @@
+api.recreated.ru {
+
+ @gameCapability {
+  method POST
+  path_regexp gameCapability ^/api/auth/devices/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/game-session-capability$
+ }
+ handle @gameCapability {
+  reverse_proxy 127.0.0.1:8080
+ }
+ @gameTicket {
+  method POST
+  path /api/game-sessions
+ }
+ handle @gameTicket {
+  reverse_proxy 127.0.0.1:8080
+ }
+ @gameLogout {
+  method DELETE
+  path /api/launcher/sessions/current
+ }
+ handle @gameLogout {
+  reverse_proxy 127.0.0.1:8080
+ }
+
+	@launcherFiles {
+		method GET HEAD
+		path /launcher/versions/* /launcher/latest/*
+	}
+	handle @launcherFiles {
+		uri strip_prefix /launcher
+		root * /opt/create-server/launcher-distribution
+		header X-Content-Type-Options nosniff
+		header Cache-Control "no-store"
+		@installer path *.exe
+		header @installer Content-Disposition "attachment; filename=RE-CREATED-Launcher-x64-setup.exe"
+		file_server
+	}
+	@releaseFiles {
+		method GET HEAD
+		path /releases/*
+	}
+	handle @releaseFiles {
+		root * /opt/create-server/distribution
+		header X-Content-Type-Options nosniff
+		header Cache-Control "no-cache"
+		file_server
+	}
+	@deviceBegin {
+		method POST
+		path /api/auth/devices
+	}
+	@devicePoll {
+		method GET
+		path_regexp devicePoll ^/api/auth/devices/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+	}
+	@deviceAction {
+		method POST
+		path_regexp deviceAction ^/api/auth/devices/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/(authenticate|revoke)$
+	}
+	handle @deviceBegin {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle @devicePoll {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle @deviceAction {
+		reverse_proxy 127.0.0.1:8080
+	}
+	@read {
+		method GET
+		path /api/health /api/version /api/launcher/news
+	}
+	@credentials {
+		method POST
+		path /api/registrations /api/auth/login
+	}
+	@poll {
+		method GET
+		path_regexp registration ^/api/registrations/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
+	}
+	handle @read {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle @credentials {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle @poll {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

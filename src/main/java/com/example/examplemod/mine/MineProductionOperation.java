@@ -95,10 +95,29 @@ final class MineProductionOperation {
             );
         }
 
-        long plannedAmount = Math.min(
-                requestedAmount,
+        /*
+         * Планируемый выход сравнивается с запасом в одних и тех же
+         * физических единицах: остаток reserve сначала переводится
+         * в предметы шлюза, и только потом берётся минимум.
+         * Иначе на последнем сырье удвоенный выход железа
+         * обрезался бы вдвое.
+         */
+        long availablePhysical = MineOutputMapping.physicalAmountFor(
+                deposit.getResourceId(),
                 deposit.getRemainingReserve()
         );
+        long plannedAmount = Math.min(requestedAmount, availablePhysical);
+        if (plannedAmount <= 0L) {
+            return withDeposit(
+                    IndustrialMineState.DEPOSIT_DEPLETED,
+                    region,
+                    deposit,
+                    requestedAmount,
+                    0L,
+                    selection.changed(),
+                    "Выбранная залежь истощена; запасы не изменены."
+            );
+        }
         if (!output.available()
                 || !output.canAccept(deposit.getResourceId(), plannedAmount)) {
             return withDeposit(
@@ -112,9 +131,20 @@ final class MineProductionOperation {
             );
         }
 
+        /*
+         * requestedAmount — это физический выход в шлюз шахты.
+         * Геологический reserve при этом списывается в
+         * эквиваленте базового ресурса: для железа 10 сырья
+         * стоят 5 единиц запаса. Физический выход и расход
+         * запаса намеренно различаются.
+         */
+        long reserveAmount = MineOutputMapping.reserveUnitsFor(
+                deposit.getResourceId(),
+                plannedAmount
+        );
         DepositExtractionResult extraction = geology.extract(
                 deposit.getId(),
-                plannedAmount
+                reserveAmount
         );
         if (extraction.status() != DepositExtractionResult.Status.EXTRACTED) {
             return mapExtractionFailure(
@@ -126,9 +156,25 @@ final class MineProductionOperation {
             );
         }
 
+        /*
+         * Шлюз получает физические предметы, а reserve списывается
+         * в единицах базового ресурса. Если геология отдала меньше,
+         * чем было запрошено, физический выход масштабируется тем же
+         * коэффициентом, поэтому шлюз никогда не получает больше
+         * реально добытого.
+         */
+        long physicalOutput = plannedAmount;
+        if (plannedAmount > 0L) {
+            long scaled = MineOutputMapping.physicalAmountFor(
+                    deposit.getResourceId(),
+                    extraction.extractedAmount()
+            );
+            physicalOutput = Math.min(physicalOutput, Math.max(scaled, 1L));
+        }
+
         output.insertExact(
                 deposit.getResourceId(),
-                extraction.extractedAmount()
+                physicalOutput
         );
         return new MineOperationResult(
                 IndustrialMineState.RUNNING,

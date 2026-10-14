@@ -3,6 +3,7 @@ package com.example.examplemod.economy.block;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.economy.EconomyManager;
 import com.example.examplemod.economy.EconomyTypes;
+import com.example.examplemod.economy.ShipmentTokenItemData;
 import com.example.examplemod.sound.ModSounds;
 import com.example.examplemod.sound.WorldSoundHelper;
 import net.minecraft.core.BlockPos;
@@ -60,6 +61,12 @@ public final class EconomyThroughputBlockEntity extends BlockEntity {
         IItemHandler target = level.getCapability(Capabilities.ItemHandler.BLOCK,
                 pos.relative(outputDirection), outputDirection.getOpposite());
         if (target == null) return;
+        if (state.getBlock() instanceof WarehouseGatewayBlock
+                && WarehouseGatewayBlock.mode(state) == EconomyTypes.GatewayMode.OUTPUT
+                && blockEntity.registrationId != null && blockEntity.bufferIsEmpty()) {
+            EconomyManager.ImportDispatch dispatch=EconomyManager.get(level).dispatchNextImport(blockEntity.registrationId,64,level.getGameTime());
+            if(dispatch!=null){ItemStack cargo=new ItemStack(BuiltInRegistries.ITEM.get(dispatch.itemId()),dispatch.amount());ShipmentTokenItemData.write(cargo,dispatch.tokenId());blockEntity.buffer.insertItem(0,cargo,false);}
+        }
         for (int slot = 0; slot < blockEntity.buffer.getSlots(); slot++) {
             ItemStack stored = blockEntity.buffer.getStackInSlot(slot);
             if (stored.isEmpty()) continue;
@@ -80,6 +87,7 @@ public final class EconomyThroughputBlockEntity extends BlockEntity {
 
     private int allowedOutput(ItemStack stack, int requested) {
         if (!(level instanceof ServerLevel serverLevel) || registrationId == null) return requested;
+        if (ShipmentTokenItemData.read(stack).isPresent()) return requested;
         if (getBlockState().getBlock() instanceof WarehouseGatewayBlock
                 && WarehouseGatewayBlock.mode(getBlockState()) == EconomyTypes.GatewayMode.OUTPUT) {
             ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
@@ -94,19 +102,20 @@ public final class EconomyThroughputBlockEntity extends BlockEntity {
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(stack.getItem());
         EconomyManager manager = EconomyManager.get(serverLevel);
         if (getBlockState().getBlock() instanceof ContractIntakeBlock) {
-            manager.recordIntakeFlow(registrationId, itemId, moved, serverLevel);
             // Тихий щелчок перемещения. Строго ограничен по времени,
             // иначе поезд с тысячами предметов даст пулемёт.
             WorldSoundHelper.playFlowTick(serverLevel, worldPosition,
                     ModSounds.CONTRACT_DELIVERY_TICK.get(), 0.8F);
         } else if (getBlockState().getBlock() instanceof WarehouseGatewayBlock) {
-            manager.recordGatewayFlow(registrationId, WarehouseGatewayBlock.mode(getBlockState()), itemId, moved);
+            if(ShipmentTokenItemData.read(stack).isEmpty())manager.recordGatewayFlow(registrationId, WarehouseGatewayBlock.mode(getBlockState()), itemId, moved);
             // Склад работает в обе стороны, но звук один и тот же:
             // различать вход и выход незачем, это создаёт шум.
             WorldSoundHelper.playFlowTick(serverLevel, worldPosition,
                     ModSounds.WAREHOUSE_INPUT_TICK.get(), 0.8F);
         }
     }
+
+    private boolean bufferIsEmpty(){for(int slot=0;slot<buffer.getSlots();slot++)if(!buffer.getStackInSlot(slot).isEmpty())return false;return true;}
 
     public void dropContents(ServerLevel level) {
         for (int slot=0;slot<buffer.getSlots();slot++) {

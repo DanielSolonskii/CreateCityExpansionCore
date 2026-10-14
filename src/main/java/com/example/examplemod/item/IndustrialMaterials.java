@@ -33,9 +33,89 @@ public final class IndustrialMaterials {
      * =========================================
      */
 
+    /*
+     * =========================================
+     * BULK-ЦЕПОЧКА ЖЕЛЕЗА (Alpha v1)
+     * =========================================
+     *
+     * Промышленная шахта больше не выдаёт готовое железо.
+     * Для залежи createcityexpansioncore:iron шлюз шахты
+     * отдаёт IRON_ORE_RAW — несортированную рудную массу.
+     *
+     * Геологический production potential залежи при этом
+     * НЕ меняется: он по-прежнему выражен в эквиваленте
+     * конечного железа. Коэффициент пересчёта задан в
+     * MineOutputMapping и равен 2, потому что 1 концентрат
+     * даёт 2 железа:
+     *
+     *   500 Fe/ч  ->  1 000 сырья/ч
+     *  2500 Fe/ч  ->  5 000 сырья/ч
+     *  5000 Fe/ч  -> 10 000 сырья/ч
+     * 10000 Fe/ч  -> 20 000 сырья/ч
+     *
+     * Уголь, известняк и медь намеренно не получают
+     * собственных bulk-предметов: уголь остаётся обычным
+     * углём, известняк — существующим CRUSHED_LIMESTONE,
+     * медь — обычным create:raw_zinc.
+     *
+     * Обратных рецептов нет: ни железо, ни ванильная
+     * железная руда / raw iron не превращаются в сырьё.
+     * Ванильное железо остаётся обычным usable resource.
+     */
+
+    /**
+     * Железорудное сырьё.
+     * Несортированная рудная масса, выдаваемая
+     * Industrial Mine на железной залежи.
+     * Create Crushing: 1 сырьё -> 1 CRUSHED_IRON_ORE.
+     */
+    public static final DeferredItem<Item> IRON_ORE_RAW =
+            CreateCityExpansionCore.ITEMS.registerItem(
+                    "iron_ore_raw",
+                    properties -> new Item(properties),
+                    new Item.Properties()
+            );
+
+    /**
+     * Дроблёное железорудное сырьё.
+     * Промежуточный продукт Create Crushing на пути
+     * к обогащению.
+     */
+    public static final DeferredItem<Item> CRUSHED_IRON_ORE =
+            CreateCityExpansionCore.ITEMS.registerItem(
+                    "crushed_iron_ore",
+                    properties -> new Item(properties),
+                    new Item.Properties()
+            );
+
+    /**
+     * Железорудный концентрат.
+     * Create Mixing: 4 дроблёного сырья + 250 mB воды
+     * -> 1 концентрат.
+     * Далее: 1 концентрат -> 2 железа (Mixing, нагрев).
+     */
+    public static final DeferredItem<Item> IRON_CONCENTRATE =
+            CreateCityExpansionCore.ITEMS.registerItem(
+                    "iron_concentrate",
+                    properties -> new Item(properties),
+                    new Item.Properties()
+            );
+
+    /**
+     * Дроблёный известняк.
+     * Промежуточный продукт Create Crushing для получения негашёной извести.
+     */
+    public static final DeferredItem<Item> CRUSHED_LIMESTONE =
+            CreateCityExpansionCore.ITEMS.registerItem(
+                    "crushed_limestone",
+                    properties -> new Item(properties),
+                    new Item.Properties()
+            );
+
     /**
      * Промышленный кокс.
-     * Продукт угольной цепочки: 8 угля -> 8 кокса (Mixing, нагрев).
+     * Bootstrap-продукт угольной цепочки: 4 угля -> 2 кокса (Mixing, нагрев).
+     * Coke Oven Battery сохраняет промышленную эффективность 1:1.
      * Создаёт отдельную угольную промышленность вместо
      * прямого использования угля в металлургии.
      */
@@ -48,8 +128,8 @@ public final class IndustrialMaterials {
 
     /**
      * Стальная заготовка.
-     * Базовый steel commodity: 4 железа + 2 кокса + 1 кальцит
-     * -> 4 заготовки (Mixing, нагрев).
+     * Ранний steel commodity: 4 железа + 4 кокса + 1 негашёная известь
+     * -> 2 заготовки (Mixing, сверхнагрев).
      *
      * Будущий City Project «Metallurgical Works» сможет производить
      * её эффективнее и большими партиями, но не будет единственным

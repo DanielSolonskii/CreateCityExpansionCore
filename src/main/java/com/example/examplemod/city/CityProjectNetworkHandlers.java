@@ -176,10 +176,20 @@ public final class CityProjectNetworkHandlers {
     }
 
     private static void sync(ServerPlayer player, City city) {
-        PacketDistributor.sendToPlayer(player, createState(player.getServer(), city));
+        PacketDistributor.sendToPlayer(player, createState(player.getServer(), city, player));
     }
 
-    public static CityPylonStatePayload createState(MinecraftServer server, City city) {
+    /**
+     * Снимок состояния города для открытого экрана.
+     *
+     * <p><b>Зритель обязателен и не может быть {@code null}.</b> Раньше существовал вариант без
+     * зрителя, и он молча отправлял {@code canManageTerritory=false}: любое обновление состояния
+     * (проект, развитие, смена цвета) выбивало право управлять территорией, и карта переставала
+     * принимать claim, пока игрок не переоткроет пилон. Теперь вызывающий обязан назвать того, кому
+     * отправляется снимок, и ошибка такого рода невозможна по построению.
+     */
+    public static CityPylonStatePayload createState(MinecraftServer server, City city, ServerPlayer viewer) {
+        java.util.Objects.requireNonNull(viewer, "viewer");
         List<CityProjectSnapshot> projects = new ArrayList<>();
         for (CityProject project : city.getProjects()) {
             String status = "OFFLINE / UNLOADED";
@@ -214,7 +224,9 @@ public final class CityProjectNetworkHandlers {
                 .toList();
         return new CityPylonStatePayload(
                 city.getPylonPos(), city.getLevel(), city.getProjectCapacity(), projects,
-                primary, development
+                primary, development,
+                city.getClaimedPlotCount(), city.getColorRgb(),
+                viewer != null && city.isAdmin(viewer.getUUID())
         );
     }
 

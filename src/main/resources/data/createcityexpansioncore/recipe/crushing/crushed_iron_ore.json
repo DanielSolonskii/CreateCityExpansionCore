@@ -1,0 +1,14 @@
+{
+  "type": "create:crushing",
+  "ingredients": [
+    {
+      "item": "createcityexpansioncore:iron_ore_raw"
+    }
+  ],
+  "processing_time": 400,
+  "results": [
+    {
+      "id": "createcityexpansioncore:crushed_iron_ore"
+    }
+  ]
+}
