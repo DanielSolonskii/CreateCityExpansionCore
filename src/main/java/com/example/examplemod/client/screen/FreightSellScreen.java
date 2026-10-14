@@ -11,7 +11,7 @@ import java.util.*;
 import static com.example.examplemod.client.screen.LogisticsStyle.*;
 
 /** City sales retain explicit selection and confirmation; only presentation is client-owned. */
-public final class FreightSellScreen extends Screen {
+public final class FreightSellScreen extends CityPylonPageScreen {
     private final CityPylonScreen pylon;
     private UUID selected,destination;
     private int scroll,ticks,submittedAt;
@@ -57,7 +57,7 @@ public final class FreightSellScreen extends Screen {
         g.fill(0,0,width,height,BG);g.fill(0,0,width,34,0xFF192A32);
         g.drawCenteredString(font,title,width/2,12,GOLD);
         var list=sales();scroll=Math.clamp(scroll,0,Math.max(0,list.size()-rows()));
-        g.enableScissor(20,40,width-20,height-104);
+        CityPylonWorkspace.clip(g,20,40,width-20,height-104);
         if(state()==null)text(g,font,FreightUi.tr("loading"),26,48,width-52,MUTED);
         else if(list.isEmpty()){
             icon(g,"minecraft:chest",26,47);text(g,font,tr("sales_empty"),50,50,width-76,GOLD);

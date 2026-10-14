@@ -1,0 +1,737 @@
+[
+  {
+    "id": "STATE-01",
+    "stage": "M0",
+    "title": "Платформа и сборка",
+    "owner": "Engineering",
+    "source": "build.gradle",
+    "implemented": "Minecraft 1.21.1; NeoForge 21.1.251; Java 21; Create 6.0.10-280; EE 1.1.2; CCEC 1.0.1. Gradle check/build и набор headless contracts.",
+    "acceptance": "Чистый клон: Gradle wrapper, EE и runtime Ponder/Flywheel/Create должны быть доступны.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-01",
+      "id": "REC-5",
+      "url": "https://linear.app/re-creted/issue/REC-5/kod-m0-platforma-i-sborka"
+    }
+  },
+  {
+    "id": "STATE-02",
+    "stage": "M1",
+    "title": "Аккаунты и Telegram verification",
+    "owner": "Backend",
+    "source": "platform/backend/src/main/java/dev/createserver/backend/account",
+    "implemented": "Регистрация pending→ACTIVE, BCrypt credentials, Telegram binding, alpha access keys, phone verification; Flyway V1–V5.",
+    "acceptance": "Проверить новый аккаунт, неверный/повторный alpha key и реальное подтверждение телефона в Telegram.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-02",
+      "id": "REC-6",
+      "url": "https://linear.app/re-creted/issue/REC-6/kod-m1-akkaunty-i-telegram-verification"
+    }
+  },
+  {
+    "id": "STATE-03",
+    "stage": "M1",
+    "title": "Trusted devices и Credential Manager",
+    "owner": "Backend",
+    "source": "platform/backend/src/main/java/dev/createserver/backend/api/DeviceController.java",
+    "implemented": "Создание, polling, approve, authenticate, revoke доверенного устройства; native launcher хранит device credential в Windows Credential Manager.",
+    "acceptance": "Проверить approve/revoke, перезапуск launcher, выход и смену endpoint без утечки credentials.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-03",
+      "id": "REC-7",
+      "url": "https://linear.app/re-creted/issue/REC-7/kod-m1-trusted-devices-i-credential-manager"
+    }
+  },
+  {
+    "id": "STATE-04",
+    "stage": "M1",
+    "title": "Игровая авторизация и TLS admission",
+    "owner": "Backend",
+    "source": "src/main/java/com/example/examplemod/auth/ConnectionAdmissionRegistry.java",
+    "implemented": "Launcher capability → connection-bound challenge → одноразовый game ticket → consume в backend → допуск CONFIGURATION. Boot/nonce/UUID bindings и защита дубликатов.",
+    "acceptance": "Runtime: правильный вход, подмена имени, параллельный вход, expiry, revoke и outage. На production mode=REQUIRED.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-04",
+      "id": "REC-8",
+      "url": "https://linear.app/re-creted/issue/REC-8/kod-m1-igrovaya-avtorizaciya-i-tls-admission"
+    }
+  },
+  {
+    "id": "STATE-05",
+    "stage": "M2",
+    "title": "Города, участники, роли и территория",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/city/CityManager.java",
+    "implemented": "City Pylon, основание города, identity, claims, участники, поиск, приглашения и роли; SavedData и server-side permissions.",
+    "acceptance": "Два игрока: основать город, пригласить, изменить роль, claim/release и проверить чужую территорию.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-05",
+      "id": "REC-9",
+      "url": "https://linear.app/re-creted/issue/REC-9/kod-m2-goroda-uchastniki-roli-i-territoriya"
+    }
+  },
+  {
+    "id": "STATE-06",
+    "stage": "M2",
+    "title": "Отношения между городами",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/city/CityAccessPolicy.java",
+    "implemented": "Одностороннее доверие; взаимное доверие даёт PARTNER; политика доступа к private railway.",
+    "acceptance": "Проверить A→B и B→A; доверие само по себе не является скидкой на тариф.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-06",
+      "id": "REC-10",
+      "url": "https://linear.app/re-creted/issue/REC-10/kod-m2-otnosheniya-mezhdu-gorodami"
+    }
+  },
+  {
+    "id": "STATE-07",
+    "stage": "M2",
+    "title": "Развитие города и индустриальные проекты",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/city/CityDevelopmentRequirements.java",
+    "implemented": "City level requirements, городские проекты промышленных объектов, commissioning/decommissioning шахты и развитие I→II.",
+    "acceptance": "Проверить требования фактического уровня, корректные блоки и отключённые/утраченные объекты.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-07",
+      "id": "REC-11",
+      "url": "https://linear.app/re-creted/issue/REC-11/kod-m2-razvitie-goroda-i-industrialnye-proekty"
+    }
+  },
+  {
+    "id": "STATE-08",
+    "stage": "M2",
+    "title": "Проекты города и сервера",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/projects/ProjectManager.java",
+    "implemented": "Scope CITY/SERVER; draft/publish/funding/applicants/assign/stages/submit/accept/return/cancel/withdraw. Reward/reserve, server budget, revisions и persistence.",
+    "acceptance": "Проверить весь lifecycle двумя игроками/OP, stale revision, refund, restart, project zone conflicts.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-08",
+      "id": "REC-12",
+      "url": "https://linear.app/re-creted/issue/REC-12/kod-m2-proekty-goroda-i-servera"
+    }
+  },
+  {
+    "id": "STATE-09",
+    "stage": "M2",
+    "title": "Профили игроков",
+    "owner": "UI/UX",
+    "source": "src/main/java/com/example/examplemod/profile/ProfileService.java",
+    "implemented": "Profile screen, поиск/каталог, город, участие в проектах, метрики из существующих ledgers, настройки видимости, skins/offline cache и rate limits.",
+    "acceptance": "Проверить privacy другого игрока, собственное редактирование, offline profile и отображение skin.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-09",
+      "id": "REC-13",
+      "url": "https://linear.app/re-creted/issue/REC-13/kod-m2-profili-igrokov"
+    }
+  },
+  {
+    "id": "STATE-10",
+    "stage": "M2",
+    "title": "City Pylon workspace",
+    "owner": "UI/UX",
+    "source": "src/main/java/com/example/examplemod/client/screen/CityPylonWorkspace.java",
+    "implemented": "Hub, страницы города, участники, экономика, логистика, relations, проекты и переходы к WorldMap; общая тема/layout.",
+    "acceptance": "Проверить все доступные страницы на минимальном размере окна и с длинными RU/EN строками.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-10",
+      "id": "REC-14",
+      "url": "https://linear.app/re-creted/issue/REC-14/kod-m2-city-pylon-workspace"
+    }
+  },
+  {
+    "id": "STATE-11",
+    "stage": "M2",
+    "title": "WorldMap и слои",
+    "owner": "UI/UX",
+    "source": "src/main/java/com/example/examplemod/client/screen/PolishedWorldMapScreen.java",
+    "implemented": "Pan/zoom/поиск/карточки; города/territories/freight/stations/railway/trains/routes и project workspace. Server snapshots/read access.",
+    "acceptance": "Проверить видимые слои и hitboxes в игре; headless layout не подтверждает внешний вид.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-11",
+      "id": "REC-15",
+      "url": "https://linear.app/re-creted/issue/REC-15/kod-m2-worldmap-i-sloi"
+    }
+  },
+  {
+    "id": "STATE-12",
+    "stage": "M2",
+    "title": "Terrain pyramid, atlas и cache",
+    "owner": "UI/UX",
+    "source": "src/main/java/com/example/examplemod/client/map/TerrainAtlas.java",
+    "implemented": "Региональные масштабы, terrain LOD/pyramid, relief, revisions, source colours, texture/cache/store и lifecycle карты.",
+    "acceptance": "Проверить загрузку/переключение регионов, stale revision, повторное открытие и освобождение GPU textures.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-12",
+      "id": "REC-16",
+      "url": "https://linear.app/re-creted/issue/REC-16/kod-m2-terrain-pyramid-atlas-i-cache"
+    }
+  },
+  {
+    "id": "STATE-13",
+    "stage": "M3",
+    "title": "Геология format 4 / generator 2",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/geology/GeologySavedDataCodec.java",
+    "implemented": "Детерминированная геология iron/coal/limestone/copper/zinc, per-resource seed, формы/potential/quality/size, общий reserve. Старые форматы 1–3 пересоздаются.",
+    "acceptance": "Критично: старые reserves/выработка не переносятся; неизвестный будущий формат отклоняется. Проверить на копии сохранения.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-13",
+      "id": "REC-17",
+      "url": "https://linear.app/re-creted/issue/REC-17/kod-m3-geologiya-format-4-generator-2"
+    }
+  },
+  {
+    "id": "STATE-14",
+    "stage": "M3",
+    "title": "Magnetic Analyzer",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/item/MagneticAnalyzerItem.java",
+    "implemented": "Единый server-side scan для воздуха/блока, cooldown/durability, survey, direction/distance/local potential и reserve estimate.",
+    "acceptance": "Проверить оба ПКМ, первый scan, cooldown, все пять ресурсов и локализацию.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-14",
+      "id": "REC-18",
+      "url": "https://linear.app/re-creted/issue/REC-18/kod-m3-magnetic-analyzer"
+    }
+  },
+  {
+    "id": "STATE-15",
+    "stage": "M3",
+    "title": "Industrial Mine и электричество",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/mine/IndustrialMineService.java",
+    "implemented": "Мультиблок, контроллер, EE power port, commissioning/start/stop, structure/power/output states, local deposit extraction и gateway output.",
+    "acceptance": "Проверить 4 ориентации, power under load, OUTPUT_BLOCKED, истощение, restart и реальный выпуск.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-15",
+      "id": "REC-19",
+      "url": "https://linear.app/re-creted/issue/REC-19/kod-m3-industrial-mine-i-elektrichestvo"
+    }
+  },
+  {
+    "id": "STATE-16",
+    "stage": "M3",
+    "title": "Bulk iron и промышленные материалы",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/mine/MineOutputMapping.java",
+    "implemented": "Physical output отделён от reserve units; raw/crushed iron/concentrate; рецепты промышленных материалов, slag/fluids и T1–T3 items.",
+    "acceptance": "Свести BOM/throughput/энергию из актуальных JSON; не приравнивать item tier к city level.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-16",
+      "id": "REC-20",
+      "url": "https://linear.app/re-creted/issue/REC-20/kod-m3-bulk-iron-i-promyshlennye-materialy"
+    }
+  },
+  {
+    "id": "STATE-17",
+    "stage": "M3",
+    "title": "Coke Oven Battery",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/coke/CokeBatteryControllerBlockEntity.java",
+    "implemented": "Фиксированный multiblock, input/output/controller/guide/state, партия 8, цикл 200 ticks; provisional balance отмечен в коде.",
+    "acceptance": "Сверить реальную выдачу/EE и баланс относительно Create Mixer.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-17",
+      "id": "REC-21",
+      "url": "https://linear.app/re-creted/issue/REC-21/kod-m3-coke-oven-battery"
+    }
+  },
+  {
+    "id": "STATE-18",
+    "stage": "M3",
+    "title": "Blast Furnace",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/blast/BlastFurnaceControllerBlockEntity.java",
+    "implemented": "Multiblock, input/fluid output, EE power/state и guide; цикл 300 ticks, выход 8000 mB, номинально 60 kW.",
+    "acceptance": "Проверить физические input/output и остановки при power/structure/output failure.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-18",
+      "id": "REC-22",
+      "url": "https://linear.app/re-creted/issue/REC-22/kod-m3-blast-furnace"
+    }
+  },
+  {
+    "id": "STATE-19",
+    "stage": "M3",
+    "title": "Steel Converter",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/steel/SteelConverterControllerBlockEntity.java",
+    "implemented": "Multiblock/ports/guide; 8000 mB→8 billets, 300 ticks, 80 kW, диапазон 500–600 V.",
+    "acceptance": "Проверить полный steel path в игре, баланс и rendering.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-19",
+      "id": "REC-23",
+      "url": "https://linear.app/re-creted/issue/REC-23/kod-m3-steel-converter"
+    }
+  },
+  {
+    "id": "STATE-20",
+    "stage": "M3",
+    "title": "Chunk loader",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/chunkloader/ChunkLoaderSavedData.java",
+    "implemented": "Рецепт/блок, максимум 3 на игрока, ownership, persistent registry, tickets и reconciliation/removal.",
+    "acceptance": "Проверить 4-ю установку, чужое разрушение, explosion/piston/contraption и восстановление после restart.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-20",
+      "id": "REC-24",
+      "url": "https://linear.app/re-creted/issue/REC-24/kod-m3-chunk-loader"
+    }
+  },
+  {
+    "id": "STATE-21",
+    "stage": "M3",
+    "title": "Gameplay restrictions",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/policy/GameplayRestrictions.java",
+    "implemented": "Запрет shulker boxes/elytra flight, cap лодки на льду, запрет поездов в Nether; kelp growth policy.",
+    "acceptance": "Проверить bypass через предметы/теги/портал и сохранить работу лодки на воде/обычного транспорта.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-21",
+      "id": "REC-25",
+      "url": "https://linear.app/re-creted/issue/REC-25/kod-m3-gameplay-restrictions"
+    }
+  },
+  {
+    "id": "STATE-22",
+    "stage": "M4",
+    "title": "Кошельки, казна и escrow",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/economy/EconomyManager.java",
+    "implemented": "Persistent economy, wallets, city treasury, escrow, проверки балансов и atomic settlement.",
+    "acceptance": "Проверить refund/replay/restart/overflow и отсутствие бесплатного выпуска валюты.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-22",
+      "id": "REC-26",
+      "url": "https://linear.app/re-creted/issue/REC-26/kod-m4-koshelki-kazna-i-escrow"
+    }
+  },
+  {
+    "id": "STATE-23",
+    "stage": "M4",
+    "title": "P2P рынок и контракты",
+    "owner": "UI/UX",
+    "source": "src/main/java/com/example/examplemod/client/screen/MarketScreen.java",
+    "implemented": "Listings buy/sell, contracts, community/exclusive operations, server read view, row selection и labelled actions/confirmation.",
+    "acceptance": "Клик строки только SELECT; проверить явные Accept/Cancel/Confirm и права другой стороны.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-23",
+      "id": "REC-27",
+      "url": "https://linear.app/re-creted/issue/REC-27/kod-m4-p2p-rynok-i-kontrakty"
+    }
+  },
+  {
+    "id": "STATE-24",
+    "stage": "M4",
+    "title": "Master City / External Market",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/economy/ExternalMarketState.java",
+    "implemented": "Definitions/offers/demand/saturation, smart orders, master warehouse/procurement budget; физические freight endpoints.",
+    "acceptance": "Проверить supply/demand и реальный Packager путь, отсутствие inventory grants вместо перевозки.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-24",
+      "id": "REC-28",
+      "url": "https://linear.app/re-creted/issue/REC-28/kod-m4-master-city-external-market"
+    }
+  },
+  {
+    "id": "STATE-25",
+    "stage": "M4",
+    "title": "Freight points и физические Packages",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/economy/FreightLogistics.java",
+    "implemented": "SEND/RECEIVE/BOTH endpoints, postbox/packager/address/station bind/rebind, assignment/token/manifest; physical dispatch/intake.",
+    "acceptance": "E2E Package→поезд→receiver→unpacking→settlement; partial delivery, duplicate, outage и restart.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-25",
+      "id": "REC-29",
+      "url": "https://linear.app/re-creted/issue/REC-29/kod-m4-freight-points-i-fizicheskie-packages"
+    }
+  },
+  {
+    "id": "STATE-26",
+    "stage": "M4",
+    "title": "Железные дороги, собственность и маршруты",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/railway/RailwayManager.java",
+    "implemented": "Stations/fleet/Create schedules; PLAYER/CITY ownership, PUBLIC/PRIVATE, CR/1000 blocks/train tariffs, planner CHEAPEST/FASTEST/BALANCED.",
+    "acceptance": "Проверить topology change, private/trust policy, route reservation, duplicate routes и чужое присвоение.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-26",
+      "id": "REC-30",
+      "url": "https://linear.app/re-creted/issue/REC-30/kod-m4-zheleznye-dorogi-sobstvennost-i-marshruty"
+    }
+  },
+  {
+    "id": "STATE-27",
+    "stage": "M4",
+    "title": "Railway reserve/settlement и Freight dispatch",
+    "owner": "Game Design",
+    "source": "src/main/java/com/example/examplemod/railway/RailwayTripAccountingService.java",
+    "implemented": "Trip ledger, upfront reserve/actual settlement/owner payouts, route guards и restart/replay protection; freight reuse.",
+    "acceptance": "Проверить денежный итог для всех участников при arrival/cancel/restart и неполной перевозке.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-27",
+      "id": "REC-31",
+      "url": "https://linear.app/re-creted/issue/REC-31/kod-m4-railway-reservesettlement-i-freight-dispatch"
+    }
+  },
+  {
+    "id": "STATE-28",
+    "stage": "M5",
+    "title": "Reports и moderation backend/bot",
+    "owner": "Backend",
+    "source": "platform/backend/src/main/java/dev/createserver/backend/report",
+    "implemented": "Игровой report bridge, ограничения текста/cooldown, PostgreSQL reports, admin actions, notifications/claim/ack и player card.",
+    "acceptance": "Проверить игровой report→реальный Telegram→action и недоступность private endpoints снаружи.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-28",
+      "id": "REC-32",
+      "url": "https://linear.app/re-creted/issue/REC-32/kod-m5-reports-i-moderation-backendbot"
+    }
+  },
+  {
+    "id": "STATE-29",
+    "stage": "M5",
+    "title": "Telemetry bridge и Telegram панели",
+    "owner": "Backend",
+    "source": "platform/backend/src/main/java/dev/createserver/backend/bridge",
+    "implemented": "Bounded game telemetry queue, immutable retry/ACK/overflow; backend summaries; Telegram server/menu/admin панели.",
+    "acceptance": "Проверить свежесть/overflow/outage и реальные Telegram callbacks; service active недостаточно для acceptance.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-29",
+      "id": "REC-33",
+      "url": "https://linear.app/re-creted/issue/REC-33/kod-m5-telemetry-bridge-i-telegram-paneli"
+    }
+  },
+  {
+    "id": "STATE-30",
+    "stage": "M5",
+    "title": "Broadcasts и новости launcher",
+    "owner": "UI/UX",
+    "source": "platform/backend/src/main/java/dev/createserver/backend/broadcast",
+    "implemented": "Draft/publish/cancel broadcasts, claim/ack deliveries; публичные safe news DTO для launcher/news pages.",
+    "acceptance": "Проверить compose→news rendering→Telegram delivery, ссылки/форматирование и права автора.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-30",
+      "id": "REC-34",
+      "url": "https://linear.app/re-creted/issue/REC-34/kod-m5-broadcasts-i-novosti-launcher"
+    }
+  },
+  {
+    "id": "STATE-31",
+    "stage": "M5",
+    "title": "Launcher UI и native game launch",
+    "owner": "UI/UX",
+    "source": "platform/launcher/src-tauri/src/lib.rs",
+    "implemented": "React/Tauri 2, account flows, trusted devices, game prepare/start/status/logout, signed game update, settings, news, window controls и live TLS server status.",
+    "acceptance": "Browser preview не проверяет native Play/TLS/Credential Manager. Нужен Windows installer E2E.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-31",
+      "id": "REC-35",
+      "url": "https://linear.app/re-creted/issue/REC-35/kod-m5-launcher-ui-i-native-game-launch"
+    }
+  },
+  {
+    "id": "STATE-32",
+    "stage": "M5",
+    "title": "Launcher self-update и releases",
+    "owner": "Engineering",
+    "source": "platform/launcher/src-tauri/src/self_update.rs",
+    "implemented": "Проверка/скачивание/установка launcher update, deferred update при работающем Minecraft; signed game manifests и release dry-run→server-deploy→publish.",
+    "acceptance": "Проверить upgrade с production 0.1.5, mandatory optional update и rollback/recovery без перезаписи старых releases.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-32",
+      "id": "REC-36",
+      "url": "https://linear.app/re-creted/issue/REC-36/kod-m5-launcher-self-update-i-releases"
+    }
+  },
+  {
+    "id": "STATE-33",
+    "stage": "M5",
+    "title": "Production и storage",
+    "owner": "Ops",
+    "source": "platform/infra",
+    "implemented": "Systemd Minecraft/backend/bot/TLS, Caddy HTTPS, PostgreSQL, loopback raw Minecraft/API/DB, защищённые secrets/backups и game/launcher distribution.",
+    "acceptance": "14.10 SSH: четыре службы active/running, health/postgres UP; production CCEC hash отличается от локальной новой сборки.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-33",
+      "id": "REC-37",
+      "url": "https://linear.app/re-creted/issue/REC-37/kod-m5-production-i-storage"
+    }
+  },
+  {
+    "id": "STATE-34",
+    "stage": "M6",
+    "title": "FTB Quests RU/EN onboarding",
+    "owner": "Game Design",
+    "source": "tools/ftb-campaign/build_campaign.py",
+    "implemented": "6 глав / 128 квестов; survival/Create/geology/city/mine/optional chunks. Item + manual checkmark, consume_items=false, optional branches и stable IDs.",
+    "acceptance": "Проверить книгу в клиенте, видимость линий, основной маршрут, ручные подтверждения и сохранность progress.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-34",
+      "id": "REC-38",
+      "url": "https://linear.app/re-creted/issue/REC-38/kod-m6-ftb-quests-ruen-onboarding"
+    }
+  },
+  {
+    "id": "STATE-35",
+    "stage": "M6",
+    "title": "HUD, локализация, модели и звуки",
+    "owner": "UI/UX",
+    "source": "src/main/resources/assets/createcityexpansioncore",
+    "implemented": "RU/EN, item/block models/textures/sounds, multiblock guides/renderers, unified statuses/toasts, city bossbar/maintenance countdown.",
+    "acceptance": "Проверить assets в игре, читаемость/tooltip/empty/error states, maintenance cancel и UI без client imports на server.",
+    "status": "Done",
+    "linear": {
+      "catalog": "STATE-35",
+      "id": "REC-39",
+      "url": "https://linear.app/re-creted/issue/REC-39/kod-m6-hud-lokalizaciya-modeli-i-zvuki"
+    }
+  },
+  {
+    "id": "TODO-01",
+    "stage": "M0",
+    "title": "Воспроизвести сборку из чистого Windows-клона",
+    "owner": "Engineering",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Обеспечить EE/Ponder/Flywheel/Create для dev runtime, npm ci, Rust prerequisites; build/check без локальных абсолютных зависимостей. Записать точные версии и вывод.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-01",
+      "id": "REC-40",
+      "url": "https://linear.app/re-creted/issue/REC-40/priyomka-m0-vosproizvesti-sborku-iz-chistogo-windows-klona"
+    }
+  },
+  {
+    "id": "TODO-02",
+    "stage": "M1",
+    "title": "Провести Windows login → Play → join E2E",
+    "owner": "Backend",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Чистая установка/upgrade, Telegram verification/device approve, native broker/TLS и REQUIRED admission. Проверить spoof/duplicate/expiry/backend outage; сохранить evidence без credentials.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-02",
+      "id": "REC-41",
+      "url": "https://linear.app/re-creted/issue/REC-41/priyomka-m1-provesti-windows-login-play-join-e2e"
+    }
+  },
+  {
+    "id": "TODO-03",
+    "stage": "M2",
+    "title": "Проверить города, роли, проекты и profile privacy двумя игроками",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Полный lifecycle города/территории/relations/projects, server/city funding, restart/refunds, privacy/offline profiles и права другой роли.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-03",
+      "id": "REC-42",
+      "url": "https://linear.app/re-creted/issue/REC-42/priyomka-m2-proverit-goroda-roli-proekty-i-profile-privacy-dvumya"
+    }
+  },
+  {
+    "id": "TODO-04",
+    "stage": "M3",
+    "title": "Принять геологию format 4 и влияние на старые saves",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "На резервной копии проверить переход 1–3→4, потерю старых reserves/ID и работу старых шахт. Зафиксировать продуктовую политику миграций; ничего не удалять на production.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-04",
+      "id": "REC-43",
+      "url": "https://linear.app/re-creted/issue/REC-43/priyomka-m3-prinyat-geologiyu-format-4-i-vliyanie-na-starye-saves"
+    }
+  },
+  {
+    "id": "TODO-05",
+    "stage": "M3",
+    "title": "Провести промышленный runtime pass и свести BOM",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Analyzer→mine→ore processing→coke→blast→steel; throughput/energy/reserve, все orientation/power/output/structure failures; сравнить с ванильными/Create альтернативами.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-05",
+      "id": "REC-44",
+      "url": "https://linear.app/re-creted/issue/REC-44/priyomka-m3-provesti-promyshlennyj-runtime-pass-i-svesti-bom"
+    }
+  },
+  {
+    "id": "TODO-06",
+    "stage": "M3",
+    "title": "Проверить transport bypass и chunk-loading нагрузку",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Elytra/shulker/ice boats/Nether trains/kelp; 3-loader limit, crash/restart cleanup, реальные удалённые объекты и train chunks. Измерить TPS/MSPT.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-06",
+      "id": "REC-45",
+      "url": "https://linear.app/re-creted/issue/REC-45/priyomka-m3-proverit-transport-bypass-i-chunk-loading-nagruzku"
+    }
+  },
+  {
+    "id": "TODO-07",
+    "stage": "M4",
+    "title": "Пройти физический Freight/Railway E2E с денежной сверкой",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Два города, public/private/trust routes, Packages/Postboxes, partial/duplicate/source outage, tariffs/reserve/owner payout и restart. Сверить balances и физические предметы до/после.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-07",
+      "id": "REC-46",
+      "url": "https://linear.app/re-creted/issue/REC-46/priyomka-m4-projti-fizicheskij-freightrailway-e2e-s-denezhnoj-sverkoj"
+    }
+  },
+  {
+    "id": "TODO-08",
+    "stage": "M5",
+    "title": "Проверить reports/broadcasts/telemetry в настоящем Telegram",
+    "owner": "Backend",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Сверить admin permissions, callbacks, delivery/ACK/retry и публичную news выдачу. Не брать service active за доказательство получения сообщения.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-08",
+      "id": "REC-47",
+      "url": "https://linear.app/re-creted/issue/REC-47/priyomka-m5-proverit-reportsbroadcaststelemetry-v-nastoyashem-telegram"
+    }
+  },
+  {
+    "id": "TODO-09",
+    "stage": "M5",
+    "title": "Выполнить PostgreSQL integration suite на отдельной БД",
+    "owner": "Backend",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Запустить opt-in postgresTest только на выделенной тестовой БД, проверить Flyway V1–V10, uniqueness/locks/replays. Production базу не использовать для тестовых insert.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-09",
+      "id": "REC-48",
+      "url": "https://linear.app/re-creted/issue/REC-48/priyomka-m5-vypolnit-postgresql-integration-suite-na-otdelnoj-bd"
+    }
+  },
+  {
+    "id": "TODO-10",
+    "stage": "M6",
+    "title": "Провести UI/UX runtime pass и визуальную приёмку",
+    "owner": "UI/UX",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Матрица min/default/max окна × RU/EN × роли × empty/loading/error/stale states; WorldMap/terrain, pylon, market/freight, projects/profiles, analyzer, launcher. Скриншоты, клики и контраст.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-10",
+      "id": "REC-49",
+      "url": "https://linear.app/re-creted/issue/REC-49/priyomka-m6-provesti-uiux-runtime-pass-i-vizualnuyu-priyomku"
+    }
+  },
+  {
+    "id": "TODO-11",
+    "stage": "M6",
+    "title": "Пройти FTB Quests с новым игроком",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "128 quests/6 chapters; optional не блокируют обязательные, electron tube независим от brass, manual actions объяснены; проверить progress после restart.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-11",
+      "id": "REC-50",
+      "url": "https://linear.app/re-creted/issue/REC-50/priyomka-m6-projti-ftb-quests-s-novym-igrokom"
+    }
+  },
+  {
+    "id": "TODO-12",
+    "stage": "M6",
+    "title": "Зафиксировать визуальный стандарт CCEC",
+    "owner": "UI/UX",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Инвентаризация icons/models/textures; нативные 32×32 для новых согласованных Minecraft textures. Не массово перерисовывать утверждённые формы/палитру. Подготовить reviewable макеты.",
+    "status": "Todo",
+    "linear": {
+      "catalog": "TODO-12",
+      "id": "REC-51",
+      "url": "https://linear.app/re-creted/issue/REC-51/priyomka-m6-zafiksirovat-vizualnyj-standart-ccec"
+    }
+  },
+  {
+    "id": "TODO-13",
+    "stage": "M0",
+    "title": "Выдать сотрудникам личные GitHub/Linear/SSH-доступы",
+    "owner": "Ops",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Получить GitHub usernames, email Linear и публичные Ed25519 ключи. Добавить collaborator write/Linear members, создать отдельные SSH users по согласованным правам. Приватные ключи/root key не пересылать.",
+    "status": "Backlog",
+    "linear": {
+      "catalog": "TODO-13",
+      "id": "REC-52",
+      "url": "https://linear.app/re-creted/issue/REC-52/priyomka-m0-vydat-sotrudnikam-lichnye-githublinearssh-dostupy"
+    }
+  },
+  {
+    "id": "TODO-14",
+    "stage": "M7",
+    "title": "Уточнить post-alpha roadmap после baseline",
+    "owner": "Game Design",
+    "source": "docs/audit-2026-10-14/STATE_RU.md",
+    "implemented": "Открытый этап проверки/работы. Реализация смежных модулей сама по себе не закрывает эту задачу.",
+    "acceptance": "Отдельные предложения: oil industry, traction/passenger billing, timetable/fleet, offline Create simulation, multi-train splitting. Не отмечать их реализованными по старым Linear-задачам.",
+    "status": "Backlog",
+    "linear": {
+      "catalog": "TODO-14",
+      "id": "REC-53",
+      "url": "https://linear.app/re-creted/issue/REC-53/priyomka-m7-utochnit-post-alpha-roadmap-posle-baseline"
+    }
+  }
+]

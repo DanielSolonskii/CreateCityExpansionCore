@@ -28,11 +28,19 @@ final class GeologyGenerator {
     /**
      * Версия процедурного генератора.
      *
-     * Входит в идентификатор месторождения, поэтому изменение
-     * правил генерации не может молча пересоздать уже известные
-     * залежи: их данные хранятся в NBT и на этом остаются.
+     * <p><b>Версия 2 пересоздаёт геологию мира целиком.</b> Причина: в версии 1
+     * идентичность ресурса не входила в seed, поэтому все пять ресурсов в одной
+     * macro-cell получали одно и то же положение, форму, качество и запас. В
+     * мире это выглядело как 20 точек, в каждой из которых уголь лежал точно на
+     * железе, а сканер показывал только железо — первым в списке ресурсов, при
+     * полном равенстве потенциалов. Никакими правками сохранённых залежей это
+     * не лечилось: они остались бы лежать друг на друге навсегда.
+     *
+     * <p>Версия входит в идентификатор месторождения, поэтому новые залежи
+     * получают другие ID и не конфликтуют со старыми. Старые записи отбрасываются
+     * при загрузке (см. GeologySavedDataCodec), а не «достраиваются».
      */
-    static final int GENERATOR_VERSION = 1;
+    static final int GENERATOR_VERSION = 2;
 
     /**
      * Размер macro-cell в блоках.
@@ -144,6 +152,10 @@ final class GeologyGenerator {
     private static final double MAX_RESERVE_NOISE = 1.20;
 
     private static final long SALT_COUNT = 0x1010L;
+    /** Идентичность ресурса: без этой соли все ресурсы ячейки сливались. */
+    private static final long SALT_RESOURCE = 0x1095L;
+    /** Общая для всех ресурсов монетка заселённости ячейки. */
+    private static final long SALT_CELL_OCCUPIED = 0x1098L;
     private static final long SALT_CENTER_X = 0x1020L;
     private static final long SALT_CENTER_Z = 0x1030L;
     private static final long SALT_SHAPE = 0x1040L;
@@ -157,55 +169,92 @@ final class GeologyGenerator {
     /**
      * Профиль геологического ресурса.
      *
-     * depositsPerCell — средняя частота кандидатов на macro-cell.
-     * При 768-блоковой ячейке и стартовой территории 5000x5000
-     * это примерно 49 ячеек, что даёт ориентир по количеству
-     * месторождений: железо ~12, уголь ~12, известняк ~9,
-     * медь ~9, цинк ~10.
+     * <p><b>candidateChances — вероятности появления кандидатов по порядку.</b>
+     * Раньше здесь было одно число {@code depositsPerCell} на все кандидаты,
+     * поэтому ресурс мог дать максимум одну залежь, а доля пустых клеток
+     * получалась одинаковой для всех ресурсов.
+     *
+     * <p>Список, а не одно число, потому что нужна разная частота для первого и
+     * второго кандидата: первый определяет «есть ли здесь вообще что-то», второй
+     * добавляет плотность. Оба числа независимы друг от друга.
      */
     record ResourceProfile(
             ResourceLocation id,
-            double depositsPerCell,
+            List<Double> candidateChances,
             int depth,
             double hardness
     ) {
         ResourceProfile {
-            if (depositsPerCell < 0.0 || !Double.isFinite(depositsPerCell)) {
+            if (candidateChances == null || candidateChances.isEmpty()) {
                 throw new IllegalArgumentException(
-                        "depositsPerCell must be finite and non-negative"
+                        "candidateChances must not be empty for " + id
                 );
             }
-            if (depositsPerCell > MAX_CANDIDATES_PER_CELL) {
+            if (candidateChances.size() > MAX_CANDIDATES_PER_CELL) {
                 throw new IllegalArgumentException(
-                        "depositsPerCell exceeds the per-cell candidate limit"
+                        "candidateChances exceeds the per-cell candidate limit for " + id
                 );
             }
+            for (Double chance : candidateChances) {
+                if (chance == null || chance < 0.0 || chance > 1.0 || !Double.isFinite(chance)) {
+                    throw new IllegalArgumentException(
+                            "candidate chance must be finite and within [0,1] for " + id
+                    );
+                }
+            }
+        }
+
+        /** Ожидаемое число залежей этого ресурса на macro-cell. */
+        double expectedPerCell() {
+            double sum = 0.0;
+            for (Double chance : candidateChances) {
+                sum += chance;
+            }
+            return sum;
         }
     }
 
     /**
      * Ресурсы Alpha-геологии.
      *
-     * Железо использует Bulk-цепочку. Уголь, известняк, медь и цинк
-     * остаются обычными ресурсами и новых bulk-предметов не требуют.
+     * <p>Первый кандидат появляется с вероятностью 0.80, второй — 0.15. Вместе с
+     * {@link #CELL_OCCUPIED_CHANCE} это даёт около 25% пустых клеток и 4-5 залежей
+     * в заселённых.
+     *
+     * <p>Железо использует Bulk-цепочку. Уголь, известняк, медь и цинк остаются
+     * обычными ресурсами и новых bulk-предметов не требуют.
      */
     static final List<ResourceProfile> RESOURCES = List.of(
             new ResourceProfile(
-                    resource("iron"), 0.25, 36, 1.8
+                    resource("iron"), List.of(0.80, 0.15), 36, 1.8
             ),
             new ResourceProfile(
-                    resource("coal"), 0.25, 18, 1.0
+                    resource("coal"), List.of(0.80, 0.15), 18, 1.0
             ),
             new ResourceProfile(
-                    resource("limestone"), 0.19, 24, 1.4
+                    resource("limestone"), List.of(0.80, 0.15), 24, 1.4
             ),
             new ResourceProfile(
-                    resource("copper"), 0.19, 30, 1.5
+                    resource("copper"), List.of(0.80, 0.15), 30, 1.5
             ),
             new ResourceProfile(
-                    resource("zinc"), 0.20, 42, 2.0
+                    resource("zinc"), List.of(0.80, 0.15), 42, 2.0
             )
     );
+
+    /**
+     * Вероятность того, что macro-cell вообще заселена.
+     *
+     * <p><b>Зачем отдельная монетка клетки.</b> Требования «пустых клеток около
+     * 25%» и «в заселённой клетке 4-5 залежей» несовместимы при независимых
+     * бросках по каждому ресурсу: чтобы пустых клеток было 25%, каждый ресурс
+     * должен появляться с вероятностью около 0.24, и тогда на клетку выходило бы
+     * 1.2 залежи вместо 4-5. Общая монетка снимает противоречие: сначала решается
+     * «есть ли здесь что искать», и только потом каждый ресурс решает независимо.
+     *
+     * <p>Именно так и выглядит мир: где-то участок пустой, где-то богатый.
+     */
+    static final double CELL_OCCUPIED_CHANCE = 0.75;
 
     private GeologyGenerator() {
     }
@@ -222,10 +271,32 @@ final class GeologyGenerator {
             int cellZ
     ) {
         List<GeologicalDeposit> deposits = new ArrayList<>();
+        long cellSeed = cellSeed(worldSeed, dimensionId, cellX, cellZ);
+
+        /*
+         * Монетка заселённости клетки. Общая для всех ресурсов намеренно:
+         * см. CELL_OCCUPIED_CHANCE. Раньше общей была и другая монета — решения
+         * «есть ли залежь», — но она считалась для каждого ресурса из одного и
+         * того же числа без соли, поэтому все пять ресурсов получали одно
+         * решение одновременно: либо все пять, либо никакого. Отсюда были и
+         * 75% пустых клеток, и складывание всех ресурсов в одну точку.
+         */
+        if (!isCellOccupied(cellSeed)) {
+            return deposits;
+        }
 
         for (ResourceProfile profile : RESOURCES) {
-            long cellSeed = cellSeed(worldSeed, dimensionId, cellX, cellZ);
-            int candidates = candidateCount(profile, cellSeed);
+            /*
+             * Идентичность ресурса входит в seed. Это ключевая правка всего
+             * инцидента: без неё candidateSeed одинаков для всех ресурсов
+             * ячейки, а значит одинаковы центр, форма, качество и запас.
+             */
+            long resourceSeed = GeologyNoise.mix(
+                    cellSeed,
+                    SALT_RESOURCE,
+                    profile.id().toString().hashCode()
+            );
+            int candidates = candidateCount(profile, resourceSeed);
 
             for (int index = 0; index < candidates; index++) {
                 deposits.add(
@@ -236,7 +307,7 @@ final class GeologyGenerator {
                                 cellX,
                                 cellZ,
                                 index,
-                                cellSeed
+                                resourceSeed
                         )
                 );
             }
@@ -245,16 +316,33 @@ final class GeologyGenerator {
         return deposits;
     }
 
-    static int candidateCount(ResourceProfile profile, long cellSeed) {
-        double perCell = profile.depositsPerCell();
-        int whole = (int) Math.floor(perCell);
-        double fraction = perCell - whole;
-        if (fraction <= 0.0) {
-            return whole;
+    /** Заселена ли ячейка: общий для всех ресурсов бросок. */
+    static boolean isCellOccupied(long cellSeed) {
+        return GeologyNoise.unit01(GeologyNoise.mix(cellSeed, SALT_CELL_OCCUPIED))
+                < CELL_OCCUPIED_CHANCE;
+    }
+
+    /**
+     * Сколько кандидатов даёт ресурс в этой ячейке.
+     *
+     * <p>Каждый кандидат бросает свою монетку, поэтому второй не зависит от
+     * первого: можно получить ноль, одну или две залежи. Счёт по порядку идёт до
+     * первого неудачного броска — так «два кандидата» не могут появиться без
+     * первого, и распределение остаётся разумным.
+     */
+    static int candidateCount(ResourceProfile profile, long resourceSeed) {
+        int count = 0;
+        List<Double> chances = profile.candidateChances();
+
+        for (int index = 0; index < chances.size(); index++) {
+            long hash = GeologyNoise.mix(resourceSeed, SALT_COUNT, index);
+            if (GeologyNoise.unit01(hash) >= chances.get(index)) {
+                break;
+            }
+            count++;
         }
 
-        long hash = GeologyNoise.mix(cellSeed, SALT_COUNT);
-        return whole + (GeologyNoise.unit01(hash) < fraction ? 1 : 0);
+        return count;
     }
 
     private static GeologicalDeposit createDeposit(

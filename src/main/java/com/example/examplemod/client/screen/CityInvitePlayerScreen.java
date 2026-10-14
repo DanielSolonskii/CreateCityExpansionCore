@@ -29,7 +29,7 @@ import java.util.List;
  * <p>Layout lives in {@link CityInviteUiLayout}, so the row a player sees and the row they can click
  * cannot drift apart.
  */
-public class CityInvitePlayerScreen extends Screen {
+public class CityInvitePlayerScreen extends CityPylonPageScreen {
 
     /** Debounce for the search box: long enough not to spam, short enough to feel live. */
     static final long SEARCH_DEBOUNCE_MILLIS = 300L;
@@ -184,7 +184,8 @@ public class CityInvitePlayerScreen extends Screen {
 
     private void drawRow(GuiGraphics graphics, CityPlayerSearchResultPayload.Entry entry, int visibleIndex) {
         CityPlayerSearchResultPayload.State state = entry.state();
-        boolean actionable = state == CityPlayerSearchResultPayload.State.AVAILABLE;
+        boolean actionable = state == CityPlayerSearchResultPayload.State.AVAILABLE
+                || state == CityPlayerSearchResultPayload.State.INVITED;
         CityInviteUiLayout.Rect bounds =
                 CityInviteUiLayout.row(this.width, PANEL_TOP, feedback(), visibleIndex, visibleRowCount());
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(),
@@ -213,7 +214,9 @@ public class CityInvitePlayerScreen extends Screen {
         boolean hover = action.contains(this.lastMouseX, this.lastMouseY);
         graphics.fill(action.x(), action.y(), action.right(), action.bottom(), hover ? 0xFF4A391E : 0xFF3A4145);
         graphics.drawCenteredString(this.font,
-                Component.translatable("gui.createcityexpansioncore.city.invite.state.invite"),
+                Component.translatable(state == CityPlayerSearchResultPayload.State.INVITED
+                        ? "gui.createcityexpansioncore.city.invite.state.resend"
+                        : "gui.createcityexpansioncore.city.invite.state.invite"),
                 action.x() + action.width() / 2, action.y() + 7, 0xFFFFD59A);
     }
 
@@ -243,7 +246,8 @@ public class CityInvitePlayerScreen extends Screen {
                 continue;
             }
             CityPlayerSearchResultPayload.Entry entry = results.get(index);
-            if (entry.state() != CityPlayerSearchResultPayload.State.AVAILABLE) {
+            if (entry.state() != CityPlayerSearchResultPayload.State.AVAILABLE
+                    && entry.state() != CityPlayerSearchResultPayload.State.INVITED) {
                 return true;
             }
             CityInviteUiLayout.Rect action = CityInviteUiLayout.rowAction(this.width, PANEL_TOP, feedback(),

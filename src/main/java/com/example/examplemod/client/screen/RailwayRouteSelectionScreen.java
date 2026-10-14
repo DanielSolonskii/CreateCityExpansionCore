@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
 import java.util.function.Consumer;
-public final class RailwayRouteSelectionScreen extends Screen{
+public final class RailwayRouteSelectionScreen extends CityPylonPageScreen{
  private final Screen parent;private final RailwayRouteOptionsPayload payload;private final Consumer<RailwayRouteOption> selector;
  public RailwayRouteSelectionScreen(Screen parent,RailwayRouteOptionsPayload payload){this(parent,payload,null);}
  public RailwayRouteSelectionScreen(Screen parent,RailwayRouteOptionsPayload payload,Consumer<RailwayRouteOption> selector){super(Component.translatable("gui.createcityexpansioncore.railway.routes.title"));this.parent=parent;this.payload=payload;this.selector=selector;}

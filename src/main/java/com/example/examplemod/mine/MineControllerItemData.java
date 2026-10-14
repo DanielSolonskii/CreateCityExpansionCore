@@ -28,9 +28,8 @@ public final class MineControllerItemData {
                 .orElse(project == null ? null : project.resourceId());
         UUID creatorId = controller.getCreatorId().orElse(null);
         String creatorName = controller.getCreatorName();
-        if (creatorName.isBlank() && creatorId != null) {
-            creatorName = level.getServer().getProfileCache().get(creatorId)
-                    .map(profile -> profile.getName()).orElse("");
+        if (creatorId != null) {
+            creatorName = com.example.examplemod.auth.PlayerNames.name(level.getServer(), creatorId);
         }
         City city = project == null ? null : manager.getCity(project.cityId());
         boolean registered = controller.isCommissioned()

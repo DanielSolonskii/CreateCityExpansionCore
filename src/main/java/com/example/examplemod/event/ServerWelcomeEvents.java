@@ -48,7 +48,7 @@ public final class ServerWelcomeEvents {
         boolean firstJoin = !data.getBoolean(GREETED);
         data.putBoolean(GREETED, true);
 
-        String name = player.getGameProfile().getName();
+        String name = com.example.examplemod.auth.PlayerNames.name(player);
 
         player.sendSystemMessage(Component.translatable(
                 firstJoin ? "message.createcityexpansioncore.server.welcome"

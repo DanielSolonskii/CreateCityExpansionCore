@@ -1,5 +1,8 @@
 # CURRENT_STATE.md
 
+> Этот текст ниже сохраняет срез от 03.10.2026. Актуальный State от 14.10.2026: [docs/audit-2026-10-14/STATE_RU.md](docs/audit-2026-10-14/STATE_RU.md).
+> В частности, ниже устарели Geology v3 и перечень новых Auth/Projects/Profile/HUD систем.
+
 Срез текущего локального состояния CreateCityExpansionCore.
 
 Актуализирован: 2026-10-03. Source of truth — код текущего MERGED worktree.

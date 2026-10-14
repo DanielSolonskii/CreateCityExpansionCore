@@ -12,10 +12,33 @@ public final class AtlasPreferences {
     public record Pin(int x, int z) {}
     public double centerX, centerZ, zoom = 1.25;
     public int mode;
+    public int territoryMode;
+    public boolean plotGrid;
     public boolean positioned, grid, minimap;
     public final int[] overlays = {-1, -1, -1, -1};
     public final List<Pin> pins = new ArrayList<>();
     public static final int MAX_PINS = 64;
+
+    /** Pins belong to a player/world/dimension, never to a movable map anchor. */
+    public static AtlasPreferences loadWorld(Path path, String world) {
+        Properties values = read(path);
+        if (values.containsKey(world + ".pins")) return load(path, world);
+        AtlasPreferences result = load(path, world);
+        for (String key : values.stringPropertyNames().stream().sorted().toList()) {
+            if (!key.startsWith(world + ":") || !key.endsWith(".pins")) continue;
+            String legacy = key.substring(0, key.length() - ".pins".length());
+            try { Long.parseLong(legacy.substring(world.length() + 1)); }
+            catch (NumberFormatException ignored) { continue; }
+            AtlasPreferences old = load(path, legacy);
+            if (!result.positioned && old.positioned) {
+                result.centerX = old.centerX; result.centerZ = old.centerZ; result.zoom = old.zoom;
+                result.positioned = true; result.mode = old.mode; result.grid = old.grid; result.minimap = old.minimap;
+                System.arraycopy(old.overlays, 0, result.overlays, 0, old.overlays.length);
+            }
+            for (Pin pin : old.pins) if (result.pins.size() < MAX_PINS && !result.pins.contains(pin)) result.pins.add(pin);
+        }
+        return result;
+    }
 
     public static AtlasPreferences load(Path path, String world) {
         AtlasPreferences result = new AtlasPreferences();
@@ -28,6 +51,8 @@ public final class AtlasPreferences {
             result.positioned = Boolean.parseBoolean(values.getProperty(prefix + "positioned", "false"));
             result.mode = Math.max(0, Math.min(2, Integer.parseInt(values.getProperty(prefix + "mode", "0"))));
             result.grid = Boolean.parseBoolean(values.getProperty(prefix + "grid", "false"));
+            result.territoryMode=Math.clamp(Integer.parseInt(values.getProperty(prefix+"territoryMode","0")),0,2);
+            result.plotGrid=Boolean.parseBoolean(values.getProperty(prefix+"plotGrid","false"));
             result.minimap = Boolean.parseBoolean(values.getProperty(prefix + "minimap", "false"));
             for (int i = 0; i < result.overlays.length; i++) result.overlays[i] = Integer.parseInt(values.getProperty(prefix + "layers." + i, "-1"));
             if (!Double.isFinite(result.centerX) || !Double.isFinite(result.centerZ)
@@ -53,6 +78,8 @@ public final class AtlasPreferences {
         values.setProperty(prefix + "positioned", Boolean.toString(positioned));
         values.setProperty(prefix + "mode", Integer.toString(mode));
         values.setProperty(prefix + "grid", Boolean.toString(grid));
+        values.setProperty(prefix+"territoryMode",Integer.toString(territoryMode));
+        values.setProperty(prefix+"plotGrid",Boolean.toString(plotGrid));
         values.setProperty(prefix + "minimap", Boolean.toString(minimap));
         for (int i = 0; i < overlays.length; i++) values.setProperty(prefix + "layers." + i, Integer.toString(overlays[i]));
         StringBuilder coordinates = new StringBuilder();

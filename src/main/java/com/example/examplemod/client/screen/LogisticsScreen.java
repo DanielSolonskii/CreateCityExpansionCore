@@ -20,7 +20,7 @@ import static com.example.examplemod.client.screen.LogisticsStyle.*;
  * Client-only operations console. Selection/navigation never sends a mutating command.
  * All economic actions still go through the existing server-validated payload.
  */
-public final class LogisticsScreen extends Screen {
+public final class LogisticsScreen extends CityPylonPageScreen {
     private enum View { LIST, REGISTER, POINT, SHIPMENT, SOURCE, TRAIN, RENAME, REMOVE, LEGACY, REVOKE }
     private final CityPylonScreen parent;
     private final CityPylonMenu menu;
@@ -537,7 +537,7 @@ public final class LogisticsScreen extends Screen {
         icon(g,"create:package_postbox",layout.left(),10);
         line(g,title,layout.left()+24,8,layout.width()-24,GOLD);
         line(g,Component.literal(menu.getCityName()),layout.left()+24,22,layout.width()-24,MUTED);
-        g.enableScissor(layout.left(),layout.top(),layout.right(),layout.bottom());
+        CityPylonWorkspace.clip(g,layout.left(),layout.top(),layout.right(),layout.bottom());
         compose(g,mx,my);
         g.disableScissor();
         if(contentHeight>layout.viewport()){

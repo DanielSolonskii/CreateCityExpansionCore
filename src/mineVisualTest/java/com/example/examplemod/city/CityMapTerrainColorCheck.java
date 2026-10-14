@@ -79,9 +79,9 @@ public final class CityMapTerrainColorCheck {
 
             // A server can only ever supply a biome's authored override, or nothing at all. Both are
             // exercised: the authored tint a server can produce, and the "no tint" case.
-            int untinted = CityMapSavedData.normalize(row.mapColor().col);
-            int tinted = CityMapSavedData.normalize(
-                    CityMapSavedData.applyTint(row.mapColor().col, row.tint(), CityMapSavedData.BIOME_TINT_STRENGTH));
+            int material=CityMapSavedData.materialColor(family,row.mapColor().col);
+            int untinted=0xFF000000|material;
+            int tinted=0xFF000000|CityMapSavedData.applyTint(material,row.tint(),CityMapSavedData.BIOME_TINT_STRENGTH);
 
             require(family == row.family(),
                     row.blockId() + " must be classified as " + row.family() + " but is " + family);
@@ -99,11 +99,11 @@ public final class CityMapTerrainColorCheck {
                 require(tinted == untinted,
                         row.blockId() + " is never biome-tinted, so its colour must be untouched");
             }
-            require(chroma(untinted) <= CityMapSavedData.MAX_CHROMA + 1,
-                    row.blockId() + " stays under the chroma ceiling");
+            require(chroma(untinted) <= 160,
+                    row.blockId() + " has restrained natural chroma");
             require(CityMapSavedData.luminance(red(untinted), green(untinted), blue(untinted))
-                            <= CityMapSavedData.MAX_LUMINANCE,
-                    row.blockId() + " is never blinding");
+                            <= 255,
+                    row.blockId() + " remains within the colour gamut");
 
             System.out.printf("%-15s %-9s map=%-9s tint=%-9s result=%-9s dominant=%s%n",
                     row.blockId(), family, "#" + Integer.toHexString(row.mapColor().col),
@@ -111,6 +111,9 @@ public final class CityMapTerrainColorCheck {
                     "#" + Integer.toHexString(tinted), dominant(tinted));
         }
 
+        require(CityMapSavedData.materialColor(CityMapSavedData.TintFamily.NONE,MapColor.SNOW.col)==MapColor.SNOW.col,"snow retains native white without a luminance cap");
+        require(CityMapSavedData.materialColor(CityMapSavedData.TintFamily.NONE,0x73A9D1)==0x73A9D1,"building and mod material colours remain exact");
+        require(CityMapSavedData.materialColor(CityMapSavedData.TintFamily.FOLIAGE,MapColor.PLANT.col)!=MapColor.PLANT.col,"forest uses a natural deep green rather than neon map green");
         // ------------------------------------------------------------------- classification contract
         require(CityMapSavedData.classifyTint(ResourceLocation.withDefaultNamespace("grass_block"))
                         == CityMapSavedData.TintFamily.GRASS, "grass_block uses the grass tint");

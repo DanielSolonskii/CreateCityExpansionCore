@@ -43,8 +43,8 @@ import java.nio.charset.StandardCharsets;
 
 public final class CityMapPanel {
 
-    private static final double MIN_ZOOM = 0.5;
-    private static final double MAX_ZOOM = 4.0;
+    private static final double MIN_ZOOM = AtlasMapScale.MIN_ZOOM;
+    private static final double MAX_ZOOM = AtlasMapScale.MAX_ZOOM;
     private static final double ZOOM_STEP = 1.25;
     private static final double MAX_WORLD_COORDINATE = 29_999_984.0;
     /**
@@ -54,10 +54,10 @@ public final class CityMapPanel {
      */
     private static final double MIN_SAMPLE_SCREEN_PX = 2.0;
     /** Terrain texture rebuilds are budgeted per frame so a level-of-detail change never stalls a pan. */
-    private static final int MAX_TILE_REBUILDS_PER_FRAME = 4;
+    private static final int MAX_TILE_REBUILDS_PER_FRAME = 16;
     /** Upper bound on cached tiles, so exploring a large world cannot grow the client cache forever. */
     private static final int MAX_CACHED_TILES = 4096;
-    private static final int MAX_REQUESTS_PER_RENDER = 4;
+    private static final int MAX_REQUESTS_PER_RENDER = 8;
     private static final long REQUEST_INTERVAL_MILLIS = 100L;
     private static final long REQUEST_TIMEOUT_MILLIS = 5_000L;
     private static final long HOVER_DELAY_MILLIS = 160L;
@@ -85,6 +85,10 @@ public final class CityMapPanel {
      * картой, не угадывая её размер.
      */
     private CityMapFrame.Geometry chromeGeometry;
+    private java.util.function.Consumer<GuiGraphics> visualOverlay;
+
+    /** Optional client visual layer, inside the terrain batch and below markers/chrome. */
+    public void setVisualOverlay(java.util.function.Consumer<GuiGraphics> overlay) { this.visualOverlay=overlay; }
 
     /*
      * Территория рисуется по реальным участкам 50×50, а не по
@@ -92,8 +96,6 @@ public final class CityMapPanel {
      * и обводится контуром, чужие — в собственном цвете города, но
      * приглушённо: карта остаётся инфраструктурной, а не политической.
      */
-    private static final int OWN_FILL_ALPHA = MapPalette.OWN_FILL_ALPHA;
-    private static final int PEER_FILL_ALPHA = MapPalette.PEER_FILL_ALPHA;
     /** Цвет подсветки участка под курсором, когда его можно занять. */
     private static final int CLAIMABLE_HINT = 0xFFE8C87A;
     /** Сетка участков видна только когда участок достаточно велик на экране. */
@@ -233,6 +235,13 @@ public final class CityMapPanel {
     private boolean showTradeInfrastructure = true;
     private boolean showCities = true;
     private boolean showTerritory = true;
+    private int territoryMode;
+    private boolean projectFocus, projectPicking, showPlotGrid;
+    private final java.util.Map<UUID,List<TerritoryPresentation.Edge>> territoryEdges=new java.util.HashMap<>();
+    public void setTerritoryPresentation(int mode,boolean plots){territoryMode=Math.clamp(mode,0,2);showPlotGrid=plots;}
+    public int territoryMode(){return territoryMode;}
+    public boolean plotGrid(){return showPlotGrid;}
+    public void setProjectFocus(boolean focus,boolean picking){projectFocus=focus;projectPicking=picking;}
     private boolean showProjects = true;
     private boolean showRelations;
     private boolean drawInternalControls = true;
@@ -242,10 +251,26 @@ public final class CityMapPanel {
     private long hoverCandidateSince;
     private Focus focus = Focus.WORLD;
     private long routeSelectionStartedAt;
-    private final Map<TileKey, CachedTile> tileCache = new HashMap<>();
+    private final Map<TileKey, CachedTile> tileCache = new java.util.LinkedHashMap<>(64, .75f, true);
     private final Map<TileKey, Long> requestedTiles = new HashMap<>();
-    /** One GPU texture per cached tile, built lazily and released when the tile leaves the cache. */
+    /** Lightweight tile handles. GPU storage is shared and capped by TerrainAtlas. */
     private final Map<TileKey, TerrainTileTexture> terrainTextures = new HashMap<>();
+    private TerrainTileStore terrainStore;
+    private UUID terrainWorld=new UUID(0,0);
+
+    private TerrainTileStore terrainStore() {
+        if (this.terrainStore == null) this.terrainStore = TerrainCache.store(this.dimensionId.toString());
+        return this.terrainStore;
+    }
+    private CachedTile cachedTerrain(TileKey key) {
+        CachedTile local = this.tileCache.get(key);
+        if (local != null) return local;
+        var saved = terrainStore().get(key.tileX(), key.tileZ(),key.level());
+        if (saved == null || !terrainWorld.equals(new UUID(0,0))&&!saved.worldId().equals(terrainWorld)) return null;
+        local = new CachedTile(saved.colors(), saved.contours(), saved.complete(), 0L,saved.heights(),saved.revision(),saved.worldId());
+        this.tileCache.put(key, local); evictTerrainTiles();
+        return local;
+    }
     private final Map<MarkerKey, ScreenPoint> markerPositions = new HashMap<>();
 
     private double centerX;
@@ -379,6 +404,8 @@ public final class CityMapPanel {
     public void receivePeers(List<CityMapPeersPayload.Peer> peers) {
         this.territoryPeers = List.copyOf(peers);
         this.peers = CityMapCities.merge(peers, publicCities, publicDirectoryActive);
+        territoryEdges.clear();
+        for(var peer:this.peers)territoryEdges.put(peer.cityId(),TerritoryPresentation.boundary(peer.plots()));
         if (selection != null && selection.kind() == SelectionKind.CITY && selection.id() != null) {
             var selectedPeer = this.peers.stream().filter(peer -> peer.cityId().equals(selection.id())).findFirst().orElse(null);
             selection = selectedPeer == null ? null : peerSelection(selectedPeer);
@@ -762,7 +789,7 @@ public final class CityMapPanel {
 
         requestVisibleTiles();
 
-        guiGraphics.enableScissor(
+        com.example.examplemod.client.screen.CityPylonWorkspace.clip(guiGraphics,
                 Math.round(x * this.guiScale),
                 Math.round(y * this.guiScale),
                 Math.round((x + width) * this.guiScale),
@@ -786,17 +813,20 @@ public final class CityMapPanel {
                 }
                 if (this.showCoordinateGrid) renderGrid(guiGraphics);
                 renderSnapshotNotice(guiGraphics);
-                if (this.showTerritory && this.showCoordinateGrid && this.plotClaimRequest != null) renderPlotGrid(guiGraphics);
+                if (this.showTerritory && this.showPlotGrid && this.plotClaimRequest != null) renderPlotGrid(guiGraphics);
                 // Соседи рисуются ДО своей территории: собственный город
                 // остаётся главным акцентом, чужие — фоном.
-                if (this.showTerritory || this.showCities) renderPeers(guiGraphics, mouseX, mouseY);
-                if (this.showTerritory) {
+                if (this.showTerritory || this.showCities || this.projectPicking) renderPeers(guiGraphics, mouseX, mouseY);
+                if (this.showTerritory || this.projectPicking) {
+                    if(projectPicking)renderConstructionMask(guiGraphics);
                     renderTerritory(guiGraphics);
-                    renderClaimHint(guiGraphics);
+                    if (!projectFocus) renderClaimHint(guiGraphics);
                 }
                 renderCityTooltips(guiGraphics, mouseX, mouseY);
                 renderRailway(guiGraphics, mouseX, mouseY);
                 renderMarkers(guiGraphics, mouseX, mouseY);
+                // Placement previews and project markers must stay visible over city/player icons.
+                if (this.visualOverlay != null) this.visualOverlay.accept(guiGraphics);
                 renderPersonalTools(guiGraphics);
             });
         } finally {
@@ -858,21 +888,25 @@ public final class CityMapPanel {
             return false;
         }
 
-        TileKey key = new TileKey(payload.dimensionId(), payload.tileX(), payload.tileZ());
-        this.requestedTiles.remove(key);
-        this.failedTiles.remove(key);
-        this.tileAttempts.remove(key);
-        this.tileCache.put(key, new CachedTile(
-                payload.colors(),
-                payload.contours(),
-                payload.complete(),
-                System.currentTimeMillis()
-        ));
-        // Only this tile changed, so only its texture is stale. Everything else on screen keeps the
-        // texture it already has: an incremental update, never a full atlas rebuild.
-        TerrainTileTexture texture = this.terrainTextures.get(key);
-        if (texture != null) {
-            texture.invalidate();
+        TileKey key=new TileKey(payload.dimensionId(),payload.tileX(),payload.tileZ(),payload.level());
+        this.requestedTiles.remove(key);this.failedTiles.remove(key);this.tileAttempts.remove(key);
+        if(!terrainWorld.equals(payload.worldId())) {
+            boolean mismatch=this.tileCache.values().stream().anyMatch(t->!t.worldId().equals(payload.worldId()));
+            terrainWorld=payload.worldId();if(mismatch)TerrainCache.clearTextures(this.terrainStore);
+            this.tileCache.entrySet().removeIf(e->!e.getValue().worldId().equals(terrainWorld));
+            if(mismatch){this.terrainTextures.values().forEach(TerrainTileTexture::close);this.terrainTextures.clear();}
+        }
+        CachedTile previous=cachedTerrain(key);long now=System.currentTimeMillis();
+        if(payload.unchanged()) {
+            if(previous!=null)this.tileCache.put(key,new CachedTile(previous.colors(),previous.contours(),previous.complete(),now,previous.heights(),previous.revision(),previous.worldId()));
+            return true;
+        }
+        this.tileCache.put(key,new CachedTile(payload.colors(),payload.contours(),payload.complete(),now,payload.heights(),payload.revision(),payload.worldId()));
+        terrainStore().put(payload.tileX(),payload.tileZ(),payload.level(),new TerrainTileStore.Tile(payload.colors(),payload.contours(),payload.complete(),now,payload.heights(),payload.revision(),payload.worldId()));
+        TerrainTileTexture texture=this.terrainTextures.get(key);
+        if(previous==null||previous.revision()!=payload.revision()) {
+            if(texture!=null)texture.invalidate();
+            TerrainCache.invalidate(this.terrainStore,key.tileX(),key.tileZ(),key.level());
         }
         evictTerrainTiles();
         return true;
@@ -1014,10 +1048,10 @@ public final class CityMapPanel {
             if (atAnchor(peer)) continue;
             Selection candidate = peerSelection(peer);
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
+            if (insideCityMarker(mouseX, mouseY, point.x(), point.y())) return candidate;
         }
         ScreenPoint ownPoint = markerPoint(SelectionKind.CITY, null, this.pylonPos);
-        if (this.showCities && hasCityAnchor() && inside(mouseX, mouseY, ownPoint.x() - 11, ownPoint.y() - 11, 22, 22)) {
+        if (this.showCities && hasCityAnchor() && insideCityMarker(mouseX, mouseY, ownPoint.x(), ownPoint.y())) {
             for (var peer : this.peers) if (atAnchor(peer)) return peerSelection(peer);
             if (ownPeer() != null) return peerSelection(ownPeer());
             return new Selection(SelectionKind.CITY, null,
@@ -1196,64 +1230,97 @@ public final class CityMapPanel {
         return true;
     }
 
+    private int terrainLevel(){return AtlasMapScale.terrainLevel(this.zoom,viewportWidth,viewportHeight,
+            Minecraft.getInstance().getWindow().getGuiScale()*this.guiScale);}
+    private int terrainCoordinate(double world,int level){return (int)Math.floor(world/AtlasMapScale.span(level));}
     private void renderTerrain(GuiGraphics guiGraphics) {
-        int minTileX = worldToTile(screenToWorldX(viewportX)) - 1;
-        int maxTileX = worldToTile(screenToWorldX(viewportX + viewportWidth)) + 1;
-        int minTileZ = worldToTile(screenToWorldZ(viewportY)) - 1;
-        int maxTileZ = worldToTile(screenToWorldZ(viewportY + viewportHeight)) + 1;
-        int stride = terrainStride();
-        int budget = MAX_TILE_REBUILDS_PER_FRAME;
-
-        for (int tileZ = minTileZ; tileZ <= maxTileZ; tileZ++) {
-            for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
-                TileKey key = new TileKey(this.dimensionId, tileX, tileZ);
-                CachedTile tile = this.tileCache.get(key);
-                if (tile == null) {
-                    renderMissingTile(guiGraphics, key, this.requestedTiles.containsKey(key));
-                    continue;
-                }
-                // A tile is one blit. Rebuilding its texture is the only per-tile cost, and it is
-                // budgeted per frame so a zoom that changes the level of detail never stalls.
-                TerrainTileTexture texture = this.terrainTextures.computeIfAbsent(key,
-                        ignored -> new TerrainTileTexture("ccec_city_map/" + this.dimensionId.getNamespace()
-                                + "_" + this.dimensionId.getPath() + "_" + ignored.tileX() + "_" + ignored.tileZ()));
-                if (!texture.matches(stride)) {
-                    if (budget > 0) {
-                        budget--;
-                        texture.build(tile.colors(), tile.contours(), stride);
-                    } else if (texture.id() == null) {
-                        // Nothing to draw yet and no budget left this frame: skip rather than blit an
-                        // unbuilt texture. A tile whose texture exists is still drawn at its previous
-                        // level of detail, so the budget never punches a hole in the terrain.
-                        continue;
-                    }
-                }
-                ResourceLocation id = texture.id();
-                if (id == null) {
-                    continue;
-                }
-                int left = worldToScreenX((double) tileX * CityMapTilePayload.WORLD_SIZE);
-                int top = worldToScreenY((double) tileZ * CityMapTilePayload.WORLD_SIZE);
-                int right = worldToScreenX((double) (tileX + 1) * CityMapTilePayload.WORLD_SIZE);
-                int bottom = worldToScreenY((double) (tileZ + 1) * CityMapTilePayload.WORLD_SIZE);
-                if (right <= viewportX || left >= viewportX + viewportWidth
-                        || bottom <= viewportY || top >= viewportY + viewportHeight) {
-                    continue;
-                }
-                guiGraphics.blit(id, left, top, Math.max(1, right - left), Math.max(1, bottom - top),
-                        0.0F, 0.0F, TerrainTileTexture.SIZE, TerrainTileTexture.SIZE,
-                        TerrainTileTexture.SIZE, TerrainTileTexture.SIZE);
+        TerrainAtlas.begin();
+        int level=terrainLevel(),budget=MAX_TILE_REBUILDS_PER_FRAME,fallbackLevel=-1;
+        long until=System.nanoTime()+2_000_000L;
+        // Pin existing visible samples before new uploads can reuse their atlas slots.
+        for(var entry:this.terrainTextures.entrySet()) {
+            TileKey key=entry.getKey();
+            double span=key.span();
+            if((key.tileX()+1)*span<screenToWorldX(viewportX)||key.tileX()*span>screenToWorldX(viewportX+viewportWidth)
+                    ||(key.tileZ()+1)*span<screenToWorldZ(viewportY)||key.tileZ()*span>screenToWorldZ(viewportY+viewportHeight))continue;
+            if(key.level()<level) {
+                if(entry.getValue().id()!=null)fallbackLevel=Math.max(fallbackLevel,key.level());
+                continue;
+            }
+            entry.getValue().pin();
+        }
+        // Prepare cached overview first, within the same time/count budget as detailed uploads.
+        for(int lod=7;lod>=level;lod--) {
+            int minX=terrainCoordinate(screenToWorldX(viewportX),lod),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),lod);
+            int minZ=terrainCoordinate(screenToWorldZ(viewportY),lod),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),lod);
+            for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+                if(System.nanoTime()>until)budget=0;
+                budget=renderTerrainTile(guiGraphics,new TileKey(this.dimensionId,x,z,lod),1,budget);
             }
         }
+        int minX=terrainCoordinate(screenToWorldX(viewportX),level),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),level);
+        int minZ=terrainCoordinate(screenToWorldZ(viewportY),level),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),level);
+        // A cropped parent only fills a missing/partial child: never redraw eight full-screen LODs.
+        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+            TileKey key=new TileKey(dimensionId,x,z,level);
+            TerrainTileTexture exact=terrainTextures.get(key);CachedTile raw=tileCache.get(key);
+            if(exact!=null&&exact.id()!=null&&raw!=null&&raw.complete())continue;
+            for(int parent=level+1;parent<=7;parent++) {
+                int factor=1<<(parent-level);
+                var texture=terrainTextures.get(new TileKey(dimensionId,Math.floorDiv(x,factor),Math.floorDiv(z,factor),parent));
+                if(texture==null||texture.id()==null)continue;
+                float size=32f/factor;
+                queueTerrain(texture,key,Math.floorMod(x,factor)*size,Math.floorMod(z,factor)*size,size);
+                break;
+            }
+        }
+        TerrainAtlas.flush(guiGraphics);
+        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+            TileKey key=new TileKey(dimensionId,x,z,level);var texture=terrainTextures.get(key);
+            if(texture!=null&&texture.id()!=null)queueTerrain(texture,key,0,0,32);
+        }
+        TerrainAtlas.flush(guiGraphics);
+        // Briefly retain finer already-loaded samples when zooming out into an uncached overview.
+        int retained=0;
+        for(var entry:terrainTextures.entrySet()) {
+            TileKey key=entry.getKey();if(key.level()!=fallbackLevel||entry.getValue().id()==null)continue;
+            int factor=1<<(level-key.level());var target=terrainTextures.get(new TileKey(dimensionId,
+                    Math.floorDiv(key.tileX(),factor),Math.floorDiv(key.tileZ(),factor),level));
+            if(target!=null&&target.id()!=null)continue;
+            if(queueTerrain(entry.getValue(),key,0,0,32)&&++retained>=128)break;
+        }
+        TerrainAtlas.flush(guiGraphics);
+    }
+    private int renderTerrainTile(GuiGraphics g,TileKey key,int stride,int budget) {
+        CachedTile tile=cachedTerrain(key);
+        if(tile==null)return budget;
+        TerrainTileTexture texture=this.terrainTextures.computeIfAbsent(key,ignored->{
+            TerrainTileTexture saved=TerrainCache.take(terrainStore(),key.tileX(),key.tileZ(),key.level());
+            return saved!=null?saved:new TerrainTileTexture("ccec_city_map/"+this.dimensionId.getNamespace()+"_"+this.dimensionId.getPath()+"_"+key.level()+"_"+key.tileX()+"_"+key.tileZ());
+        });
+        if(!texture.matches(stride)) {
+            if(budget>0){budget--;texture.build(tile.colors(),tile.contours(),stride,tile.heights(),key.level());}
+            else if(texture.id()==null)return budget;
+        }
+        return budget;
+    }
+    private boolean queueTerrain(TerrainTileTexture texture,TileKey key,float u,float v,float size) {
+        int left=worldToScreenX((double)key.tileX()*key.span());
+        int top=worldToScreenY((double)key.tileZ()*key.span());
+        int right=worldToScreenX((double)(key.tileX()+1)*key.span());
+        int bottom=worldToScreenY((double)(key.tileZ()+1)*key.span());
+        if(right<=viewportX||left>=viewportX+viewportWidth||bottom<=viewportY||top>=viewportY+viewportHeight)return false;
+        texture.draw(left,top,right,bottom,u,v,size);
+        return true;
     }
 
     /**
-     * Releases every terrain texture. The textures are derived from the cached samples, so dropping
-     * them costs nothing but a budgeted rebuild — and it means a closed map leaves no GPU texture
-     * behind.
+     * Returns textures to the bounded shared pool and schedules a raw-data disk checkpoint.
+     * Reopening the same world reuses both samples and already uploaded textures.
      */
     public void releaseTerrainTextures() {
-        this.terrainTextures.values().forEach(TerrainTileTexture::close);
+        if (this.terrainStore != null) this.terrainStore.flush();
+        this.terrainTextures.forEach((key, texture) -> TerrainCache.keep(this.terrainStore, key.tileX(), key.tileZ(),key.level(), texture));
         this.terrainTextures.clear();
     }
 
@@ -1264,19 +1331,8 @@ public final class CityMapPanel {
      */
     private void evictTerrainTiles() {
         while (this.tileCache.size() > MAX_CACHED_TILES) {
-            TileKey oldest = null;
-            long oldestAt = Long.MAX_VALUE;
-            for (TileKey key : this.tileCache.keySet()) {
-                long at = this.tileCache.get(key).receivedAtMillis();
-                if (at < oldestAt) {
-                    oldestAt = at;
-                    oldest = key;
-                }
-            }
-            if (oldest == null) {
-                return;
-            }
-            this.tileCache.remove(oldest);
+            var entries = this.tileCache.entrySet().iterator();
+            TileKey oldest = entries.next().getKey(); entries.remove();
             TerrainTileTexture texture = this.terrainTextures.remove(oldest);
             if (texture != null) {
                 texture.close();
@@ -1338,14 +1394,15 @@ public final class CityMapPanel {
         double maxWorldX = screenToWorldX(viewportX + viewportWidth);
         double minWorldZ = screenToWorldZ(viewportY);
         double maxWorldZ = screenToWorldZ(viewportY + viewportHeight);
-        int firstX = (int) Math.floor(minWorldX / 32.0) * 32;
-        int firstZ = (int) Math.floor(minWorldZ / 32.0) * 32;
+        int gridStep=32;while(gridStep*this.zoom<32)gridStep*=2;
+        int firstX=(int)Math.floor(minWorldX/gridStep)*gridStep;
+        int firstZ=(int)Math.floor(minWorldZ/gridStep)*gridStep;
 
-        for (int worldX = firstX; worldX <= maxWorldX; worldX += 32) {
+        for (int worldX = firstX; worldX <= maxWorldX; worldX += gridStep) {
             int screenX = worldToScreenX(worldX);
             guiGraphics.vLine(screenX, viewportY, viewportY + viewportHeight, MapPalette.INK_GRID);
         }
-        for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += 32) {
+        for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += gridStep) {
             int screenY = worldToScreenY(worldZ);
             guiGraphics.hLine(viewportX, viewportX + viewportWidth, screenY, MapPalette.INK_GRID);
         }
@@ -1363,6 +1420,16 @@ public final class CityMapPanel {
      * сервером по дистанции, поэтому ни обхода мира, ни выборки
      * чанков в цикле кадра не происходит.
      */
+    private boolean insideCityMarker(double mx,double my,int x,int y) {
+        int r=TerritoryPresentation.cityRadius(this.zoom);return inside(mx,my,x-r,y-r,r*2,r*2);
+    }
+    private void renderCityMarker(GuiGraphics g,int x,int y,boolean owned,boolean hover,boolean selected) {
+        int r=TerritoryPresentation.cityRadius(this.zoom),color=selected?MapPalette.SELECTED:hover?0xFFE0C395:owned?MapPalette.OWN:MapPalette.NEUTRAL;
+        g.fill(x-r,y-r,x+r,y+r,0xEE172025);g.renderOutline(x-r,y-r,r*2,r*2,color);
+        float scale=(r-3)/8F;
+        g.pose().pushPose();g.pose().translate(x,y,0);g.pose().scale(scale,scale,1);
+        MapMarkerRenderer.drawGlyph(g,AtlasGlyph.CITY,-8,-8,color);g.pose().popPose();
+    }
     private void renderPeers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         if (this.showRelations) for (CityMapPeersPayload.Peer peer : this.peers) {
             CityRelationSnapshot.Status status = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
@@ -1374,6 +1441,7 @@ public final class CityMapPanel {
         }
         for (CityMapPeersPayload.Peer peer : this.peers) {
             // Свой город рисуется отдельно и ярче.
+            if ((this.showTerritory || this.projectPicking) && !peer.own()) renderClaims(guiGraphics, peer, false);
             if (atAnchor(peer)) {
                 continue;
             }
@@ -1402,14 +1470,12 @@ public final class CityMapPanel {
              * вокруг пилона серого цвета, и одинаковый серый для всех
              * чужих городов делал соседние территории неразличимыми.
              */
-            if (this.showTerritory) {
-                renderClaims(guiGraphics, peer, PEER_FILL_ALPHA, false);
-            }
+
 
             if (!this.showCities) continue;
             drawMarkerLeader(guiGraphics, markerX, markerY,
                     worldToScreenX(peer.pylonX() + 0.5), worldToScreenY(peer.pylonZ() + 0.5));
-            MapMarkerRenderer.renderMap(guiGraphics, this.zoom, markerX, markerY, this.cityIcon, peer.own(), false,
+            renderCityMarker(guiGraphics, markerX, markerY, peer.own(),
                     matchesTargetAt(this.hoveredSelection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()),
                     matchesTargetAt(this.selection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()));
             /*
@@ -1417,7 +1483,7 @@ public final class CityMapPanel {
              * Без неё наведение на чужой город давало только квадрат вокруг
              * маркера: ни названия, ни размера территории.
              */
-            if (inside(mouseX, mouseY, markerX - 11, markerY - 11, 22, 22)) {
+            if (insideCityMarker(mouseX, mouseY, markerX, markerY)) {
                 deferCityTooltip(mouseX, mouseY, peer);
             }
             CityRelationSnapshot.Status relation = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
@@ -1435,8 +1501,8 @@ public final class CityMapPanel {
              * названия, и на экране оно оказывалось дважды — у маркера и в
              * окошке в паре пикселей от него.
              */
-            if (emphasized && !tooltipShown && name != null && !name.isEmpty()) {
-                int textX = markerX + 7;
+            if ((emphasized || this.zoom < 1.1) && !tooltipShown && name != null && !name.isEmpty()) {
+                int textX = markerX + TerritoryPresentation.cityRadius(this.zoom) + 4;
                 int textY = markerY - 4;
                 var font = Minecraft.getInstance().font;
                 if (textX + font.width(name) < viewportX + viewportW
@@ -1787,8 +1853,24 @@ public final class CityMapPanel {
         if (own == null) {
             return;
         }
-        renderClaimableFrontier(guiGraphics, own);
-        renderClaims(guiGraphics, own, OWN_FILL_ALPHA, true);
+        if (!projectFocus && this.showPlotGrid) renderClaimableFrontier(guiGraphics, own);
+        renderClaims(guiGraphics, own, true);
+    }
+
+    private void renderConstructionMask(GuiGraphics g) {
+        var own=ownPeer();if(own==null)return;
+        int minX=CityPlot.plotXOf((int)Math.floor(screenToWorldX(viewportX))),maxX=CityPlot.plotXOf((int)Math.ceil(screenToWorldX(viewportX+viewportWidth)));
+        int minZ=CityPlot.plotZOf((int)Math.floor(screenToWorldZ(viewportY))),maxZ=CityPlot.plotZOf((int)Math.ceil(screenToWorldZ(viewportY+viewportHeight)));
+        if((long)(maxX-minX+1)*(maxZ-minZ+1)>4096)return;
+        for(int z=minZ;z<=maxZ;z++) {
+            int start=minX;
+            for(int x=minX;x<=maxX+1;x++) {
+                boolean available=x<=maxX&&!own.plots().contains(new CityPlot(dimensionId,x,z));
+                if(available)continue;
+                if(x>start)g.fill(worldToScreenX(start*CityPlot.PLOT_SIZE),worldToScreenY(z*CityPlot.PLOT_SIZE),worldToScreenX(x*CityPlot.PLOT_SIZE),worldToScreenY((z+1)*CityPlot.PLOT_SIZE),0x6010181C);
+                start=x+1;
+            }
+        }
     }
 
     /**
@@ -1807,7 +1889,7 @@ public final class CityMapPanel {
             return;
         }
         ScreenPoint ownPoint = markerPoint(SelectionKind.CITY, null, this.pylonPos);
-        if (inside(mouseX, mouseY, ownPoint.x() - 11, ownPoint.y() - 11, 22, 22)) {
+        if (insideCityMarker(mouseX, mouseY, ownPoint.x(), ownPoint.y())) {
             CityMapPeersPayload.Peer own = ownPeer();
             if (own != null) {
                 deferOwnCityTooltip(mouseX, mouseY, own);
@@ -1925,74 +2007,24 @@ public final class CityMapPanel {
      * а всё целиком отсекается вьюпортом: за кадром не рисуется
      * ничего, и обход мировых данных в кадре не происходит.
      */
-    private void renderClaims(
-            GuiGraphics guiGraphics,
-            CityMapPeersPayload.Peer peer,
-            int fillAlpha,
-            boolean emphasize
-    ) {
-        Set<CityPlot> owned = peer.plots();
-        if (owned.isEmpty()) {
-            return;
+    private void renderClaims(GuiGraphics g,CityMapPeersPayload.Peer peer,boolean emphasize) {
+        var style=TerritoryPresentation.style(this.zoom,this.territoryMode,projectFocus,projectPicking&&peer.own());
+        if(style.borderAlpha()==0&&style.fillAlpha()==0)return;
+        if(style.fillAlpha()>0)for(var plot:peer.plots()) {
+            int l=worldToScreenX(plot.minX()),t=worldToScreenY(plot.minZ());
+            int r=worldToScreenX(plot.maxX()+1),b=worldToScreenY(plot.maxZ()+1);
+            if(r>viewportX&&l<viewportX+viewportWidth&&b>viewportY&&t<viewportY+viewportHeight)
+                g.fill(l,t,r,b,CityColors.argb(peer.colorRgb(),style.fillAlpha()));
         }
-
-        int border = CityColors.argb(CityColors.lift(peer.colorRgb(), emphasize ? 110 : 70),
-                emphasize ? 0xFF : 0xC0);
-        int fill = CityColors.argb(peer.colorRgb(), fillAlpha);
-
-        for (CityPlot plot : owned) {
-            int left = worldToScreenX(plot.minX());
-            int top = worldToScreenY(plot.minZ());
-            int right = worldToScreenX(plot.maxX() + 1);
-            int bottom = worldToScreenY(plot.maxZ() + 1);
-            if (right <= viewportX || left >= viewportX + viewportWidth
-                    || bottom <= viewportY || top >= viewportY + viewportHeight) {
-                continue;
-            }
-            guiGraphics.fill(left, top, right, bottom, fill);
-        }
-
-        /*
-         * Контур рисуется по линиям сетки, а не по каждому участку:
-         * линия вдоль границы сетки на всём видимом диапазоне дешевле
-         * и не оставляет швов на стыке соседних участков.
-         *
-         * Линия сетки рисуется, только если с одной из её сторон есть
-         * хотя бы один занятый участок, то есть она проходит по
-         * внешнему краю территории, а не по её середине. Внутренние
-         * границы между своими же участками не рисуются, поэтому
-         * большая территория не превращается в шахматную доску.
-         */
-        if (this.zoom * CityPlot.PLOT_SIZE < MIN_PLOT_GRID_PX) {
-            return;
-        }
-        Set<Integer> columns = new java.util.HashSet<>();
-        Set<Integer> rows = new java.util.HashSet<>();
-        for (CityPlot plot : owned) {
-            columns.add(plot.plotX());
-            rows.add(plot.plotZ());
-        }
-        double minWorldX = screenToWorldX(viewportX);
-        double maxWorldX = screenToWorldX(viewportX + viewportWidth);
-        double minWorldZ = screenToWorldZ(viewportY);
-        double maxWorldZ = screenToWorldZ(viewportY + viewportHeight);
-        int firstX = (int) Math.floor(minWorldX / CityPlot.PLOT_SIZE) * CityPlot.PLOT_SIZE;
-        int firstZ = (int) Math.floor(minWorldZ / CityPlot.PLOT_SIZE) * CityPlot.PLOT_SIZE;
-
-        for (int worldX = firstX; worldX <= maxWorldX; worldX += CityPlot.PLOT_SIZE) {
-            if (columns.contains(CityPlot.plotXOf(worldX))
-                    || columns.contains(CityPlot.plotXOf(worldX - 1))) {
-                guiGraphics.vLine(worldToScreenX(worldX), viewportY, viewportY + viewportHeight, border);
-            }
-        }
-        for (int worldZ = firstZ; worldZ <= maxWorldZ; worldZ += CityPlot.PLOT_SIZE) {
-            if (rows.contains(CityPlot.plotZOf(worldZ))
-                    || rows.contains(CityPlot.plotZOf(worldZ - 1))) {
-                guiGraphics.hLine(viewportX, viewportX + viewportWidth, worldToScreenY(worldZ), border);
-            }
+        int border=CityColors.argb(CityColors.lift(peer.colorRgb(),emphasize?90:60),style.borderAlpha());
+        for(var edge:territoryEdges.getOrDefault(peer.cityId(),List.of())) {
+            int x1=worldToScreenX(edge.x1()),y1=worldToScreenY(edge.z1()),x2=worldToScreenX(edge.x2()),y2=worldToScreenY(edge.z2());
+            if(x1==x2) {if(x1>=viewportX&&x1<viewportX+viewportWidth&&y2>=viewportY&&y1<viewportY+viewportHeight)
+                g.fill(x1,Math.max(viewportY,y1),x1+1,Math.min(viewportY+viewportHeight,y2),border);}
+            else if(y1>=viewportY&&y1<viewportY+viewportHeight&&x2>=viewportX&&x1<viewportX+viewportWidth)
+                g.fill(Math.max(viewportX,x1),y1,Math.min(viewportX+viewportWidth,x2),y1+1,border);
         }
     }
-
     private void renderMarkers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         if (hasCityAnchor()) {
         ScreenPoint ownMarker = markerPoint(SelectionKind.CITY, null, this.pylonPos);
@@ -2001,13 +2033,13 @@ public final class CityMapPanel {
         drawMarkerLeader(guiGraphics, markerX, markerY,
                 worldToScreenX(this.pylonPos.getX() + 0.5), worldToScreenY(this.pylonPos.getZ() + 0.5));
         boolean ownedAnchor = this.peers.stream().anyMatch(peer -> atAnchor(peer) && peer.own());
-        if (this.showCities) MapMarkerRenderer.renderMap(guiGraphics, this.zoom, markerX, markerY, this.cityIcon, ownedAnchor, false,
+        if (this.showCities) renderCityMarker(guiGraphics, markerX, markerY, ownedAnchor,
                 matchesTarget(this.hoveredSelection, SelectionKind.CITY, null, this.pylonPos),
                 matchesTarget(this.selection, SelectionKind.CITY, null, this.pylonPos));
         if (this.showCities) guiGraphics.drawString(
                 Minecraft.getInstance().font,
                 this.peers.stream().filter(this::atAnchor).findFirst().map(peer -> Component.literal(peer.name())).orElse(Component.translatable("gui.createcityexpansioncore.map.city_pylon")),
-                markerX + 7,
+                markerX + TerritoryPresentation.cityRadius(this.zoom) + 4,
                 markerY - 4,
                 0xFFF4D49A,
                 true
@@ -2113,14 +2145,16 @@ public final class CityMapPanel {
             }
             for(var section:this.railwaySections){drawSemanticSection(graphics,section);}
             RailwayMapPayload.RouteView focused = this.selection != null && this.selection.kind() == SelectionKind.ROUTE ? route(this.selection.id()) : null;
-            if (focused != null) graphics.fill(this.viewportX, this.viewportY, this.viewportX + this.viewportWidth, this.viewportY + this.viewportHeight, 0x54101719);
+            if (focused != null) graphics.fill(this.viewportX, this.viewportY, this.viewportX + this.viewportWidth, this.viewportY + this.viewportHeight, 0x24101719);
             for(var route:this.railwayRoutes) {
                 if (focused != null && !focused.id().equals(route.id())) continue;
-                int color=route.selected()?0xFFFFFF76:route.status().equals("active")?0xFF61E6B0:0xFFE48C54;
-                if (focused != null) drawAnimatedRoute(graphics, route, color); else drawSegments(graphics,route.segments(),color,3);
+                int color=focused!=null||route.selected()?MapPalette.SELECTED:route.status().equals("active")?0xFF8BCDB1:0xFFE0A776;
+                if(focused!=null||route.selected())drawAnimatedRoute(graphics,route,color);
+                else {drawSegments(graphics,route.segments(),0xE0121B20,-1,5);drawSegments(graphics,route.segments(),color,3);}
             }
-            if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawLine(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
         }
+        // Freight links belong to the logistics overlay, independently of railway visibility.
+        if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawLine(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
         if (this.showStations && this.zoom >= MIN_ZOOM) {
             for (RailwayStationSnapshot station : this.railwayStations) {
                 if (!station.dimension().equals(this.dimensionId)) continue;
@@ -2527,17 +2561,14 @@ public final class CityMapPanel {
         }
     }
     public Component terrainStatus() {
-        boolean failed = false, loading = false, unknown = false;
-        int minX = worldToTile(screenToWorldX(this.viewportX)), maxX = worldToTile(screenToWorldX(this.viewportX + this.viewportWidth));
-        int minZ = worldToTile(screenToWorldZ(this.viewportY)), maxZ = worldToTile(screenToWorldZ(this.viewportY + this.viewportHeight));
-        for (int z = minZ; z <= maxZ; z++) for (int x = minX; x <= maxX; x++) {
-            TileKey key = new TileKey(this.dimensionId, x, z);
-            CachedTile tile = this.tileCache.get(key);
-            failed |= this.failedTiles.contains(key);
-            loading |= this.requestedTiles.containsKey(key);
-            unknown |= tile == null || !tile.complete();
+        boolean failed=false,loading=false,unknown=false;int level=terrainLevel();
+        int minX=terrainCoordinate(screenToWorldX(viewportX),level),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),level);
+        int minZ=terrainCoordinate(screenToWorldZ(viewportY),level),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),level);
+        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+            TileKey key=new TileKey(dimensionId,x,z,level);CachedTile tile=tileCache.get(key);
+            failed|=failedTiles.contains(key);loading|=requestedTiles.containsKey(key);unknown|=tile==null||!tile.complete();
         }
-        return Component.translatable("gui.createcityexpansioncore.world_map.terrain." + (failed ? "failed" : loading ? "loading" : unknown ? "unknown" : "ready"));
+        return Component.translatable("gui.createcityexpansioncore.world_map.terrain."+(failed?"failed":loading?"loading":unknown?"unknown":"ready"));
     }
     public void retryTerrain() { this.failedTiles.clear(); this.tileAttempts.clear(); this.requestedTiles.clear(); }
 
@@ -2688,7 +2719,7 @@ public final class CityMapPanel {
     private static BlockPos midpoint(List<RailwayMapPayload.TrackSegment> values){if(values.isEmpty())return BlockPos.ZERO;var s=values.get(values.size()/2);return BlockPos.containing((s.x1()+s.x2())/2,0,(s.z1()+s.z2())/2);}
     private void drawSegments(GuiGraphics graphics,List<RailwayMapPayload.TrackSegment> values,int color,int width){drawSegments(graphics,values,color,0,width);}
     private void drawSegments(GuiGraphics graphics,List<RailwayMapPayload.TrackSegment> values,int color,int start,int count){
-        for(var s:values){int x1=worldToScreenX(s.x1()),y1=worldToScreenY(s.z1()),x2=worldToScreenX(s.x2()),y2=worldToScreenY(s.z2());for(int offset=start;offset<start+count;offset++)drawLine(graphics,x1,y1+offset,x2,y2+offset,color);}
+        for(var s:values){int x1=worldToScreenX(s.x1()),y1=worldToScreenY(s.z1()),x2=worldToScreenX(s.x2()),y2=worldToScreenY(s.z2());double length=Math.max(1,Math.hypot(x2-x1,y2-y1));double nx=-(y2-y1)/length,ny=(x2-x1)/length;for(int offset=start;offset<start+count;offset++){double band=offset-(count-1)/2.0-start;int dx=(int)Math.round(nx*band),dy=(int)Math.round(ny*band);drawLine(graphics,x1+dx,y1+dy,x2+dx,y2+dy,color);}}
     }
 
     /**
@@ -2717,9 +2748,9 @@ public final class CityMapPanel {
         return switch (kind) {
             case OWN -> 0xFFC7D0D6;
             case PUBLIC_FREE -> 0xFF7FA8BE;
-            case PUBLIC_PAID -> 0xFF3FBF6A;
-            case PRIVATE -> 0xFF8A4A48;
-            case OFFLINE -> 0xFF5A4748;
+            case PUBLIC_PAID -> 0xFF70C58E;
+            case PRIVATE -> 0xFFB47B79;
+            case OFFLINE -> 0xFF6E777C;
         };
     }
 
@@ -2766,8 +2797,18 @@ public final class CityMapPanel {
             }
         }
     }
-    private void drawAnimatedRoute(GuiGraphics graphics,RailwayMapPayload.RouteView route,int color){
-        if(route.segments().isEmpty())return;double progress=Math.min(1.0,(System.currentTimeMillis()-this.routeSelectionStartedAt)/700.0);int count=Math.max(1,(int)Math.ceil(route.segments().size()*progress));drawSegments(graphics,route.segments().subList(0,Math.min(count,route.segments().size())),color,3);var first=route.segments().getFirst();var last=route.segments().getLast();int pulse=3+(int)(Math.abs(Math.sin(System.currentTimeMillis()/260.0))*3);graphics.renderOutline(worldToScreenX(first.x1())-pulse,worldToScreenY(first.z1())-pulse,pulse*2,pulse*2,0xFFFFE59A);graphics.renderOutline(worldToScreenX(last.x2())-pulse,worldToScreenY(last.z2())-pulse,pulse*2,pulse*2,0xFFFFE59A);
+    private void drawAnimatedRoute(GuiGraphics graphics,RailwayMapPayload.RouteView route,int color) {
+        if(route.segments().isEmpty())return;
+        int alpha=(int)(36+12*Math.sin(System.currentTimeMillis()/1100.0));
+        drawSegments(graphics,route.segments(),(alpha<<24)|(color&0xFFFFFF),-2,9);
+        drawSegments(graphics,route.segments(),0xF011181D,-1,5);
+        drawSegments(graphics,route.segments(),color,3);
+        var first=route.segments().getFirst();var last=route.segments().getLast();
+        for(var point:List.of(new double[]{first.x1(),first.z1()},new double[]{last.x2(),last.z2()})) {
+            int x=worldToScreenX(point[0]),y=worldToScreenY(point[1]);
+            graphics.fill(x-3,y-3,x+4,y+4,0xFF172025);
+            graphics.renderOutline(x-3,y-3,7,7,color);graphics.fill(x-1,y-1,x+2,y+2,color);
+        }
     }
     private RailwayMapPayload.RouteView route(UUID id){return railwayRoutes.stream().filter(value->value.id().equals(id)).findFirst().orElse(null);}
     private RailwayMapPayload.NetworkView network(UUID id){return railwayNetworks.stream().filter(value->value.id().equals(id)).findFirst().orElse(null);}
@@ -2809,87 +2850,57 @@ public final class CityMapPanel {
     }
 
     private void requestVisibleTiles() {
-        if (this.tileAttempts.size() > MAX_CACHED_TILES) {
-            this.tileAttempts.keySet().removeIf(key -> Math.abs(key.tileX() - worldToTile(this.centerX)) > 32
-                    || Math.abs(key.tileZ() - worldToTile(this.centerZ)) > 32);
-            this.failedTiles.retainAll(this.tileAttempts.keySet());
-        }
-        long now = System.currentTimeMillis();
-        this.requestedTiles.entrySet().removeIf(
-                entry -> now - entry.getValue() >= REQUEST_TIMEOUT_MILLIS
-        );
-        if (now < this.nextRequestAtMillis) {
-            return;
-        }
-
-        int minTileX = worldToTile(screenToWorldX(viewportX)) - 1;
-        int maxTileX = worldToTile(screenToWorldX(viewportX + viewportWidth)) + 1;
-        int minTileZ = worldToTile(screenToWorldZ(viewportY)) - 1;
-        int maxTileZ = worldToTile(screenToWorldZ(viewportY + viewportHeight)) + 1;
-        List<TileKey> missing = new ArrayList<>();
-
-        for (int tileZ = minTileZ; tileZ <= maxTileZ; tileZ++) {
-            for (int tileX = minTileX; tileX <= maxTileX; tileX++) {
-                TileKey key = new TileKey(this.dimensionId, tileX, tileZ);
-                if (!this.tileCache.containsKey(key) && !this.failedTiles.contains(key)
-                        && !this.requestedTiles.containsKey(key)) {
-                    missing.add(key);
-                }
+        long now=System.currentTimeMillis();
+        requestedTiles.entrySet().removeIf(e->now-e.getValue()>=REQUEST_TIMEOUT_MILLIS);
+        if(now<nextRequestAtMillis||requestedTiles.size()>=64)return;
+        int level=terrainLevel();List<TileKey> missing=new ArrayList<>();
+        // Small overview first, then intermediate coverage and physical-pixel detail.
+        for(int lod=Math.min(7,level+2);lod>=level;lod--) {
+            int minX=terrainCoordinate(screenToWorldX(viewportX),lod)-1,maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),lod)+1;
+            int minZ=terrainCoordinate(screenToWorldZ(viewportY),lod)-1,maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),lod)+1;
+            for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+                TileKey key=new TileKey(dimensionId,x,z,lod);CachedTile known=cachedTerrain(key);
+                if(!terrainStore().ready(x,z,lod))continue;
+                if((known==null||now-known.receivedAtMillis()>=(known.complete()?60_000L:5_000L))&&!requestedTiles.containsKey(key)&&!failedTiles.contains(key))missing.add(key);
             }
         }
-
-        /*
-         * Ничего не пропущено — сортировку и аллокацию списка
-         * пропускаем целиком, этот метод вызывается каждый кадр.
-         */
-        if (missing.isEmpty()) {
-            return;
+        // Cancel obsolete queued view requests; late replies may still enrich the cache.
+        requestedTiles.keySet().removeIf(k->{double span=k.span();return (k.tileX()+1)*span<screenToWorldX(viewportX)-span||k.tileX()*span>screenToWorldX(viewportX+viewportWidth)+span||(k.tileZ()+1)*span<screenToWorldZ(viewportY)-span||k.tileZ()*span>screenToWorldZ(viewportY+viewportHeight)+span;});
+        missing.sort(Comparator.<TileKey>comparingInt(k->tileCache.containsKey(k)?1:0).thenComparingInt(k->-k.level()).thenComparingDouble(this::distanceFromCenterSquared));
+        int count=Math.min(MAX_REQUESTS_PER_RENDER,missing.size());
+        for(int i=0;i<count;i++) {
+            TileKey key=missing.get(i);if(tileAttempts.merge(key,1,Integer::sum)>3){failedTiles.add(key);continue;}
+            CachedTile known=cachedTerrain(key);requestedTiles.put(key,now);
+            PacketDistributor.sendToServer(new RequestCityMapTilePayload(pylonPos,dimensionId,key.tileX(),key.tileZ(),key.level(),known==null?0:known.revision(),known==null?new UUID(0,0):known.worldId()));
         }
-
-        missing.sort(Comparator.comparingDouble(this::distanceFromCenterSquared));
-        int requestCount = Math.min(MAX_REQUESTS_PER_RENDER, missing.size());
-        for (int index = 0; index < requestCount; index++) {
-            TileKey key = missing.get(index);
-            int attempts = this.tileAttempts.merge(key, 1, Integer::sum);
-            if (attempts > 3) { this.failedTiles.add(key); continue; }
-            this.requestedTiles.put(key, now);
-            PacketDistributor.sendToServer(new RequestCityMapTilePayload(
-                    this.pylonPos,
-                    this.dimensionId,
-                    key.tileX(),
-                    key.tileZ()
-            ));
-        }
-        if (requestCount > 0) {
-            this.nextRequestAtMillis = now + REQUEST_INTERVAL_MILLIS;
-        }
+        if(count>0)nextRequestAtMillis=now+REQUEST_INTERVAL_MILLIS;
     }
 
     private double distanceFromCenterSquared(TileKey key) {
-        double tileCenterX = (double) key.tileX() * CityMapTilePayload.WORLD_SIZE
-                + CityMapTilePayload.WORLD_SIZE / 2.0;
-        double tileCenterZ = (double) key.tileZ() * CityMapTilePayload.WORLD_SIZE
-                + CityMapTilePayload.WORLD_SIZE / 2.0;
+        double tileCenterX = (double) key.tileX() * key.span()
+                + key.span() / 2.0;
+        double tileCenterZ = (double) key.tileZ() * key.span()
+                + key.span() / 2.0;
         double deltaX = tileCenterX - this.centerX;
         double deltaZ = tileCenterZ - this.centerZ;
         return deltaX * deltaX + deltaZ * deltaZ;
     }
 
-    private int worldToScreenX(double worldX) {
+    public int worldToScreenX(double worldX) {
         return (int) Math.floor(this.viewportX + this.viewportWidth / 2.0
                 + (worldX - this.centerX) * this.zoom);
     }
 
-    private int worldToScreenY(double worldZ) {
+    public int worldToScreenY(double worldZ) {
         return (int) Math.floor(this.viewportY + this.viewportHeight / 2.0
                 + (worldZ - this.centerZ) * this.zoom);
     }
 
-    private double screenToWorldX(double screenX) {
+    public double screenToWorldX(double screenX) {
         return this.centerX + (screenX - this.viewportX - this.viewportWidth / 2.0) / this.zoom;
     }
 
-    private double screenToWorldZ(double screenY) {
+    public double screenToWorldZ(double screenY) {
         return this.centerZ + (screenY - this.viewportY - this.viewportHeight / 2.0) / this.zoom;
     }
 
@@ -2927,14 +2938,16 @@ public final class CityMapPanel {
         return Math.max(minimum, Math.min(maximum, value));
     }
 
-    private record TileKey(ResourceLocation dimensionId, int tileX, int tileZ) {
+    private record TileKey(ResourceLocation dimensionId, int tileX, int tileZ,int level) {
+        TileKey(ResourceLocation dimensionId,int x,int z){this(dimensionId,x,z,0);}
+        int span(){return AtlasMapScale.span(level);}
     }
 
     private record CachedTile(
             int[] colors,
             BitSet contours,
             boolean complete,
-            long receivedAtMillis
+            long receivedAtMillis,short[] heights,long revision,UUID worldId
     ) {
     }
 }

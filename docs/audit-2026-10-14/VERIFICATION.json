@@ -1,0 +1,94 @@
+{
+  "date": "2026-10-14",
+  "scope": "current CCEC worktree plus imported platform source snapshot",
+  "graph": {
+    "indexFiles": 1159,
+    "indexNodes": 17218,
+    "indexEdges": 52883,
+    "indexProcesses": 787,
+    "changedFiles": 694,
+    "changedSymbols": 6799,
+    "affectedProcesses": 633,
+    "risk": "CRITICAL",
+    "detectChangesPartial": false,
+    "detectChangesListingTruncated": true,
+    "rerun": "CLI --scope all --limit 10000 still has hard 1000 listing cap",
+    "supplement": {
+      "method": "GitNexus Cypher export over every staged path, filtered with GitNexus parseDiffHunksResult/coalesceHunksByPath/hunksOverlapRange against git diff HEAD",
+      "exportedSymbolRows": 9152,
+      "fullyEnumeratedChangedSymbols": 6799,
+      "matchesDetectChangesCount": true
+    }
+  },
+  "tests": {
+    "ccec": "check/build SUCCESS",
+    "backend": {
+      "tests": 121,
+      "failures": 0,
+      "errors": 0
+    },
+    "bot": {
+      "tests": 67
+    },
+    "launcherFrontend": {
+      "tests": 66,
+      "build": "SUCCESS"
+    },
+    "launcherNative": {
+      "passed": 37,
+      "ignored": 4,
+      "failed": 0
+    },
+    "releaseWorkflow": {
+      "passed": 6
+    },
+    "quests": {
+      "total": 128,
+      "main": 47,
+      "optional": 81
+    }
+  },
+  "production": {
+    "minecraft": "active",
+    "backend": "active",
+    "bot": "active",
+    "tlsGateway": "active",
+    "postgresHealth": "UP",
+    "httpsHealth": "UP",
+    "authMode": "REQUIRED",
+    "game": "alpha-0.1.18",
+    "launcher": "0.1.5",
+    "ccecSha256": "7c62c72fde7634f208d3db9d4e90b5f19d349835500ad3248e4022e5cd40fd86"
+  },
+  "local": {
+    "launcher": "0.1.6",
+    "ccecSha256": "15bc00868ebe2b639efc1c506da18ce5fcc7c009664994f32be0efc9beae687f"
+  },
+  "secrets": {
+    "historicalBlobsScanned": 1090,
+    "workingFilesScanned": 1447,
+    "strongPatternHits": 1,
+    "disposition": "Intentional invalid example.test credential URL in accountApi.test.ts:76. No real secret identified; fixture strings inspected.",
+    "scopeCaveat": "Pattern scan is not a guarantee that every possible secret format was detected."
+  },
+  "linear": {
+    "workspace": "https://linear.app/re-creted",
+    "project": "https://linear.app/re-creted/project/ccec-state-klient-server-i-mod-3942ce25a40b",
+    "milestones": 8,
+    "codeDone": 35,
+    "acceptanceTodo": 12,
+    "deferredBacklog": 2
+  },
+  "github": {
+    "url": "https://github.com/DanielSolonskii/CreateCityExpansionCore",
+    "visibility": "public",
+    "anonymousApiReadVerified": true,
+    "branch": "codex/next-ai-work"
+  },
+  "boundaries": [
+    "No production deploy/restart/publish in this audit",
+    "No gameplay or Windows GUI E2E acceptance",
+    "No opt-in PostgreSQL integration against production",
+    "Personal employee accesses deferred by owner"
+  ]
+}

@@ -18,7 +18,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -79,8 +78,7 @@ public final class CityInviteDirectory {
 
     /**
      * The server's verdict for one candidate. Ordering matters: being yourself outranks everything,
-     * and an existing invite is reported before "member of another city" because it is the actionable
-     * state for this city.
+     * membership outranks a pending invite, which can be resent only to a player without a city.
      */
     public static CityPlayerSearchResultPayload.State stateOf(
             boolean self, boolean memberOfOwnCity, boolean alreadyInvited, boolean memberOfOtherCity) {
@@ -90,11 +88,11 @@ public final class CityInviteDirectory {
         if (memberOfOwnCity) {
             return CityPlayerSearchResultPayload.State.MEMBER_OF_OWN_CITY;
         }
-        if (alreadyInvited) {
-            return CityPlayerSearchResultPayload.State.INVITED;
-        }
         if (memberOfOtherCity) {
             return CityPlayerSearchResultPayload.State.MEMBER_OF_OTHER_CITY;
+        }
+        if (alreadyInvited) {
+            return CityPlayerSearchResultPayload.State.INVITED;
         }
         return CityPlayerSearchResultPayload.State.AVAILABLE;
     }
@@ -131,15 +129,14 @@ public final class CityInviteDirectory {
      *   <li><b>currently connected players</b>, who always win on name and online state.</li>
      * </ol>
      *
-     * <p>Nicknames come from {@code GameProfileCache.get(UUID)}, which is a pure in-memory read of
-     * {@code profilesByUUID}. {@code get(String)} is deliberately never called: it can fall through to
-     * a repository lookup. When a UUID cannot be named locally the short id is used and no request
-     * leaves the server — the limitation is stated rather than papered over.
+     * <p>Nicknames come from the verified account identity and server-owned display-name history.
+     * Older offline players can be recovered from their saved CustomName; the UUID-keyed local
+     * profile cache is a fallback for ordinary profiles. No name-based repository lookup runs.
      */
     public static List<Candidate> knownProfiles(MinecraftServer server, CityManager cities, ServerPlayer viewer) {
         Map<UUID, String> byId = new LinkedHashMap<>();
         for (ServerPlayer online : server.getPlayerList().getPlayers()) {
-            byId.put(online.getUUID(), online.getGameProfile().getName());
+            byId.put(online.getUUID(), com.example.examplemod.auth.PlayerNames.name(online));
         }
         for (Path file : playerDataFiles(server)) {
             UUID id = parsePlayerFile(file.getFileName().toString());
@@ -157,12 +154,12 @@ public final class CityInviteDirectory {
         UUID self = viewer.getUUID();
         List<Candidate> candidates = new ArrayList<>();
         server.getPlayerList().getPlayers().forEach(online ->
-                candidates.add(new Candidate(online.getUUID(), online.getGameProfile().getName(), true)));
+                candidates.add(new Candidate(online.getUUID(), com.example.examplemod.auth.PlayerNames.name(online), true)));
         for (Map.Entry<UUID, String> entry : byId.entrySet()) {
             if (entry.getKey().equals(self) || isOnline(server, entry.getKey())) {
                 continue;
             }
-            candidates.add(new Candidate(entry.getKey(), resolveName(server, entry.getValue(), entry.getKey()), false));
+            candidates.add(new Candidate(entry.getKey(), com.example.examplemod.auth.PlayerNames.name(server, entry.getKey()), false));
         }
         return candidates;
     }
@@ -200,15 +197,6 @@ public final class CityInviteDirectory {
         }
     }
 
-    /** The remembered name when we have one, otherwise the server's own profile cache, otherwise a short id. */
-    private static String resolveName(MinecraftServer server, String remembered, UUID id) {
-        if (remembered != null && !remembered.isBlank()) {
-            return remembered;
-        }
-        Optional<com.mojang.authlib.GameProfile> cached = server.getProfileCache().get(id);
-        return cached.map(com.mojang.authlib.GameProfile::getName).orElseGet(() -> shortId(id));
-    }
-
     public static String shortId(UUID id) {
         String hex = id.toString().replace("-", "");
         return hex.substring(0, 8);
@@ -220,7 +208,8 @@ public final class CityInviteDirectory {
             return;
         }
         ServerLevel level = viewer.serverLevel();
-        CityManager cities = CityManager.get(level);
+        // Invitations and deletion use the canonical overworld city registry.
+        CityManager cities = CityManager.get(level.getServer().overworld());
         City city = cities.getCityByPylon(viewer.serverLevel().dimension().location(), payload.pylonPos());
         if (city == null || !city.isAdmin(viewer.getUUID())) {
             return;
@@ -266,7 +255,7 @@ public final class CityInviteDirectory {
         List<com.example.examplemod.network.SyncCityMembersPayload.Entry> entries = new ArrayList<>();
         for (CityMember member : city.getMembers()) {
             entries.add(new com.example.examplemod.network.SyncCityMembersPayload.Entry(
-                    member.getPlayerId(), member.getRole().ordinal()));
+                    member.getPlayerId(), member.getRole().ordinal(), displayName(server, member.getPlayerId())));
         }
         // One payload instance, sent once to every viewer of this very pylon — the same rule the
         // removal and role-change deltas already use. Sending to the inviter alone left a second
@@ -300,15 +289,15 @@ public final class CityInviteDirectory {
     }
 
     /**
- * Display name for an account, from the server's in-memory profile cache only. Never performs a
+ * Display name from verified account identity and its server-owned local history. Never performs a
  * network lookup, and falls back to a short id rather than guessing a nickname.
  */
 public static String displayName(MinecraftServer server, UUID id) {
         ServerPlayer online = server.getPlayerList().getPlayer(id);
         if (online != null) {
-            return online.getGameProfile().getName();
+            return com.example.examplemod.auth.PlayerNames.name(online);
         }
-        return resolveName(server, null, id);
+        return com.example.examplemod.auth.PlayerNames.name(server, id);
     }
 
     /** Tells the inviter exactly what happened to the invite they just sent. */

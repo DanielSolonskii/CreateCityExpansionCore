@@ -153,7 +153,7 @@ public class CityPylonMenu extends AbstractContainerMenu implements com.example.
             }
 
             members.add(
-                    new CityMember(playerId, role)
+                    new CityMember(playerId, role, data.readUtf(64))
             );
         }
 

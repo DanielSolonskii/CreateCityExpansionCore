@@ -1,0 +1,29 @@
+{
+  "type": "create:mechanical_crafting",
+  "accept_mirrored": false,
+  "category": "misc",
+  "key": {
+    "S": {
+      "item": "createcityexpansioncore:steel_plate"
+    },
+    "B": {
+      "item": "createcityexpansioncore:structural_beam"
+    },
+    "C": {
+      "item": "createcityexpansioncore:copper_busbar"
+    },
+    "F": {
+      "item": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  },
+  "pattern": [
+    "SFS",
+    "BCB",
+    "SFS"
+  ],
+  "result": {
+    "count": 1,
+    "id": "createcityexpansioncore:chunk_loader"
+  },
+  "show_notification": false
+}

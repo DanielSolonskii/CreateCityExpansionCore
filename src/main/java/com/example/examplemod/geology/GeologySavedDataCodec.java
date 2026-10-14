@@ -30,7 +30,7 @@ import java.math.BigInteger;
  */
 final class GeologySavedDataCodec {
 
-    static final int CURRENT_FORMAT_VERSION = 3;
+    static final int CURRENT_FORMAT_VERSION = 4;
     private static final int LEGACY_V2 = 2;
     private static final int LEGACY_V1 = 1;
 
@@ -50,37 +50,69 @@ final class GeologySavedDataCodec {
     ) {
         try {
             if (!tag.contains("FormatVersion")) {
-                if (!tag.contains("Regions")) {
-                    if (tag.isEmpty()) {
-                        return LoadResult.available(List.of(), false);
-                    }
-                    throw new GeologyDataException(
-                            "Unversioned geology data has no migratable Regions list"
-                    );
+                /*
+                 * Версии без формата тоже пересоздаются: это форматы 1-2 в
+                 * disguise, а в них залежи лежат друг на друге ровно так же.
+                 * Отдельная миграция для них больше не нужна.
+                 */
+                if (tag.isEmpty()) {
+                    return LoadResult.available(List.of(), false);
                 }
-
-                List<LoadedCell> migrated = readRegions(
-                        tag,
-                        dimensionId,
-                        true,
-                        true
-                );
                 LOGGER.info(
-                        "Migrated unversioned geology data to format {} for dimension {}",
-                        CURRENT_FORMAT_VERSION,
+                        "Regenerating geology for dimension {}: unversioned data "
+                                + "precedes the per-resource seeding fix",
                         dimensionId
                 );
-                return LoadResult.available(migrated, true);
+                return LoadResult.available(List.of(), true);
             }
 
             requireType(tag, "FormatVersion", Tag.TAG_INT);
             int formatVersion = tag.getInt("FormatVersion");
-            if (formatVersion != CURRENT_FORMAT_VERSION
-                    && formatVersion != LEGACY_V2
-                    && formatVersion != LEGACY_V1) {
+            if (formatVersion > CURRENT_FORMAT_VERSION) {
                 throw new GeologyDataException(
                         "Unsupported geology format version " + formatVersion
                 );
+            }
+
+            /*
+             * Формат 4 пересоздаёт геологию целиком.
+             *
+             * <p>В форматах 1-3 идентичность ресурса не входила в seed, поэтому
+             * все пять ресурсов одной macro-cell получали одно положение, форму,
+             * качество и запас. Уголь лежал ровно на железе, и сканер показывал
+             * только железо — оно первое в списке ресурсов, а потенциалы совпадали
+             * до бита. Сохранённые залежи починить нельзя: они физически лежат
+             * друг на друге, и «развести» их, не сдвинув ни одну, невозможно.
+             *
+             * <p>Поэтому старые записи отбрасываются, а залежи строятся заново по
+             * требованию. Запас и выработка на старых местах теряются — это
+             * осознанная цена: править геологию по частям означало бы оставить
+             * рядом старый и новый миры одновременно.
+             *
+             * <p>Измерение проверяется и здесь: файл от другого измерения — это
+             * не «старый формат», а ошибка, и молча пересоздавать геологию
+             * Nether в Overworld было бы хуже, чем отказать.
+             */
+            if (formatVersion < CURRENT_FORMAT_VERSION) {
+                ResourceLocation previousDimension = readResourceLocation(
+                        tag,
+                        "Dimension"
+                );
+                if (!previousDimension.equals(dimensionId)) {
+                    throw new GeologyDataException(
+                            "Stored dimension " + previousDimension
+                                    + " does not match " + dimensionId
+                    );
+                }
+                LOGGER.info(
+                        "Regenerating geology for dimension {}: stored format {} "
+                                + "placed every resource of a cell at one point; "
+                                + "deposits are rebuilt as {} cells are visited",
+                        dimensionId,
+                        formatVersion,
+                        CURRENT_FORMAT_VERSION
+                );
+                return LoadResult.available(List.of(), true);
             }
 
             ResourceLocation storedDimension = readResourceLocation(

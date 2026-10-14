@@ -259,8 +259,19 @@ public class City {
         return level;
     }
 
+    /**
+     * Меняет уровень города.
+     *
+     * <p>Событие телеметрии переименовано из {@code TERRITORY_CHANGED} в
+     * {@code CITY_LEVEL_CHANGED}: с переходом на участки территория
+     * перестала зависеть от уровня, и событие «территория изменилась»
+     * при смене уровня стало просто неверным фактом. Уровень по-прежнему
+     * сообщается, но под своим именем.
+     */
     public void setLevel(int level) {
+        int previous = this.level;
         this.level = Math.max(1, Math.min(level, 2));
+        if (previous != this.level) com.example.examplemod.auth.ServerTelemetryBridge.emit("CITY_LEVEL_CHANGED", owner, id, Integer.toString(this.level));
     }
 
     public int getTradeReputation() { return tradeReputation; }
@@ -506,6 +517,7 @@ public class City {
         CityProject project = getProject(projectId);
         if (project != null) {
             projects.remove(project);
+            com.example.examplemod.auth.ServerTelemetryBridge.emit("PROJECT_REMOVED", project.creatorId(), projectId, project.projectType().name());
         }
         return project;
     }
@@ -672,6 +684,7 @@ public class City {
                 member ->
                         member.getPlayerId().equals(player)
         );
+        if (removed) com.example.examplemod.auth.ServerTelemetryBridge.emit("CITY_LEAVE", player, id, "");
     }
 
     /*
@@ -889,6 +902,7 @@ public class City {
                             CityMember.Role.RESIDENT
                     )
             );
+            com.example.examplemod.auth.ServerTelemetryBridge.emit("CITY_JOIN", player, id, "");
         }
 
         /*

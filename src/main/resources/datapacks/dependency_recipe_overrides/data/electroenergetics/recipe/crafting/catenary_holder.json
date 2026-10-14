@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "B": {
+      "item": "createcityexpansioncore:structural_beam"
+    },
+    "F": {
+      "item": "createcityexpansioncore:industrial_fastener_pack"
+    }
+  },
+  "pattern": [
+    " B ",
+    "FFF",
+    " B "
+  ],
+  "result": {
+    "count": 4,
+    "id": "electroenergetics:catenary_holder"
+  }
+}

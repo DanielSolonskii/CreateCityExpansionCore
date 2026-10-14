@@ -7,6 +7,8 @@ import com.example.examplemod.city.CityTerritoryHandlers;
 import com.example.examplemod.city.CityInviteDirectory;
 import com.example.examplemod.city.CityMapSavedData;
 import com.example.examplemod.city.CityProjectNetworkHandlers;
+import com.example.examplemod.chunkloader.ChunkLoaderBlock;
+import com.example.examplemod.chunkloader.ChunkLoaderBlockEntity;
 import com.example.examplemod.electrical.*;
 import com.example.examplemod.event.CityProtectionEvents;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
@@ -330,6 +332,26 @@ public class CreateCityExpansionCore {
                             MINE_CONTROLLER.get()
                     ).build(null)
             );
+
+    /*
+     * =========================================
+     * CHUNK LOADER
+     * =========================================
+     *
+     * Инфраструктура для удалённых заводов и станций.
+     * Один блок = один forced/ticking чанк, в котором он стоит.
+     * Лимит владельца живёт в ChunkLoaderSavedData, тикет — в ChunkLoaderTickets.
+     */
+
+    public static final DeferredBlock<ChunkLoaderBlock> CHUNK_LOADER =
+            BLOCKS.register("chunk_loader", () -> new ChunkLoaderBlock(ChunkLoaderBlock.chunkLoaderProperties()));
+
+    public static final DeferredItem<BlockItem> CHUNK_LOADER_ITEM =
+            ITEMS.registerSimpleBlockItem("chunk_loader", CHUNK_LOADER);
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ChunkLoaderBlockEntity>>
+            CHUNK_LOADER_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register("chunk_loader",
+            () -> BlockEntityType.Builder.of(ChunkLoaderBlockEntity::new, CHUNK_LOADER.get()).build(null));
 
     /*
      * =========================================
@@ -795,6 +817,7 @@ public class CreateCityExpansionCore {
          */
         IndustrialMaterials.INDUSTRIAL_COKE.getClass();
 
+        com.example.examplemod.auth.AuthenticationBootstrap.setup(modEventBus, modContainer);
 
         ModElectricalDevices.register(modEventBus);
         ModFluids.register(modEventBus);
@@ -872,6 +895,11 @@ public class CreateCityExpansionCore {
                             CityManager cityManager =
                                     CityManager.get(overworld);
 
+                            City existingCity = cityManager.getCityByOwner(player.getUUID());
+                            if (existingCity != null && com.example.examplemod.economy.EconomyManager.get(overworld).projects().hasActive(existingCity.getId())) {
+                                player.sendSystemMessage(Component.translatable("gui.createcityexpansioncore.projects.delete_blocked"));
+                                return 0;
+                            }
                             City city =
                                     cityManager.removeCityByOwner(
                                             player.getUUID()
@@ -973,7 +1001,7 @@ public class CreateCityExpansionCore {
                                     new CityInviteNotificationPayload(
                                             city.getPylonPos(),
                                             city.getName(),
-                                            player.getName().getString()
+                                            com.example.examplemod.auth.PlayerNames.name(player)
                                     )
                             );
 
@@ -1067,7 +1095,36 @@ public class CreateCityExpansionCore {
     ) {
 
         PayloadRegistrar registrar =
-                event.registrar("1");
+                event.registrar("2");
+        registrar.playToServer(com.example.examplemod.network.ProfileSearchPayload.TYPE,
+                com.example.examplemod.network.ProfileSearchPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.profile.ProfileAccess.search(player, payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.ProfileDirectoryPayload.TYPE,
+                com.example.examplemod.network.ProfileDirectoryPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.PlayerProfileScreen.acceptDirectory(payload)));
+        registrar.playToClient(com.example.examplemod.network.OpenProfilePayload.TYPE,
+                com.example.examplemod.network.OpenProfilePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.ProfileDiscoveryClient.open(payload)));
+        registrar.playToServer(com.example.examplemod.network.ProfileRequestPayload.TYPE,
+                com.example.examplemod.network.ProfileRequestPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.profile.ProfileService.handle(player, payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.ProfileResponsePayload.TYPE,
+                com.example.examplemod.network.ProfileResponsePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.PlayerProfileScreen.accept(payload)));
+
+        registrar.playToServer(com.example.examplemod.network.ProjectCommandPayload.TYPE,
+                com.example.examplemod.network.ProjectCommandPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.projects.ProjectNetworkHandlers.handle(player,payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.ProjectStatePayload.TYPE,
+                com.example.examplemod.network.ProjectStatePayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.ProjectClientState.accept(payload)));
+
 
         registrar.playToServer(com.example.examplemod.network.RequestCityDirectoryPayload.TYPE,
                 com.example.examplemod.network.RequestCityDirectoryPayload.STREAM_CODEC,
@@ -1085,6 +1142,9 @@ public class CreateCityExpansionCore {
         registrar.playToClient(com.example.examplemod.network.CityIdentityResultPayload.TYPE,
                 com.example.examplemod.network.CityIdentityResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.CityIdentityEditorScreen.accept(payload)));
+        registrar.playToClient(com.example.examplemod.network.CityCreationResultPayload.TYPE,
+                com.example.examplemod.network.CityCreationResultPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.CityCreationScreen.accept(payload)));
 
         registrar.playToServer(
                 com.example.examplemod.network.EconomyCommandPayload.TYPE,
@@ -1378,14 +1438,16 @@ public class CreateCityExpansionCore {
                             return;
                         }
 
+                        java.util.function.Consumer<String> reply = result -> PacketDistributor.sendToPlayer(serverPlayer, new com.example.examplemod.network.CityCreationResultPayload(payload.pylonPos(), result));
                         String name =
                                 payload.name();
 
                         if (
                                 name == null
-                                        || name.isBlank()
+                                        || name.isBlank() || name.trim().length() > 32
                         ) {
 
+                            reply.accept("invalid_name");
                             return;
                         }
 
@@ -1409,6 +1471,7 @@ public class CreateCityExpansionCore {
                                         )
                         ) {
 
+                            reply.accept("invalid_pylon");
                             return;
                         }
 
@@ -1429,6 +1492,7 @@ public class CreateCityExpansionCore {
                                         > 64 * 64
                         ) {
 
+                            reply.accept("too_far");
                             return;
                         }
 
@@ -1452,6 +1516,7 @@ public class CreateCityExpansionCore {
                                         ) != null
                         ) {
 
+                            reply.accept("already_member");
                             return;
                         }
 
@@ -1473,6 +1538,8 @@ public class CreateCityExpansionCore {
                          * BlockEntity нужно обновить отдельно — иначе лампы
                          * пилона останутся тёмными до перезагрузки чанка.
                          */
+                        if (city == null) { reply.accept("occupied"); return; }
+                        reply.accept("created");
                         CityPylonBlock.refreshActive(
                                 pylonLevel,
                                 pylonPos
@@ -1498,6 +1565,18 @@ public class CreateCityExpansionCore {
                                 1.0F,
                                 1.0F
                         );
+                        // Reuse the normal pylon opening path to send a fresh, server-owned menu.
+                        // The old menu's hasCity/name fields are immutable and cannot become an overview.
+                        if (serverPlayer.containerMenu instanceof com.example.examplemod.menu.CityPylonMenu openMenu
+                                && openMenu.getPylonPos().equals(pylonPos)) {
+                            var state = pylonLevel.getBlockState(pylonPos);
+                            if (state.getBlock() instanceof CityPylonBlock pylon) {
+                                pylon.useWithoutItem(state,pylonLevel,pylonPos,serverPlayer,
+                                        new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(pylonPos),
+                                                net.minecraft.core.Direction.UP,pylonPos,false));
+                                serverPlayer.displayClientMessage(Component.translatable("gui.createcityexpansioncore.city.founding.created"),true);
+                            }
+                        }
                     });
                 }
         );
@@ -1922,7 +2001,8 @@ public class CreateCityExpansionCore {
                                                 ) != null
                                 );
 
-                        if (state != CityPlayerSearchResultPayload.State.AVAILABLE) {
+                        boolean resend = state == CityPlayerSearchResultPayload.State.INVITED;
+                        if (state != CityPlayerSearchResultPayload.State.AVAILABLE && !resend) {
 
                             CityInviteDirectory.reportResult(
                                     serverPlayer,
@@ -1943,6 +2023,10 @@ public class CreateCityExpansionCore {
                          * only decides whether the recipient is told straight away.
                          */
 
+                        // Renew the single pending record and attribute the response to this sender.
+                        if (resend) {
+                            city.removeInvite(targetId);
+                        }
                         City.InviteResult result =
                                 city.addInvite(
                                         targetId,
@@ -1966,9 +2050,7 @@ public class CreateCityExpansionCore {
                                     new CityInviteNotificationPayload(
                                             city.getPylonPos(),
                                             city.getName(),
-                                            serverPlayer
-                                                    .getName()
-                                                    .getString()
+                                            com.example.examplemod.auth.PlayerNames.name(serverPlayer)
                                     )
                             );
                         }
@@ -1977,9 +2059,9 @@ public class CreateCityExpansionCore {
                                 serverPlayer,
                                 payload.pylonPos(),
                                 result == City.InviteResult.SENT,
-                                CityInviteDirectory.reasonKey(
-                                        result
-                                ),
+                                resend && result == City.InviteResult.SENT
+                                        ? "gui.createcityexpansioncore.city.invite.state.resent"
+                                        : CityInviteDirectory.reasonKey(result),
                                 targetName
                         );
                     });
@@ -2077,7 +2159,7 @@ public class CreateCityExpansionCore {
                             CityInviteDirectory.reportOutcome(
                                     player.server,
                                     inviterId,
-                                    player.getName().getString(),
+                                    com.example.examplemod.auth.PlayerNames.name(player),
                                     city.getName(),
                                     false
                             );
@@ -2131,7 +2213,7 @@ public class CreateCityExpansionCore {
                         CityInviteDirectory.reportOutcome(
                                 player.server,
                                 inviterId,
-                                player.getName().getString(),
+                                com.example.examplemod.auth.PlayerNames.name(player),
                                 city.getName(),
                                 true
                         );

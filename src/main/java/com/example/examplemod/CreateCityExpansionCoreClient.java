@@ -104,6 +104,7 @@ public class CreateCityExpansionCoreClient {
         );
         modEventBus.addListener(BuildGuideKeyMappings::register);
         modEventBus.addListener(CityWorldMapKey::register);
+        modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
         modEventBus.addListener(ModFluidClientExtensions::register);
 
 
@@ -119,6 +120,7 @@ public class CreateCityExpansionCoreClient {
                 CityBoundaryRenderer.class
         );
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.client.PlayerProfileKey.class);
         NeoForge.EVENT_BUS.register(CokeBatteryGuideRenderer.class);
         NeoForge.EVENT_BUS.register(BlastFurnaceGuideRenderer.class);
         NeoForge.EVENT_BUS.register(SteelConverterGuideRenderer.class);
@@ -204,7 +206,8 @@ public class CreateCityExpansionCoreClient {
 
         CreateCityExpansionCore.SYNC_CITY_MEMBER_REMOVAL_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> {
-                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen) {
+                CityPylonScreen screen = com.example.examplemod.client.screen.CityPylonWorkspace.controller();
+                if (screen != null) {
                     if (screen.getMenu().getPylonPos().equals(payload.pylonPos())) {
                         screen.getMenu().removeMember(payload.playerId());
                     }
@@ -225,7 +228,8 @@ public class CreateCityExpansionCoreClient {
         };
         CreateCityExpansionCore.SYNC_CITY_MEMBERS_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> {
-                if (Minecraft.getInstance().screen instanceof CityPylonScreen screen) {
+                CityPylonScreen screen = com.example.examplemod.client.screen.CityPylonWorkspace.controller();
+                if (screen != null) {
                     screen.applyMembersSnapshot(payload);
                 }
             });

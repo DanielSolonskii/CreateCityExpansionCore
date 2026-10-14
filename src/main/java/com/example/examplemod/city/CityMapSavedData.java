@@ -86,6 +86,33 @@ public final class CityMapSavedData extends SavedData {
      */
     public static final int CONTOUR_INTERVAL_BLOCKS = 4;
 
+    private java.util.UUID worldId=java.util.UUID.randomUUID();
+    private final TerrainPyramid pyramid=new TerrainPyramid();
+    private final Set<Long> changedChunks=new LinkedHashSet<>();
+    public void refreshLoaded(int tileX,int tileZ){
+        for(int z=0;z<2;z++)for(int x=0;x<2;x++)if(changedChunks.size()<4096)changedChunks.add(ChunkPos.asLong(tileX*2+x,tileZ*2+z));
+    }
+    private static void queueSurface(net.minecraft.world.level.LevelAccessor level,BlockPos pos){
+        if(level instanceof ServerLevel server){var data=get(server);if(data.changedChunks.size()<4096)data.changedChunks.add(ChunkPos.asLong(Math.floorDiv(pos.getX(),16),Math.floorDiv(pos.getZ(),16)));}
+    }
+    @SubscribeEvent public static void onSurfaceBreak(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event){queueSurface(event.getLevel(),event.getPos());}
+    @SubscribeEvent public static void onSurfacePlace(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event){queueSurface(event.getLevel(),event.getPos());}
+    private void refresh(ServerLevel level){
+        long until=System.nanoTime()+1_000_000L;
+        for(int i=0;i<2&&!changedChunks.isEmpty()&&System.nanoTime()<until;i++){
+            long key=changedChunks.iterator().next();changedChunks.remove(key);
+            LevelChunk chunk=level.getChunkSource().getChunkNow(ChunkPos.getX(key),ChunkPos.getZ(key));
+            if(chunk!=null)capture(chunk);
+        }
+    }
+    public java.util.UUID worldId(){return worldId;}
+    public TerrainPyramid.Data terrain(TerrainPyramid.Key key){return pyramid.get(key);}
+    public short[] terrainHeights(TerrainPyramid.Key key){return pyramid.halo(key);}
+    private void index(long key,KnownTile tile) {
+        int[] colors=tile.colors().clone();
+        for(int i=0;i<colors.length;i++)if(!tile.known().get(i))colors[i]=0;
+        pyramid.put(ChunkPos.getX(key),ChunkPos.getZ(key),colors,tile.heights());
+    }
     private final Map<Long, KnownTile> tiles = new HashMap<>();
     /** Tiles whose samples changed and still have to reach whoever is holding them. */
     private final Set<Long> dirty = new LinkedHashSet<>();
@@ -112,7 +139,9 @@ public final class CityMapSavedData extends SavedData {
     /** Pushes tiles that changed since the last pass. Only runs when somebody is actually mapping. */
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ServerLevel level) || level.getGameTime() % PUSH_INTERVAL_TICKS != 0L) {
+        if (!(event.getLevel() instanceof ServerLevel level))return;
+        var terrain=get(level);terrain.refresh(level);terrain.pyramid.advance(16,2_000_000L);
+        if (level.getGameTime() % PUSH_INTERVAL_TICKS != 0L) {
             return;
         }
         List<ServerPlayer> mappers = new ArrayList<>();
@@ -135,18 +164,22 @@ public final class CityMapSavedData extends SavedData {
                 if (!data.isWatched(player.getUUID(), key)) {
                     continue;
                 }
-                TileSnapshot snapshot = data.tile(ChunkPos.getX(key), ChunkPos.getZ(key));
+                var terrainKey=new TerrainPyramid.Key(0,ChunkPos.getX(key),ChunkPos.getZ(key));
+                var raw=data.terrain(terrainKey);if(raw==null)continue;
+                short[] halo=data.terrainHeights(terrainKey);
                 PacketDistributor.sendToPlayer(player,
                         new CityMapTilePayload(anchor, level.dimension().location(),
                                 ChunkPos.getX(key), ChunkPos.getZ(key),
-                                snapshot.complete(), snapshot.colors(), snapshot.contours()));
+                                java.util.Arrays.stream(raw.colors()).allMatch(c->(c>>>24)==255),raw.colors(),new BitSet(),0,halo,data.worldId(),TerrainPyramid.revision(raw.colors(),halo),false));
             }
         }
     }
 
     /** Remembers that a player already holds a tile, so later changes can be pushed to them. */
     public void watch(UUID player, int tileX, int tileZ) {
-        this.watched.computeIfAbsent(player, ignored -> new HashSet<>()).add(ChunkPos.asLong(tileX, tileZ));
+        Set<Long> keys = this.watched.computeIfAbsent(player, ignored -> new LinkedHashSet<>());
+        long key = ChunkPos.asLong(tileX, tileZ); keys.remove(key); keys.add(key);
+        while (keys.size() > 8192) keys.remove(keys.iterator().next());
     }
 
     public boolean isWatched(UUID player, long tileKey) {
@@ -221,7 +254,7 @@ public final class CityMapSavedData extends SavedData {
         KnownTile tile = this.tiles.computeIfAbsent(tileKey, ignored -> new KnownTile(
                 new int[CityMapTilePayload.COLOR_COUNT],
                 new BitSet(CityMapTilePayload.COLOR_COUNT),
-                new BitSet(CityMapTilePayload.COLOR_COUNT)));
+                new BitSet(CityMapTilePayload.COLOR_COUNT), emptyHeights()));
 
         int tileOriginX = tileX * CityMapTilePayload.WORLD_SIZE;
         int tileOriginZ = tileZ * CityMapTilePayload.WORLD_SIZE;
@@ -238,18 +271,24 @@ public final class CityMapSavedData extends SavedData {
                 int localZ = localSampleZ * CityMapTilePayload.SAMPLE_STEP;
                 int worldX = chunkPos.getMinBlockX() + localX;
                 int worldZ = chunkPos.getMinBlockZ() + localZ;
-                int surfaceY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, localX, localZ) - 1;
+                // ChunkAccess.getHeight already returns firstAvailable - 1: the occupied surface.
+                int surfaceY = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, localX, localZ);
                 BlockPos surface = new BlockPos(worldX, surfaceY, worldZ);
                 BlockState state = chunk.getBlockState(surface);
                 MapColor mapColor = state.getMapColor(chunk.getLevel(), surface);
-                heights[localSampleZ * perChunk + localSampleX] = surfaceY;
+                // Transparent/uncoloured decoration must not stamp dark speckles over the ground.
+                for(int skip=0;mapColor==MapColor.NONE&&skip<8&&surfaceY>chunk.getMinBuildHeight();skip++){
+                    surface=surface.below();surfaceY--;state=chunk.getBlockState(surface);
+                    mapColor=state.getMapColor(chunk.getLevel(),surface);
+                }
+                heights[localSampleZ * perChunk + localSampleX] = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,localX,localZ);
                 flat[localSampleZ * perChunk + localSampleX] =
                         baseColor((ServerLevel) chunk.getLevel(), surface, state.getBlock(), mapColor);
             }
         }
         // Slope shading from the sampled heights: a multiplicative tint, so grass stays grass and
         // water stays blue instead of turning into grey mush.
-        shade(heights, perChunk, flat);
+        // Raw colour; the client derives relief from persisted heights.
         /*
          * Горизонтали помечаются здесь, а не на клиенте: высота известна только в момент
          * выборки, и отправлять её целиком ради признака «здесь проходит линия» было бы
@@ -257,7 +296,7 @@ public final class CityMapSavedData extends SavedData {
          */
         BitSet chunkContours = markContours(heights, perChunk);
         for (int localSample = 0; localSample < perChunk * perChunk; localSample++) {
-            flat[localSample] = normalize(flat[localSample]);
+            flat[localSample] |= 0xFF000000;
         }
         for (int localSampleZ = 0; localSampleZ < perChunk; localSampleZ++) {
             for (int localSampleX = 0; localSampleX < perChunk; localSampleX++) {
@@ -267,6 +306,7 @@ public final class CityMapSavedData extends SavedData {
                 if (index < 0 || index >= CityMapTilePayload.COLOR_COUNT) {
                     continue;
                 }
+                if(tile.heights()[index]!=(short)heights[local]){tile.heights()[index]=(short)heights[local];changed=true;}
                 if (tile.colors()[index] != flat[local] || !tile.known().get(index)) {
                     tile.colors()[index] = flat[local];
                     tile.known().set(index);
@@ -288,6 +328,7 @@ public final class CityMapSavedData extends SavedData {
             }
         }
         if (changed) {
+            index(tileKey,tile);
             this.dirty.add(tileKey);
             setDirty();
         }
@@ -462,9 +503,15 @@ public final class CityMapSavedData extends SavedData {
         if (mapColor == MapColor.NONE) {
             return NO_COLOR_FALLBACK;
         }
-        return applyTint(mapColor.col,
-                biomeTint(level, pos, classifyTint(BuiltInRegistries.BLOCK.getKey(block))),
+        TintFamily family=classifyTint(BuiltInRegistries.BLOCK.getKey(block));
+        return applyTint(materialColor(family,mapColor.col),
+                biomeTint(level, pos, family),
                 BIOME_TINT_STRENGTH);
+    }
+
+    /** Material categories come from actual block identity, never inferred from rendered RGB. */
+    public static int materialColor(TintFamily family,int fallback){
+        return switch(family){case GRASS->0x78AB55;case FOLIAGE->0x3F743D;case WATER->0x3C79B4;case NONE->fallback;};
     }
 
     static int normalize(int rgb) {
@@ -500,6 +547,7 @@ public final class CityMapSavedData extends SavedData {
 
     private static CityMapSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
         CityMapSavedData data = new CityMapSavedData();
+        if(tag.hasUUID("WorldId"))data.worldId=tag.getUUID("WorldId");else data.setDirty();
         for (Tag raw : tag.getList("Tiles", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
             int[] colors = entry.getIntArray("Colors");
@@ -514,19 +562,22 @@ public final class CityMapSavedData extends SavedData {
                     ? BitSet.valueOf(entry.getLongArray("Contours"))
                     : new BitSet(CityMapTilePayload.COLOR_COUNT);
             data.tiles.put(ChunkPos.asLong(entry.getInt("X"), entry.getInt("Z")),
-                    new KnownTile(colors, known, contours));
+                    new KnownTile(colors, known, contours,readHeights(entry)));
         }
+        data.tiles.forEach(data::index);
         return data;
     }
 
     @Override
     public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        tag.putUUID("WorldId",worldId);tag.putInt("TerrainVersion",3);
         ListTag list = new ListTag();
         this.tiles.forEach((key, tile) -> {
             CompoundTag entry = new CompoundTag();
             entry.putInt("X", ChunkPos.getX(key));
             entry.putInt("Z", ChunkPos.getZ(key));
             entry.putIntArray("Colors", tile.colors());
+            int[] h=new int[1024];for(int i=0;i<h.length;i++)h[i]=tile.heights()[i];entry.putIntArray("Heights",h);
             entry.putLongArray("Known", tile.known().toLongArray());
             entry.putLongArray("Contours", tile.contours().toLongArray());
             list.add(entry);
@@ -540,5 +591,7 @@ public final class CityMapSavedData extends SavedData {
      */
     public record TileSnapshot(int[] colors, BitSet contours, boolean complete) {}
 
-    private record KnownTile(int[] colors, BitSet known, BitSet contours) {}
+    private static short[] emptyHeights(){short[] h=new short[1024];java.util.Arrays.fill(h,TerrainPyramid.NO_HEIGHT);return h;}
+    private static short[] readHeights(CompoundTag tag){short[] h=emptyHeights();int[] saved=tag.getIntArray("Heights");if(saved.length==1024)for(int i=0;i<1024;i++)h[i]=(short)saved[i];return h;}
+    private record KnownTile(int[] colors, BitSet known, BitSet contours,short[] heights) {}
 }

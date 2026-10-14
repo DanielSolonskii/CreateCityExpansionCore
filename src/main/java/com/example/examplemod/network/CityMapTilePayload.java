@@ -26,7 +26,8 @@ public record CityMapTilePayload(
         int tileZ,
         boolean complete,
         int[] colors,
-        BitSet contours
+        BitSet contours,
+        int level, short[] heights, java.util.UUID worldId, long revision, boolean unchanged
 ) implements CustomPacketPayload {
 
     /**
@@ -39,6 +40,9 @@ public record CityMapTilePayload(
     public static final int WORLD_SIZE = SAMPLE_COUNT * SAMPLE_STEP;
     public static final int COLOR_COUNT = SAMPLE_COUNT * SAMPLE_COUNT;
 
+    public CityMapTilePayload(BlockPos pos,ResourceLocation dimension,int x,int z,boolean complete,int[] colors,BitSet contours) {
+        this(pos,dimension,x,z,complete,colors,contours,0,new short[0],new java.util.UUID(0,0),0,false);
+    }
     public static final Type<CityMapTilePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(
                     CreateCityExpansionCore.MODID,
@@ -54,6 +58,9 @@ public record CityMapTilePayload(
                         buffer.writeInt(payload.tileX());
                         buffer.writeInt(payload.tileZ());
                         buffer.writeBoolean(payload.complete());
+                        buffer.writeByte(payload.level());buffer.writeUUID(payload.worldId());buffer.writeLong(payload.revision());buffer.writeBoolean(payload.unchanged());
+                        if(payload.unchanged())return;
+                        buffer.writeVarInt(payload.heights().length);for(short height:payload.heights())buffer.writeShort(height);
                         for (int color : payload.colors()) {
                             buffer.writeInt(color);
                         }
@@ -65,6 +72,10 @@ public record CityMapTilePayload(
                         int tileX = buffer.readInt();
                         int tileZ = buffer.readInt();
                         boolean complete = buffer.readBoolean();
+                        int level=buffer.readUnsignedByte();java.util.UUID world=buffer.readUUID();long revision=buffer.readLong();boolean unchanged=buffer.readBoolean();
+                        if(unchanged)return new CityMapTilePayload(pylonPos,dimension,tileX,tileZ,complete,new int[0],new BitSet(),level,new short[0],world,revision,true);
+                        int count=buffer.readVarInt();if(count!=0&&count!=1156)throw new IllegalArgumentException("height halo size");
+                        short[] heights=new short[count];for(int i=0;i<count;i++)heights[i]=buffer.readShort();
                         int[] colors = new int[COLOR_COUNT];
                         for (int index = 0; index < colors.length; index++) {
                             colors[index] = buffer.readInt();
@@ -83,16 +94,16 @@ public record CityMapTilePayload(
                                 tileZ,
                                 complete,
                                 colors,
-                                contours
+                                contours,level,heights,world,revision,false
                         );
                     }
             );
 
     public CityMapTilePayload {
-        if (colors.length != COLOR_COUNT) {
+        if (level<0||level>7||(!unchanged&&colors.length != COLOR_COUNT)||unchanged&&colors.length!=0||heights.length!=0&&heights.length!=1156) {
             throw new IllegalArgumentException("Invalid city map tile color count");
         }
-        colors = colors.clone();
+        colors = colors.clone();heights=heights.clone();java.util.Objects.requireNonNull(worldId);
         if (contours == null) {
             contours = new BitSet(COLOR_COUNT);
         } else if (contours.length() > COLOR_COUNT) {

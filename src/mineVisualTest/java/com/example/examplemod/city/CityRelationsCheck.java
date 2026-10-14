@@ -42,6 +42,23 @@ public final class CityRelationsCheck {
         restored.setTrusted(a.getId(), b.getId(), false);
         require(!com.example.examplemod.railway.RailwayRoutePlanner.allowsNetwork(privateNetwork,
                 RailwayOwnershipTypes.OwnerType.CITY, b.getId(), restored), "revoked trust blocks private railway");
+        UUID resident = UUID.randomUUID();
+        City oldCity = restored.getCity(a.getId());
+        oldCity.addMember(resident, CityMember.Role.RESIDENT);
+        require(restored.getCityByMember(resident) == oldCity, "resident belongs to old city");
+        require(restored.removeCityByOwner(oldCity.getOwner()) == oldCity, "clearcity deletes owner city");
+        require(restored.getCityByMember(resident) == null, "clearcity releases resident membership");
+        require(restored.getCityByMember(oldCity.getOwner()) == null, "clearcity releases owner membership");
+        CityManager afterRestart = CityManager.load(restored.save(new CompoundTag(), null), null);
+        require(afterRestart.getCityByMember(resident) == null, "deleted membership stays absent after restart");
+        City destination = afterRestart.getCity(b.getId());
+        require(CityInviteDirectory.stateOf(false, destination.hasMember(resident),
+                destination.hasInvite(resident), afterRestart.getCityByMember(resident) != null)
+                == com.example.examplemod.network.CityPlayerSearchResultPayload.State.AVAILABLE,
+                "former resident is available for another city invitation");
+        destination.addInvite(resident, destination.getOwner());
+        destination.acceptInvite(resident);
+        require(afterRestart.getCityByMember(resident) == destination, "former resident joins new city");
         System.out.println("PASS: " + checks + " city relation persistence and permission checks");
     }
 }

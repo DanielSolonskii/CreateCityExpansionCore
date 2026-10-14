@@ -70,6 +70,7 @@ public final class RailwayNetworkHandlers {
             case SELECT_ROUTE -> selectRoute(context,payload.primaryId(),payload.secondaryId());
             default -> false;
         };
+        if(success)com.example.examplemod.auth.ServerTelemetryBridge.emit("RAILWAY_ACTION",player.getUUID(),context.city.getId(),payload.action().name());
         feedback(player, success ? "operation_complete" : "operation_failed");
         sendState(player, context);
     }
@@ -183,7 +184,7 @@ public final class RailwayNetworkHandlers {
         RailwayManager manager=c.railway;
         Train t=CreateRailwayAdapter.train(f.createTrainId());
         String line=f.activeLineId()==null?"":Optional.ofNullable(manager.line(f.activeLineId())).map(RailLine::name).orElse("");
-        String owner=city?c.city.getName():c.player.getGameProfile().getName();
+        String owner=city?c.city.getName():com.example.examplemod.auth.PlayerNames.name(c.player);
         RailwayTripLedger trip=manager.activeTrip(f.createTrainId());
         String tripToken=trip==null?"":trip.status().name().toLowerCase(Locale.ROOT);
         String shipment=activeShipment(c.player,f);
@@ -221,7 +222,7 @@ public final class RailwayNetworkHandlers {
 
     private static List<RailwayMapPayload.NetworkView> mapNetworks(ServerPlayer player,Context c){
         CityManager cities=CityManager.get(player.getServer().overworld());List<RailwayMapPayload.NetworkView> result=new ArrayList<>();
-        for(OwnedRailwayNetwork network:c.railway.ownedNetworks()){if(result.size()>=RailwayMapPayload.MAX_NETWORKS)break;var sections=c.railway.sectionsForNetwork(network.id());String owner=network.ownerType()==RailwayOwnershipTypes.OwnerType.CITY?Optional.ofNullable(cities.getCity(network.ownerId())).map(City::getName).orElse(shortId(network.ownerId())):player.getServer().getProfileCache().get(network.ownerId()).map(profile->profile.getName()).orElse(shortId(network.ownerId()));result.add(new RailwayMapPayload.NetworkView(network.id(),network.name(),network.ownerType(),network.ownerId(),owner,network.access(),network.freightTariff(),sections.stream().mapToDouble(OwnedRailwaySection::length).sum(),sections.size(),(int)sections.stream().filter(s->s.status()==RailwayOwnershipTypes.SectionStatus.ONLINE).count()));}
+        for(OwnedRailwayNetwork network:c.railway.ownedNetworks()){if(result.size()>=RailwayMapPayload.MAX_NETWORKS)break;var sections=c.railway.sectionsForNetwork(network.id());String owner=network.ownerType()==RailwayOwnershipTypes.OwnerType.CITY?Optional.ofNullable(cities.getCity(network.ownerId())).map(City::getName).orElse(shortId(network.ownerId())):com.example.examplemod.auth.PlayerNames.name(player.getServer(), network.ownerId());result.add(new RailwayMapPayload.NetworkView(network.id(),network.name(),network.ownerType(),network.ownerId(),owner,network.access(),network.freightTariff(),sections.stream().mapToDouble(OwnedRailwaySection::length).sum(),sections.size(),(int)sections.stream().filter(s->s.status()==RailwayOwnershipTypes.SectionStatus.ONLINE).count()));}
         return List.copyOf(result);
     }
     private static List<RailwayMapPayload.SectionView> mapSections(ServerPlayer player,Context c){

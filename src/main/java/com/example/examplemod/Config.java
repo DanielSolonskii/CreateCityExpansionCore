@@ -49,6 +49,9 @@ public class Config {
     public static final ModConfigSpec.IntValue ECONOMY_DELIVERED_TIMEOUT_MINUTES = BUILDER
             .comment("Minutes before a fully delivered ordinary contract is auto-confirmed.")
             .defineInRange("economy.deliveredConfirmationTimeoutMinutes", 1_440, 1, 43_200);
+    public static final ModConfigSpec.LongValue SERVER_PROJECT_BUDGET = BUILDER
+            .comment("Lifetime CR issuance limit for SERVER projects. Reserved and paid amounts persist; no automatic replenishment. Lowering this blocks new reservations but honours existing ones.")
+            .defineInRange("economy.serverProjectsLifetimeBudget", 1_000_000L, 0L, Long.MAX_VALUE);
     public static final ModConfigSpec.LongValue ECONOMY_MAX_TRANSACTION = BUILDER
             .comment("Maximum value accepted by one economy operation.")
             .defineInRange("economy.maximumTransaction", 1_000_000_000L, 1L, Long.MAX_VALUE);

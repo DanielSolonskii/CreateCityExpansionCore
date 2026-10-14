@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "create:item/crushed_raw_zinc"
+    "layer0": "createcityexpansioncore:item/crushed_limestone"
   }
 }

@@ -1,88 +1,51 @@
 package com.example.examplemod.client.map;
 
 import com.example.examplemod.network.CityMapTilePayload;
-import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
 
-/**
- * One GPU texture per atlas tile, built once from the tile's colour samples and then stretched over
- * the tile's screen rectangle.
- *
- * <p>The previous renderer issued one {@code fill()} per sample, so a screen full of terrain cost
- * thousands of individual GUI rectangles every frame. A tile is now a single blit, and the level of
- * detail is a property of the texture: when the map is zoomed out the texture is rebuilt once with
- * area-averaged samples, which removes the aliasing nearest-neighbour downsampling produces and
- * keeps far zoom readable instead of merely coarser.
- *
- * <p>The texture is derived data — it is rebuilt from the cached samples whenever the level of
- * detail changes — and {@link #close()} hands it back to the {@link net.minecraft.client.renderer.texture.TextureManager},
- * which both unregisters and closes it, so a tile that leaves the cache never leaks a GPU texture.
- *
- * <p>Samples reach the GPU already run through {@link MapSurveyTransform}, so the terrain arrives on
- * screen as drafting paper rather than as a photograph. The transform is applied per texel after
- * averaging rather than per sample before it: averaging first and transforming second keeps the level
- * of detail stable, because a transformed average is not the average of transformed samples.
- */
+/** One texture per LOD tile. Raster work is bounded and asynchronous; uploads stay on the render thread.
+ * Raw colours and elevations remain in the disk cache independently of GPU lifetime. */
 final class TerrainTileTexture {
     /** Texels per side; one texel per sample, so the texture always maps 1:1 onto the sample grid. */
     static final int SIZE = CityMapTilePayload.SAMPLE_COUNT;
 
     private final String name;
-    private DynamicTexture texture;
-    private NativeImage pixels;
-    private ResourceLocation id;
+    private TerrainAtlas.Slot slot;
+    private boolean uploaded;
     private int builtStride = -1;
 
     TerrainTileTexture(String name) { this.name = name; }
 
     /** The registered texture identifier, or null while it has not been built yet. */
-    ResourceLocation id() { return this.id; }
+    ResourceLocation id() { return valid() && uploaded ? slot.id() : null; }
+    private boolean valid() { return slot!=null&&slot.belongs(this); }
+    void pin() { if(valid())slot.pin(); }
+    void draw(int left,int top,int right,int bottom,float u,float v,float size) {
+        if(valid())TerrainAtlas.queue(slot,left,top,right,bottom,u,v,size);
+    }
 
     /** True when this texture already represents the tile at the wanted level of detail. */
-    boolean matches(int stride) { return this.texture != null && this.builtStride == stride; }
+    boolean matches(int stride) { return valid() && uploaded && this.builtStride == stride; }
 
     /** Marks the texture stale so the next frame rebuilds it, e.g. after new samples arrived. */
-    void invalidate() { this.builtStride = -1; }
+    void invalidate() { this.builtStride = -1;if(pending!=null){pending.cancel(false);pending=null;} }
 
-    /**
-     * Rebuilds the texture for {@code stride}. Stride 1 copies the samples one-to-one; a larger
-     * stride averages each {@code stride × stride} block into every texel of that block, which is an
-     * area-average LOD rather than a point sample — no shimmer while panning, and no squares
-     * appearing when a biome boundary lands between two samples.
-     */
-    void build(int[] colors, java.util.BitSet contours, int stride) {
-        int step = Math.max(1, Math.min(stride, SIZE));
-        if (this.texture == null) {
-            this.pixels = new NativeImage(SIZE, SIZE, false);
-            this.texture = new DynamicTexture(this.pixels);
-            this.id = Minecraft.getInstance().getTextureManager().register(this.name, this.texture);
+    private static final java.util.concurrent.ThreadPoolExecutor WORK=new java.util.concurrent.ThreadPoolExecutor(1,2,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(128),r->{Thread t=new Thread(r,"CCEC terrain raster");t.setDaemon(true);return t;});
+    private java.util.concurrent.Future<int[]> pending;
+    private int pendingStride;
+    void build(int[] colors,java.util.BitSet contours,int stride){build(colors,contours,stride,new short[0],0);}
+    void build(int[] colors,java.util.BitSet contours,int stride,short[] heights,int level) {
+        if(pending==null){
+            int[] copy=colors.clone();short[] h=heights.clone();pendingStride=stride;
+            try{pending=WORK.submit(()->h.length==1156?TerrainRelief.raster(copy,h,level):raster(copy,contours,stride));}catch(java.util.concurrent.RejectedExecutionException busy){return;}
         }
-        for (int z = 0; z < SIZE; z++) {
-            int baseZ = (z / step) * step;
-            for (int x = 0; x < SIZE; x++) {
-                int baseX = (x / step) * step;
-                this.pixels.setPixelRGBA(x, z, toNativeImageColor(
-                        MapSurveyTransform.survey(
-                                areaAverage(colors, baseX, baseZ, step)
-                        )
-                ));
-            }
-        }
-        /*
-         * Горизонтали ложатся поверх бумаги, а не смешиваются с ней.
-         *
-         * Смешивание убило бы ровно то, ради чего они нужны: на отдалённом зуме соседние
-         * сэмплы усредняются в один тексель, и разбавленная линия перестаёт читаться как
-         * линия. Поэтому линия рисуется последним проходом и в полную силу, а на сильном
-         * укрупнении сглаживается по площади — иначе на одном блоке высоты она выглядела бы
-         * как щетина.
-         */
-        drawContours(contours, step);
-        this.texture.upload();
-        this.builtStride = step;
+        if(!pending.isDone())return;
+        if(!valid()){slot=TerrainAtlas.acquire(this);uploaded=false;if(slot==null)return;}
+        int[] raster;
+        try{raster=pending.get();}catch(Exception failed){pending=null;return;}pending=null;
+        TerrainAtlas.upload(slot,raster);uploaded=true;this.builtStride=pendingStride;
     }
 
     /**
@@ -93,35 +56,23 @@ final class TerrainTileTexture {
      * занимает меньше половины, остаётся бумагой: половинка линии — это уже размытая полоса,
      * а не линия.
      */
-    private void drawContours(java.util.BitSet contours, int step) {
-        if (contours == null || contours.isEmpty()) {
-            return;
-        }
-        for (int z = 0; z < SIZE; z++) {
-            int baseZ = (z / step) * step;
-            for (int x = 0; x < SIZE; x++) {
-                int baseX = (x / step) * step;
+    static int[] raster(int[] colors, java.util.BitSet contours, int stride) {
+        int step = Math.max(1, Math.min(stride, SIZE));
+        int[] result = new int[SIZE * SIZE];
+        colors = TerrainSurfaceFilter.smooth(colors,SIZE);
+        // Average and count contour coverage once per LOD cell, rather than once per texel.
+        for (int baseZ = 0; baseZ < SIZE; baseZ += step) for (int baseX = 0; baseX < SIZE; baseX += step) {
+            int limitX = Math.min(SIZE, baseX + step), limitZ = Math.min(SIZE, baseZ + step);
+            int color = MapSurveyTransform.survey(areaAverage(colors, baseX, baseZ, step));
+            if (step < 8 && contours != null && !contours.isEmpty()) {
                 int marked = 0;
-                int limitX = Math.min(SIZE, baseX + step);
-                int limitZ = Math.min(SIZE, baseZ + step);
-                int samples = (limitX - baseX) * (limitZ - baseZ);
-                for (int z1 = baseZ; z1 < limitZ; z1++) {
-                    int row = z1 * SIZE;
-                    for (int x1 = baseX; x1 < limitX; x1++) {
-                        if (contours.get(row + x1)) {
-                            marked++;
-                        }
-                    }
-                }
-                if (marked * 2 < samples) {
-                    continue;
-                }
-                int existing = this.pixels.getPixelRGBA(x, z);
-                this.pixels.setPixelRGBA(x, z, toNativeImageColor(
-                        MapSurveyTransform.surveyInk(fromNativeImageColor(existing))
-                ));
+                for (int z = baseZ; z < limitZ; z++) for (int x = baseX; x < limitX; x++)
+                    if (contours.get(z * SIZE + x)) marked++;
+                if (marked * 2 >= (limitX - baseX) * (limitZ - baseZ)) color = MapSurveyTransform.surveyInk(color);
             }
+            for (int z = baseZ; z < limitZ; z++) java.util.Arrays.fill(result, z * SIZE + baseX, z * SIZE + limitX, color);
         }
+        return result;
     }
 
     /**
@@ -189,12 +140,10 @@ final class TerrainTileTexture {
 
     /** Hands the texture back to the texture manager, which unregisters and closes it. */
     void close() {
-        if (this.texture != null && this.id != null) {
-            Minecraft.getInstance().getTextureManager().release(this.id);
-        }
-        this.texture = null;
-        this.pixels = null;
-        this.id = null;
+        if(pending!=null){pending.cancel(false);pending=null;}
+        if(valid())slot.owner=null;
+        this.slot = null;
+        this.uploaded = false;
         this.builtStride = -1;
     }
 }

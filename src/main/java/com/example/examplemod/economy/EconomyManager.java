@@ -25,9 +25,21 @@ import java.util.*;
 public final class EconomyManager extends SavedData {
     public record TransportPayout(boolean cityAccount, UUID ownerId, long amount) {}
     private static final String DATA_NAME = "createcityexpansioncore_economy";
-    private static final int FORMAT_VERSION = 7;
+    private static final int FORMAT_VERSION = 8;
     private final FreightLogistics freight = new FreightLogistics(this);
     public FreightLogistics freight() { return freight; }
+    private final com.example.examplemod.projects.ProjectManager projects = new com.example.examplemod.projects.ProjectManager(
+            new com.example.examplemod.projects.ProjectManager.Accounts() {
+                public long balance(boolean city,UUID id){return (city?treasuries:wallets).getOrDefault(id,0L);}
+                public boolean debit(boolean city,UUID id,long amount){return EconomyManager.debit(city?treasuries:wallets,id,amount);}
+                public boolean canCredit(boolean city,UUID id,long amount){return EconomyManager.canCredit(city?treasuries:wallets,id,amount);}
+                public void credit(boolean city,UUID id,long amount){EconomyManager.credit(city?treasuries:wallets,id,amount);}
+                public long maximum(){return Config.ECONOMY_MAX_TRANSACTION.get();}
+                public long serverBudget(){return Config.SERVER_PROJECT_BUDGET.get();}
+                public void dirty(){setDirty();}
+            });
+    public com.example.examplemod.projects.ProjectManager projects(){return projects;}
+
     public synchronized boolean createFreightSale(UUID city,UUID creator,ResourceLocation item,long amount,long price,long deadline,String title,String description){
         if(!validContract(item,amount,price,deadline)||freight.sales.values().stream().filter(s->s.city().equals(city)&&s.contract()==null).count()>=64)return false;
         FreightSellOffer offer=new FreightSellOffer(UUID.randomUUID(),city,creator,item,amount,price,deadline,title,description,null);
@@ -83,8 +95,9 @@ public final class EconomyManager extends SavedData {
     public long wallet(UUID playerId) { return wallets.getOrDefault(playerId, 0L); }
     public long treasury(UUID cityId) { return treasuries.getOrDefault(cityId, 0L); }
     public long treasuryEscrow(UUID cityId) {
-        return contracts.values().stream().filter(c -> cityId.equals(c.issuerCityId()))
-                .mapToLong(IndustrialContract::escrow).reduce(0L,
+        return java.util.stream.LongStream.concat(
+                contracts.values().stream().filter(c -> cityId.equals(c.issuerCityId())).mapToLong(IndustrialContract::escrow),
+                projects.all().stream().filter(p -> cityId.equals(p.city()) && p.funding()==com.example.examplemod.projects.Project.Funding.TREASURY).mapToLong(com.example.examplemod.projects.Project::reserved)).reduce(0L,
                         (left,right)->EconomyMath.saturatingAdd(left,right,Long.MAX_VALUE));
     }
     public long warehouseStock(ResourceLocation itemId) { return warehouseStock.getOrDefault(itemId, 0L); }
@@ -1088,10 +1101,12 @@ public final class EconomyManager extends SavedData {
                 .filter(value->value.kind()==EconomyTypes.ContractKind.MASTER_SMART&&!value.state().terminal())
                 .mapToLong(IndustrialContract::escrow)
                 .reduce(0L,(left,right)->EconomyMath.saturatingAdd(left,right,Long.MAX_VALUE));
+        manager.projects.load(root.getCompound("CityProjects"));
         return manager;
     }
 
     @Override public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+        root.put("CityProjects",projects.save());
         root.put("FreightLogistics",freight.save());
         root.putInt("FormatVersion",FORMAT_VERSION);if(masterCityId!=null)root.putUUID("MasterCity",masterCityId);
         root.putLong("ProcurementAvailable",procurementAvailable);root.putLong("ProcurementReserved",procurementReserved);root.putLong("LastProcurementTick",lastProcurementTick);

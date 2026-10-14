@@ -96,10 +96,8 @@ public final class CityTerritorySnapshot {
 
     /** Экран этого пилона, если он открыт прямо сейчас. */
     private static CityPylonScreen openPylonScreen(BlockPos pylonPos) {
-        return Minecraft.getInstance().screen instanceof CityPylonScreen screen
-                && screen.getMenu().getPylonPos().equals(pylonPos)
-                ? screen
-                : null;
+        CityPylonScreen screen = com.example.examplemod.client.screen.CityPylonWorkspace.controller();
+        return screen != null && screen.getMenu().getPylonPos().equals(pylonPos) ? screen : null;
     }
 
     /** Атлас этого пилона, если он открыт прямо сейчас. */

@@ -1,0 +1,10 @@
+import fs from 'node:fs/promises';
+import { argumentsOf, verifiedEnvelope } from './release-common.mjs';
+const args = argumentsOf(process.argv.slice(2));
+const response = await fetch('https://api.recreated.ru/releases/channels/alpha/manifest.json', { redirect: 'error', signal: AbortSignal.timeout(30000) });
+if (!response.ok) throw new Error('Current alpha HTTPS unavailable');
+const bytes = Buffer.from(await response.arrayBuffer());
+if (bytes.length > 16 * 1024**2) throw new Error('Manifest too large');
+await fs.writeFile(args.output, bytes);
+const envelope = await verifiedEnvelope(args.output, new URL('../src-tauri/release-public-key.hex', import.meta.url));
+console.log(JSON.stringify({ version: envelope.manifest.version, sequence: envelope.manifest.sequence }));

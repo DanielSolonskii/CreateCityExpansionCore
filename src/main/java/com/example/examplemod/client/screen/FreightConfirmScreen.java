@@ -14,7 +14,7 @@ import java.util.*;
 import static com.example.examplemod.client.screen.LogisticsStyle.*;
 
 /** Selection and explicit confirmation share one screen for all three freight trades. */
-public final class FreightConfirmScreen extends Screen {
+public final class FreightConfirmScreen extends CityPylonPageScreen {
     private final Screen parent;
     private final CityPylonScreen pylon;
     private final CityPylonMenu menu;
@@ -94,7 +94,7 @@ public final class FreightConfirmScreen extends Screen {
             destination=FreightUi.point(s,destId);
             source=importing()?FreightUi.point(s,s.logistics().hasUUID("MasterSend")?s.logistics().getUUID("MasterSend"):null):own;
             int start=42-scroll,y=start;
-            g.enableScissor(18,40,width-18,height-94);
+            CityPylonWorkspace.clip(g,18,40,width-18,height-94);
             if(o!=null||c!=null){
                 var item=o!=null?o.itemId():c.itemId();
                 long amount=o!=null?quantity:c.amount();

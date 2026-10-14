@@ -66,6 +66,7 @@ public final class DependencyRecipeOverride {
      * Electro Energetics 1.1.2:
      *   electroenergetics:crafting/connector
      *   electroenergetics:crafting/insulator
+     *   electroenergetics:crafting/catenary_holder
      */
     public static final String[] OVERRIDDEN_RECIPES = {
             "create:sequenced_assembly/track",
@@ -73,7 +74,8 @@ public final class DependencyRecipeOverride {
             "create:crafting/kinetics/track_signal",
             "create:crafting/kinetics/controller_rail",
             "electroenergetics:crafting/connector",
-            "electroenergetics:crafting/insulator"
+            "electroenergetics:crafting/insulator",
+            "electroenergetics:crafting/catenary_holder"
     };
 
     private DependencyRecipeOverride() {

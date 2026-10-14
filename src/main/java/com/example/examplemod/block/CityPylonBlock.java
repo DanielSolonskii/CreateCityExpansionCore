@@ -368,6 +368,7 @@ public class CityPylonBlock extends BaseEntityBlock {
                             for (var member : city.getMembers()) {
                                 data.writeUUID(member.getPlayerId());
                                 data.writeVarInt(member.getRole().ordinal());
+                                data.writeUtf(com.example.examplemod.auth.PlayerNames.name(serverPlayer.getServer(), member.getPlayerId()), 64);
                             }
 
                         } else {

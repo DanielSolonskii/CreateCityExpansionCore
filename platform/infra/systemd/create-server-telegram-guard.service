@@ -1,0 +1,9 @@
+[Unit]
+Description=Telegram service-only persistent fail-closed guard
+Before=wg-quick@wgtelegram.service create-server-telegram-bot.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/create-server/telegram-guard
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

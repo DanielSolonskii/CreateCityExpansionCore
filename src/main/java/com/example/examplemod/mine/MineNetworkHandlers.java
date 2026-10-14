@@ -105,7 +105,7 @@ public final class MineNetworkHandlers {
 
         UUID projectId = UUID.randomUUID();
         UUID creatorId = controller.getCreatorId().orElse(player.getUUID());
-        controller.setCreator(creatorId, player.getName().getString());
+        controller.setCreator(creatorId, com.example.examplemod.auth.PlayerNames.name(player));
         CityProject project = new CityProject(
                 projectId,
                 city.getId(),

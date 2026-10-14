@@ -1,5 +1,8 @@
 # CreateCityExpansionCore
 
+> Актуальный срез команды от 14.10.2026: [State, подключения, роли и чеклист](docs/audit-2026-10-14/README.md).
+> Backend, Telegram bot, Windows launcher и infra находятся в `platform/`. Рабочая ветка: `codex/next-ai-work`.
+
 > **Индустриальный мод для Minecraft 1.21.1 (NeoForge)**  
 > Связывает Create, Create: Electro Energetics, железные дороги и городскую экономику в единую производственную прогрессию.
 

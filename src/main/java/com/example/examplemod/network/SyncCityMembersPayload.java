@@ -31,7 +31,9 @@ public record SyncCityMembersPayload(
 ) implements CustomPacketPayload {
 
     /** One member: the stable account id and the role the server assigned. */
-    public record Entry(UUID playerId, int roleId) {}
+    public record Entry(UUID playerId, int roleId, String displayName) {
+        public Entry(UUID playerId, int roleId) { this(playerId, roleId, ""); }
+    }
 
     /** Bounded so a malformed or hostile packet cannot allocate an unbounded list. */
     public static final int MAX_MEMBERS = 256;
@@ -45,10 +47,11 @@ public record SyncCityMembersPayload(
                     (buffer, entry) -> {
                         buffer.writeUUID(entry.playerId());
                         ByteBufCodecs.VAR_INT.encode(buffer, entry.roleId());
+                        buffer.writeUtf(entry.displayName(), 64);
                     },
                     buffer -> new Entry(
                             buffer.readUUID(),
-                            ByteBufCodecs.VAR_INT.decode(buffer)));
+                            ByteBufCodecs.VAR_INT.decode(buffer), buffer.readUtf(64)));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SyncCityMembersPayload> STREAM_CODEC =
             StreamCodec.composite(

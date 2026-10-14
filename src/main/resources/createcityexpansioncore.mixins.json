@@ -4,8 +4,13 @@
   "package": "com.example.examplemod.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "CarriageBogeyAccessor"
+    "CarriageBogeyAccessor",
+    "ServerLoginAdmissionMixin",
+    "ConfigurationAdmissionAssertionMixin",
+    "PrivateMinecraftTcpMixin",
+    "KelpGrowthMixin"
   ],
+  "client": ["ClientTlsConnectionMixin"],
   "injectors": {
     "defaultRequire": 1
   }

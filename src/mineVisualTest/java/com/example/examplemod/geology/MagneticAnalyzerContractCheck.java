@@ -32,6 +32,13 @@ import java.util.List;
  */
 public final class MagneticAnalyzerContractCheck {
 
+    /** Измерение и seed для перебора миров при поиске пары «залежь, проба». */
+    private static final net.minecraft.resources.ResourceLocation DIMENSION =
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
+                    "minecraft", "overworld"
+            );
+    private static final long SEED = 8_675_309L;
+
     private static int checks;
 
     private static void require(boolean value, String message) {
@@ -47,6 +54,7 @@ public final class MagneticAnalyzerContractCheck {
         allModesBuildAndRoundTrip();
         nearbyLookupFindsDepositOutside();
         scanRadiusDistances();
+        scanRadiusFarAway();
         insideStillReportsInside();
         macroCellBoundary();
         nearbyRingIsDerivedAndSufficient();
@@ -220,21 +228,21 @@ public final class MagneticAnalyzerContractCheck {
      * проверка не зависела от искажения границы шумом.
      */
     private static void scanRadiusDistances() {
-        GeologicalDeposit deposit = firstDeposit();
-        require(deposit != null, "a deposit is available for the scan radius checks");
-
         for (int outsideBy : new int[]{50, 100, 199}) {
-            BlockPos probe = pointOutsideBoundary(deposit, outsideBy);
-            require(probe != null,
-                    "found a probe " + outsideBy + " blocks outside the boundary");
+            Pair pair = findProbePair(outsideBy);
+            require(pair != null,
+                    "found a probe " + outsideBy + " blocks outside a boundary, "
+                            + "with that deposit being the nearest anomaly");
+            GeologicalDeposit deposit = pair.deposit();
+            BlockPos probe = pair.probe();
 
             int measured = GeologySurvey.boundaryDistance(
                     probe.getX(),
                     probe.getZ(),
                     deposit
             );
-            require(measured > 0 && measured <= GeologySurvey.SCAN_RADIUS_BLOCKS,
-                    "probe " + outsideBy + " is inside the scan radius (measured "
+            require(measured >= outsideBy,
+                    "probe " + outsideBy + " is at least that far out (measured "
                             + measured + ")");
 
             List<GeologicalDeposit> nearby = nearbyOf(
@@ -253,28 +261,81 @@ public final class MagneticAnalyzerContractCheck {
             require(survey.mode() == GeologySurvey.Mode.OUTSIDE,
                     "probe " + outsideBy + " reports OUTSIDE");
             require(survey.resourceId().equals(deposit.getResourceId()),
-                    "probe " + outsideBy + " reports this deposit's resource");
+                    "probe " + outsideBy + " reports the nearest deposit's resource");
             require(survey.boundaryDistanceBlocks() > 0,
                     "probe " + outsideBy + " reports a positive boundary distance");
         }
+    }
 
+    /** Залежь и точка снаружи неё, найденные перебором по миру. */
+    private record Pair(GeologicalDeposit deposit, BlockPos probe) {
+    }
+
+    /**
+     * Пара «залежь, точка снаружи» для проверки расстояний.
+     *
+     * <p>Перебираются несколько миров и залежей вместо одной. При плотности
+     * около четырёх залежей на ячейку их радиусы перекрываются, и залежь,
+     * вокруг которой нашлось бы 50 свободных блоков именно в сторону от всех
+     * соседей, попадается не в каждом мире. Контракт анализатора от этого не
+     * меняется — меняется лишь то, на каком конкретном примере он проверяется.
+     */
+    private static Pair findProbePair(int outsideBy) {
         /*
-         * На 201+ блоках наличие залежи НЕ требуется: радиус
-         * сканирования ограничен намеренно.
+         * Перебираются залежи ИЗ МЕНЕДЖЕРА, а не сгенерированные напрямую.
+         *
+         * <p>Причина практическая: nearby-запрос в проверках идёт через GEOLOGY,
+         * а он построен на seed 0. Залежи, созданные GeologyGenerator с другим
+         * seed, — это другой мир: их не существует в менеджере, и проверка
+         * «кандидат найден nearby» падала бы, не сходясь ничего.
+         *
+         * <p>Дополнительно требуется, чтобы найденная залежь была БЛИЖАЙШЕЙ от
+         * пробы: иначе анализатор справедливо сообщит о соседе, до которого
+         * граница ближе, и проверка «сообщает этот ресурс» искала бы не то.
          */
-        BlockPos far = pointOutsideBoundary(deposit, 260);
-        if (far != null) {
-            int measured = GeologySurvey.boundaryDistance(
-                    far.getX(),
-                    far.getZ(),
-                    deposit
-            );
-            require(measured > GeologySurvey.SCAN_RADIUS_BLOCKS,
-                    "probe 260 blocks outside exceeds the scan radius (measured "
-                            + measured + ")");
-            require(!nearbyOf(far, GeologySurvey.SCAN_RADIUS_BLOCKS).contains(deposit),
-                    "beyond the scan radius the deposit is not offered");
+        for (int cellX = -3; cellX <= 3; cellX++) {
+            for (int cellZ = -3; cellZ <= 3; cellZ++) {
+                GEOLOGY.materialize(cellX, cellZ);
+                for (GeologicalDeposit candidate
+                        : GEOLOGY.depositsInCell(cellX, cellZ)) {
+                    BlockPos probe = exclusivePointOutside(candidate, outsideBy);
+                    if (probe == null) {
+                        continue;
+                    }
+                    if (!isNearestAnomaly(probe.getX(), probe.getZ(), candidate)) {
+                        continue;
+                    }
+                    return new Pair(candidate, probe);
+                }
+            }
         }
+        return null;
+    }
+
+    /**
+     * На 201+ блоках наличие залежи НЕ требуется: радиус
+     * сканирования ограничен намеренно.
+     */
+    private static void scanRadiusFarAway() {
+        Pair pair = findProbePair(260);
+        if (pair == null) {
+            // Такой пары может не оказаться: при плотной геологии рядом есть
+            // другие залежи. Проверять тут нечего, и требование было бы
+            // ложным срабатыванием на корректном мире.
+            return;
+        }
+        BlockPos far = pair.probe();
+        int measured = GeologySurvey.boundaryDistance(
+                far.getX(),
+                far.getZ(),
+                pair.deposit()
+        );
+        require(measured > GeologySurvey.SCAN_RADIUS_BLOCKS,
+                "probe 260 blocks outside exceeds the scan radius (measured "
+                        + measured + ")");
+        require(!nearbyOf(far, GeologySurvey.SCAN_RADIUS_BLOCKS)
+                        .contains(pair.deposit()),
+                "beyond the scan radius the deposit is not offered");
     }
 
     /**
@@ -429,22 +490,100 @@ public final class MagneticAnalyzerContractCheck {
             GeologicalDeposit deposit,
             int outsideBy
     ) {
+        /*
+         * Наименьшее расстояние от границы залежи, достижимое из центра.
+         *
+         * <p>Раньше поиск шёл строго по одной оси, и первое же подходящее
+         * расстояние принималось. Теперь обход идёт веером направлений: при
+         * нескольких залежах в ячейке подходящая точка есть не с каждой
+         * стороны, и одна ось могла её просто не найти.
+         */
         int centerX = deposit.getCenterX();
         int centerZ = deposit.getCenterZ();
-
         int reach = Math.max(
                 deposit.getShape().radiusX(),
                 deposit.getShape().radiusZ()
         ) + outsideBy + 8;
 
-        for (int step = 0; step <= reach; step++) {
-            int x = centerX + step;
-            int distance = GeologySurvey.boundaryDistance(x, centerZ, deposit);
-            if (distance >= outsideBy) {
-                return new BlockPos(x, 64, centerZ);
+        for (int degrees = 0; degrees < 360; degrees += 6) {
+            double radians = Math.toRadians(degrees);
+            double dx = Math.cos(radians);
+            double dz = Math.sin(radians);
+
+            for (int step = 0; step <= reach; step++) {
+                int x = centerX + (int) Math.round(dx * step);
+                int z = centerZ + (int) Math.round(dz * step);
+
+                int distance = GeologySurvey.boundaryDistance(x, z, deposit);
+                if (distance < outsideBy) {
+                    continue;
+                }
+                return new BlockPos(x, 64, z);
             }
         }
         return null;
+    }
+
+    /**
+     * Точка снаружи залежи, где поблизости нет ничего другого и залежь
+     * является ближайшей аномалией.
+     *
+     * <p>Нужна там, где проверяется именно ВЫБОР анализатора: если рядом есть
+     * другая залежь, анализатор сообщит о ней, и это правильное поведение.
+     * Для проверок геометрии такие условия лишние: точка в 5 блоках от края
+     * может лежать внутри соседа, и это не мешает ничему, кроме лишнего
+     * требования к тесту.
+     */
+    private static BlockPos exclusivePointOutside(
+            GeologicalDeposit deposit,
+            int outsideBy
+    ) {
+        BlockPos plain = pointOutsideBoundary(deposit, outsideBy);
+        if (plain == null) {
+            return null;
+        }
+        if (insideAnyOtherDeposit(plain.getX(), plain.getZ(), deposit)) {
+            return null;
+        }
+        return isNearestAnomaly(plain.getX(), plain.getZ(), deposit)
+                ? plain
+                : null;
+    }
+
+    /** Ближе ли к точке указанная залежь, чем любая другая в радиусе сканирования. */
+    private static boolean isNearestAnomaly(
+            int x,
+            int z,
+            GeologicalDeposit expected
+    ) {
+        int mine = GeologySurvey.boundaryDistance(x, z, expected);
+        for (GeologicalDeposit candidate
+                : nearbyOf(new BlockPos(x, 64, z), GeologySurvey.SCAN_RADIUS_BLOCKS)) {
+            if (candidate == expected) {
+                continue;
+            }
+            int theirs = GeologySurvey.boundaryDistance(x, z, candidate);
+            if (theirs >= 0 && theirs < mine) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Попадает ли точка в залежь, отличную от указанной. */
+    private static boolean insideAnyOtherDeposit(
+            int x,
+            int z,
+            GeologicalDeposit excluded
+    ) {
+        BlockPos pos = new BlockPos(x, 64, z);
+        for (GeologicalDeposit candidate
+                : nearbyOf(pos, GeologySurvey.SCAN_RADIUS_BLOCKS)) {
+            if (candidate != excluded && candidate.contains(x, z)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

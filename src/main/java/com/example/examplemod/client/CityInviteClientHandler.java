@@ -200,18 +200,13 @@ public class CityInviteClientHandler {
             CityInviteNotificationPayload invite
     ) {
 
-        boolean alreadyExists =
-                INVITES.stream()
-                        .anyMatch(
-                                existing ->
-                                        existing.pylonPos()
-                                                .equals(
-                                                        invite.pylonPos()
-                                                )
-                        );
-
-        if (alreadyExists) {
-            return;
+        // A repeated notification renews the display name and reopens the invitation.
+        for (int index = 0; index < INVITES.size(); index++) {
+            if (INVITES.get(index).pylonPos().equals(invite.pylonPos())) {
+                INVITES.set(index, invite);
+                openScreenIfNeeded();
+                return;
+            }
         }
 
         INVITES.add(

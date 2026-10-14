@@ -32,8 +32,8 @@ public final class CityMapNetworkHandlers {
             return;
         }
 
-        long originXLong = (long) request.tileX() * CityMapTilePayload.WORLD_SIZE;
-        long originZLong = (long) request.tileZ() * CityMapTilePayload.WORLD_SIZE;
+        long originXLong = (long) request.tileX() * (CityMapTilePayload.WORLD_SIZE<<request.level());
+        long originZLong = (long) request.tileZ() * (CityMapTilePayload.WORLD_SIZE<<request.level());
         if (originXLong < Integer.MIN_VALUE
                 || originXLong > Integer.MAX_VALUE
                 || originZLong < Integer.MIN_VALUE
@@ -47,17 +47,14 @@ public final class CityMapNetworkHandlers {
         CityMapSavedData atlas = CityMapSavedData.get(mapLevel);
         // The player is about to hold this tile, so later changes to it are pushed instead of
         // waiting for a reopen that may never happen.
-        atlas.watch(player.getUUID(), request.tileX(), request.tileZ());
-        CityMapSavedData.TileSnapshot tile = atlas.tile(request.tileX(), request.tileZ());
-        PacketDistributor.sendToPlayer(player, new CityMapTilePayload(
-                request.pylonPos(),
-                request.dimensionId(),
-                request.tileX(),
-                request.tileZ(),
-                tile.complete(),
-                tile.colors(),
-                tile.contours()
-        ));
+        if(request.level()==0){atlas.watch(player.getUUID(),request.tileX(),request.tileZ());atlas.refreshLoaded(request.tileX(),request.tileZ());}
+        var key=new TerrainPyramid.Key(request.level(),request.tileX(),request.tileZ());
+        var data=atlas.terrain(key);int[] colors=data==null?new int[1024]:data.colors();
+        short[] heights=atlas.terrainHeights(key);long revision=TerrainPyramid.revision(colors,heights);
+        boolean same=request.worldId().equals(atlas.worldId())&&request.revision()==revision;
+        boolean complete=java.util.Arrays.stream(colors).allMatch(c->(c>>>24)==255);
+        PacketDistributor.sendToPlayer(player,new CityMapTilePayload(request.pylonPos(),request.dimensionId(),request.tileX(),request.tileZ(),complete,
+                same?new int[0]:colors,new java.util.BitSet(),request.level(),same?new short[0]:heights,atlas.worldId(),revision,same));
     }
 
     /** Read-only atlas access; the server chooses the anchor, never the packet. */

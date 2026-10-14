@@ -1,0 +1,266 @@
+{
+  "workspace": "https://linear.app/re-creted",
+  "project": "https://linear.app/re-creted/project/ccec-state-klient-server-i-mod-3942ce25a40b",
+  "milestones": {
+    "M0": "93f1401a-42cb-48db-ab3d-632a52c576a3",
+    "M1": "815ba3a2-bc63-4b86-8df2-11cdf98fa098",
+    "M2": "22da5b35-2871-4926-b939-42cac020c585",
+    "M3": "9ef5631d-77bf-4593-a1fe-1774fadffc0d",
+    "M4": "94173bf2-a8a5-4fee-abd3-f5917d1d8e42",
+    "M5": "962bebcc-99ac-4879-8403-e58bd4f4e5c8",
+    "M6": "b759cf98-030f-4040-b0ab-09029164942d",
+    "M7": "68b59041-3bd6-4ed7-a1ef-d77b1d5f8c71"
+  },
+  "counts": {
+    "codeDone": 35,
+    "acceptanceTodo": 12,
+    "deferredBacklog": 2
+  },
+  "issues": [
+    {
+      "catalog": "STATE-01",
+      "id": "REC-5",
+      "url": "https://linear.app/re-creted/issue/REC-5/kod-m0-platforma-i-sborka"
+    },
+    {
+      "catalog": "STATE-02",
+      "id": "REC-6",
+      "url": "https://linear.app/re-creted/issue/REC-6/kod-m1-akkaunty-i-telegram-verification"
+    },
+    {
+      "catalog": "STATE-03",
+      "id": "REC-7",
+      "url": "https://linear.app/re-creted/issue/REC-7/kod-m1-trusted-devices-i-credential-manager"
+    },
+    {
+      "catalog": "STATE-04",
+      "id": "REC-8",
+      "url": "https://linear.app/re-creted/issue/REC-8/kod-m1-igrovaya-avtorizaciya-i-tls-admission"
+    },
+    {
+      "catalog": "STATE-05",
+      "id": "REC-9",
+      "url": "https://linear.app/re-creted/issue/REC-9/kod-m2-goroda-uchastniki-roli-i-territoriya"
+    },
+    {
+      "catalog": "STATE-06",
+      "id": "REC-10",
+      "url": "https://linear.app/re-creted/issue/REC-10/kod-m2-otnosheniya-mezhdu-gorodami"
+    },
+    {
+      "catalog": "STATE-07",
+      "id": "REC-11",
+      "url": "https://linear.app/re-creted/issue/REC-11/kod-m2-razvitie-goroda-i-industrialnye-proekty"
+    },
+    {
+      "catalog": "STATE-08",
+      "id": "REC-12",
+      "url": "https://linear.app/re-creted/issue/REC-12/kod-m2-proekty-goroda-i-servera"
+    },
+    {
+      "catalog": "STATE-09",
+      "id": "REC-13",
+      "url": "https://linear.app/re-creted/issue/REC-13/kod-m2-profili-igrokov"
+    },
+    {
+      "catalog": "STATE-10",
+      "id": "REC-14",
+      "url": "https://linear.app/re-creted/issue/REC-14/kod-m2-city-pylon-workspace"
+    },
+    {
+      "catalog": "STATE-11",
+      "id": "REC-15",
+      "url": "https://linear.app/re-creted/issue/REC-15/kod-m2-worldmap-i-sloi"
+    },
+    {
+      "catalog": "STATE-12",
+      "id": "REC-16",
+      "url": "https://linear.app/re-creted/issue/REC-16/kod-m2-terrain-pyramid-atlas-i-cache"
+    },
+    {
+      "catalog": "STATE-13",
+      "id": "REC-17",
+      "url": "https://linear.app/re-creted/issue/REC-17/kod-m3-geologiya-format-4-generator-2"
+    },
+    {
+      "catalog": "STATE-14",
+      "id": "REC-18",
+      "url": "https://linear.app/re-creted/issue/REC-18/kod-m3-magnetic-analyzer"
+    },
+    {
+      "catalog": "STATE-15",
+      "id": "REC-19",
+      "url": "https://linear.app/re-creted/issue/REC-19/kod-m3-industrial-mine-i-elektrichestvo"
+    },
+    {
+      "catalog": "STATE-16",
+      "id": "REC-20",
+      "url": "https://linear.app/re-creted/issue/REC-20/kod-m3-bulk-iron-i-promyshlennye-materialy"
+    },
+    {
+      "catalog": "STATE-17",
+      "id": "REC-21",
+      "url": "https://linear.app/re-creted/issue/REC-21/kod-m3-coke-oven-battery"
+    },
+    {
+      "catalog": "STATE-18",
+      "id": "REC-22",
+      "url": "https://linear.app/re-creted/issue/REC-22/kod-m3-blast-furnace"
+    },
+    {
+      "catalog": "STATE-19",
+      "id": "REC-23",
+      "url": "https://linear.app/re-creted/issue/REC-23/kod-m3-steel-converter"
+    },
+    {
+      "catalog": "STATE-20",
+      "id": "REC-24",
+      "url": "https://linear.app/re-creted/issue/REC-24/kod-m3-chunk-loader"
+    },
+    {
+      "catalog": "STATE-21",
+      "id": "REC-25",
+      "url": "https://linear.app/re-creted/issue/REC-25/kod-m3-gameplay-restrictions"
+    },
+    {
+      "catalog": "STATE-22",
+      "id": "REC-26",
+      "url": "https://linear.app/re-creted/issue/REC-26/kod-m4-koshelki-kazna-i-escrow"
+    },
+    {
+      "catalog": "STATE-23",
+      "id": "REC-27",
+      "url": "https://linear.app/re-creted/issue/REC-27/kod-m4-p2p-rynok-i-kontrakty"
+    },
+    {
+      "catalog": "STATE-24",
+      "id": "REC-28",
+      "url": "https://linear.app/re-creted/issue/REC-28/kod-m4-master-city-external-market"
+    },
+    {
+      "catalog": "STATE-25",
+      "id": "REC-29",
+      "url": "https://linear.app/re-creted/issue/REC-29/kod-m4-freight-points-i-fizicheskie-packages"
+    },
+    {
+      "catalog": "STATE-26",
+      "id": "REC-30",
+      "url": "https://linear.app/re-creted/issue/REC-30/kod-m4-zheleznye-dorogi-sobstvennost-i-marshruty"
+    },
+    {
+      "catalog": "STATE-27",
+      "id": "REC-31",
+      "url": "https://linear.app/re-creted/issue/REC-31/kod-m4-railway-reservesettlement-i-freight-dispatch"
+    },
+    {
+      "catalog": "STATE-28",
+      "id": "REC-32",
+      "url": "https://linear.app/re-creted/issue/REC-32/kod-m5-reports-i-moderation-backendbot"
+    },
+    {
+      "catalog": "STATE-29",
+      "id": "REC-33",
+      "url": "https://linear.app/re-creted/issue/REC-33/kod-m5-telemetry-bridge-i-telegram-paneli"
+    },
+    {
+      "catalog": "STATE-30",
+      "id": "REC-34",
+      "url": "https://linear.app/re-creted/issue/REC-34/kod-m5-broadcasts-i-novosti-launcher"
+    },
+    {
+      "catalog": "STATE-31",
+      "id": "REC-35",
+      "url": "https://linear.app/re-creted/issue/REC-35/kod-m5-launcher-ui-i-native-game-launch"
+    },
+    {
+      "catalog": "STATE-32",
+      "id": "REC-36",
+      "url": "https://linear.app/re-creted/issue/REC-36/kod-m5-launcher-self-update-i-releases"
+    },
+    {
+      "catalog": "STATE-33",
+      "id": "REC-37",
+      "url": "https://linear.app/re-creted/issue/REC-37/kod-m5-production-i-storage"
+    },
+    {
+      "catalog": "STATE-34",
+      "id": "REC-38",
+      "url": "https://linear.app/re-creted/issue/REC-38/kod-m6-ftb-quests-ruen-onboarding"
+    },
+    {
+      "catalog": "STATE-35",
+      "id": "REC-39",
+      "url": "https://linear.app/re-creted/issue/REC-39/kod-m6-hud-lokalizaciya-modeli-i-zvuki"
+    },
+    {
+      "catalog": "TODO-01",
+      "id": "REC-40",
+      "url": "https://linear.app/re-creted/issue/REC-40/priyomka-m0-vosproizvesti-sborku-iz-chistogo-windows-klona"
+    },
+    {
+      "catalog": "TODO-02",
+      "id": "REC-41",
+      "url": "https://linear.app/re-creted/issue/REC-41/priyomka-m1-provesti-windows-login-play-join-e2e"
+    },
+    {
+      "catalog": "TODO-03",
+      "id": "REC-42",
+      "url": "https://linear.app/re-creted/issue/REC-42/priyomka-m2-proverit-goroda-roli-proekty-i-profile-privacy-dvumya"
+    },
+    {
+      "catalog": "TODO-04",
+      "id": "REC-43",
+      "url": "https://linear.app/re-creted/issue/REC-43/priyomka-m3-prinyat-geologiyu-format-4-i-vliyanie-na-starye-saves"
+    },
+    {
+      "catalog": "TODO-05",
+      "id": "REC-44",
+      "url": "https://linear.app/re-creted/issue/REC-44/priyomka-m3-provesti-promyshlennyj-runtime-pass-i-svesti-bom"
+    },
+    {
+      "catalog": "TODO-06",
+      "id": "REC-45",
+      "url": "https://linear.app/re-creted/issue/REC-45/priyomka-m3-proverit-transport-bypass-i-chunk-loading-nagruzku"
+    },
+    {
+      "catalog": "TODO-07",
+      "id": "REC-46",
+      "url": "https://linear.app/re-creted/issue/REC-46/priyomka-m4-projti-fizicheskij-freightrailway-e2e-s-denezhnoj-sverkoj"
+    },
+    {
+      "catalog": "TODO-08",
+      "id": "REC-47",
+      "url": "https://linear.app/re-creted/issue/REC-47/priyomka-m5-proverit-reportsbroadcaststelemetry-v-nastoyashem-telegram"
+    },
+    {
+      "catalog": "TODO-09",
+      "id": "REC-48",
+      "url": "https://linear.app/re-creted/issue/REC-48/priyomka-m5-vypolnit-postgresql-integration-suite-na-otdelnoj-bd"
+    },
+    {
+      "catalog": "TODO-10",
+      "id": "REC-49",
+      "url": "https://linear.app/re-creted/issue/REC-49/priyomka-m6-provesti-uiux-runtime-pass-i-vizualnuyu-priyomku"
+    },
+    {
+      "catalog": "TODO-11",
+      "id": "REC-50",
+      "url": "https://linear.app/re-creted/issue/REC-50/priyomka-m6-projti-ftb-quests-s-novym-igrokom"
+    },
+    {
+      "catalog": "TODO-12",
+      "id": "REC-51",
+      "url": "https://linear.app/re-creted/issue/REC-51/priyomka-m6-zafiksirovat-vizualnyj-standart-ccec"
+    },
+    {
+      "catalog": "TODO-13",
+      "id": "REC-52",
+      "url": "https://linear.app/re-creted/issue/REC-52/priyomka-m0-vydat-sotrudnikam-lichnye-githublinearssh-dostupy"
+    },
+    {
+      "catalog": "TODO-14",
+      "id": "REC-53",
+      "url": "https://linear.app/re-creted/issue/REC-53/priyomka-m7-utochnit-post-alpha-roadmap-posle-baseline"
+    }
+  ]
+}

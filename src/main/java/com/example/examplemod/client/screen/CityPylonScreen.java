@@ -354,7 +354,7 @@ public class CityPylonScreen
      * GuiGraphics ждёт координаты экрана, поэтому учитываем interfaceScale.
      */
     private void beginClip(GuiGraphics graphics, int x1, int y1, int x2, int y2) {
-        graphics.enableScissor(
+        CityPylonWorkspace.clip(graphics,
                 Math.round(x1 * this.interfaceScale),
                 Math.round(y1 * this.interfaceScale),
                 Math.round(x2 * this.interfaceScale),
@@ -502,6 +502,15 @@ public class CityPylonScreen
      */
     private final java.util.function.LongConsumer plotClaimHandler = this::requestPlotClaim;
 
+    void refreshMapClaimAccess() {
+        var screen = this.minecraft == null ? null : this.minecraft.screen;
+        boolean owningAtlas = screen instanceof PolishedWorldMapScreen atlas && atlas.getParentScreen() == this;
+        boolean readOnlyAtlas = screen instanceof PolishedWorldMapScreen atlas && atlas.isReadOnly();
+        boolean interactive = CityMapClaimAccess.allowed(this.menu.hasCity(),this.menu.canManageTerritory(),
+                screen == this,CityPylonWorkspace.isEmbedded(this),owningAtlas,readOnlyAtlas);
+        this.mapPanel.setPlotClaimRequest(interactive ? this.plotClaimHandler : null);
+    }
+
     /**
      * Отправка подтверждённого claim на сервер.
      *
@@ -594,10 +603,91 @@ public class CityPylonScreen
         SoundHelper.playUi(ModSounds.PYLON_SCREEN_WAKE.get());
     }
 
+    /** Switch a workspace section without replacing the server-owned menu. */
+    /** Map snapshots are shared with the full-screen atlas; no screen frame is rendered here. */
+    void workspaceSyncMapData() {
+        refreshMapClaimAccess();
+        this.menu.drainMapTiles().forEach(this.mapPanel::receive);
+        RailwayMapPayload railwayMap = this.menu.drainRailwayMap();
+        if (railwayMap != null) {
+            this.mapPanel.receive(railwayMap);
+        }
+        this.mapPanel.setProjects(this.menu.getProjects());
+        if(this.menu.getEconomyState()!=null){
+            this.mapPanel.setEconomyInfrastructure(this.menu.getEconomyState().infrastructure());
+            this.mapPanel.setFreightData(this.menu.getEconomyState().logistics());
+        }
+        if(this.menu.getRelationsState()!=null)this.mapPanel.setRelations(this.menu.getRelationsState().cities());
+        this.mapPanel.setRailwayData(
+                this.menu.getRailwayStations(),
+                this.menu.getRailwayTrains()
+        );
+
+    }
+
+    Component workspaceMemberNames() {
+        String names=this.menu.getMembers().stream().limit(5).map(this::getMemberName)
+                .reduce((a,b)->a+"  •  "+b).orElse("—");
+        if(this.menu.getMemberCount()>5)names+="  +"+(this.menu.getMemberCount()-5);
+        return Component.literal(names);
+    }
+
+    void prepareWorkspaceContent() {
+        this.interfaceScale=1.0F;
+        for(CityButton button:this.tabButtons)if(button!=null){button.visible=false;button.active=false;}
+        if(this.closeButton!=null){this.closeButton.visible=false;this.closeButton.active=false;}
+        if(this.economySearch!=null)this.economySearch.visible=false;
+        updateInviteButton();
+    }
+
+    /** Paint only the selected management body. Never call AbstractContainerScreen.render here. */
+    void renderWorkspaceContent(GuiGraphics graphics,int mouseX,int mouseY,float partialTick) {
+        prepareWorkspaceContent();
+        workspaceSyncMapData();
+        int left=this.contentLeft(),top=this.contentTop();
+        CityPylonTheme.panel(graphics,left-6,top-5,440,260);
+        graphics.drawString(this.font,managementTabName(this.activeTab),left,top,CityPylonTheme.TEXT,false);
+        graphics.fill(left,top+16,left+CONTENT_WIDTH,top+17,CityPylonTheme.LINE);
+        renderManagementNav(graphics,left,CityPylonUiLayout.navTop(top),mouseX,mouseY);
+        switch(this.activeTab) {
+            case 1->renderTerritory(graphics,left,top,mouseX,mouseY);
+            case 2->renderMembers(graphics,left,top,mouseX,mouseY);
+            case 3->renderProjects(graphics,left,top);
+            case 5->renderDevelopment(graphics,left,top,mouseX,mouseY);
+            case 6->renderRailway(graphics,left,top,mouseX,mouseY);
+            default->{}
+        }
+        if(this.activeTab==2&&this.inviteButton!=null&&this.inviteButton.visible)
+            this.inviteButton.render(graphics,mouseX,mouseY,partialTick);
+        flushDeferredTooltip(graphics,mouseX,mouseY);
+    }
+
+    int workspaceSection() { return this.activeTab == 0 ? 0 : 3; }
+
+    void workspaceSelect(int tab) {
+        this.activeTab = tab;
+        this.cityHubGuideVisible = false;
+        this.problemCenterVisible = false;
+        this.marketplaceHintVisible = false;
+        this.decommissionConfirmation = null;
+        updateTabButtons();
+        updateInviteButton();
+        requestEconomyState();
+        requestRailwayState();
+    }
+
+    @Override public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (!CityPylonWorkspace.isEmbedded(this)) super.renderBackground(graphics, mouseX, mouseY, partialTick);
+    }
+
     @Override
     protected void init() {
 
         super.init();
+        if (!this.menu.hasCity()) {
+            this.minecraft.setScreen(new CityCreationScreen(this));
+            return;
+        }
         this.interfaceScale = Math.min(1.0F, Math.min(
                 (this.width - 12.0F) / this.imageWidth,
                 (this.height - 12.0F) / this.imageHeight));
@@ -639,7 +729,7 @@ public class CityPylonScreen
 
                                     this.minecraft.setScreen(
                                             new CityCreationScreen(
-                                                    this.menu.getPylonPos()
+                                                    this
                                             )
                                     );
                                 }
@@ -834,7 +924,7 @@ public class CityPylonScreen
         }
 
         updateTabButtonsVisibility();
-        this.cityHubGuideVisible = !cityHubGuideSeen;
+        this.cityHubGuideVisible = !CityPylonWorkspace.isEmbedded(this) && !cityHubGuideSeen;
         requestEconomyState();
         requestRailwayState();
         requestRailwayMap();
@@ -1366,7 +1456,7 @@ private String managementTabName(int tab) {
             }
         }
 
-        if (button == 0 && isManagementTab(this.activeTab)) {
+        if (button == 0 && (isManagementTab(this.activeTab) || CityPylonWorkspace.isEmbedded(this) && this.activeTab == 6)) {
             int[] tabs = MANAGEMENT_TABS;
             /* The very same rectangles renderManagementNav paints. */
             CityPylonUiLayout.Rect[] cells = managementTabs(
@@ -1525,6 +1615,11 @@ private String managementTabName(int tab) {
 
                     return true;
                 }
+                if (layout.listClip().contains(mouseX, mouseY)
+                        && layout.row(visibleIndex).contains(mouseX, mouseY) && !clicked) {
+                    PlayerProfileScreen.open(this.minecraft.screen, member.getPlayerId());
+                    return true;
+                }
             }
         }
 
@@ -1651,9 +1746,7 @@ private String managementTabName(int tab) {
                         .getId();
 
         String playerName =
-                playerInfo
-                        .getProfile()
-                        .getName();
+                displayedPlayerName(playerInfo);
 
         PacketDistributor.sendToServer(
                 new InvitePlayerPayload(
@@ -1713,32 +1806,22 @@ private String managementTabName(int tab) {
      * =========================================
      */
 
-    private String getMemberName(
-            CityMember member
-    ) {
-
-        if (this.minecraft != null
-                && this.minecraft.getConnection() != null) {
-
-            PlayerInfo playerInfo =
-                    this.minecraft
-                            .getConnection()
-                            .getPlayerInfo(
-                                    member.getPlayerId()
-                            );
-
-            if (playerInfo != null) {
-
-                return playerInfo
-                        .getProfile()
-                        .getName();
+    private String getMemberName(CityMember member) {
+        if (!member.getDisplayName().isBlank()
+                && !member.getDisplayName().matches("cs[a-z0-9]{14}")) return member.getDisplayName();
+        if (this.minecraft != null && this.minecraft.getConnection() != null) {
+            PlayerInfo info = this.minecraft.getConnection().getPlayerInfo(member.getPlayerId());
+            if (info != null) {
+                String name = displayedPlayerName(info);
+                if (!name.matches("cs[a-z0-9]{14}")) return name;
             }
         }
+        return "Player " + member.getPlayerId().toString().substring(0, 8);
+    }
 
-        return member.getRole()
-                == CityMember.Role.OWNER
-                ? tr("role.createcityexpansioncore.owner")
-                : tr("role.createcityexpansioncore.resident");
+    private static String displayedPlayerName(PlayerInfo info) {
+        Component display = info.getTabListDisplayName();
+        return display != null ? display.getString() : info.getProfile().getName();
     }
 
     /*
@@ -1795,7 +1878,7 @@ private String managementTabName(int tab) {
                 top + 48,
                 left + this.imageWidth,
                 top + 51,
-                0xFFD09A3A
+                0xFFB78A43
         );
 
         if (!this.menu.hasCity()) {
@@ -1841,21 +1924,7 @@ private String managementTabName(int tab) {
             float partialTick
     ) {
 
-        this.menu.drainMapTiles().forEach(this.mapPanel::receive);
-        RailwayMapPayload railwayMap = this.menu.drainRailwayMap();
-        if (railwayMap != null) {
-            this.mapPanel.receive(railwayMap);
-        }
-        this.mapPanel.setProjects(this.menu.getProjects());
-        if(this.menu.getEconomyState()!=null){
-            this.mapPanel.setEconomyInfrastructure(this.menu.getEconomyState().infrastructure());
-            this.mapPanel.setFreightData(this.menu.getEconomyState().logistics());
-        }
-        if(this.menu.getRelationsState()!=null)this.mapPanel.setRelations(this.menu.getRelationsState().cities());
-        this.mapPanel.setRailwayData(
-                this.menu.getRailwayStations(),
-                this.menu.getRailwayTrains()
-        );
+        workspaceSyncMapData();
 
         this.renderBackground(
                 guiGraphics,
@@ -2033,7 +2102,7 @@ private String managementTabName(int tab) {
                 CityPylonUiLayout.divider(contentLeft, contentTop, this.imageWidth - 20).y(),
                 left + this.imageWidth - 20,
                 CityPylonUiLayout.divider(contentLeft, contentTop, this.imageWidth - 20).bottom(),
-                0xFFD09A3A
+                0xFFB78A43
         );
 
         if (isManagementTab(this.activeTab)) {
@@ -2092,7 +2161,7 @@ private String managementTabName(int tab) {
                     guiGraphics.fill(atlasX, atlasY, atlasX + 104, atlasY + 20,
                             atlasHover ? 0xFF4A3A20 : 0xFF303638);
                     guiGraphics.renderOutline(atlasX, atlasY, 104, 20,
-                            atlasHover ? 0xFFD09A3A : 0xFF596064);
+                            atlasHover ? 0xFFB78A43 : 0xFF596064);
                     guiGraphics.drawCenteredString(this.font,
                             Component.translatable("gui.createcityexpansioncore.world_map.open"),
                             atlasX + 52, atlasY + 6, atlasHover ? 0xFFFFFFFF : 0xFFD3D8DA);
@@ -2153,7 +2222,7 @@ private String managementTabName(int tab) {
                         + this.imageWidth
                         - 20,
                 top + 18,
-                0xFFD09A3A
+                0xFFB78A43
         );
 
         guiGraphics.drawString(
@@ -2205,7 +2274,7 @@ private String managementTabName(int tab) {
                 backWidth,
                 backHeight,
                 backHovered
-                        ? 0xFFD09A3A
+                        ? 0xFFB78A43
                         : 0xFF555555
         );
 
@@ -2312,7 +2381,7 @@ private String managementTabName(int tab) {
                     290,
                     32,
                     hovered
-                            ? 0xFFD09A3A
+                            ? 0xFFB78A43
                             : 0xFF3A3A3A
             );
 
@@ -2332,8 +2401,7 @@ private String managementTabName(int tab) {
              */
 
             String playerName =
-                    player.getProfile()
-                            .getName();
+                    displayedPlayerName(player);
 
             guiGraphics.drawString(
                     this.font,
@@ -2351,7 +2419,7 @@ private String managementTabName(int tab) {
                     listX + 190,
                     currentY + 7,
                     hovered
-                            ? 0xFFD09A3A
+                            ? 0xFFB78A43
                             : 0xAAAAAA
             );
         }
@@ -2416,11 +2484,11 @@ private String managementTabName(int tab) {
                 openMapX + 112, openMapY + 5, openMapHover ? 0xFFFFD59A : 0xFFB9C1C3);
 
         guiGraphics.fill(left + 406, top + 32, left + 435, top + 55, 0xDD20282A);
-        guiGraphics.renderOutline(left + 406, top + 32, 29, 23, 0xFFD09A3A);
+        guiGraphics.renderOutline(left + 406, top + 32, 29, 23, 0xFFB78A43);
         guiGraphics.drawCenteredString(this.font, "?", left + 420, top + 39, 0xFFFFFFFF);
 
         guiGraphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.members_list"),
-                left, top + 211, 0xFFD09A3A, false);
+                left, top + 211, 0xFFB78A43, false);
         String names = this.menu.getMembers().stream().limit(5).map(this::getMemberName)
                 .reduce((a, b) -> a + "  •  " + b).orElse("—");
         if (this.menu.getMemberCount() > 5) names += "  +" + (this.menu.getMemberCount() - 5);
@@ -2430,7 +2498,7 @@ private String managementTabName(int tab) {
 
     private void hubKpi(GuiGraphics graphics, int x, int y, int width, Component label, String value) {
         graphics.fill(x, y, x + width, y + 34, 0xFF282E30);
-        graphics.fill(x, y, x + 2, y + 34, 0xFFD09A3A);
+        graphics.fill(x, y, x + 2, y + 34, 0xFFB78A43);
         graphics.drawString(this.font, label, x + 7, y + 6, 0xFF929DA0, false);
         graphics.drawString(this.font, value, x + 7, y + 19, 0xFFF0F2F2, false);
     }
@@ -2516,14 +2584,14 @@ private String managementTabName(int tab) {
                         cell.y(),
                         cell.width() - 1,
                         cell.height() - 1,
-                        0xFFD09A3A
+                        0xFFB78A43
                 );
                 graphics.fill(
                         cell.x() + 1,
                         cell.y() + 1,
                         cell.x() + 3,
                         cell.bottom() - 1,
-                        0xFFD09A3A
+                        0xFFB78A43
                 );
             }
 
@@ -2560,7 +2628,7 @@ private String managementTabName(int tab) {
         hubIconButton(graphics, left + 382, top - 3, "?", false, mouseX, mouseY);
         if (this.problemCenterVisible) {
             graphics.fill(left + 55, top + 28, left + 430, top + 245, 0xF3182023);
-            graphics.renderOutline(left + 55, top + 28, 375, 217, 0xFFD09A3A);
+            graphics.renderOutline(left + 55, top + 28, 375, 217, 0xFFB78A43);
             graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.problems"), left + 68, top + 42, 0xFFFFD59A, false);
             graphics.drawWordWrap(this.font, Component.translatable(nextStepKey()), left + 68, top + 67, 345, 0xFFD7DDDE);
             graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.problem_count", problems), left + 68, top + 104, problems > 0 ? 0xFFFFA7A0 : 0xFF9FE1C0, false);
@@ -2570,7 +2638,7 @@ private String managementTabName(int tab) {
         } else if (this.cityHubGuideVisible) {
             graphics.fill(left - 4, top + 20, left + CONTENT_WIDTH + 4, top + 246, 0xD5101517);
             graphics.fill(left + 48, top + 52, left + 392, top + 184, 0xFF222B2E);
-            graphics.renderOutline(left + 48, top + 52, 344, 132, 0xFFD09A3A);
+            graphics.renderOutline(left + 48, top + 52, 344, 132, 0xFFB78A43);
             graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.title"), left + 64, top + 68, 0xFFFFD59A, false);
             graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.text"), left + 64, top + 91, 312, 0xFFD7DDDE);
             graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.dismiss"), left + 220, top + 162, 0xFFB9C1C3);
@@ -2688,7 +2756,7 @@ private String managementTabName(int tab) {
         guiGraphics.fill(colorPaletteButtonX, colorPaletteButtonY,
                 colorPaletteButtonX + 18, colorPaletteButtonY + 14,
                 CityColors.argb(swatchColor, 0xFF));
-        guiGraphics.renderOutline(colorPaletteButtonX - 1, colorPaletteButtonY - 1, 20, 16, 0xFFD09A3A);
+        guiGraphics.renderOutline(colorPaletteButtonX - 1, colorPaletteButtonY - 1, 20, 16, 0xFFB78A43);
         guiGraphics.drawString(
                 this.font,
                 Component.literal(String.format(java.util.Locale.ROOT, "#%06X", swatchColor)),
@@ -2704,7 +2772,7 @@ private String managementTabName(int tab) {
                     buttonX + 96, colorPaletteButtonY + 15,
                     hovered ? 0xFF4A3A20 : 0xFF303638);
             guiGraphics.renderOutline(buttonX, colorPaletteButtonY - 1, 96, 16,
-                    hovered ? 0xFFD09A3A : 0xFF596064);
+                    hovered ? 0xFFB78A43 : 0xFF596064);
             guiGraphics.drawCenteredString(this.font,
                     Component.translatable("gui.createcityexpansioncore.city.color.change"),
                     buttonX + 48, colorPaletteButtonY + 3,
@@ -2742,7 +2810,7 @@ private String managementTabName(int tab) {
                     checkboxY + 3,
                     checkboxX + boxSize - 3,
                     checkboxY + boxSize - 3,
-                    0xFFD09A3A
+                    0xFFB78A43
             );
         }
 
@@ -2916,7 +2984,7 @@ private String managementTabName(int tab) {
                     thumb.y(),
                     thumb.right(),
                     thumb.bottom(),
-                    0xFFD09A3A
+                    0xFFB78A43
             );
         }
     }
@@ -2951,7 +3019,7 @@ private String managementTabName(int tab) {
                 card.y(),
                 card.right(),
                 card.bottom(),
-                0xFF181818
+                card.contains(mouseX, mouseY) ? 0xFF263137 : 0xFF181818
         );
 
         CityMember.Role role =
@@ -2961,7 +3029,7 @@ private String managementTabName(int tab) {
                 switch (role) {
 
                     case OWNER ->
-                            0xFFD09A3A;
+                            0xFFB78A43;
 
                     case ADMIN ->
                             0xFFCC5555;
@@ -3039,22 +3107,7 @@ private String managementTabName(int tab) {
             );
         }
 
-        String playerName;
-
-        if (playerInfo != null) {
-
-            playerName =
-                    playerInfo
-                            .getProfile()
-                            .getName();
-
-        } else {
-
-            playerName =
-                    role == CityMember.Role.OWNER
-                            ? tr("role.createcityexpansioncore.owner")
-                            : tr("role.createcityexpansioncore.resident");
-        }
+        String playerName = getMemberName(member);
 
         /*
          * Line 1: nickname, обрезается по доступной ширине строки
@@ -3157,7 +3210,7 @@ private String managementTabName(int tab) {
                     gear.width(),
                     gear.contains(mouseX, mouseY)
                             ? 0xFFFFC978
-                            : 0xFFD09A3A
+                            : 0xFFB78A43
             );
         }
     }
@@ -3251,13 +3304,13 @@ private String managementTabName(int tab) {
         guiGraphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.city.project_capacity",
                         this.menu.getProjects().size(), this.menu.getProjectCapacity()),
-                left + 125, body + 0, 0xFFD09A3A);
+                left + 125, body + 0, 0xFFB78A43);
 
         List<CityProjectSnapshot> projects = this.menu.getProjects();
         for (int index = 0; index < Math.min(2, projects.size()); index++) {
             CityProjectSnapshot project = projects.get(index);
             int cardY = body + PROJECT_CARD_TOP + index * PROJECT_CARD_PITCH;
-            guiGraphics.fill(left, cardY, left + CONTENT_WIDTH, cardY + 34, 0xFF181D20);
+            guiGraphics.fill(left, cardY, left + CONTENT_WIDTH, cardY + 34, 0xFF192125);
             guiGraphics.renderOutline(left, cardY, CONTENT_WIDTH, 34, 0xFF455159);
             Component resource = resourceName(project.resourceId());
             guiGraphics.drawString(this.font, Component.translatable(
@@ -3326,7 +3379,7 @@ private String managementTabName(int tab) {
                     left + CONTENT_CENTER, bodyTop + 20, 0xFF77C98D);
             guiGraphics.drawCenteredString(this.font, Component.translatable(
                             "gui.createcityexpansioncore.development.reward_capacity", 1, 2),
-                    left + CONTENT_CENTER, bodyTop + 42, 0xFFD09A3A);
+                    left + CONTENT_CENTER, bodyTop + 42, 0xFFB78A43);
             return;
         }
 
@@ -3345,7 +3398,7 @@ private String managementTabName(int tab) {
                 .findFirst().orElse(null);
         guiGraphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.development.level_transition"),
-                left, bodyTop + 0, 0xFFD09A3A);
+                left, bodyTop + 0, 0xFFB78A43);
         guiGraphics.drawString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.development.primary_industry"),
                 left, bodyTop + 13, 0xFF9EADB3);
@@ -3403,7 +3456,7 @@ private String managementTabName(int tab) {
                 bodyBottom - DEV_FOOTER_TOP + 16, 0xFF252B2E);
         guiGraphics.fill(left, bodyBottom - DEV_FOOTER_TOP + 10,
                 left + (int) Math.round(CONTENT_WIDTH * progress),
-                bodyBottom - DEV_FOOTER_TOP + 16, 0xFFD09A3A);
+                bodyBottom - DEV_FOOTER_TOP + 16, 0xFFB78A43);
 
         int buttonY = bodyBottom - DEV_BUTTON_H;
         guiGraphics.fill(left, buttonY, left + HALF_W, buttonY + 19, 0xFF30434A);
@@ -3432,7 +3485,7 @@ private String managementTabName(int tab) {
                 .map(ItemStack::new).orElse(ItemStack.EMPTY);
         int height = prominent ? 28 : 19;
         graphics.fill(x, y, x + width, y + height,
-                requirement.complete() ? 0xFF1D3028 : 0xFF181D20);
+                requirement.complete() ? 0xFF1D3028 : 0xFF192125);
         graphics.renderOutline(x, y, width, height,
                 requirement.complete() ? 0xFF557D68 : 0xFF3F4A50);
         if (!stack.isEmpty()) {
@@ -3445,14 +3498,14 @@ private String managementTabName(int tab) {
         graphics.drawString(this.font, Component.literal(
                         formatCount(requirement.current()) + " / " + formatCount(requirement.required())
                                 + (requirement.complete() ? " ?" : "")),
-                x + width - 88, y + 4, requirement.complete() ? 0xFF77C98D : 0xFFD09A3A);
+                x + width - 88, y + 4, requirement.complete() ? 0xFF77C98D : 0xFFB78A43);
         if (prominent) {
             int barX = x + 23;
             int barY = y + 18;
             int barWidth = width - 28;
             graphics.fill(barX, barY, barX + barWidth, barY + 5, 0xFF252B2E);
             graphics.fill(barX, barY, barX + (int) Math.round(barWidth * requirement.progress()),
-                    barY + 5, requirement.complete() ? 0xFF557D68 : 0xFFD09A3A);
+                    barY + 5, requirement.complete() ? 0xFF557D68 : 0xFFB78A43);
         }
         if (!stack.isEmpty() && mouseX >= x + 2 && mouseX < x + 21
                 && mouseY >= y && mouseY < y + height) {
@@ -3465,7 +3518,7 @@ private String managementTabName(int tab) {
         CityPylonUiLayout.ManagementBody body = managementBody(top);
         int overlayTop = body.top() + DEV_ANIMATION_TOP;
         graphics.fill(left, overlayTop, left + CONTENT_WIDTH, body.bottom(), 0xEE111719);
-        graphics.renderOutline(left, overlayTop, CONTENT_WIDTH, body.bottom() - overlayTop, 0xFFD09A3A);
+        graphics.renderOutline(left, overlayTop, CONTENT_WIDTH, body.bottom() - overlayTop, 0xFFB78A43);
         int phase = Math.min(3, developmentAnimationTicks / 30);
         Component[] checks = {
                 Component.translatable("gui.createcityexpansioncore.development.animation.industry"),
@@ -3474,7 +3527,7 @@ private String managementTabName(int tab) {
         };
         for (int index = 0; index < checks.length; index++) {
             int color = phase > index ? 0xFF77C98D
-                    : phase == index ? 0xFFD09A3A : 0xFF667176;
+                    : phase == index ? 0xFFB78A43 : 0xFF667176;
             Component line = phase > index
                     ? Component.translatable(
                     "gui.createcityexpansioncore.development.animation.done", checks[index])
@@ -3492,7 +3545,7 @@ private String managementTabName(int tab) {
                     left + 150, overlayTop + 150, 0xFFFFFFFF);
             graphics.drawCenteredString(this.font, Component.translatable(
                             "gui.createcityexpansioncore.development.reward_capacity", 1, 2),
-                    left + 150, overlayTop + 171, 0xFFD09A3A);
+                    left + 150, overlayTop + 171, 0xFFB78A43);
         }
     }
 
@@ -3515,9 +3568,9 @@ private String managementTabName(int tab) {
         for (int i = 0; i < pages.length; i++) {
             int x = left + i * pageWidth;
             graphics.fill(x, bodyTop + RAIL_PAGE_TOP, x + pageWidth - 3, bodyTop + RAIL_PAGE_TOP + RAIL_PAGE_H,
-                    this.railwayPage == i ? 0xFF4A3A20 : 0xFF292F31);
+                    this.railwayPage == i ? 0xFF4A3A20 : 0xFF222C30);
             graphics.renderOutline(x, bodyTop + RAIL_PAGE_TOP, pageWidth - 3, RAIL_PAGE_H,
-                    this.railwayPage == i ? 0xFFD09A3A : 0xFF596064);
+                    this.railwayPage == i ? 0xFFB78A43 : 0xFF596064);
             graphics.drawCenteredString(this.font, pages[i], x + (pageWidth - 3) / 2,
                     bodyTop + RAIL_PAGE_TOP + 5,
                     this.railwayPage == i ? 0xFFFFE0A6 : 0xFFB8C0C2);
@@ -3535,7 +3588,7 @@ private String managementTabName(int tab) {
         int top = body.top();
         List<RailwayOwnershipSnapshot> owned=this.menu.getRailwayOwnership();
         if(!owned.isEmpty()){
-            int y=top+RAIL_ROW_TOP,end=Math.min(owned.size(),3);for(int i=0;i<end;i++){var network=owned.get(i);int color=network.onlineSections()==network.sections()?0xFF77B992:0xFFD07968;graphics.fill(left,y,left+CONTENT_WIDTH,y+35,0xFF292F31);graphics.fill(left,y,left+3,y+35,color);graphics.drawString(this.font,network.name(),left+9,y+4,0xFFE6E9EA,false);graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_summary",network.sections(),network.onlineSections(),String.format(java.util.Locale.ROOT,"%.0f",network.totalLength())),left+9,y+15,0xFFAEB8BB,false);graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_access_tariff",Component.translatable("gui.createcityexpansioncore.railway.access."+network.access().name().toLowerCase()),network.freightTariff()),left+9,y+25,0xFFD09A3A,false);y+=39;for(var section:this.menu.getRailwayOwnedSections().stream().filter(s->s.networkId().equals(network.networkId())).limit(2).toList()){graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.section_summary",section.sectionId().toString().substring(0,8),String.format(java.util.Locale.ROOT,"%.0f",section.length()),Component.translatable("gui.createcityexpansioncore.railway.section_status."+section.status().name().toLowerCase())),left+12,y,section.status()==RailwayOwnershipTypes.SectionStatus.ONLINE?0xFF77B992:0xFFD07968,false);y+=12;}}
+            int y=top+RAIL_ROW_TOP,end=Math.min(owned.size(),3);for(int i=0;i<end;i++){var network=owned.get(i);int color=network.onlineSections()==network.sections()?0xFF77B992:0xFFD07968;graphics.fill(left,y,left+CONTENT_WIDTH,y+35,0xFF222C30);graphics.fill(left,y,left+3,y+35,color);graphics.drawString(this.font,network.name(),left+9,y+4,0xFFE6E9EA,false);graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_summary",network.sections(),network.onlineSections(),String.format(java.util.Locale.ROOT,"%.0f",network.totalLength())),left+9,y+15,0xFFAEB8BB,false);graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_access_tariff",Component.translatable("gui.createcityexpansioncore.railway.access."+network.access().name().toLowerCase()),network.freightTariff()),left+9,y+25,0xFFB78A43,false);y+=39;for(var section:this.menu.getRailwayOwnedSections().stream().filter(s->s.networkId().equals(network.networkId())).limit(2).toList()){graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.railway.section_summary",section.sectionId().toString().substring(0,8),String.format(java.util.Locale.ROOT,"%.0f",section.length()),Component.translatable("gui.createcityexpansioncore.railway.section_status."+section.status().name().toLowerCase())),left+12,y,section.status()==RailwayOwnershipTypes.SectionStatus.ONLINE?0xFF77B992:0xFFD07968,false);y+=12;}}
             graphics.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.railway.ownership_hint"),left,railActionY(body)-34,CONTENT_WIDTH,0xFF8F9A9E);return;
         }
         long availableStations = this.menu.getRailwayStations().stream()
@@ -3554,7 +3607,7 @@ private String managementTabName(int tab) {
                 availableStations, missingStations == 0 ? 0xFF77B992 : 0xFFD07968);
         renderRailMetric(graphics, left, y + 38,
                 Component.translatable("gui.createcityexpansioncore.railway.lines_count"),
-                this.menu.getRailwayLines().size(), 0xFFD09A3A);
+                this.menu.getRailwayLines().size(), 0xFFB78A43);
         renderRailMetric(graphics, left, y + 76,
                 Component.translatable("gui.createcityexpansioncore.railway.trains_running"),
                 runningTrains, 0xFF70A9C0);
@@ -3570,7 +3623,7 @@ private String managementTabName(int tab) {
 
     private void renderRailMetric(GuiGraphics graphics, int x, int y,
                                   Component label, long value, int color) {
-        graphics.fill(x, y, x + CONTENT_WIDTH, y + 31, 0xFF292F31);
+        graphics.fill(x, y, x + CONTENT_WIDTH, y + 31, 0xFF222C30);
         graphics.fill(x, y, x + 3, y + 31, color);
         graphics.drawString(this.font, label, x + 12, y + 5, 0xFFB7C0C3, false);
         graphics.drawString(this.font, Long.toString(value), x + 12, y + 17, color, false);
@@ -3585,7 +3638,7 @@ private String managementTabName(int tab) {
             RailwayLineSnapshot line = lines.get(i);
             int y = top + RAIL_ROW_TOP + (i - this.railwayScroll) * 32;
             boolean hovered = inside(mouseX, mouseY, left, y, CONTENT_WIDTH, 28);
-            graphics.fill(left, y, left + CONTENT_WIDTH, y + 28, hovered ? 0xFF343C3F : 0xFF292F31);
+            graphics.fill(left, y, left + CONTENT_WIDTH, y + 28, hovered ? 0xFF343C3F : 0xFF222C30);
             graphics.fill(left, y, left + 3, y + 28, railStatusColor(line.statusKey()));
             graphics.drawString(this.font, line.name(), left + 9, y + 4, 0xFFE6E9EA, false);
             graphics.drawString(this.font, Component.translatable(
@@ -3620,7 +3673,7 @@ private String managementTabName(int tab) {
 
     private void renderRailTrainRow(GuiGraphics graphics, int left, int y, RailwayTrainSnapshot train) {
         CcecStatusUi.observe(train.fleetTrainId(),train.uiStatus());
-        graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
+        graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF222C30);
         graphics.fill(left, y, left + 3, y + 27, CcecStatusUi.color(train.uiStatus()));
         graphics.drawString(this.font, train.name(), left + 9, y + 4,
                 train.cityOwned() ? 0xFFE6E9EA : 0xFF9AA5A9, false);
@@ -3643,18 +3696,18 @@ private String managementTabName(int tab) {
                 : train.activeLineId() == null
                 ? Component.translatable("gui.createcityexpansioncore.railway.assign")
                 : Component.translatable("gui.createcityexpansioncore.railway.unassign");
-        graphics.drawString(this.font, action, left + CONTENT_WIDTH - 150, y + 9, 0xFFD09A3A, false);
+        graphics.drawString(this.font, action, left + CONTENT_WIDTH - 150, y + 9, 0xFFB78A43, false);
         if (train.cityOwned()) graphics.drawString(this.font, "×", left + RAIL_CLOSE_X, y + 9, 0xFFD07872, false);
     }
 
     private void renderRailTrainCandidateRow(GuiGraphics graphics, int left, int y, RailwayTrainCandidate candidate) {
         CcecStatus status = CcecStatusResolver.unregisteredTrain();
-        graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
+        graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF222C30);
         graphics.fill(left, y, left + 3, y + 27, CcecStatusUi.color(status));
         graphics.drawString(this.font, candidate.name(), left + 9, y + 4, 0xFFE6E9EA, false);
         graphics.drawString(this.font, CcecStatusUi.title(status), left + 9, y + 15, 0xFFAEB8BB, false);
         graphics.drawString(this.font, CcecStatusUi.action(status), left + CONTENT_WIDTH - 150, y + 9,
-                candidate.canManage() ? 0xFFD09A3A : 0xFF6E777A, false);
+                candidate.canManage() ? 0xFFB78A43 : 0xFF6E777A, false);
     }
 
     private void renderRailTrains(GuiGraphics graphics, int left, CityPylonUiLayout.ManagementBody body, int mouseX, int mouseY) {
@@ -3704,7 +3757,7 @@ private String managementTabName(int tab) {
         for (int i = this.railwayScroll; i < end; i++) {
             RailwayStationSnapshot station = stations.get(i);
             int y = top + RAIL_ROW_TOP + (i - this.railwayScroll) * 31;
-            graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF292F31);
+            graphics.fill(left, y, left + CONTENT_WIDTH, y + 27, 0xFF222C30);
             graphics.fill(left, y, left + 3, y + 27,
                     station.available() ? 0xFF77B992 : 0xFFD07872);
             graphics.drawString(this.font, station.name(), left + 9, y + 4,
@@ -3719,7 +3772,7 @@ private String managementTabName(int tab) {
                             : station.cityOwned()
                             ? Component.translatable("gui.createcityexpansioncore.railway.change_type_short")
                             : Component.translatable("gui.createcityexpansioncore.railway.attach"),
-                    left + CONTENT_WIDTH - 150, y + 9, 0xFFD09A3A, false);
+                    left + CONTENT_WIDTH - 150, y + 9, 0xFFB78A43, false);
             if (station.cityOwned() && station.linkedProjectId() != null) {
                 graphics.drawString(this.font, Component.translatable(
                                 "gui.createcityexpansioncore.railway.project_linked_short"),
@@ -3738,7 +3791,7 @@ private String managementTabName(int tab) {
                                        RailwayTrainSnapshot train, int mouseX, int mouseY) {
         int panelTop = body.top() + RAIL_ROW_TOP;
         int panelBottom = railDetailBottom(body);
-        graphics.fill(left, panelTop, left + CONTENT_WIDTH, panelBottom, 0xFF292F31);
+        graphics.fill(left, panelTop, left + CONTENT_WIDTH, panelBottom, 0xFF222C30);
         CcecStatusUi.observe(train.fleetTrainId(),train.uiStatus());
         graphics.fill(left, panelTop, left + 4, panelBottom, CcecStatusUi.color(train.uiStatus()));
         graphics.drawString(this.font, train.name(), left + 12, panelTop + 7, 0xFFFFFFFF, false);
@@ -3787,7 +3840,7 @@ private String managementTabName(int tab) {
                                          RailwayStationSnapshot station, int mouseX, int mouseY) {
         int panelTop = body.top() + RAIL_ROW_TOP;
         int panelBottom = railDetailBottom(body);
-        graphics.fill(left, panelTop, left + CONTENT_WIDTH, panelBottom, 0xFF292F31);
+        graphics.fill(left, panelTop, left + CONTENT_WIDTH, panelBottom, 0xFF222C30);
         graphics.fill(left, panelTop, left + 4, panelBottom,
                 station.available() ? 0xFF77B992 : 0xFFD07872);
         graphics.drawString(this.font, station.name(), left + 12, panelTop + 7, 0xFFFFFFFF, false);
@@ -3839,7 +3892,7 @@ private String managementTabName(int tab) {
                                   Component label, int mouseX, int mouseY) {
         boolean hovered = inside(mouseX, mouseY, x, y, width, 22);
         graphics.fill(x, y, x + width, y + 22, hovered ? 0xFF4A3A20 : 0xFF303638);
-        graphics.renderOutline(x, y, width, 22, hovered ? 0xFFD09A3A : 0xFF596064);
+        graphics.renderOutline(x, y, width, 22, hovered ? 0xFFB78A43 : 0xFF596064);
         graphics.drawCenteredString(this.font, label, x + width / 2, y + 7,
                 hovered ? 0xFFFFE0A6 : 0xFFD3D8DA);
     }
@@ -4049,7 +4102,7 @@ private String managementTabName(int tab) {
     private void renderEconomy(GuiGraphics graphics,int left,int top,int mouseX,int mouseY){
         EconomyStatePayload state=this.menu.getEconomyState();
         if(state==null){graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.economy.loading"),left,top+32,0xFFB7C0C3,false);return;}
-        if(!state.unlocked()){graphics.fill(left,top+29,left+CONTENT_WIDTH,top+139,0xCC171D20);graphics.drawCenteredString(this.font,Component.translatable("gui.createcityexpansioncore.economy.locked"),left+CONTENT_WIDTH/2,top+45,0xFFD09A3A);graphics.drawCenteredString(this.font,Component.translatable("gui.createcityexpansioncore.economy.locked_hint"),left+CONTENT_WIDTH/2,top+63,0xFF9CA6A9);graphics.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.economy.locked_action"),left+28,top+84,CONTENT_WIDTH-56,0xFFB7C0C3);return;}
+        if(!state.unlocked()){graphics.fill(left,top+29,left+CONTENT_WIDTH,top+139,0xCC171D20);graphics.drawCenteredString(this.font,Component.translatable("gui.createcityexpansioncore.economy.locked"),left+CONTENT_WIDTH/2,top+45,0xFFB78A43);graphics.drawCenteredString(this.font,Component.translatable("gui.createcityexpansioncore.economy.locked_hint"),left+CONTENT_WIDTH/2,top+63,0xFF9CA6A9);graphics.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.economy.locked_action"),left+28,top+84,CONTENT_WIDTH-56,0xFFB7C0C3);return;}
         graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.economy.wallet",formatCount(state.wallet())),left,top+23,0xFFB7C0C3,false);
         graphics.drawString(this.font,Component.translatable("gui.createcityexpansioncore.economy.treasury",formatCount(state.treasury()),formatCount(state.treasuryEscrow())),left+145,top+23,0xFFB7C0C3,false);
         renderEconomyButton(graphics,left+CONTENT_WIDTH-128,top+19,100,Component.translatable("gui.createcityexpansioncore.market.open"),mouseX,mouseY);
@@ -4104,7 +4157,7 @@ private String managementTabName(int tab) {
     private void renderEconomyCard(GuiGraphics g,int x,int y,int width,EconomyEntry entry,boolean selected,int mouseX,int mouseY){
         boolean hover=inside(mouseX,mouseY,x,y,width,MARKET_ROW_H);
         g.fill(x,y,x+width,y+MARKET_ROW_H,selected?0xFF26323A:(hover?0xFF242C31:0xFF20272B));
-        if(selected)g.renderOutline(x,y,width,MARKET_ROW_H,0xFFD09A3A);
+        if(selected)g.renderOutline(x,y,width,MARKET_ROW_H,0xFFB78A43);
 
         ItemStack icon=economyIcon(entry.item());
         g.renderItem(icon,x+4,y+3);
@@ -4274,7 +4327,7 @@ private String managementTabName(int tab) {
                 x+4,y+47,0xFFAEB8BB,false);
         double progress=c.amount()<=0?0.0:Math.min(1.0,(double)c.delivered()/c.amount());
         g.fill(x+4,y+58,x+width-4,y+62,0xFF30383C);
-        g.fill(x+4,y+58,x+4+(int)Math.round((width-8)*progress),y+62,0xFFD09A3A);
+        g.fill(x+4,y+58,x+4+(int)Math.round((width-8)*progress),y+62,0xFFB78A43);
         g.drawString(this.font,ellipsize(Component.translatable("gui.createcityexpansioncore.economy.journey.contract."+c.state().name().toLowerCase(java.util.Locale.ROOT)),inner),
                 x+4,y+66,economyStateColor(c.state().name()),false);
         g.drawWordWrap(this.font,ellipsize(economyNextStep(entry),inner*2),x+4,y+78,inner,0xFFB7C0C3);
@@ -4301,7 +4354,7 @@ private String managementTabName(int tab) {
         int textX=left+15,textW=CONTENT_WIDTH-30;
         int contentBottom=buttonY-6;
         g.fill(left+3,overlayTop,left+CONTENT_WIDTH-3,overlayBottom,0xF51A2125);
-        g.renderOutline(left+3,overlayTop,CONTENT_WIDTH-6,overlayBottom-overlayTop,0xFFD09A3A);
+        g.renderOutline(left+3,overlayTop,CONTENT_WIDTH-6,overlayBottom-overlayTop,0xFFB78A43);
 
         /*
          * Справка не обрезается: если текст не влез — он прокручивается
@@ -4375,7 +4428,7 @@ private String managementTabName(int tab) {
                 RailwayStationSnapshot station=this.menu.getRailwayStations().stream().filter(candidate->candidate.registrationId().equals(value.stationId())).findFirst().orElse(null);
                 Component stationText=station==null?Component.translatable("gui.createcityexpansioncore.economy.infrastructure.station_missing"):Component.translatable("gui.createcityexpansioncore.economy.infrastructure.station",station.name());
                 Component detail=value.lastError()==com.example.examplemod.economy.EconomyTypes.IntakeAttributionError.NONE?stationText:Component.translatable("status.createcityexpansioncore.economy.intake_error."+value.lastError().name().toLowerCase());
-                g.drawString(this.font,detail,left+10,y+26,value.lastError()==com.example.examplemod.economy.EconomyTypes.IntakeAttributionError.NONE?(station==null?0xFFD09A3A:0xFFB7C0C3):0xFFD07872,false);
+                g.drawString(this.font,detail,left+10,y+26,value.lastError()==com.example.examplemod.economy.EconomyTypes.IntakeAttributionError.NONE?(station==null?0xFFB78A43:0xFFB7C0C3):0xFFD07872,false);
                 boolean stationAvailable=!eligibleFreightStations().isEmpty();
                 if(stationAvailable)renderEconomyButton(g,left+CONTENT_WIDTH-84,y+15,78,Component.translatable(value.stationId()==null?"gui.createcityexpansioncore.economy.infrastructure.assign_station":"gui.createcityexpansioncore.economy.infrastructure.change_station"),mouseX,mouseY);
             }else if(!value.cityOwned())renderEconomyButton(g,left+CONTENT_WIDTH-76,y+9,70,Component.translatable("gui.createcityexpansioncore.economy.infrastructure.attach"),mouseX,mouseY);
@@ -4415,7 +4468,7 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
     private void openEconomyCreate(EconomyCreateScreen.Mode mode){if(this.minecraft!=null&&this.menu.getEconomyState()!=null)this.minecraft.setScreen(new EconomyCreateScreen(this,mode,this.menu.getPylonPos(),this.menu.getEconomyState()));}
     private List<EconomyEntry> economyVisibleEntries(EconomyStatePayload state){List<EconomyEntry> result=new ArrayList<>();for(var c:state.contracts())if(economyPage==0||c.mine()||c.issuerMine())result.add(new EconomyEntry(c.id(),false,c.itemId(),c,null));for(var l:state.listings())if(economyPage==0||l.mine())result.add(new EconomyEntry(l.id(),true,l.itemId(),null,l));String query=economySearch==null?"":economySearch.getValue().trim().toLowerCase(java.util.Locale.ROOT);if(!query.isEmpty())result.removeIf(e->{ResourceLocation requested=e.contract()!=null?null:e.listingView().requestItemId();String text=e.item()+" "+economyIcon(e.item()).getHoverName().getString()+" "+(requested==null?"":economyIcon(requested).getHoverName().getString()+" ")+(e.contract()!=null?e.contract().title()+" "+e.contract().issuerName():e.listingView().creatorName()+" "+e.listingView().meeting());return!text.toLowerCase(java.util.Locale.ROOT).contains(query);});if(economySort==0)java.util.Collections.reverse(result);else if(economySort==1)result.sort(java.util.Comparator.comparingLong(e->e.contract()!=null?e.contract().reward():e.listingView().price()));else result.sort(java.util.Comparator.comparingLong(e->e.contract()!=null&&e.contract().deadlineAt()>0?e.contract().deadlineAt():Long.MAX_VALUE));return result;}
     private static ItemStack economyIcon(ResourceLocation id){var item=BuiltInRegistries.ITEM.get(id);return new ItemStack(item);}
-    private static int economyStateColor(String name){return name.equals("COMPLETED")||name.equals("DELIVERED")?0xFF77B992:name.equals("FAILED")||name.equals("DISPUTED")?0xFFD07872:0xFFD09A3A;}
+    private static int economyStateColor(String name){return name.equals("COMPLETED")||name.equals("DELIVERED")?0xFF77B992:name.equals("FAILED")||name.equals("DISPUTED")?0xFFD07872:0xFFB78A43;}
     private record EconomyEntry(UUID id,boolean listing,ResourceLocation item,EconomyStatePayload.ContractView contract,EconomyStatePayload.ListingView listingView){}
 
 
@@ -4435,7 +4488,7 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
             CityMember.Role role = roleId >= 0 && roleId < roles.length
                     ? roles[roleId]
                     : CityMember.Role.RESIDENT;
-            members.add(new CityMember(entry.playerId(), role));
+            members.add(new CityMember(entry.playerId(), role, entry.displayName()));
         }
         this.menu.replaceMembers(members);
         // The section is redrawn from the menu every frame, so a fresh list and a reset
@@ -4494,14 +4547,12 @@ private void performEconomyAction(EconomyEntry entry){EconomyCommandPayload.Acti
          * должны предлагать claim от имени города. Право приходит с
          * сервера вместе с состоянием города.
          */
-        boolean mapIsInteractive = this.minecraft != null && this.minecraft.screen == this
-                && this.menu.hasCity() && this.menu.canManageTerritory();
         /*
          * Ссылка на метод, а не новая лямбда каждый тик: setPlotClaimRequest
          * сравнивает по ссылке и пересчитывает фронтир доступных участков
          * только при реальном изменении права, а не 20 раз в секунду.
          */
-        this.mapPanel.setPlotClaimRequest(mapIsInteractive ? this.plotClaimHandler : null);
+        refreshMapClaimAccess();
         if (this.showTerritory) {
             CityBoundaryRenderer.setVisible(
                     true, ownTerritoryPlots(), this.menu.getColorRgb());

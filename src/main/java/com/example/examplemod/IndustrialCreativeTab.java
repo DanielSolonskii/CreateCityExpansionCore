@@ -125,7 +125,10 @@ public final class IndustrialCreativeTab {
             CreateCityExpansionCore.CONTRACT_INTAKE_ITEM.get(),
             CreateCityExpansionCore.CONTRACT_DISPATCH_TERMINAL_ITEM.get(),
             CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get(),
-            CreateCityExpansionCore.RAILWAY_TRACK_MARKER_ITEM.get()
+            CreateCityExpansionCore.RAILWAY_TRACK_MARKER_ITEM.get(),
+            // Загрузчик чанка держит удалённый завод живым, поэтому идёт сразу за разметкой пути:
+            // это инфраструктура, которой в первую очередь пользуется железнодорожная сеть.
+            CreateCityExpansionCore.CHUNK_LOADER_ITEM.get()
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(

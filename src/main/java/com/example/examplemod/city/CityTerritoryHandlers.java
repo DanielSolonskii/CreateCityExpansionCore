@@ -74,7 +74,7 @@ public final class CityTerritoryHandlers {
             result = manager.claimPlot(city, request.plot(), player.getUUID());
         }
         LOGGER.info("Claim request from {}: pylon={} plot=({},{}) result={}",
-                player.getName().getString(), request.pylonPos(),
+                com.example.examplemod.auth.PlayerNames.name(player), request.pylonPos(),
                 request.plotX(), request.plotZ(), result);
 
         if (result.success()) {
@@ -159,29 +159,21 @@ public final class CityTerritoryHandlers {
      * пилона не применяется, а фильтр по членству — да.
      */
     public static void requestTerritories(ServerPlayer player, RequestCityTerritoriesPayload request) {
-        if (!(player.containerMenu instanceof CityPylonMenu menu)
-                || !menu.getPylonPos().equals(request.pylonPos())) {
-            LOGGER.info(
-                    "Territory request refused: menu={} requested={}",
-                    player.containerMenu instanceof CityPylonMenu ? "other pylon" : "not a pylon menu",
-                    request.pylonPos());
-            return;
-        }
-        ResourceLocation dimension = player.serverLevel().dimension().location();
-        if (!dimension.equals(menu.getDimensionId())) {
-            LOGGER.info("Territory request refused: dimension {} vs menu {}",
-                    dimension, menu.getDimensionId());
-            return;
-        }
-        City city = CityManager.get(player.getServer().overworld())
-                .getCityByPylon(dimension, request.pylonPos());
-        LOGGER.info("Territory request accepted: pylon={} dimension={} city={} plots={}",
-                request.pylonPos(), dimension,
-                city != null ? city.getName() : "none",
-                city != null ? city.getClaimedPlotCount() : 0);
-        sendTerritories(player, city);
+        CityManager cities=CityManager.get(player.getServer().overworld());
+        City city=cities.getMemberCity(player.getUUID());
+        boolean menuMatches=player.containerMenu instanceof CityPylonMenu menu
+                &&menu.getPylonPos().equals(request.pylonPos())
+                &&menu.getDimensionId().equals(player.serverLevel().dimension().location());
+        boolean memberMatches=city!=null&&city.getPylonPos().equals(request.pylonPos())
+                &&city.getPylonDimension().equals(player.serverLevel().dimension().location());
+        if(!menuMatches&&!memberMatches)return;
+        if(menuMatches)city=cities.getCityByPylon(player.serverLevel().dimension().location(),request.pylonPos());
+        var budget=player.getPersistentData();long now=net.minecraft.Util.getMillis();
+        long previous=budget.getLong("CCECTerritoryRefresh");
+        if(now>=previous&&now-previous<500)return;
+        budget.putLong("CCECTerritoryRefresh",now);
+        sendTerritories(player,city,request.center(),request.range());
     }
-
     /**
      * Отправляет игроку снимок территорий для его карты.
      *
@@ -200,9 +192,12 @@ public final class CityTerritoryHandlers {
      * его территории тому, кто просто знает, куда позвать.
      */
     public static void sendTerritories(ServerPlayer player, City ownCity) {
+        sendTerritories(player,ownCity,null,CityPylonBlock.MAP_PEER_RANGE);
+    }
+    private static void sendTerritories(ServerPlayer player,City ownCity,BlockPos center,int range) {
         if (ownCity != null && !ownCity.hasMember(player.getUUID())) {
             LOGGER.info("Territory snapshot refused: {} is not a member of {}",
-                    player.getName().getString(), ownCity.getName());
+                    com.example.examplemod.auth.PlayerNames.name(player), ownCity.getName());
             return;
         }
         BlockPos pylonPos = player.containerMenu instanceof CityPylonMenu menu
@@ -232,7 +227,7 @@ public final class CityTerritoryHandlers {
 
         var peers = new ArrayList<CityMapPeersPayload.Peer>(CityMapPeersPayload.MAX_PEERS);
         for (CityManager.CityTerritoryView view : CityManager.get(player.getServer().overworld())
-                .territoryViews(dimension, pylonPos, CityPylonBlock.MAP_PEER_RANGE,
+                .territoryViews(dimension, center==null?pylonPos:center, range,
                         ownCityId, isMaster)) {
             peers.add(new CityMapPeersPayload.Peer(
                     view.cityId(), view.name(), view.pylonX(), view.pylonZ(),

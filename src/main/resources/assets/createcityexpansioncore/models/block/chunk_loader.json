@@ -1,0 +1,7 @@
+{
+  "_comment": "Placeholder texture. A dedicated chunk_loader.png is not shipped yet, so this points at vanilla copper so the model resolves instead of showing the missing-texture checker. Replace with createcityexpansioncore:block/chunk_loader once art exists.",
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "minecraft:block/copper_block"
+  }
+}

@@ -39,6 +39,23 @@ public final class CityInviteSearchCheck {
     }
 
     public static void main(String[] args) throws Exception {
+        var names = new net.minecraft.nbt.CompoundTag();
+        UUID namedId = UUID.randomUUID();
+        names.putString(namedId.toString(), "moorgull");
+        names.putString(UUID.randomUUID().toString(), "cs0123456789abcd");
+        names.putString("bad-id", "drannch1k");
+        var restoredNames = com.example.examplemod.auth.PlayerNames.load(names, net.minecraft.core.RegistryAccess.EMPTY);
+        var savedNames = restoredNames.save(new net.minecraft.nbt.CompoundTag(), net.minecraft.core.RegistryAccess.EMPTY);
+        require(savedNames.getString(namedId.toString()).equals("moorgull") && savedNames.getAllKeys().size() == 1,
+                "offline display names survive persistence; technical aliases and corrupt entries are ignored");
+        var roster = new com.example.examplemod.network.SyncCityMembersPayload(BlockPos.ZERO,
+                List.of(new com.example.examplemod.network.SyncCityMembersPayload.Entry(namedId, CityMember.Role.RESIDENT.ordinal(), "moorgull")));
+        var nameBuffer = new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(), net.minecraft.core.RegistryAccess.EMPTY);
+        try {
+            com.example.examplemod.network.SyncCityMembersPayload.STREAM_CODEC.encode(nameBuffer, roster);
+            require(com.example.examplemod.network.SyncCityMembersPayload.STREAM_CODEC.decode(nameBuffer).equals(roster),
+                    "member snapshot codec preserves nickname and stable UUID independently");
+        } finally { nameBuffer.release(); }
         // ------------------------------------------------------------------ case-insensitive matching
         require(CityInviteDirectory.matches("ste", "Steve"), "substring match, mixed case");
         require(CityInviteDirectory.matches("STE", "steve"), "case-insensitive both ways");
@@ -94,6 +111,8 @@ public final class CityInviteSearchCheck {
                 "SELF outranks every other state");
         require(CityInviteDirectory.stateOf(false, true, true, false) == CityPlayerSearchResultPayload.State.MEMBER_OF_OWN_CITY,
                 "membership outranks a stale invite for the same city");
+        require(CityInviteDirectory.stateOf(false, false, true, true) == CityPlayerSearchResultPayload.State.MEMBER_OF_OTHER_CITY,
+                "joining another city blocks resending an old invite");
 
         // --------------------------------------------------------------- the stale race the UI asked for
         // A row that said AVAILABLE, and a click that happens after the player joined another city,
@@ -137,6 +156,12 @@ public final class CityInviteSearchCheck {
         require(invite != null, "the pending invite is retrievable before it is resolved");
         require(invite.getInvokerId().equals(admin), "the invite remembers who sent it");
         require(invite.getPlayerId().equals(candidate1), "the invite remembers who it was sent to");
+        city.removeInvite(candidate1);
+        require(city.addInvite(candidate1, owner) == City.InviteResult.SENT,
+                "renewed invite can be sent again");
+        require(city.getInvites().size() == 1, "resending preserves exactly one invite");
+        require(city.getInvite(candidate1).getInvokerId().equals(owner),
+                "renewed invite attributes the response to the latest sender");
 
         // ------------------------------------------------- accept is idempotent and clears the invite
         city.acceptInvite(candidate1);
@@ -214,8 +239,8 @@ public final class CityInviteSearchCheck {
                 .resolve("src/main/java/com/example/examplemod/city/CityInviteDirectory.java"));
         require(directory.contains("LevelResource.PLAYER_DATA_DIR"),
                 "the roster reads the playerdata directory, which covers players with no city history");
-        require(directory.contains("server.getProfileCache().get(id)"),
-                "names come from the UUID-keyed in-memory profile cache");
+        require(directory.contains("PlayerNames.name(server, entry.getKey())"),
+                "names come from the server-owned identity resolver");
         require(!directory.contains("getProfileCache().get(String"),
                 "the network-capable profile lookup by name is never used");
         require(!directory.contains("lookupGameProfile"),
@@ -267,6 +292,15 @@ public final class CityInviteSearchCheck {
                 "search and click share one authoritative verdict");
         require(mod2.contains("city.addInvite("),
                 "the invite is created");
+        require(mod2.contains("if (resend) {\n                            city.removeInvite(targetId);")
+                        || mod2.contains("if (resend) {\r\n                            city.removeInvite(targetId);"),
+                "resending renews the pending record before creation");
+        int notificationStart = mod2.indexOf("new CityInviteNotificationPayload(", mod2.indexOf("InvitePlayerPayload.TYPE"));
+        String inviteNotification = mod2.substring(notificationStart, mod2.indexOf("CityInviteDirectory.reportResult(", notificationStart));
+        require(inviteNotification.contains("PlayerNames.name(serverPlayer)"),
+                "incoming invitation uses the verified game nickname");
+        require(!inviteNotification.replaceAll("\\s+", "").contains("serverPlayer.getName()"),
+                "incoming invitation cannot use the technical profile name");
         require(!mod2.contains("target == null"),
                 "the online target is only used for the immediate notification, never as a refusal");
         require(mod2.contains("if (target != null) {"),

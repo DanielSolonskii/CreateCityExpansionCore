@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.List;
 import java.util.Locale;
 
-public final class CityRelationsScreen extends Screen {
+public final class CityRelationsScreen extends CityPylonPageScreen {
     private final CityPylonScreen parent;
     private final CityPylonMenu menu;
     private EditBox search;

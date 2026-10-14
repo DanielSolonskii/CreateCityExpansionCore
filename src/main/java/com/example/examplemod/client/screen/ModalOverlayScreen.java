@@ -75,6 +75,11 @@ public abstract class ModalOverlayScreen extends Screen {
             int mouseY,
             float partialTick
     ) {
+        if (CityPylonWorkspace.isEmbedded(this)) {
+            guiGraphics.fill(0, 0, width, height, 0xFF192125);
+            renderModalContent(guiGraphics, mouseX, mouseY, partialTick);
+            return;
+        }
         boolean underlying = drawsUnderlyingScreen() && this.underlying != null;
 
         /*
@@ -82,8 +87,10 @@ public abstract class ModalOverlayScreen extends Screen {
          *    Он рисуется один раз и больше не перерисовывается.
          */
         if (underlying) {
-            this.underlying.render(guiGraphics, mouseX, mouseY, partialTick);
+            this.underlying.render(guiGraphics, -10000, -10000, partialTick);
         }
+        // Submit the parent's queued text/items before post-processing its framebuffer.
+        guiGraphics.flush();
 
         /*
          * 2. Blur применяется ко всему, что уже есть в кадре.
@@ -103,15 +110,24 @@ public abstract class ModalOverlayScreen extends Screen {
          * <p>Без родителя затемнение плотное: под панелью не должно читаться
          * ничего, иначе панель выглядит дырявой.
          */
-        guiGraphics.fill(
-                0,
-                0,
-                this.width,
-                this.height,
-                underlying ? 0xB0000000 : 0xF2101719
-        );
+        guiGraphics.pose().pushPose();
+        // Container labels/items/tooltips have their own positive Z offsets.
+        // Both the modal's opaque panels and its widgets must cover those layers.
+        guiGraphics.pose().translate(0.0F, 0.0F, 1000.0F);
+        try {
+            guiGraphics.fill(
+                    0,
+                    0,
+                    this.width,
+                    this.height,
+                    underlying ? 0xB0000000 : 0xF2101719
+            );
 
-        this.renderModalContent(guiGraphics, mouseX, mouseY, partialTick);
+            this.renderModalContent(guiGraphics, mouseX, mouseY, partialTick);
+            guiGraphics.flush();
+        } finally {
+            guiGraphics.pose().popPose();
+        }
     }
 
     /**

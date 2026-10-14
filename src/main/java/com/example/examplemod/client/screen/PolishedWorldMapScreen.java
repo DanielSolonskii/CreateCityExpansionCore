@@ -47,9 +47,9 @@ public final class PolishedWorldMapScreen extends Screen {
      * были независимые числа, рамка карты и подложка колонки отличались оттенком при одинаковой
      * роли, и это читалось как «колонка приклеена к карте», а не «прибор собран из частей».
      */
-    private static final int PANEL = 0xEC1B1E20;
-    private static final int PANEL_ALT = 0xF023282A;
-    private static final int FRAME = MapPalette.INK_SOFT;
+    private static final int PANEL = WorldMapChrome.SURFACE;
+    private static final int PANEL_ALT = WorldMapChrome.RAISED;
+    private static final int FRAME = WorldMapChrome.EDGE;
     private static final int ACCENT = MapPalette.OWN;
     private static final int TEXT = MapPalette.TEXT;
     private static final int MUTED = MapPalette.TEXT_MUTED;
@@ -72,8 +72,9 @@ public final class PolishedWorldMapScreen extends Screen {
      * готовности рисуется экран загрузки.
      */
     private CityMapPanel map;
-    /** Карта открыта по клавише: только просмотр, ничего не изменить. */
+    /** Legacy map management stays read-only by key; projects use their own membership-checked commands. */
     private final boolean readOnly;
+    private final ProjectPanel projectWorkspace = new ProjectPanel();
     private final ItemStack titleIcon = item("createcityexpansioncore:city_pylon");
     private final ItemStack cityIcon = item("createcityexpansioncore:city_pylon");
     private final ItemStack residentsIcon = item("minecraft:player_head");
@@ -84,7 +85,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private final ItemStack layersIcon = item("minecraft:map");
 
     /** Glyphs for the global actions; every one of them also carries a visible label when it fits. */
-    private static final String[] GLOBAL_GLYPHS = { "‹", "›", "⌖", "⌕", "▤", "!", "?", "×" };
+    private static final com.example.examplemod.client.map.ToolbarGlyph[] GLOBAL_GLYPHS = com.example.examplemod.client.map.ToolbarGlyph.values();
     private static final String[] GLOBAL_KEYS = {
             "gui.createcityexpansioncore.world_map.back",
             "gui.createcityexpansioncore.world_map.forward",
@@ -122,7 +123,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private int problemOffset;
     private int cardScroll, cardMaxScroll;
     private int guideScroll, guideMaxScroll;
-    private int layerScroll;
+    private int layerScroll,legendScroll,mouseXNow,mouseYNow;
     private String cardKey = "";
     private UUID followingTrain;
     private AtlasPreferences preferences;
@@ -130,7 +131,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private Runnable pendingMutation;
     private Component mutationTitle;
     private final List<WorldMapUiLayout.Rect> viewButtons = new ArrayList<>();
-    private static final String[] VIEW_KEYS = {"player", "fit", "follow", "pin", "measure", "overview", "grid", "retry"};
+    private static final String[] VIEW_KEYS = {"player", "fit", "follow", "pin", "measure", "overview", "grid", "retry", "player_profile"};
 
     /** Атлас из вкладки «Карта»: панель и данные — из открытого пилона. */
     public PolishedWorldMapScreen(CityPylonScreen parent) {
@@ -243,9 +244,10 @@ public final class PolishedWorldMapScreen extends Screen {
     @Override
     protected void init() {
         openingIdentityEditor = false;
+        com.example.examplemod.client.ProjectClientState.begin();
         ensurePanel();
         loadPreferences();
-        if (this.map != null) this.map.setGuiScale(1.0F);
+        if (this.map != null) { this.map.setGuiScale(1.0F); this.map.setDrawInternalControls(false); }
         applyMode(this.mode);
         requestSnapshots(true);
         this.tutorialTicks = tutorialSeen ? 0 : 220;
@@ -312,6 +314,8 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public void tick() {
+        if (!this.readOnly && this.parent != null) this.parent.refreshMapClaimAccess();
+        com.example.examplemod.client.ProjectClientState.tick();
         if (this.tutorialTicks > 0 && --this.tutorialTicks == 0) tutorialSeen = true;
         if (this.map == null) {
             /*
@@ -338,7 +342,8 @@ public final class PolishedWorldMapScreen extends Screen {
     }
 
     private void requestSnapshots(boolean includeMap) {
-        if (this.requestedDimension != null || com.example.examplemod.client.CityPublicDirectory.loading()) return;
+        if (this.requestedDimension != null) return;
+        if (com.example.examplemod.client.CityPublicDirectory.loading()) {requestVisibleTerritories();return;}
         if (!this.readOnly && this.data.getPylonPos() != null) PacketDistributor.sendToServer(
                 new com.example.examplemod.network.RequestCityDirectoryPayload(this.data.getDimensionId(), com.example.examplemod.network.RequestCityDirectoryPayload.NEW, 0));
         if (this.readOnly) {
@@ -350,6 +355,7 @@ public final class PolishedWorldMapScreen extends Screen {
              * не работали бы — они требуют открытое меню, которого у этого экрана нет.
              */
             PacketDistributor.sendToServer(new RequestCityWorldMapPayload());
+            requestVisibleTerritories();
             return;
         }
         PacketDistributor.sendToServer(RailwayCommandPayload.simple(
@@ -364,9 +370,16 @@ public final class PolishedWorldMapScreen extends Screen {
          * принимать. Периодический запрос делает данные устойчивыми и в
          * этом экране.
          */
-        PacketDistributor.sendToServer(new RequestCityTerritoriesPayload(this.data.getPylonPos()));
+        requestVisibleTerritories();
         if (includeMap) PacketDistributor.sendToServer(RailwayCommandPayload.simple(
                 this.data.getPylonPos(), RailwayCommandPayload.Action.REQUEST_MAP, null, null));
+    }
+
+    private void requestVisibleTerritories() {
+        if(this.map==null||this.data.getPylonPos()==null)return;
+        int range=(int)Math.ceil(Math.max(this.width,this.height)/Math.max(.0625,this.map.zoom())/2)+100;
+        PacketDistributor.sendToServer(new RequestCityTerritoriesPayload(this.data.getPylonPos(),
+                new net.minecraft.core.BlockPos((int)this.map.centerX(),0,(int)this.map.centerZ()),range));
     }
 
     private void syncMapData() {
@@ -474,6 +487,7 @@ public final class PolishedWorldMapScreen extends Screen {
      */
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        this.mouseXNow=mouseX;this.mouseYNow=mouseY;
         syncMapData();
         if (this.map == null) {
             renderLoading(graphics);
@@ -497,18 +511,24 @@ public final class PolishedWorldMapScreen extends Screen {
         int mapTop = layoutViewButtons(mapWidth);
         if (this.map.pinToolActive() || this.map.measureToolActive()) mapTop += this.font.wordWrapHeight(Component.translatable("gui.createcityexpansioncore.world_map.tool." + (this.map.pinToolActive() ? "pin" : "measure")), mapWidth) + NORMAL;
         int mapBottom = WorldMapUiLayout.statusStrip(this.width, this.height).y() - MICRO;
+        projectWorkspace.prepareMap(this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY);
+        this.map.setProjectFocus(projectWorkspace.open() && this.mode==Mode.CITIES,projectWorkspace.territoryPicking() && this.mode==Mode.CITIES);
+        this.map.setVisualOverlay(this.mode==Mode.CITIES && projectWorkspace.mapLayerVisible() && !modal ? projectWorkspace::renderMapLayer : null);
         this.map.render(graphics, mapLeft, mapTop, mapWidth, Math.max(1, mapBottom - mapTop), mouseX, mouseY);
         // 3-4: markers are inside the panel render above; 5-6: chrome and the context column.
         renderTitle(graphics);
         renderModeToolbar(graphics, mouseX, mouseY);
         renderActionToolbar(graphics, mouseX, mouseY);
         renderViewButtons(graphics, mouseX, mouseY);
-        renderContextCard(graphics);
+        if (!projectWorkspace.open() || this.mode != Mode.CITIES) { renderContextCard(graphics); renderModeLegend(graphics); }
         renderStatus(graphics, mouseX, mouseY);
         if (!modal) {
             if (this.layersOpen) renderLayers(graphics, mouseX, mouseY);
             if (this.searchOpen) renderSearchPanel(graphics, mouseX, mouseY);
         }
+        projectWorkspace.render(graphics,this.font,this.map,this.data.getDimensionId(),this.width,this.height,
+                WorldMapUiLayout.headerBottom(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL,
+                new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,partialTick,this.mode==Mode.CITIES && !modal && !this.layersOpen && !this.searchOpen);
         // 7-10: dim, tutorial target, modal surface and its widgets, then the tooltip last.
         super.render(graphics, mouseX, mouseY, partialTick);
         if (this.tutorialTicks > 0) renderTutorial(graphics);
@@ -548,14 +568,12 @@ public final class PolishedWorldMapScreen extends Screen {
             boolean selected = value == this.mode;
             boolean enabled = value.available();
             boolean hover = enabled && bounds.contains(mouseX, mouseY);
-            graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(),
-                    selected ? 0xFF4A391E : hover ? 0xFF303A3D : enabled ? PANEL_ALT : 0xFF1B2124);
-            if (selected) graphics.renderOutline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), ACCENT);
-            else if (hover) graphics.renderOutline(bounds.x(), bounds.y(), bounds.width(), bounds.height(), FRAME);
-            MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY; case RAILWAY -> AtlasGlyph.TRAIN; case LOGISTICS -> AtlasGlyph.FREIGHT; case ENERGY -> AtlasGlyph.ENERGY; }, bounds.x() + MICRO, bounds.y() + MICRO, enabled ? ACCENT : MUTED);
+            WorldMapChrome.control(graphics,bounds,selected,hover,enabled,false);
+            if(selected)graphics.fill(bounds.x()+NORMAL,bounds.bottom()-3,bounds.right()-NORMAL,bounds.bottom()-1,ACCENT);
+            MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY; case RAILWAY -> AtlasGlyph.TRAIN; case LOGISTICS -> AtlasGlyph.FREIGHT; case ENERGY -> AtlasGlyph.ENERGY; }, bounds.x() + MICRO, bounds.y() + (bounds.height()-16)/2, !enabled ? 0xFF667377 : selected ? ACCENT : TEXT);
             if (WorldMapUiLayout.modeTabsLabelled(this.width)) {
                 int labelColour = !enabled ? 0xFF6E787C : selected ? 0xFFFFD59A : TEXT;
-                graphics.drawString(this.font, value.label(), bounds.x() + MICRO + 16 + MICRO, bounds.y() + NORMAL + 1,
+                graphics.drawString(this.font, value.label(), bounds.x() + MICRO + 16 + MICRO, bounds.y() + (bounds.height()-8)/2,
                         labelColour, false);
             }
             Component hint = !enabled
@@ -577,34 +595,36 @@ public final class PolishedWorldMapScreen extends Screen {
             WorldMapUiLayout.Rect bounds = WorldMapUiLayout.globalButton(this.width, index, this.modeLabelWidths, this.globalLabelWidths);
             boolean active = (index == WorldMapUiLayout.GLOBAL_SEARCH && this.searchOpen)
                     || (index == WorldMapUiLayout.GLOBAL_LAYERS && this.layersOpen)
-                    || (index == WorldMapUiLayout.GLOBAL_PROBLEMS && this.problemCenterOpen);
+                    || (index == WorldMapUiLayout.GLOBAL_PROBLEMS && this.problemCenterOpen)
+                    || (index == WorldMapUiLayout.GLOBAL_HELP && this.guideOpen);
             boolean hover = bounds.contains(mouseX, mouseY);
             boolean enabled = (index != WorldMapUiLayout.GLOBAL_BACK || canGoBack())
                     && (index != WorldMapUiLayout.GLOBAL_FORWARD || canGoForward());
-            graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(),
-                    active ? 0xFF4A391E : hover ? 0xFF303A3D : PANEL_ALT);
-            graphics.renderOutline(bounds.x(), bounds.y(), bounds.width(), bounds.height(),
-                    active ? ACCENT : hover ? FRAME : 0xFF394245);
-            // The glyph occupies the reserved icon slot: centred in it when a label follows, centred
-            // in the whole button when it does not, so both forms look centred.
-            String glyph = GLOBAL_GLYPHS[index];
+            WorldMapChrome.control(graphics,bounds,active,hover,enabled,false);
+            if(index==2||index==5||index==7)graphics.vLine(bounds.x()-MICRO-1,bounds.y()+6,bounds.bottom()-6,FRAME);
+            if (enabled && (active || hover)) {
+                graphics.hLine(bounds.x() + 3, bounds.right() - 4, bounds.bottom() - 2, active ? ACCENT : 0xFF94704B);
+            }
             boolean labelled = WorldMapUiLayout.globalToolbarLabelled(this.width,
                     this.modeLabelWidths, this.globalLabelWidths);
-            int glyphX = labelled
-                    ? bounds.x() + MICRO + (16 - this.font.width(glyph)) / 2
-                    : bounds.x() + (bounds.width() - this.font.width(glyph)) / 2;
-            graphics.drawString(this.font, glyph, glyphX, bounds.y() + NORMAL + 1,
-                    enabled ? TEXT : 0xFF5E686C, false);
+            int glyphX = labelled ? bounds.x() + MICRO : bounds.x() + (bounds.width() - 16) / 2;
+            int glyphY = bounds.y() + (bounds.height() - 16) / 2;
+            int color = !enabled ? 0xFF566164 : active || hover ? ACCENT : TEXT;
+            var glyph = GLOBAL_GLYPHS[index];
+            for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++)
+                if (glyph.pixel(x, y)) graphics.fill(glyphX + x, glyphY + y, glyphX + x + 1, glyphY + y + 1, color);
             Component label = Component.translatable(GLOBAL_KEYS[index]);
             if (labelled) {
                 graphics.drawString(this.font, label, bounds.x() + MICRO + 16 + MICRO, bounds.y() + NORMAL + 1,
                         enabled ? TEXT : MUTED, false);
             }
             if (index == WorldMapUiLayout.GLOBAL_PROBLEMS && problems > 0) {
-                graphics.drawString(this.font, Integer.toString(problems), bounds.right() - 12,
-                        bounds.y() + NORMAL + 1, 0xFFFFA7A0, false);
+                graphics.fill(bounds.right() - 7, bounds.y() + 2, bounds.right() - 1, bounds.y() + 8, 0xFF171D20);
+                graphics.fill(bounds.right() - 6, bounds.y() + 3, bounds.right() - 2, bounds.y() + 7, 0xFFE8856B);
+                label = label.copy().append(": " + problems);
             }
             offerTooltip(label, hover);
+
         }
     }
 
@@ -631,11 +651,11 @@ public final class PolishedWorldMapScreen extends Screen {
     /** Railway classes in legend order; the swatches come from the same policy the map draws with. */
     private static List<CityMapPanel.RailClass> legendClasses() {
         return List.of(CityMapPanel.RailClass.OWN, CityMapPanel.RailClass.PUBLIC_FREE,
-                CityMapPanel.RailClass.PUBLIC_PAID, CityMapPanel.RailClass.PRIVATE);
+                CityMapPanel.RailClass.PUBLIC_PAID, CityMapPanel.RailClass.PRIVATE, CityMapPanel.RailClass.OFFLINE);
     }
 
     private int layersRowCount() {
-        return activeOverlays().size() + 3 + (this.mode == Mode.RAILWAY ? legendClasses().size() + 1 : 0);
+        return activeOverlays().size() + 2 + (VIEW_KEYS.length - 5) + (this.mode == Mode.RAILWAY ? legendClasses().size() + 1 : 0);
     }
 
     private void renderLayers(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -661,13 +681,19 @@ public final class PolishedWorldMapScreen extends Screen {
             offerTooltip(label, hover && panel.contains(mouseX, mouseY));
             graphics.drawString(this.font, count, bounds.right() - this.font.width(count) - MICRO, bounds.y() + 5, MUTED, false);
         }
+        for(int option=0;option<2;option++) {
+            var bounds=layerRow(row++);boolean hover=bounds.contains(mouseX,mouseY)&&panel.contains(mouseX,mouseY);
+            if(hover)graphics.fill(bounds.x(),bounds.y(),bounds.right(),bounds.bottom(),PANEL_ALT);
+            Component label=Component.translatable("gui.createcityexpansioncore.world_map."+(option==0?"territory_mode."+this.map.territoryMode():"plot_grid."+this.map.plotGrid()));
+            graphics.drawString(this.font,WorldMapChrome.fit(this.font,label,bounds.width()-12),bounds.x()+6,bounds.y()+5,TEXT,false);
+        }
         for (int index = 5; index < VIEW_KEYS.length; index++) {
             var bounds = layerRow(row++);
             boolean enabled = index == 5 && this.map.overviewVisible() || index == 6 && this.map.coordinateGrid();
             boolean hover = bounds.contains(mouseX, mouseY) && panel.contains(mouseX, mouseY);
             if (hover) graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), PANEL_ALT);
             Component label = Component.translatable("gui.createcityexpansioncore.world_map.view." + VIEW_KEYS[index]);
-            graphics.drawString(this.font, index == 7 ? "↻" : enabled ? "◆" : "◇", bounds.x() + MICRO, bounds.y() + 5, ACCENT, false);
+            graphics.drawString(this.font, index == 8 ? "▣" : index == 7 ? "↻" : enabled ? "◆" : "◇", bounds.x() + MICRO, bounds.y() + 5, ACCENT, false);
             graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), bounds.width() - 20), bounds.x() + 14, bounds.y() + 5, TEXT, false);
             offerTooltip(label, hover);
         }
@@ -742,50 +768,52 @@ public final class PolishedWorldMapScreen extends Screen {
     }
 
     /** "Сейчас важно": counts the player actually acts on, and a calm state when nothing is wrong. */
-    private void renderOverview(GuiGraphics graphics) {
-        int width = WorldMapUiLayout.contextPanelWidth(this.width);
-        int trains = this.data.getRailwayTrains().size();
-        int freightPoints = this.map.freightPointCount();
-        int discoveries = this.map.freightCandidateCount();
-        int problems = problemCount();
-        List<Component> facts = new ArrayList<>();
-        facts.add(Component.translatable("gui.createcityexpansioncore.world_map.overview.trains", trains));
-        facts.add(Component.translatable("gui.createcityexpansioncore.world_map.overview.freight_points", freightPoints));
-        if (discoveries > 0) facts.add(Component.translatable("gui.createcityexpansioncore.world_map.overview.discoveries", discoveries));
-        if (freightPoints == 0) facts.add(Component.translatable("gui.createcityexpansioncore.world_map.overview.start_freight"));
-        if (trains == 0) facts.add(Component.translatable("gui.createcityexpansioncore.world_map.overview.start_train"));
-        facts.add(problems > 0
-                ? Component.translatable("gui.createcityexpansioncore.world_map.overview.problems", problems)
-                : Component.translatable("gui.createcityexpansioncore.world_map.overview.calm"));
-        if (this.readOnly && this.data.getCityName().isBlank()) {
-            facts.clear();
-            facts.add(com.example.examplemod.client.CityPublicDirectory.loading()
-                    ? Component.translatable("gui.createcityexpansioncore.city.identity.public_loading")
-                    : Component.translatable("gui.createcityexpansioncore.city.identity.public_count", com.example.examplemod.client.CityPublicDirectory.profiles(this.data.getDimensionId()).size()));
-            facts.add(Component.translatable("gui.createcityexpansioncore.city.identity.public_hint"));
-        }
-        int factsHeight = 0;
-        for (Component fact : facts) factsHeight += this.font.wordWrapHeight(fact, width - LARGE) + MICRO;
-        int hintHeight = this.font.wordWrapHeight(Component.translatable("gui.createcityexpansioncore.world_map.overview.hint"), width - LARGE * 2);
-        int height = 30 + hintHeight + factsHeight + 8;
-        WorldMapUiLayout.Rect panel = WorldMapUiLayout.contextPanel(this.width, this.height, this.modeLabelWidths, this.globalLabelWidths, height);
-        this.cardX = panel.x(); this.cardY = panel.y();
-        this.cardWidth = panel.width(); this.cardHeight = panel.height();
-        if (!"overview".equals(this.cardKey)) { this.cardKey = "overview"; this.cardScroll = 0; }
-        this.cardMaxScroll = Math.max(0, height - panel.height());
-        this.cardScroll = Math.min(this.cardScroll, this.cardMaxScroll);
-        plate(graphics, panel.x(), panel.y(), panel.width(), panel.height());
-        graphics.renderOutline(panel.x(), panel.y(), panel.width(), panel.height(), FRAME);
-        graphics.enableScissor(panel.x() + 1, panel.y() + 1, panel.right() - 1, panel.bottom() - 1);
-        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.overview.title"),
-                panel.x() + LARGE, panel.y() + NORMAL - this.cardScroll, 0xFFFFD59A, false);
-        graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.world_map.overview.hint"), panel.x() + LARGE, panel.y() + NORMAL + 12 - this.cardScroll, width - LARGE * 2, MUTED);
-        int cursor = panel.y() + 30 + hintHeight - this.cardScroll;
-        for (Component fact : facts) {
-            graphics.drawWordWrap(this.font, fact, panel.x() + LARGE, cursor, width - LARGE, TEXT);
-            cursor += this.font.wordWrapHeight(fact, width - LARGE) + MICRO;
-        }
-        graphics.disableScissor();
+    private void renderOverview(GuiGraphics g) {
+        var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
+        this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
+        String key="overview:"+this.mode;
+        if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;}
+        int pad=WorldMapUiLayout.CARD_PADDING,x=panel.x()+pad,w=panel.width()-2*pad;
+        plate(g,panel.x(),panel.y(),panel.width(),panel.height());
+        g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
+        try {
+            g.drawString(this.font,WorldMapChrome.fit(this.font,this.mode.label(),w),x,panel.y()+pad,ACCENT,false);
+            g.drawString(this.font,WorldMapChrome.fit(this.font,Component.translatable("gui.createcityexpansioncore.world_map.polish.summary"),w),x,panel.y()+pad+15,TEXT,false);
+            int cursor=panel.y()+WorldMapUiLayout.CARD_HEADER-this.cardScroll;
+            List<CityMapPanel.Overlay> metrics=switch(this.mode) {
+                case CITIES->List.of(CityMapPanel.Overlay.CITIES,CityMapPanel.Overlay.TERRITORIES,CityMapPanel.Overlay.PROJECTS);
+                case RAILWAY->List.of(CityMapPanel.Overlay.TRACKS,CityMapPanel.Overlay.STATIONS,CityMapPanel.Overlay.TRAINS);
+                case LOGISTICS->List.of(CityMapPanel.Overlay.TRADE,CityMapPanel.Overlay.TRAINS,CityMapPanel.Overlay.CITIES);
+                case ENERGY->List.of();
+            };
+            var body=WorldMapUiLayout.cardBody(panel);
+            g.enableScissor(body.x(),body.y(),body.right(),body.bottom());
+            for(var metric:metrics) {
+                var r=new WorldMapUiLayout.Rect(x,cursor,w,WorldMapUiLayout.SUMMARY_ROW_HEIGHT);
+                WorldMapChrome.rounded(g,r.x(),r.y(),r.width(),r.height(),4,WorldMapChrome.INSET);
+                Component label=Component.translatable("gui.createcityexpansioncore.world_map.polish.metric."+metric.name().toLowerCase(Locale.ROOT));
+                g.drawString(this.font,WorldMapChrome.fit(this.font,label,w-48),x+8,cursor+11,MUTED,false);
+                String count=Integer.toString(this.map.overlayCount(metric));
+                g.drawString(this.font,count,x+w-8-this.font.width(count),cursor+11,TEXT,false);
+                cursor+=WorldMapUiLayout.SUMMARY_ROW_PITCH;
+            }
+            Component status=Component.translatable(problemCount()>0?"gui.createcityexpansioncore.world_map.overview.problems":"gui.createcityexpansioncore.world_map.overview.calm",problemCount());
+            g.drawWordWrap(this.font,status,x,cursor,w,problemCount()>0?MapPalette.ALERT:MapPalette.GOOD);
+            cursor+=this.font.wordWrapHeight(status,w)+SECTION;
+            Component hint=Component.translatable("gui.createcityexpansioncore.world_map.polish.empty."+this.mode.name().toLowerCase(Locale.ROOT));
+            g.drawWordWrap(this.font,hint,x,cursor,w,MUTED);
+            cursor+=this.font.wordWrapHeight(hint,w)+SECTION;
+            this.cardMaxScroll=Math.max(0,cursor+this.cardScroll-panel.bottom());
+            this.cardScroll=Math.min(this.cardScroll,this.cardMaxScroll);
+        }finally{g.disableScissor();g.disableScissor();}
+        renderCardScroll(g,panel);
+    }
+    private void renderCardScroll(GuiGraphics g,WorldMapUiLayout.Rect panel) {
+        if(this.cardMaxScroll<=0)return;
+        var track=WorldMapUiLayout.cardScrollTrack(panel);
+        var thumb=WorldMapUiLayout.cardScrollThumb(panel,this.cardScroll,this.cardMaxScroll);
+        g.fill(track.x(),track.y(),track.right(),track.bottom(),FRAME);
+        g.fill(thumb.x(),thumb.y(),thumb.right(),thumb.bottom(),ACCENT);
     }
 
     /**
@@ -793,95 +821,66 @@ public final class PolishedWorldMapScreen extends Screen {
      * facts that matter, and then at most one primary action plus its siblings. Raw ids and
      * coordinates are deliberately not part of the normal card.
      */
-    private void renderSelectionPanel(GuiGraphics graphics, CityMapPanel.Selection value, boolean pinned) {
-        var profile = value.kind() == CityMapPanel.SelectionKind.CITY ? com.example.examplemod.client.CityPublicDirectory.profile(value.id()) : null;
-        this.cardActions.clear();
-        if (pinned) { this.cardActions.addAll(contextActions(value)); this.cardActions.addAll(navigationActions(value)); }
-        int actionCount = this.cardActions.size();
-        int width = WorldMapUiLayout.contextPanelWidth(this.width);
-        int detailCount = pinned ? Math.min(6, value.details().size()) : Math.min(2, value.details().size());
-        int detailsHeight = 0;
-        for (int index = 0; index < detailCount; index++) {
-            detailsHeight += this.font.wordWrapHeight(value.details().get(index), width - LARGE) + MICRO;
-        }
-        int height = 46 + detailsHeight + (pinned ? 28 : 0)
-                + (actionCount > 0 ? MICRO * 2 + actionCount * 20 : 0);
-        if (profile != null) height += 28 + this.font.wordWrapHeight(Component.literal(profile.identity().description().isBlank() ? Component.translatable("gui.createcityexpansioncore.city.identity.no_description").getString() : profile.identity().description()), width - LARGE) + MICRO;
-        WorldMapUiLayout.Rect panel = WorldMapUiLayout.contextPanel(this.width, this.height,
-                this.modeLabelWidths, this.globalLabelWidths, height);
-        int x = panel.x(), y = panel.y();
-        String key = value.kind() + ":" + (value.id() == null ? value.pos().asLong() : value.id());
-        if (!key.equals(this.cardKey)) { this.cardScroll = 0; this.cardKey = key; }
-        this.cardMaxScroll = Math.max(0, height - panel.height());
-        this.cardScroll = Math.min(this.cardScroll, this.cardMaxScroll);
-        this.cardX = x; this.cardY = y; this.cardWidth = panel.width(); this.cardHeight = panel.height();
-        plate(graphics, x, y, panel.width(), panel.height());
-        graphics.renderOutline(x, y, panel.width(), panel.height(), pinned ? ACCENT : FRAME);
-        graphics.enableScissor(x + 1, y + 1, panel.right() - 1, panel.bottom() - 1);
+    private void renderSelectionPanel(GuiGraphics g,CityMapPanel.Selection value,boolean pinned) {
+        var profile=value.kind()==CityMapPanel.SelectionKind.CITY?com.example.examplemod.client.CityPublicDirectory.profile(value.id()):null;
+        this.cardActions.clear();if(pinned){this.cardActions.addAll(contextActions(value));this.cardActions.addAll(navigationActions(value));}
+        int pad=WorldMapUiLayout.CARD_PADDING;
+        var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
+        int x=panel.x()+pad,w=panel.width()-2*pad;
+        String key=value.kind()+":"+(value.id()==null?value.pos().asLong():value.id());
+        if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;}
+        this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
+        plate(g,panel.x(),panel.y(),panel.width(),panel.height());
+        g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
+        if(profile!=null)com.example.examplemod.client.map.CityEmblemRenderer.draw(g,profile.identity(),profile.colour(),x,panel.y()+pad,1);
+        else MapMarkerRenderer.renderCardIcon(g,x,panel.y()+pad,value.icon(),value.own(),value.warning());
+        int titleX=x+32;
+        g.drawString(this.font,WorldMapChrome.fit(this.font,value.title(),w-32),titleX,panel.y()+pad,TEXT,false);
+        g.drawString(this.font,WorldMapChrome.fit(this.font,selectionType(value),w-32),titleX,panel.y()+pad+15,value.own()?ACCENT:MUTED,false);
+        offerTooltip(value.title(),inside(this.mouseXNow,this.mouseYNow,titleX,panel.y()+pad,w-32,12));
+        g.hLine(x,x+w,panel.y()+WorldMapUiLayout.CARD_HEADER-7,FRAME);
+        var body=WorldMapUiLayout.cardBody(panel);
+        g.enableScissor(body.x(),body.y(),body.right(),body.bottom());
+        int cursor=panel.y()+WorldMapUiLayout.CARD_HEADER-this.cardScroll;
         try {
-        y -= this.cardScroll;
-        if (profile != null) com.example.examplemod.client.map.CityEmblemRenderer.draw(graphics, profile.identity(), profile.colour(), x + LARGE, y + LARGE - 2, 1);
-        else MapMarkerRenderer.renderCardIcon(graphics, x + LARGE, y + LARGE - 2, value.icon(), value.own(), value.warning());
-        graphics.drawString(this.font, this.font.plainSubstrByWidth(value.title().getString(), width - LARGE * 2 - 32), x + 32 + LARGE, y + NORMAL, TEXT, false);
-        graphics.drawString(this.font, selectionType(value), x + 32 + LARGE, y + NORMAL + 12,
-                value.own() ? 0xFFFFD59A : MUTED, false);
-        if (pinned) {
-            // Coordinates are a last-resort detail for a pinned selection only, never for hover.
-            graphics.drawString(this.font,
-                    Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",
-                            value.pos().getX(), value.pos().getZ()),
-                    x + 32 + LARGE, y + NORMAL + 23, MUTED, false);
-        }
-        int cursor = y + (pinned ? 46 : 38);
-        if (pinned) {
-            // Status band, derived from server-authoritative fields the selection already carries:
-            // a warning is the only thing that can override ownership.
-            boolean attention = value.warning();
-            int colour = attention ? MapPalette.ALERT : MUTED;
-            graphics.fill(x + LARGE, cursor, x + panel.width() - LARGE, cursor + 12,
-                    attention ? 0xFF4A2422 : value.own() ? 0xFF23382F : 0xFF2A3033);
-            graphics.drawString(this.font,
-                    Component.translatable("gui.createcityexpansioncore.world_map.context.status." + (attention ? "attention" : "clear")),
-                    x + LARGE + MICRO, cursor + 3, colour, false);
-            cursor += 14;
-            graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.context.owner." + (value.own() ? "own" : "foreign")), x + LARGE, cursor + 2, MUTED, false);
-            cursor += 14;
-        }
-        if (profile != null) {
-            graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.identity.residents", profile.residents()), x + LARGE, cursor, MUTED, false);
-            cursor += 14;
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(profile.dimension().getPath(), width - LARGE), x + LARGE, cursor, MUTED, false);
-            cursor += 14;
-            Component description = profile.identity().description().isBlank() ? Component.translatable("gui.createcityexpansioncore.city.identity.no_description") : Component.literal(profile.identity().description());
-            graphics.drawWordWrap(this.font, description, x + LARGE, cursor, width - LARGE, TEXT);
-            cursor += this.font.wordWrapHeight(description, width - LARGE) + MICRO;
-        }
-        for (int index = 0; index < detailCount; index++) {
-            Component detail = value.details().get(index);
-            graphics.drawWordWrap(this.font, detail, x + LARGE, cursor, width - LARGE, TEXT);
-            cursor += this.font.wordWrapHeight(detail, width - LARGE) + MICRO;
-        }
-        this.cardActionY = -1;
-        this.cardActionCount = 0;
-        if (actionCount == 0) {
-            if (!pinned) graphics.drawString(this.font,
-                    Component.translatable("gui.createcityexpansioncore.world_map.hover.details"),
-                    x + LARGE, cursor, 0xFFB89A68, false);
-            return;
-        }
-        graphics.hLine(x + LARGE, x + panel.width() - LARGE, cursor + 1, 0xFF6F542C);
-        int rowY = cursor + MICRO + 1;
-        this.cardActionY = rowY;
-        this.cardActionCount = actionCount;
-        for (int index = 0; index < actionCount; index++) {
-            int actionY = rowY + index * 20;
-            // The first action is the primary one, so it gets the accent instead of a flat row.
-            graphics.fill(x + LARGE, actionY, x + panel.width() - LARGE, actionY + 18,
-                    index == 0 ? 0xFF5A4522 : 0xFF3A4145);
-            graphics.drawCenteredString(this.font, this.font.plainSubstrByWidth(this.cardActions.get(index).getString(), panel.width() - LARGE * 2 - 8),
-                    x + panel.width() / 2, actionY + 5, TEXT);
-        }
-        } finally { graphics.disableScissor(); }
+            if(pinned) {
+                WorldMapChrome.rounded(g,x,cursor,w,WorldMapUiLayout.STATUS_HEIGHT,4,value.warning()?0xFF452D2B:0xFF263A33);
+                g.fill(x+7,cursor+8,x+11,cursor+12,value.warning()?MapPalette.ALERT:MapPalette.GOOD);
+                g.drawString(this.font,WorldMapChrome.fit(this.font,Component.translatable("gui.createcityexpansioncore.world_map.context.status."+(value.warning()?"attention":"clear")),w-24),x+17,cursor+7,value.warning()?0xFFE4A297:0xFFB3D1BE,false);
+                cursor+=WorldMapUiLayout.STATUS_HEIGHT+SECTION;
+                Component owner=Component.translatable("gui.createcityexpansioncore.world_map.context.owner."+(value.own()?"own":"foreign"));
+                g.drawString(this.font,WorldMapChrome.fit(this.font,owner,w),x,cursor,MUTED,false);cursor+=SECTION+4;
+            }
+            if(profile!=null) {
+                Component residents=Component.translatable("gui.createcityexpansioncore.city.identity.residents",profile.residents());
+                g.drawString(this.font,WorldMapChrome.fit(this.font,residents,w),x,cursor,MUTED,false);cursor+=SECTION+4;
+                Component description=profile.identity().description().isBlank()?Component.translatable("gui.createcityexpansioncore.city.identity.no_description"):Component.literal(profile.identity().description());
+                g.drawWordWrap(this.font,description,x,cursor,w,TEXT);cursor+=this.font.wordWrapHeight(description,w)+SECTION;
+            }
+            int count=pinned?value.details().size():Math.min(2,value.details().size());
+            for(int i=0;i<count;i++) {
+                Component fact=value.details().get(i);
+                g.drawWordWrap(this.font,fact,x,cursor,w,TEXT);
+                cursor+=this.font.wordWrapHeight(fact,w)+WorldMapUiLayout.FACT_GAP;
+            }
+            if(pinned) {
+                Component coords=Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",value.pos().getX(),value.pos().getZ());
+                g.drawString(this.font,WorldMapChrome.fit(this.font,coords,w),x,cursor,MUTED,false);cursor+=SECTION+4;
+            }
+            this.cardActionY=-1;this.cardActionCount=this.cardActions.size();
+            if(!this.cardActions.isEmpty()) {
+                cursor+=MICRO;this.cardActionY=cursor;
+                for(int i=0;i<this.cardActions.size();i++) {
+                    var action=WorldMapUiLayout.cardAction(panel,this.cardActionY,i);
+                    WorldMapChrome.control(g,action,false,action.contains(this.mouseXNow,this.mouseYNow),true,i==0);
+                    g.drawCenteredString(this.font,WorldMapChrome.fit(this.font,this.cardActions.get(i),action.width()-SECTION),action.x()+action.width()/2,action.y()+(action.height()-8)/2,TEXT);
+                }
+                cursor+=this.cardActions.size()*WorldMapUiLayout.ACTION_PITCH;
+            }else if(!pinned){g.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.world_map.hover.details"),x,cursor,w,ACCENT);cursor+=24;}
+            this.cardMaxScroll=Math.max(0,cursor+this.cardScroll+pad-panel.bottom());
+            this.cardScroll=Math.min(this.cardScroll,this.cardMaxScroll);
+        }finally{g.disableScissor();g.disableScissor();}
+        renderCardScroll(g,panel);
     }
 
     /**
@@ -1037,11 +1036,13 @@ public final class PolishedWorldMapScreen extends Screen {
         var strip = WorldMapUiLayout.statusStrip(this.width, this.height);
         plate(graphics, strip.x(), strip.y(), strip.width(), strip.height());
         Component coordinates = this.map.coordinateStatus(mouseX, mouseY);
-        int right = strip.right() - 6;
-        int coordinateWidth = Math.min(strip.width() / 2, this.font.width(coordinates));
+        int right = (this.mode==Mode.CITIES ? ProjectLayout.toggle(this.width,this.height).x() : strip.right()) - 6;
+        int available = Math.max(0,right-strip.x());
+        int coordinateWidth = Math.min(available / 2, this.font.width(coordinates));
         graphics.drawString(this.font, this.font.plainSubstrByWidth(coordinates.getString(), coordinateWidth), right - coordinateWidth, strip.y() + 5, MUTED, false);
-        String identity = this.data.getCityName() + " · " + this.data.getMemberCount() + " · " + Component.translatable("gui.createcityexpansioncore.world_map." + (this.readOnly ? "read_only_short" : "management_short")).getString();
-        int leftWidth = Math.min(180, Math.max(20, strip.width() - coordinateWidth - 22));
+        String access = projectWorkspace.open() && this.mode==Mode.CITIES ? Component.translatable("gui.createcityexpansioncore.projects.title").getString() : Component.translatable("gui.createcityexpansioncore.world_map." + (this.readOnly ? "read_only_short" : "management_short")).getString();
+        String identity = this.data.getCityName() + " · " + this.data.getMemberCount() + " · " + access;
+        int leftWidth = Math.min(180, Math.max(0, available - coordinateWidth - 22));
         graphics.drawString(this.font, this.font.plainSubstrByWidth(identity, leftWidth), strip.x() + 6, strip.y() + 5, TEXT, false);
         int statusX = strip.x() + leftWidth + 14;
         int statusWidth = right - coordinateWidth - statusX - 8;
@@ -1073,17 +1074,17 @@ public final class PolishedWorldMapScreen extends Screen {
     }
 
     private void renderTooltip(GuiGraphics graphics, Component value, int mouseX, int mouseY) {
-        int width = this.font.width(value) + 12;
-        int x = Math.max(4, Math.min(this.width - width - 4, mouseX + 10));
-        int y = Math.max(4, Math.min(this.height - 18, mouseY + 12));
-        graphics.fill(x, y, x + width, y + 16, 0xF0101517);
-        graphics.renderOutline(x, y, width, 16, FRAME);
-        graphics.drawString(this.font, value, x + 6, y + 5, TEXT, false);
+        int pad=WorldMapUiLayout.TOOLTIP_PADDING;
+        int textWidth=Math.max(1,Math.min(this.font.width(value),Math.max(1,this.width-WorldMapUiLayout.EDGE*2-pad*2)));
+        var bounds=WorldMapUiLayout.tooltip(this.width,this.height,mouseX,mouseY,textWidth,this.font.wordWrapHeight(value,textWidth));
+        plate(graphics,bounds.x(),bounds.y(),bounds.width(),bounds.height());
+        graphics.enableScissor(bounds.x(),bounds.y(),bounds.right(),bounds.bottom());
+        try { graphics.drawWordWrap(this.font,value,bounds.x()+pad,bounds.y()+pad,textWidth,TEXT); }
+        finally { graphics.disableScissor(); }
     }
 
     private static void plate(GuiGraphics graphics, int x, int y, int width, int height) {
-        graphics.fill(x, y, x + width, y + height, PANEL);
-        graphics.renderOutline(x, y, width, height, FRAME);
+        WorldMapChrome.panel(graphics,x,y,width,height);
     }
 
     private static void statusChip(GuiGraphics graphics, int x, int y, int width) {
@@ -1093,6 +1094,8 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.map != null && this.mode == Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation == null && this.tutorialTicks == 0 && !this.layersOpen && !this.searchOpen && !this.map.hasPendingClaim()
+                && projectWorkspace.click(mouseX,mouseY,button,true)) return true;
         var titleBounds = WorldMapUiLayout.title(this.width);
         if (button == 0 && this.readOnly && titleBounds.contains(mouseX, mouseY) && mouseY >= titleBounds.y() + 14 && this.pendingMutation == null) {
             var dimensions = com.example.examplemod.client.CityPublicDirectory.dimensions;
@@ -1160,12 +1163,12 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.searchOpen && this.searchBox.mouseClicked(mouseX, mouseY, button)) return true;
         if (this.layersOpen && handleLayerClick(mouseX, mouseY)) return true;
         if (this.searchOpen && handleSearchClick(mouseX, mouseY)) return true;
+        if(WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY))return true;
         CityMapPanel.Selection selected = this.map.getSelection();
         if (selected != null && this.cardActionY >= 0 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) {
             for (int index = 0; index < this.cardActionCount; index++) {
-                int rowY = this.cardActionY + index * 20;
-                if (inside(mouseX, mouseY, this.cardX + WorldMapUiLayout.LARGE, rowY,
-                        this.cardWidth - WorldMapUiLayout.LARGE * 2, 18)) {
+                var action=WorldMapUiLayout.cardAction(new WorldMapUiLayout.Rect(this.cardX,this.cardY,this.cardWidth,this.cardHeight),this.cardActionY,index);
+                if (WorldMapUiLayout.cardBody(new WorldMapUiLayout.Rect(this.cardX,this.cardY,this.cardWidth,this.cardHeight)).contains(mouseX,mouseY)&&action.contains(mouseX,mouseY)) {
                     handleContextAction(selected, index);
                     return true;
                 }
@@ -1290,6 +1293,9 @@ public final class PolishedWorldMapScreen extends Screen {
                 return true;
             }
         }
+        for(int option=0;option<2;option++)if(layerRow(row++).contains(mouseX,mouseY)) {
+            this.map.setTerritoryPresentation(option==0?(this.map.territoryMode()+1)%3:this.map.territoryMode(),option==1?!this.map.plotGrid():this.map.plotGrid());return true;
+        }
         for (int index = 5; index < VIEW_KEYS.length; index++) if (layerRow(row++).contains(mouseX, mouseY)) { handleViewAction(index); return true; }
         return layersPopoverBounds().contains(mouseX, mouseY);
     }
@@ -1322,6 +1328,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (this.mode==Mode.CITIES && projectWorkspace.blocksDrag(mouseX,mouseY)) return true;
         dismissTutorial();
         if (this.pendingMutation != null || this.guideOpen || this.problemCenterOpen || this.map != null && this.map.hasPendingClaim()) return true;
         // Панорамировать нечего, пока панели нет: свайп по экрану загрузки.
@@ -1342,6 +1349,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.scroll(mouseX,mouseY,scrollY)) return true;
         if (this.guideOpen) { this.guideScroll = Math.max(0, Math.min(this.guideMaxScroll, this.guideScroll + (scrollY > 0 ? -16 : 16))); return true; }
         if (this.pendingMutation != null || this.map != null && this.map.hasPendingClaim()) return true;
         if (this.problemCenterOpen) { this.problemOffset = Math.max(0, Math.min(Math.max(0, problemObjects().size() - problemRows()), this.problemOffset + (scrollY > 0 ? -1 : 1))); return true; }
@@ -1351,6 +1359,10 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.layersOpen && layersPopoverBounds().contains(mouseX, mouseY)) {
             int fullHeight = WorldMapUiLayout.POPOVER_HEADER + layersRowCount() * WorldMapUiLayout.POPOVER_ROW;
             this.layerScroll = Math.max(0, Math.min(fullHeight - layersPopoverBounds().height(), this.layerScroll + (scrollY > 0 ? -20 : 20))); return true;
+        }
+        if(this.map!=null&&WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)) {
+            int full=WorldMapUiLayout.legendHeader(WorldMapUiLayout.legend(this.width,this.height))+legendRows().size()*WorldMapUiLayout.LEGEND_ROW;
+            this.legendScroll=Math.max(0,Math.min(Math.max(0,full-WorldMapUiLayout.legend(this.width,this.height).height()),this.legendScroll+(scrollY>0?-18:18)));return true;
         }
         if (inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) {
             this.cardScroll = Math.max(0, Math.min(this.cardMaxScroll, this.cardScroll + (scrollY > 0 ? -16 : 16))); return true;
@@ -1378,6 +1390,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.key(keyCode,scanCode,modifiers)) return true;
         if (this.pendingMutation != null) {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) this.pendingMutation = null;
             return true;
@@ -1411,6 +1424,11 @@ public final class PolishedWorldMapScreen extends Screen {
             if (this.layersOpen) { this.layersOpen = false; return true; }
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override public boolean charTyped(char character,int modifiers) {
+        if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.character(character,modifiers)) return true;
+        return super.charTyped(character,modifiers);
     }
 
     private void dismissTutorial() {
@@ -1486,13 +1504,14 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.preferences != null || this.map == null || this.minecraft == null) return;
         String server = this.minecraft.getCurrentServer() != null ? this.minecraft.getCurrentServer().ip
                 : this.minecraft.getSingleplayerServer() != null ? this.minecraft.getSingleplayerServer().getWorldData().getLevelName() : "local";
-        this.preferenceWorld = server + ":" + (this.minecraft.player == null ? "" : this.minecraft.player.getUUID()) + ":" + this.data.getDimensionId() + ":" + this.data.getPylonPos().asLong();
-        AtlasPreferences loaded = AtlasPreferences.load(preferencePath(), this.preferenceWorld);
+        this.preferenceWorld = server + ":" + (this.minecraft.player == null ? "" : this.minecraft.player.getUUID()) + ":" + this.data.getDimensionId();
+        AtlasPreferences loaded = AtlasPreferences.loadWorld(preferencePath(), this.preferenceWorld);
         this.preferences = null;
         applyMode(Mode.values()[loaded.mode]);
         this.preferences = loaded;
         if (this.preferences.positioned) this.map.restoreView(this.preferences.centerX, this.preferences.centerZ, this.preferences.zoom);
         this.map.setPresentation(this.preferences.grid, this.preferences.minimap);
+        this.map.setTerritoryPresentation(this.preferences.territoryMode,this.preferences.plotGrid);
         this.map.setPersonalPins(this.preferences.pins);
         int mask = this.preferences.overlays[this.mode.ordinal()];
         if (mask >= 0) for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.ordinal())) != 0);
@@ -1506,45 +1525,45 @@ public final class PolishedWorldMapScreen extends Screen {
         rememberOverlays(); this.preferences.mode = this.mode.ordinal(); this.preferences.centerX = this.map.centerX();
         this.preferences.centerZ = this.map.centerZ(); this.preferences.zoom = this.map.zoom(); this.preferences.positioned = true;
         this.preferences.grid = this.map.coordinateGrid(); this.preferences.minimap = this.map.overviewVisible();
+        this.preferences.territoryMode=this.map.territoryMode();this.preferences.plotGrid=this.map.plotGrid();
         this.preferences.pins.clear(); this.preferences.pins.addAll(this.map.personalPins());
         try { this.preferences.save(preferencePath(), this.preferenceWorld); }
         catch (java.io.IOException error) { org.slf4j.LoggerFactory.getLogger(PolishedWorldMapScreen.class).warn("Cannot save local atlas view", error); }
     }
     @Override public void removed() {
         savePreferences(); this.followingTrain = null; this.pendingMutation = null;
-        if (this.map != null) { this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
+        if (this.map != null) { this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
         if (this.readOnly && !openingIdentityEditor) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
+        com.example.examplemod.client.ProjectClientState.clear();
         super.removed();
     }
     private int layoutViewButtons(int mapWidth) {
         this.viewButtons.clear();
-        int startY = WorldMapUiLayout.popoverY(this.width, this.modeLabelWidths, this.globalLabelWidths) + NORMAL;
-        int x = WorldMapUiLayout.EDGE, y = startY + 14;
-        for (String key : java.util.Arrays.copyOf(VIEW_KEYS, 5)) {
-            int width = Math.min(mapWidth, this.font.width(Component.translatable("gui.createcityexpansioncore.world_map.view." + key)) + 12);
-            if (x > WorldMapUiLayout.EDGE && x + width > WorldMapUiLayout.EDGE + mapWidth) { x = WorldMapUiLayout.EDGE; y += 22; }
-            this.viewButtons.add(new WorldMapUiLayout.Rect(x, y, width, 18)); x += width + MICRO;
-        }
-        return y + 18 + NORMAL;
+        int start=WorldMapUiLayout.popoverY(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL;
+        int[] labels=new int[5];
+        for(int i=0;i<labels.length;i++)labels[i]=this.font.width(Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i]));
+        this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,start,labels));
+        return this.viewButtons.getLast().bottom()+NORMAL;
     }
-    private void renderViewButtons(GuiGraphics graphics, int mouseX, int mouseY) {
-        if (this.viewButtons.isEmpty()) return;
-        graphics.drawString(this.font, this.mode.label(), WorldMapUiLayout.EDGE, this.viewButtons.getFirst().y() - 14, ACCENT, false);
-        for (int index = 0; index < this.viewButtons.size(); index++) {
-            var rect = this.viewButtons.get(index);
-            boolean active = index == 2 && this.followingTrain != null || index == 3 && this.map.pinToolActive() || index == 4 && this.map.measureToolActive() || index == 5 && this.map.overviewVisible() || index == 6 && this.map.coordinateGrid();
-            graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), active ? 0xFF443824 : PANEL_ALT);
-            graphics.renderOutline(rect.x(), rect.y(), rect.width(), rect.height(), active ? ACCENT : FRAME);
-            Component label = Component.translatable("gui.createcityexpansioncore.world_map.view." + VIEW_KEYS[index]);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), rect.width() - 6), rect.x() + 3, rect.y() + 5, TEXT, false);
-            offerTooltip(label, rect.contains(mouseX, mouseY));
+    private void renderViewButtons(GuiGraphics g,int mx,int my) {
+        for(int i=0;i<this.viewButtons.size();i++) {
+            var r=this.viewButtons.get(i);
+            boolean active=i==2&&this.followingTrain!=null||i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
+            var selected=this.map.getSelection();
+            boolean enabled=i!=2||this.followingTrain!=null||selected!=null&&selected.kind()==CityMapPanel.SelectionKind.TRAIN;
+            WorldMapChrome.control(g,r,active,r.contains(mx,my),enabled,false);
+            Component label=Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i]);
+            if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL)))
+                WorldMapChrome.viewIcon(g,i,r.x()+(r.width()-16)/2,r.y()+(r.height()-16)/2,enabled?TEXT:MapPalette.TEXT_FAINT);
+            else g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-SECTION),r.x()+6,r.y()+(r.height()-8)/2,enabled?TEXT:MapPalette.TEXT_FAINT,false);
+            offerTooltip(label,r.contains(mx,my));
         }
-        if (this.map.pinToolActive() || this.map.measureToolActive()) {
-            Component hint = Component.translatable("gui.createcityexpansioncore.world_map.tool." + (this.map.pinToolActive() ? "pin" : "measure"));
-            int width = Math.max(1, WorldMapUiLayout.contextPanelLeft(this.width) - WorldMapUiLayout.EDGE - NORMAL);
-            graphics.drawWordWrap(this.font, hint, WorldMapUiLayout.EDGE, this.viewButtons.getLast().bottom() + NORMAL + 4, width, TEXT);
+        if(this.map.pinToolActive()||this.map.measureToolActive()) {
+            int width=Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL);
+            g.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.world_map.tool."+(this.map.pinToolActive()?"pin":"measure")),WorldMapUiLayout.EDGE,this.viewButtons.getLast().bottom()+NORMAL,width,TEXT);
         }
     }
+
     private void handleViewAction(int index) {
         switch (index) {
             case 0 -> { this.followingTrain = null; this.map.centerOnPlayer(); }
@@ -1558,6 +1577,12 @@ public final class PolishedWorldMapScreen extends Screen {
             case 5 -> this.map.setPresentation(this.map.coordinateGrid(), !this.map.overviewVisible());
             case 6 -> this.map.setPresentation(!this.map.coordinateGrid(), this.map.overviewVisible());
             case 7 -> { this.map.retryTerrain(); requestSnapshots(true); }
+            case 8 -> {
+                // Keep the read-only map session while a temporary profile screen is open.
+                openingIdentityEditor = true; this.layersOpen = false;
+                com.example.examplemod.client.CityPublicDirectory.cancelLoading();
+                PlayerProfileScreen.open(this, this.minecraft.player.getUUID());
+            }
             default -> { }
         }
     }
@@ -1652,6 +1677,75 @@ public final class PolishedWorldMapScreen extends Screen {
             Runnable command = this.pendingMutation; this.pendingMutation = null;
             if (!this.readOnly && command != null) command.run();
         } else if (inside(x, y, rect.x() + LARGE * 2 + half, rect.bottom() - 34, half, 22)) this.pendingMutation = null;
+    }
+
+    private record Legend(String key,int color,CityMapPanel.RailClass rail,AtlasGlyph glyph) {}
+    private List<Legend> legendRows() {
+        if(this.mode==Mode.RAILWAY) {
+            var result=new ArrayList<Legend>();
+            for(var kind:legendClasses())result.add(new Legend(kind.name().toLowerCase(Locale.ROOT),CityMapPanel.railInnerColor(kind),kind,null));
+            result.add(new Legend("selected_route",MapPalette.SELECTED,null,null));
+            result.add(new Legend("active_route",0xFF8BCDB1,null,null));
+            result.add(new Legend("inactive_route",0xFFE0A776,null,null));
+            result.add(new Legend("station",MapPalette.OWN,null,AtlasGlyph.STATION));
+            result.add(new Legend("train",MapPalette.OWN,null,AtlasGlyph.TRAIN));return result;
+        }
+        if(this.mode==Mode.LOGISTICS)return List.of(
+            new Legend("freight_point",MapPalette.OWN,null,AtlasGlyph.FREIGHT),
+            new Legend("freight_link",0xB36ACFCE,null,null),
+            new Legend("train",MapPalette.OWN,null,AtlasGlyph.TRAIN),
+            new Legend("attention",MapPalette.ALERT,null,AtlasGlyph.FREIGHT));
+        if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEXT_FAINT,null,AtlasGlyph.ENERGY));
+        return List.of(new Legend("own_city",MapPalette.OWN,null,AtlasGlyph.CITY),
+            new Legend("other_city",MapPalette.NEUTRAL,null,AtlasGlyph.CITY),
+            new Legend("territory",MapPalette.OWN,null,null),
+            new Legend("industry",MapPalette.OWN,null,AtlasGlyph.MINE),
+            new Legend("partner",0xB365D8AF,null,null),
+            new Legend("trusted",0xA06EAED0,null,null),
+            new Legend("pending",0x906F7596,null,null));
+    }
+    private boolean legendEnabled(Legend entry) {
+        var layer=entry.rail()!=null||entry.key().endsWith("_route")?CityMapPanel.Overlay.TRACKS:switch(entry.key()) {
+            case "own_city","other_city" -> CityMapPanel.Overlay.CITIES;
+            case "territory" -> CityMapPanel.Overlay.TERRITORIES;
+            case "industry" -> CityMapPanel.Overlay.PROJECTS;
+            case "partner","trusted","pending" -> CityMapPanel.Overlay.RELATIONS;
+            case "train" -> CityMapPanel.Overlay.TRAINS;
+            case "station" -> CityMapPanel.Overlay.STATIONS;
+            default -> CityMapPanel.Overlay.TRADE;
+        };
+        return this.mode.available()&&this.map.isOverlayEnabled(layer);
+    }
+    private void renderModeLegend(GuiGraphics g) {
+        var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=legendRows();
+        int full=WorldMapUiLayout.legendHeader(panel)+rows.size()*WorldMapUiLayout.LEGEND_ROW;
+        this.legendScroll=Math.min(this.legendScroll,Math.max(0,full-panel.height()));
+        plate(g,panel.x(),panel.y(),panel.width(),panel.height());
+        g.drawString(this.font,WorldMapChrome.fit(this.font,Component.translatable("gui.createcityexpansioncore.world_map.polish.legend"),panel.width()-40),panel.x()+12,panel.y()+10,ACCENT,false);
+        if(full>panel.height())g.drawString(this.font,"↕",panel.right()-21,panel.y()+10,MUTED,false);
+        g.enableScissor(panel.x()+1,panel.y()+WorldMapUiLayout.legendHeader(panel)-3,panel.right()-1,panel.bottom()-1);
+        try{for(int i=0;i<rows.size();i++) {
+            Legend entry=rows.get(i);var r=WorldMapUiLayout.legendRow(panel,i,this.legendScroll);
+            boolean enabled=legendEnabled(entry);
+            if(entry.glyph()!=null) {
+                MapMarkerRenderer.drawGlyph(g,entry.glyph(),r.x(),r.y(),enabled?TEXT:MapPalette.TEXT_FAINT);
+                int badge=entry.key().equals("attention")?MapPalette.ALERT:entry.key().equals("other_city")?MapPalette.NEUTRAL:MapPalette.OWN;
+                g.fill(r.x()+12,r.y()+11,r.x()+17,r.y()+16,WorldMapChrome.INSET);
+                g.fill(r.x()+13,r.y()+12,r.x()+16,r.y()+15,enabled?badge:MapPalette.TEXT_FAINT);
+            }
+            else if(entry.rail()!=null){int inner=CityMapPanel.railInnerWidth(entry.rail());g.fill(r.x(),r.y()+5,r.x()+16,r.y()+7+inner,CityMapPanel.railOutlineColor(entry.rail()));g.fill(r.x(),r.y()+6,r.x()+16,r.y()+6+inner,entry.color());if(entry.rail()==CityMapPanel.RailClass.PUBLIC_PAID)g.fill(r.x()+7,r.y()+5,r.x()+9,r.y()+11,0xFFB6F5CD);}
+            else if(entry.key().equals("territory")){g.fill(r.x(),r.y()+3,r.x()+16,r.y()+14,0x1ED3A363);g.renderOutline(r.x(),r.y()+3,16,11,entry.color());}
+            else if(entry.key().endsWith("_route")) {
+                if(entry.key().equals("selected_route"))g.fill(r.x(),r.y()+3,r.x()+17,r.y()+12,0x38E7BA71);
+                g.fill(r.x(),r.y()+5,r.x()+17,r.y()+10,0xE0121B20);
+                g.fill(r.x(),r.y()+6,r.x()+17,r.y()+9,entry.color());
+            }
+            else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
+            Component label=Component.translatable("gui.createcityexpansioncore.world_map.legend."+entry.key());
+            g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-24),r.x()+24,r.y()+5,enabled?TEXT:MapPalette.TEXT_FAINT,false);
+            Component tooltip=enabled?label:label.copy().append(" · ").append(Component.translatable("gui.createcityexpansioncore.world_map.polish.layer_hidden"));
+            offerTooltip(tooltip,r.contains(this.mouseXNow,this.mouseYNow)&&panel.contains(this.mouseXNow,this.mouseYNow));
+        }}finally{g.disableScissor();}
     }
 
     private enum Mode {

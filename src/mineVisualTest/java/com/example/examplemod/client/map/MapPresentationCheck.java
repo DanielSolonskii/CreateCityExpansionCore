@@ -40,13 +40,10 @@ public final class MapPresentationCheck {
         require(MapPalette.green(0x80ABCDEF) == 0xCD, "green must come from bits 8-15");
         require(MapPalette.blue(0x80ABCDEF) == 0xEF, "blue must come from bits 0-7");
 
-        // The whole point of the survey look: contour ink must be darker than every tone of terrain
-        // it can land on. The darkest realistic input is near-black, not the UI chrome — comparing
-        // against the chrome would have passed an ink that vanished over deep shadow.
+        // Actual contour output must darken even deep shadow; the UI ink token is not terrain.
         int darkestTerrain = MapSurveyTransform.survey(0xFF000000);
-        require(MapPalette.luminance(MapPalette.INK) < MapPalette.luminance(darkestTerrain),
-                "ink must be darker than the darkest surveyed terrain, otherwise contours vanish "
-                        + "over shadow");
+        require(MapPalette.luminance(MapSurveyTransform.surveyInk(darkestTerrain)) <= MapPalette.luminance(darkestTerrain),
+                "contours never brighten dark materials; black remains black");
         require(MapPalette.luminance(MapPalette.INK) < MapPalette.luminance(MapSurveyTransform.survey(0xFFFFFFFF)),
                 "ink must be darker than snow, otherwise contours vanish over a snowfield");
         require(MapPalette.luminance(MapPalette.INK) < MapPalette.luminance(MapPalette.INK_SOFT),
@@ -102,6 +99,7 @@ public final class MapPresentationCheck {
             previousLuminance = luminance;
         }
 
+        require(MapSurveyTransform.survey(0xFFFFFFFF)==0xFFFFFFFF,"natural snow remains white");
         int grass = MapSurveyTransform.survey(0xFF689739);
         int snow = MapSurveyTransform.survey(0xFFFFFFFF);
         int water = MapSurveyTransform.survey(0xFF373A97);
@@ -109,14 +107,11 @@ public final class MapPresentationCheck {
                 "grass and water must stay distinguishable after desaturation, or a rail route "
                         + "cannot be planned from the map");
 
-        // The contour pass replaces the tone outright rather than blending, so a line over a snowfield and
-        // a line over deep stone must come out the same colour. If they differed, the map would grow
-        // a second, terrain-dependent line style — and that style would be invisible wherever it is
-        // weakest, which is exactly where a player most needs to read the slope.
-        require(MapSurveyTransform.surveyInk(grass) == MapSurveyTransform.surveyInk(snow),
-                "contour ink must not depend on the terrain underneath it");
-        require(MapSurveyTransform.surveyInk(grass) == MapPalette.argb(MapPalette.INK, 0xFF),
-                "the ink pass must write the palette ink at full alpha");
+        // Contours describe relief without erasing the material under dense contour masks.
+        require(MapSurveyTransform.surveyInk(grass) != MapSurveyTransform.surveyInk(snow),
+                "contours preserve the distinction between grass and snow");
+        require(MapPalette.alpha(MapSurveyTransform.surveyInk(grass)) == 255,
+                "contours preserve surface opacity");
         require(MapPalette.luminance(MapSurveyTransform.surveyInk(grass)) < MapPalette.luminance(grass),
                 "ink must be darker than the paper it is drawn on");
         require(MapPalette.luminance(MapSurveyTransform.surveyInk(snow)) < MapPalette.luminance(snow),

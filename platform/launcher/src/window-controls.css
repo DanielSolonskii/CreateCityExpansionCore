@@ -1,0 +1,2 @@
+.window-actions { position: relative; }
+.window-control-error { position: absolute; top: 100%; right: 0; z-index: 100; width: 250px; padding: 10px 14px; background: #171b1d; color: #f1b8aa; border: 1px solid #5c3c35; border-radius: 6px; font-size: 12px; }

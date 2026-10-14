@@ -59,6 +59,8 @@ public class CityManager extends SavedData {
      */
     private final Map<CityPlot, UUID> claimOwners = new HashMap<>();
 
+    private java.util.function.Predicate<UUID> activeBuildProjects = id -> false;
+
     public CityManager() {
     }
 
@@ -619,7 +621,7 @@ public class CityManager extends SavedData {
             ServerLevel level
     ) {
 
-        return level
+        CityManager manager = level
                 .getDataStorage()
                 .computeIfAbsent(
                         new SavedData.Factory<>(
@@ -629,6 +631,8 @@ public class CityManager extends SavedData {
                         ),
                         DATA_NAME
                 );
+        manager.activeBuildProjects = id -> com.example.examplemod.economy.EconomyManager.get(level).projects().hasActive(id);
+        return manager;
     }
 
     // =========================================================
@@ -692,6 +696,7 @@ public class CityManager extends SavedData {
         claimOwners.put(pylonPlot, id);
 
         setDirty();
+        com.example.examplemod.auth.ServerTelemetryBridge.emit("CITY_CREATED", owner, id, "");
 
         return city;
     }
@@ -767,6 +772,7 @@ public class CityManager extends SavedData {
             return false;
         }
         boolean added = city.addProject(project);
+        if (added) com.example.examplemod.auth.ServerTelemetryBridge.emit("PROJECT_ADDED", project.creatorId(), project.projectId(), project.projectType().name());
         if (added) {
             setDirty();
         }
@@ -897,6 +903,7 @@ public class CityManager extends SavedData {
      */
     private boolean rebaseClaims(City city, ResourceLocation dimension, BlockPos pos,
                                  int deltaX, int deltaZ) {
+        if (activeBuildProjects.test(city.getId())) return false;
         ResourceLocation previousDimension = city.getPylonDimension();
         BlockPos previousPos = city.getPylonPos();
         List<CityPlot> previousPlots = new ArrayList<>(city.getClaimedPlots());
@@ -987,6 +994,7 @@ public class CityManager extends SavedData {
             return null;
         }
 
+        if (activeBuildProjects.test(city.getId())) return null;
         dropCity(city.getId());
 
         setDirty();
@@ -1147,6 +1155,9 @@ public class CityManager extends SavedData {
         }
         claimOwners.put(plot, city.getId());
         setDirty();
+        com.example.examplemod.auth.ServerTelemetryBridge.emit(
+                "CITY_PLOT_CLAIMED", actor, city.getId(), plot.plotX() + ":" + plot.plotZ()
+        );
         return CityClaimResult.CLAIMED;
     }
 
@@ -1168,6 +1179,9 @@ public class CityManager extends SavedData {
             return false;
         }
         setDirty();
+        com.example.examplemod.auth.ServerTelemetryBridge.emit(
+                "CITY_COLOR_CHANGED", actor, city.getId(), String.format("#%06X", rgb)
+        );
         return true;
     }
 
@@ -1309,6 +1323,7 @@ public class CityManager extends SavedData {
             return null;
         }
 
+        if (activeBuildProjects.test(city.getId())) return null;
         dropCity(city.getId());
 
         setDirty();
@@ -1337,22 +1352,23 @@ public class CityManager extends SavedData {
         if (dimension == null) {
             return views;
         }
-        for (City city : cities.values()) {
+        List<City> candidates=cities.values().stream().filter(java.util.Objects::nonNull)
+                .filter(c->dimension.equals(c.getPylonDimension()))
+                .sorted(java.util.Comparator.<City>comparingInt(c->c.getId().equals(ownCityId)?0:1)
+                        .thenComparingDouble(c->origin==null?0:c.getPylonPos().distSqr(origin)))
+                .toList();
+        for (City city : candidates) {
             if (city == null || !dimension.equals(city.getPylonDimension())) {
                 continue;
             }
             BlockPos pylon = city.getPylonPos();
-            /*
-             * Фильтр по расстоянию до пилона, а не до территории:
-             * карта центрируется на пилона, и город, чей пилон вне
-             * кадра, всё равно не будет виден. Сами участки фильтруются
-             * отдельно — город может дотянуться до кадра дальше, чем
-             * на 512 блоков.
-             */
-            if (origin != null && Math.max(
+            // Include visible claimed land even when its pylon is outside the requested region.
+            if (!city.getId().equals(ownCityId) && origin != null && Math.max(
                     Math.abs(pylon.getX() - origin.getX()),
                     Math.abs(pylon.getZ() - origin.getZ())
-            ) > range) {
+            ) > range && city.getClaimedPlots().stream().noneMatch(p->
+                    p.maxX()>=origin.getX()-(long)range&&p.minX()<=origin.getX()+(long)range
+                    &&p.maxZ()>=origin.getZ()-(long)range&&p.minZ()<=origin.getZ()+(long)range)) {
                 continue;
             }
             views.add(new CityTerritoryView(

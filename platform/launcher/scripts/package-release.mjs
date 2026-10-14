@@ -1,0 +1,22 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+const args = Object.fromEntries(process.argv.slice(2).reduce((r, v, i, a) => i % 2 ? r : [...r, [v.replace(/^--/, ''), a[i + 1]]], []));
+if (!/^alpha-\d+\.\d+\.\d+$/.test(args.version ?? '')) throw new Error('Invalid version');
+const source = path.resolve(args.source);
+const archive = path.resolve(args.archive);
+const known = new Set((args.inventory ? await fs.readFile(args.inventory, 'utf8') : '').split(/\r?\n/).filter(x => /^[0-9a-f]{64}$/.test(x)));
+const manifest = JSON.parse(await fs.readFile(path.join(source, 'releases/versions', args.version, 'manifest.canonical.json')));
+const paths = [`releases/versions/${args.version}/manifest.canonical.json`, 'releases/objects'];
+const fresh = [...new Set(manifest.files.map(f => f.sha256))].filter(hash => !known.has(hash));
+// -T list enumerates only new content-addressed files; --no-recursion avoids all-old blobs.
+for (const hash of fresh) paths.push('releases/objects/' + hash);
+const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'recreated-publication-'));
+const list = path.join(temporary, 'files.txt');
+await fs.writeFile(list, paths.join('\n') + '\n');
+await fs.mkdir(path.dirname(archive), { recursive: true });
+const result = spawnSync('tar', ['-cf', archive, '--no-recursion', '-C', source, '-T', list], { encoding: 'utf8', windowsHide: true });
+await fs.rm(temporary, { recursive: true });
+if (result.status !== 0) throw new Error(result.stderr || 'tar failed');
+console.log(JSON.stringify({ version: args.version, newObjects: fresh.length, archiveBytes: (await fs.stat(archive)).size }));

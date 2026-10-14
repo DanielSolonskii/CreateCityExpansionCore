@@ -26,7 +26,7 @@ import java.util.Locale;
  * currency→item и item→item. Технические registry id игрок не вводит:
  * предмет выбирается через {@link ItemSelectorOverlay}.
  */
-public final class EconomyCreateScreen extends Screen {
+public final class EconomyCreateScreen extends CityPylonPageScreen {
 
     public enum Mode { PRIVATE, CITY_CONTRACT, MASTER_SPECIAL, CITY_SELL }
 
@@ -43,7 +43,7 @@ public final class EconomyCreateScreen extends Screen {
     private static final int PICK_WIDTH = 118;
 
     private static final int COLOR_PANEL = 0xEE151B1E;
-    private static final int COLOR_ACCENT = 0xFFD09A3A;
+    private static final int COLOR_ACCENT = 0xFFB78A43;
     private static final int COLOR_TEXT = 0xFFE2E6E7;
     private static final int COLOR_MUTED = 0xFF8F9A9E;
     private static final int COLOR_LABEL = 0xFFFFFFFF;

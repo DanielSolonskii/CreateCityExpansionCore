@@ -25,6 +25,24 @@ public final class WorldMapUiLayoutCheck {
     private static int[] globalLabels() { return new int[] { 40, 44, 52, 50, 64, 72, 30, 50 }; }
 
     public static void main(String[] args) {
+        require(CityMapClaimAccess.allowed(true,true,true,false,false,false),"root enables claim");
+        require(CityMapClaimAccess.allowed(true,true,false,true,false,false),"workspace enables claim");
+        require(CityMapClaimAccess.allowed(true,true,false,false,true,false),"own management atlas enables claim");
+        require(!CityMapClaimAccess.allowed(true,true,false,false,true,true),"read-only atlas disables claim");
+        require(!CityMapClaimAccess.allowed(true,true,false,false,false,false),"unrelated screen disables claim");
+        require(!CityMapClaimAccess.allowed(true,false,false,true,false,false),"resident cannot claim");
+        require(!CityMapClaimAccess.allowed(false,true,false,true,false,false),"unfounded city cannot claim");
+        for (int width : new int[]{320, 426, 640, 960}) for (int height : new int[]{240, 360, 540}) {
+            var founding = CityFoundingLayout.compute(width,height);
+            for (var rect : new WorldMapUiLayout.Rect[]{founding.panel(),founding.map(),founding.name(),founding.back(),founding.submit()}) {
+                require(WorldMapUiLayout.withinScreen(width,height,rect),"founding bounds stay on screen");
+                require(rect.width()>0&&rect.height()>0,"founding has usable bounds");
+            }
+            require(!founding.map().overlaps(founding.name()),"map never covers the name field");
+            require(!founding.back().overlaps(founding.submit()),"founding actions do not overlap");
+            require(founding.map().bottom()+14<founding.panel().bottom()-51,"map caption clears footer");
+            require(founding.name().bottom()+30<founding.panel().bottom()-51,"founding summary clears footer");
+        }
         int[] modes = modeLabels();
         int[] globals = globalLabels();
 
@@ -111,17 +129,17 @@ public final class WorldMapUiLayoutCheck {
 
         // ------------------------------------------------- labels, and the disabled Electricity tab
         require(WorldMapUiLayout.modeTabsLabelled(1280), "a wide screen labels its mode tabs");
-        require(!WorldMapUiLayout.modeTabsLabelled(854),
-                "854 px cannot afford labelled tabs and keep the toolbar readable");
+        require(WorldMapUiLayout.modeTabsLabelled(854),
+                "854 px prioritises readable mode names over utility labels");
         require(WorldMapUiLayout.globalToolbarLabelled(1280, modes, globals),
                 "a wide screen labels the global toolbar");
         require(!WorldMapUiLayout.globalToolbarLabelled(854, modes, globals),
                 "a labelled toolbar is refused when it would not fit");
-        require(WorldMapUiLayout.modeTabWidth(1280, 75) > WorldMapUiLayout.modeTabWidth(854, 75),
-                "the same label widens a tab when there is room for it");
+        require(WorldMapUiLayout.modeTabWidth(1280, 75) == WorldMapUiLayout.modeTabWidth(854, 75),
+                "mode names stay readable at normal GUI sizes");
         require(WorldMapUiLayout.modeTabWidth(1280, 75) > 75,
                 "a labelled mode tab actually reserves room for its label");
-        require(WorldMapUiLayout.modeTabWidth(854, 75) == WorldMapUiLayout.compactWidth(),
+        require(WorldMapUiLayout.modeTabWidth(426, 75) == WorldMapUiLayout.TAB_HEIGHT,
                 "a compact mode tab is exactly its icon, never a truncated label");
         // Per-item sizing: a short label does not inherit the widest label's padding.
         require(WorldMapUiLayout.modeTabWidth(1280, 38) < WorldMapUiLayout.modeTabWidth(1280, 75),

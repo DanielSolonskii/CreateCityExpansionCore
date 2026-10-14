@@ -14,6 +14,12 @@ public class CityMember {
     private final UUID playerId;
 
     private Role role;
+    private String displayName = "";
+    public String getDisplayName() { return displayName; }
+    public CityMember(UUID playerId, Role role, String displayName) {
+        this(playerId, role);
+        this.displayName = displayName;
+    }
 
     public CityMember(
             UUID playerId,

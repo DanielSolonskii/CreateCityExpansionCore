@@ -21,14 +21,16 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Full-screen, selection-first market dashboard. */
-public final class MarketScreen extends Screen {
-    private static final int BG=0xFF101719,PANEL=0xEC182023,PANEL_ALT=0xF0222B2E,FRAME=0xFF596064;
-    private static final int ACCENT=0xFFD09A3A,TEXT=0xFFD8DEDF,MUTED=0xFF98A3A7,GOOD=0xFF77B992,WARN=0xFFE2BD75,BAD=0xFFD07872;
+/** P2P trading board, also usable inside the City Pylon workspace. */
+public final class MarketScreen extends CityPylonPageScreen {
+    private static final int BG=0xFF141A1D,PANEL=0xFF1D2529,PANEL_ALT=0xFF222C30,FRAME=CityPylonTheme.LINE;
+    private static final int ACCENT=0xFF996215,TEXT=CityPylonTheme.TEXT,MUTED=CityPylonTheme.MUTED,GOOD=0xFF77B992,WARN=0xFFE2BD75,BAD=0xFFD07872;
     private static final int ROW_H=42,TAB_H=28;
     private final CityPylonScreen parent;
     private final CityPylonMenu menu;
-    private Tab tab=Tab.OVERVIEW;
+    private Tab tab=Tab.PLAYER;
+    private int listingFilter;
+    private static final Tab[] MAIN_TABS={Tab.PLAYER,Tab.CONTRACTS,Tab.MINE};
     private EconomyTypes.MarketDirection direction=EconomyTypes.MarketDirection.SELL_TO_MASTER;
     private String category="all";
     private EditBox search,quantity;
@@ -54,7 +56,9 @@ public final class MarketScreen extends Screen {
 
     @Override public void resize(net.minecraft.client.Minecraft minecraft,int width,int height){
         String q=search==null?"":search.getValue(),a=quantity==null?"1":quantity.getValue();
+        UUID savedSelection=selected;int savedScroll=scroll;
         super.resize(minecraft,width,height);search.setValue(q);quantity.setValue(a);
+        selected=savedSelection;scroll=savedScroll;
     }
 
     @Override public void onClose(){if(pending!=null){pending=null;return;}if(minecraft!=null)minecraft.setScreen(parent);}
@@ -64,36 +68,36 @@ public final class MarketScreen extends Screen {
     private void layoutFields(){
         if(search==null||quantity==null)return;Layout l=layout();
         search.setX(l.leftX+9);search.setY(l.y+32);search.setWidth(Math.max(64,l.leftW-18));
-        search.setVisible(tab==Tab.EXTERNAL||tab==Tab.PLAYER);
+        search.setVisible(tab==Tab.EXTERNAL||tab==Tab.PLAYER||tab==Tab.MINE);
+        if(tab==Tab.PLAYER||tab==Tab.MINE){search.setX(16);search.setY(97);search.setWidth(146);}
         quantity.setX(l.detailX+31);quantity.setY(height-78);quantity.setWidth(Math.max(38,l.detailW-62));
         quantity.setVisible(tab==Tab.EXTERNAL&&selectedOffer()!=null&&pending==null);
     }
 
     @Override public void render(GuiGraphics g,int mx,int my,float pt){
         tooltip=null;g.fill(0,0,width,height,BG);EconomyStatePayload s=menu.getEconomyState();
-        header(g,s,mx,my);tabs(g,mx,my);
+        header(g,s,mx,my);
+        if(pending!=null){confirmation(g,mx,my);return;}
+        tabs(g,mx,my);
         if(s==null)g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.economy.loading"),width/2,height/2,MUTED);
-        else switch(tab){case OVERVIEW->overview(g,s);case EXTERNAL->external(g,s,mx,my);case PLAYER->player(g,s,mx,my);case CONTRACTS->contracts(g,s,mx,my);case ACTIVITY->activity(g,s,mx,my);}
+        else switch(tab){case OVERVIEW->overview(g,s);case EXTERNAL->external(g,s,mx,my);case PLAYER,MINE->player(g,s,mx,my);case CONTRACTS->contracts(g,s,mx,my);case ACTIVITY->activity(g,s,mx,my);}
         super.render(g,mx,my,pt);
         if(pending!=null)confirmation(g,mx,my);
         else if(tooltip!=null)g.renderTooltip(font,font.split(tooltip,Math.min(240,width-24)),net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner.INSTANCE,mx,my);
     }
 
     private void header(GuiGraphics g,EconomyStatePayload s,int mx,int my){
-        plate(g,8,7,width-16,44);g.renderItem(item("createcityexpansioncore:city_pylon"),14,14);
-        g.drawString(font,title,36,12,0xFFFFD59A,false);g.drawString(font,tr("subtitle"),36,26,MUTED,false);
-        if(s!=null&&width>=550){int cw=Math.max(78,Math.min(126,(width-300)/4));int x=Math.max(190,width-40-cw*4-18);
-            stat(g,x,11,cw,tr("card.wallet"),Component.literal(Long.toString(s.wallet())));
-            stat(g,x+cw+6,11,cw,tr("card.treasury"),Component.literal(Long.toString(s.treasury())));
-            stat(g,x+(cw+6)*2,11,cw,tr("card.reputation"),Component.literal(Integer.toString(s.tradeReputation())));
-            stat(g,x+(cw+6)*3,11,cw,tr("card.obligations"),Component.literal(s.activeObligations()+" / "+obligationLimit(s.tradeReputation())));
-        }
-        iconButton(g,width-37,15,item("minecraft:barrier"),mx,my,tr("close"));
+        plate(g,8,7,width-16,44);
+        g.drawString(font,title,16,14,TEXT,false);
+        g.drawString(font,ellipsize(tr("board.subtitle"),width-270),16,34,MUTED,false);
+        button(g,width-176,12,104,20,tr("board.external"),true,mx,my,false);
+        button(g,width-68,12,52,20,tr("board.history"),true,mx,my,false);
+        if(s!=null)g.drawString(font,ellipsize(tr("board.balances",s.wallet(),s.treasury()),224),width-240,37,MUTED,false);
     }
 
     private void tabs(GuiGraphics g,int mx,int my){
-        int labelW=width>=780?92:0,tw=TAB_H+labelW,total=Tab.values().length*(tw+4)+4,x=Math.max(8,(width-total)/2);plate(g,x,56,total,30);x+=3;
-        for(Tab value:Tab.values()){boolean active=value==tab,hover=in(mx,my,x,57,tw,TAB_H);g.fill(x,57,x+tw,57+TAB_H,active?0xFF4A391E:hover?0xFF303A3D:PANEL_ALT);if(active||hover)g.renderOutline(x,57,tw,TAB_H,active?ACCENT:FRAME);g.renderItem(value.icon,x+6,63);if(labelW>0)g.drawString(font,Component.translatable(value.key),x+28,67,active?0xFFFFD59A:TEXT,false);if(hover)tooltip=Component.translatable(value.key);x+=tw+4;}
+        int tw=(width-168)/MAIN_TABS.length,x=8;
+        for(Tab value:MAIN_TABS){choice(g,x,58,tw-4,Component.translatable(value.key),value==tab,mx,my);x+=tw;}
     }
 
     private void overview(GuiGraphics g,EconomyStatePayload s){
@@ -135,18 +139,51 @@ public final class MarketScreen extends Screen {
     }
 
     private void player(GuiGraphics g,EconomyStatePayload s,int mx,int my){
-        Layout l=layout();threePanels(g,l);title(g,tr("filters"),l.leftX+9,l.y+10);fieldBack(g,search);button(g,l.leftX+8,l.y+61,l.leftW-16,22,tr("create_listing"),true,mx,my,true);
-        List<EconomyStatePayload.ListingView> values=visibleListings(s);title(g,tr("player.active",values.size()),l.listX+9,l.y+10);int top=l.y+27,visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
-        if(values.isEmpty())empty(g,l.listX+12,top+16,tr("empty.player"),l.listW-24);
-        for(int i=start;i<Math.min(values.size(),start+visible);i++){var v=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,v.id().equals(selected),mx,my);ItemStack stack=icon(v.itemId());g.renderItem(stack,l.listX+11,y+5);g.drawString(font,ellipsize(stack.getHoverName(),l.listW-130),l.listX+33,y+5,TEXT,false);g.drawString(font,tr("listing.line",v.amount(),v.price(),v.creatorName()),l.listX+33,y+18,MUTED,false);g.drawString(font,listingType(v.type()),l.listX+l.listW-72,y+5,WARN,false);}
+        Layout l=boardLayout();twoPanels(g,l);fieldBack(g,search);
+        button(g,width-146,58,138,20,tr("create_listing"),s.unlocked(),mx,my,true);
+        for(int i=0;i<4;i++)choice(g,180+i*((width-188)/4),95,(width-188)/4-4,tr("board.filter."+i),listingFilter==i,mx,my);
+        List<EconomyStatePayload.ListingView> values=visibleListings(s);
+        title(g,tr(tab==Tab.MINE?"board.mine_count":"player.active",values.size()),l.listX+9,l.y+10);
+        int visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
+        if(values.isEmpty())empty(g,l.listX+12,l.y+45,tr(tab==Tab.MINE?"board.empty_mine":"empty.player"),l.listW-24);
+        for(int i=start;i<Math.min(values.size(),start+visible);i++){
+            var v=values.get(i);int y=l.y+27+(i-start)*ROW_H;row(g,l,y,v.id().equals(selected),mx,my);
+            g.renderItem(icon(v.itemId()),l.listX+10,y+5);
+            g.drawString(font,ellipsize(tr("item_amount",v.amount(),icon(v.itemId()).getHoverName()),l.listW-112),l.listX+32,y+5,TEXT,false);
+            g.drawString(font,ellipsize(tr("board.listing_actor",v.creatorName(),status(v.state())),l.listW-42),l.listX+32,y+20,MUTED,false);
+            g.drawString(font,ellipsize(v.isBarter()?tr("board.barter"):tr("board.lot",v.price()),80),l.listX+l.listW-85,y+5,WARN,false);
+        }
         listingDetail(g,selectedListing(values),l,mx,my);
     }
 
     private void listingDetail(GuiGraphics g,EconomyStatePayload.ListingView v,Layout l,int mx,int my){
-        title(g,tr("details"),l.detailX+10,l.y+10);if(v==null){empty(g,l.detailX+10,l.y+42,tr("empty.selection"),l.detailW-20);return;}
-        ItemStack stack=icon(v.itemId());g.renderItem(stack,l.detailX+10,l.y+31);g.drawString(font,ellipsize(stack.getHoverName(),l.detailW-42),l.detailX+32,l.y+35,TEXT,false);
-        int y=l.y+61;detail(g,l,y,tr("listing.actor",v.creatorName()));detail(g,l,y+=16,tr("listing.type",listingType(v.type())));detail(g,l,y+=16,tr("listing.offer",side(v.offerItemId(),v.offerAmount())));detail(g,l,y+=16,tr("listing.request",side(v.requestItemId(),v.requestAmount())));detail(g,l,y+=16,tr("listing.status",status(v.state())));if(!v.meeting().isBlank())g.drawWordWrap(font,tr("listing.meeting",v.meeting()),l.detailX+10,y+18,l.detailW-20,MUTED);
-        ActionSpec a=listingAction(v);if(a!=null)button(g,l.detailX+8,height-36,l.detailW-16,22,a.label,true,mx,my,a.danger);
+        title(g,tr("details"),l.detailX+10,l.y+10);
+        if(v==null){empty(g,l.detailX+10,l.y+42,tr("empty.selection"),l.detailW-20);return;}
+        int y=l.y+33;
+        detail(g,l,y,tr("listing.actor",v.creatorName()));
+        detail(g,l,y+=12,tr("listing.type",v.isBarter()?tr("board.barter"):listingType(v.type())));
+        boolean creator=minecraft.player!=null&&minecraft.player.getUUID().equals(v.creator());
+        Component offer=side(v.offerItemId(),v.offerAmount()),request=side(v.requestItemId(),v.requestAmount());
+        detail(g,l,y+=12,tr("board.you_give",creator?offer:request));
+        detail(g,l,y+=12,tr("board.you_receive",creator?request:offer));
+        detail(g,l,y+=12,tr("listing.status",status(v.state())));
+        if(!v.isBarter()){
+            long fee=fee(v.price());
+            detail(g,l,y+=14,tr("board.lot",v.price()));
+            detail(g,l,y+=12,tr("board.fee",fee));
+            detail(g,l,y+=12,tr("board.buyer_total",total(v.price(),fee)));
+        }
+        if(!v.meeting().isBlank())detail(g,l,y+=14,tr("listing.meeting",v.meeting()));
+        Component manual=tr(v.isBarter()?"board.manual_barter":"board.manual");
+        g.drawString(font,Component.literal("i"),l.detailX+l.detailW-16,l.y+10,MUTED,false);
+        if(in(mx,my,l.detailX+l.detailW-24,l.y+5,20,20))tooltip=manual;
+        if(height>=400&&y+48<height-70)g.drawWordWrap(font,manual,l.detailX+10,y+18,l.detailW-20,MUTED);
+        ActionSpec a=listingAction(v);
+        if(a!=null)button(g,l.detailX+8,height-36,l.detailW-16,22,a.label,true,mx,my,a.danger);
+        if(isParticipant(v)&&v.state()==EconomyTypes.ListingState.RESERVED)
+            button(g,l.detailX+8,height-63,l.detailW-16,20,Component.translatable("gui.createcityexpansioncore.economy.cancel"),true,mx,my,false);
+        if(isParticipant(v)&&v.state()==EconomyTypes.ListingState.HANDED_OVER)
+            button(g,l.detailX+8,height-63,l.detailW-16,20,tr("board.dispute"),true,mx,my,false);
     }
 
     private void contracts(GuiGraphics g,EconomyStatePayload s,int mx,int my){
@@ -173,13 +210,19 @@ public final class MarketScreen extends Screen {
     }
 
     @Override public boolean mouseClicked(double mx,double my,int button){
-        if(button!=0)return super.mouseClicked(mx,my,button);if(pending!=null)return confirmClick(mx,my);if(in(mx,my,width-37,15,26,26)){onClose();return true;}if(tabClick(mx,my))return true;
+        if(button!=0)return super.mouseClicked(mx,my,button);if(pending!=null)return confirmClick(mx,my);if(tabClick(mx,my))return true;
         EconomyStatePayload s=menu.getEconomyState();if(s==null)return super.mouseClicked(mx,my,button);
-        boolean handled=switch(tab){case OVERVIEW->false;case EXTERNAL->externalClick(mx,my,s);case PLAYER->playerClick(mx,my,s);case CONTRACTS->contractClick(mx,my,s);case ACTIVITY->activityClick(mx,my,s);};
+        boolean handled=switch(tab){case OVERVIEW->false;case EXTERNAL->externalClick(mx,my,s);case PLAYER,MINE->playerClick(mx,my,s);case CONTRACTS->contractClick(mx,my,s);case ACTIVITY->activityClick(mx,my,s);};
         return handled||super.mouseClicked(mx,my,button);
     }
 
-    private boolean tabClick(double mx,double my){int lw=width>=780?92:0,tw=TAB_H+lw,total=Tab.values().length*(tw+4)+4,x=Math.max(8,(width-total)/2)+3;for(Tab value:Tab.values()){if(in(mx,my,x,57,tw,TAB_H)){tab=value;selected=null;scroll=0;pending=null;layoutFields();return true;}x+=tw+4;}return false;}
+    private boolean tabClick(double mx,double my){
+        if(in(mx,my,width-176,12,104,20)){tab=Tab.EXTERNAL;selected=null;scroll=0;layoutFields();return true;}
+        if(in(mx,my,width-68,12,52,20)){tab=Tab.ACTIVITY;selected=null;scroll=0;layoutFields();return true;}
+        int tw=(width-168)/MAIN_TABS.length,x=8;
+        for(Tab value:MAIN_TABS){if(in(mx,my,x,58,tw-4,20)){tab=value;selected=null;scroll=0;pending=null;layoutFields();return true;}x+=tw;}
+        return false;
+    }
 
     private boolean externalClick(double mx,double my,EconomyStatePayload s){
         Layout l=layout();int cy=l.y+58;for(String value:categories(s)){if(in(mx,my,l.leftX+8,cy,l.leftW-16,20)){category=value;selected=null;scroll=0;return true;}cy+=22;}int ty=l.y+l.h-50;
@@ -190,8 +233,25 @@ public final class MarketScreen extends Screen {
     }
 
     private boolean playerClick(double mx,double my,EconomyStatePayload s){
-        Layout l=layout();if(in(mx,my,l.leftX+8,l.y+61,l.leftW-16,22)){if(minecraft!=null)minecraft.setScreen(new EconomyCreateScreen(this,EconomyCreateScreen.Mode.PRIVATE,menu.getPylonPos(),s));return true;}
-        List<EconomyStatePayload.ListingView> values=visibleListings(s);UUID id=clickedRow(mx,my,l,values.stream().map(EconomyStatePayload.ListingView::id).toList());if(id!=null){selected=id;return true;}var v=selectedListing(values);ActionSpec a=listingAction(v);if(a!=null&&in(mx,my,l.detailX+8,height-36,l.detailW-16,22)){pending=new Pending(tr("confirm.listing",a.label,icon(v.itemId()).getHoverName()),a.action,v.id(),0);return true;}return false;
+        Layout l=boardLayout();
+        if(in(mx,my,width-146,58,138,20)){if(s.unlocked())minecraft.setScreen(new EconomyCreateScreen(this,EconomyCreateScreen.Mode.PRIVATE,menu.getPylonPos(),s));return true;}
+        for(int i=0;i<4;i++)if(in(mx,my,180+i*((width-188)/4),95,(width-188)/4-4,20)){listingFilter=i;selected=null;scroll=0;return true;}
+        List<EconomyStatePayload.ListingView> values=visibleListings(s);
+        UUID id=clickedRow(mx,my,l,values.stream().map(EconomyStatePayload.ListingView::id).toList());
+        if(id!=null){selected=id;return true;}
+        var v=selectedListing(values);if(v==null)return false;
+        ActionSpec a=listingAction(v);
+        if(isParticipant(v)&&in(mx,my,l.detailX+8,height-63,l.detailW-16,20)){
+            if(v.state()==EconomyTypes.ListingState.RESERVED)a=new ActionSpec(EconomyCommandPayload.Action.CANCEL_LISTING,Component.translatable("gui.createcityexpansioncore.economy.cancel"),true);
+            else if(v.state()==EconomyTypes.ListingState.HANDED_OVER)a=new ActionSpec(EconomyCommandPayload.Action.DISPUTE_LISTING,tr("board.dispute"),true);
+            else return false;
+        }else if(!in(mx,my,l.detailX+8,height-36,l.detailW-16,22))return false;
+        if(a!=null){
+            Component message=tr("board.confirm_listing",a.label,side(v.offerItemId(),v.offerAmount()),side(v.requestItemId(),v.requestAmount()));
+            if(!v.isBarter())message=message.copy().append("\n").append(tr("board.confirm_money",v.price(),fee(v.price()),total(v.price(),fee(v.price()))));
+            pending=new Pending(message,a.action,v.id(),0);
+        }
+        return true;
     }
 
     private boolean contractClick(double mx,double my,EconomyStatePayload s){
@@ -200,12 +260,41 @@ public final class MarketScreen extends Screen {
 
     private boolean activityClick(double mx,double my,EconomyStatePayload s){Layout l=wideLayout();List<Activity> values=activities(s);UUID id=clickedRow(mx,my,l,values.stream().map(Activity::id).toList());if(id!=null){selected=id;return true;}return false;}
 
-    private void confirmation(GuiGraphics g,int mx,int my){g.fill(0,0,width,height,0xB0000000);int w=Math.min(360,width-24),x=(width-w)/2,y=height/2-55;plate(g,x,y,w,112);g.fill(x,y,x+w,y+3,ACCENT);g.drawCenteredString(font,tr("confirm.title"),x+w/2,y+13,0xFFFFD59A);g.drawWordWrap(font,pending.message,x+14,y+34,w-28,TEXT);int bw=(w-30)/2;button(g,x+12,y+78,bw,22,Component.translatable("gui.createcityexpansioncore.common.back"),true,mx,my,false);button(g,x+18+bw,y+78,bw,22,Component.translatable("gui.createcityexpansioncore.common.confirm"),true,mx,my,true);}
-    private boolean confirmClick(double mx,double my){int w=Math.min(360,width-24),x=(width-w)/2,y=height/2-55,bw=(w-30)/2;if(in(mx,my,x+12,y+78,bw,22)){pending=null;return true;}if(in(mx,my,x+18+bw,y+78,bw,22)){Pending p=pending;pending=null;PacketDistributor.sendToServer(new EconomyCommandPayload(menu.getPylonPos(),p.action,p.id,null,null,null,p.amount,0,0,0,"","",""));selected=null;request();return true;}return true;}
+    private void confirmation(GuiGraphics g,int mx,int my){
+        g.fill(8,56,width-8,height-8,PANEL);
+        int w=Math.min(460,width-24),x=(width-w)/2,y=height/2-105;
+        title(g,tr("confirm.title"),x+12,y+13);
+        g.drawWordWrap(font,pending.message,x+12,y+38,w-24,TEXT);
+        g.drawWordWrap(font,tr("board.confirm_safety"),x+12,y+108,w-24,MUTED);
+        int bw=(w-30)/2;
+        button(g,x+12,y+172,bw,24,Component.translatable("gui.createcityexpansioncore.common.back"),true,mx,my,false);
+        button(g,x+18+bw,y+172,bw,24,Component.translatable("gui.createcityexpansioncore.common.confirm"),true,mx,my,true);
+    }
+
+    private boolean confirmClick(double mx,double my){
+        int w=Math.min(460,width-24),x=(width-w)/2,y=height/2-105,bw=(w-30)/2;
+        if(in(mx,my,x+12,y+172,bw,24)){pending=null;return true;}
+        if(in(mx,my,x+18+bw,y+172,bw,24)){
+            Pending p=pending;pending=null;
+            if(isListingCommand(p.action)&&!currentListingAction(p.id,p.action)){request();return true;}
+            PacketDistributor.sendToServer(new EconomyCommandPayload(menu.getPylonPos(),p.action,p.id,null,null,null,p.amount,0,0,0,"","",""));
+            request();return true;
+        }
+        return true;
+    }
+
     @Override public boolean mouseScrolled(double mx,double my,double sx,double sy){if(pending==null)scroll=Math.max(0,scroll+(sy<0?1:-1));return true;}
 
     private List<EconomyStatePayload.OfferView> visibleOffers(EconomyStatePayload s){String q=query();return s.offers().stream().filter(o->o.direction()==direction).filter(o->!o.status().terminal()||o.mine()).filter(o->category.equals("all")||category.equals(o.category())).filter(o->q.isBlank()||searchable(o.itemId()).contains(q)).sorted(Comparator.comparing((EconomyStatePayload.OfferView o)->o.status()!=EconomyTypes.MarketOfferStatus.OPEN).thenComparing(o->icon(o.itemId()).getHoverName().getString())).toList();}
-    private List<EconomyStatePayload.ListingView> visibleListings(EconomyStatePayload s){String q=query();return s.listings().stream().filter(v->!v.state().terminal()).filter(v->q.isBlank()||searchable(v.itemId()).contains(q)||v.creatorName().toLowerCase(Locale.ROOT).contains(q)).sorted(Comparator.comparing((EconomyStatePayload.ListingView v)->v.state()!=EconomyTypes.ListingState.OPEN).thenComparing(EconomyStatePayload.ListingView::creatorName)).toList();}
+    private List<EconomyStatePayload.ListingView> visibleListings(EconomyStatePayload s){
+        String q=query();
+        return s.listings().stream()
+                .filter(v->tab==Tab.MINE?isParticipant(v):v.state()==EconomyTypes.ListingState.OPEN||isParticipant(v)&&!v.state().terminal())
+                .filter(v->listingFilter==0||listingFilter==1&&!v.isBarter()&&v.type()==EconomyTypes.ListingType.SELL||listingFilter==2&&!v.isBarter()&&v.type()==EconomyTypes.ListingType.BUY||listingFilter==3&&v.isBarter())
+                .filter(v->q.isBlank()||searchable(v.itemId()).contains(q)||v.requestedItemId()!=null&&searchable(v.requestedItemId()).contains(q)||v.creatorName().toLowerCase(Locale.ROOT).contains(q))
+                .sorted(Comparator.comparing((EconomyStatePayload.ListingView v)->v.state().terminal()).thenComparing(v->v.state()!=EconomyTypes.ListingState.OPEN).thenComparing(EconomyStatePayload.ListingView::creatorName)).toList();
+    }
+
     private List<EconomyStatePayload.ContractView> sortedContracts(EconomyStatePayload s){return s.contracts().stream().sorted(Comparator.comparing((EconomyStatePayload.ContractView c)->c.state().terminal()).thenComparingLong(EconomyStatePayload.ContractView::deadlineAt)).toList();}
     private List<String> categories(EconomyStatePayload s){List<String> values=new ArrayList<>();values.add("all");s.offers().stream().filter(o->o.direction()==direction).map(EconomyStatePayload.OfferView::category).filter(v->v!=null&&!v.isBlank()).distinct().sorted().forEach(values::add);return values;}
     private List<Activity> activities(EconomyStatePayload s){List<Activity> values=new ArrayList<>();s.offers().stream().filter(EconomyStatePayload.OfferView::mine).forEach(o->values.add(new Activity(o.id(),o.itemId(),icon(o.itemId()).getHoverName(),tr("activity.external"),status(o.status()),statusColor(o.status()),o.status().terminal(),o.quantity()-o.remaining(),o.quantity(),o.expiresAt(),o.bond())));s.listings().stream().filter(EconomyStatePayload.ListingView::mine).forEach(v->values.add(new Activity(v.id(),v.itemId(),icon(v.itemId()).getHoverName(),tr("activity.listing"),status(v.state()),statusColor(v.state()),v.state().terminal(),0,0,0,0)));s.contracts().stream().filter(c->c.mine()||c.issuerMine()).forEach(c->values.add(new Activity(c.id(),c.itemId(),contractTitle(c),tr("activity.contract"),status(c.state()),statusColor(c.state()),c.state().terminal(),c.delivered(),c.amount(),c.deadlineAt(),0)));values.sort(Comparator.comparing(Activity::terminal).thenComparing(a->a.title.getString()));return values;}
@@ -232,10 +321,10 @@ public final class MarketScreen extends Screen {
     private void empty(GuiGraphics g,int x,int y,Component value,int w){g.drawWordWrap(font,value,x,y,Math.max(60,w),MUTED);}
     private void fieldBack(GuiGraphics g,EditBox field){if(field==null||!field.visible)return;g.fill(field.getX()-3,field.getY()-2,field.getX()+field.getWidth()+3,field.getY()+18,0xFF111719);g.renderOutline(field.getX()-3,field.getY()-2,field.getWidth()+6,20,FRAME);}
     private void choice(GuiGraphics g,int x,int y,int w,Component label,boolean selected,int mx,int my){boolean hover=in(mx,my,x,y,w,20);g.fill(x,y,x+w,y+20,selected?0xFF4A391E:hover?0xFF303A3D:PANEL_ALT);if(selected)g.fill(x,y,x+2,y+20,ACCENT);g.drawString(font,ellipsize(label,w-14),x+8,y+6,selected?0xFFFFD59A:TEXT,false);}
-    private void button(GuiGraphics g,int x,int y,int w,int h,Component label,boolean enabled,int mx,int my,boolean strong){boolean hover=enabled&&in(mx,my,x,y,w,h);int color=!enabled?0xFF282E30:strong?(hover?0xFF76562E:0xFF493A29):(hover?0xFF39464A:PANEL_ALT);g.fill(x,y,x+w,y+h,color);g.renderOutline(x,y,w,h,enabled?(strong?ACCENT:FRAME):0xFF394043);g.drawCenteredString(font,ellipsize(label,w-8),x+w/2,y+(h-8)/2,enabled?(strong?0xFFFFD59A:TEXT):0xFF687174);}
+    private void button(GuiGraphics g,int x,int y,int w,int h,Component label,boolean enabled,int mx,int my,boolean strong){boolean hover=enabled&&in(mx,my,x,y,w,h);int color=!enabled?0xFF282E30:strong?(hover?0xFF76562E:0xFF493A29):(hover?0xFF39464A:PANEL_ALT);CityPylonTheme.rounded(g,x,y,w,h,4,enabled?(strong?ACCENT:FRAME):0xFF394043);CityPylonTheme.rounded(g,x+1,y+1,w-2,h-2,3,color);g.drawCenteredString(font,ellipsize(label,w-8),x+w/2,y+(h-8)/2,enabled?(strong?0xFFFFD59A:TEXT):0xFF687174);}
     private void iconButton(GuiGraphics g,int x,int y,ItemStack icon,int mx,int my,Component tip){boolean hover=in(mx,my,x,y,26,26);g.fill(x,y,x+26,y+26,hover?0xFF303A3D:PANEL_ALT);g.renderOutline(x,y,26,26,FRAME);g.renderItem(icon,x+5,y+5);if(hover)tooltip=tip;}
     private static void progress(GuiGraphics g,int x,int y,int w,long value,long max){g.fill(x,y,x+w,y+3,0xFF30383B);int filled=max<=0?0:(int)Math.min(w,Math.max(0,java.math.BigInteger.valueOf(value).multiply(java.math.BigInteger.valueOf(w)).divide(java.math.BigInteger.valueOf(max)).longValue()));g.fill(x,y,x+filled,y+3,ACCENT);}
-    private static void plate(GuiGraphics g,int x,int y,int w,int h){g.fill(x,y,x+w,y+h,PANEL);g.renderOutline(x,y,w,h,FRAME);}
+    private static void plate(GuiGraphics g,int x,int y,int w,int h){CityPylonTheme.panel(g,x,y,w,h);}
 
     private Component destination(EconomyStatePayload s,UUID id){var p=FreightUi.point(s,id);return p==null?FreightUi.tr("requires_setup"):Component.literal(p.name); }
     private Component side(ResourceLocation id,long amount){return id==null?tr("currency",amount):tr("item_amount",amount,icon(id).getHoverName());}
@@ -257,12 +346,31 @@ public final class MarketScreen extends Screen {
     private static ItemStack icon(ResourceLocation id){return id==null||!BuiltInRegistries.ITEM.containsKey(id)?new ItemStack(Items.BARRIER):new ItemStack(BuiltInRegistries.ITEM.get(id));}
     private static boolean in(double mx,double my,int x,int y,int w,int h){return mx>=x&&mx<x+w&&my>=y&&my<y+h;}
 
+    private Layout boardLayout(){
+        int detailW=Math.min(256,Math.max(224,width*2/5)),detailX=width-detailW-8;
+        return new Layout(8,0,8,detailX-21,detailX,detailW,126,Math.max(90,height-134));
+    }
+    private boolean isParticipant(EconomyStatePayload.ListingView v){
+        UUID me=minecraft==null||minecraft.player==null?null:minecraft.player.getUUID();
+        return me!=null&&(me.equals(v.creator())||me.equals(v.counterparty()));
+    }
+    private long fee(long price){var state=menu.getEconomyState();return state==null?0:com.example.examplemod.economy.EconomyMath.applyBasisPoints(price,state.privateFeeBasisPoints());}
+    private static long total(long price,long fee){return price>Long.MAX_VALUE-fee?Long.MAX_VALUE:price+fee;}
+    private static boolean isListingCommand(EconomyCommandPayload.Action a){return switch(a){case ACCEPT_LISTING,MARK_HANDED,CONFIRM_LISTING,CANCEL_LISTING,DISPUTE_LISTING->true;default->false;};}
+    private boolean currentListingAction(UUID id,EconomyCommandPayload.Action action){
+        var state=menu.getEconomyState();if(state==null)return false;
+        var v=state.listings().stream().filter(l->l.id().equals(id)).findFirst().orElse(null);if(v==null)return false;
+        if(action==EconomyCommandPayload.Action.CANCEL_LISTING&&v.state()==EconomyTypes.ListingState.RESERVED)return isParticipant(v);
+        if(action==EconomyCommandPayload.Action.DISPUTE_LISTING&&v.state()==EconomyTypes.ListingState.HANDED_OVER)return isParticipant(v);
+        ActionSpec expected=listingAction(v);return expected!=null&&expected.action==action;
+    }
+
     private record Layout(int leftX,int leftW,int listX,int listW,int detailX,int detailW,int y,int h){}
     private record Pending(Component message,EconomyCommandPayload.Action action,UUID id,long amount){}
     private record ActionSpec(EconomyCommandPayload.Action action,Component label,boolean danger){}
     private record Activity(UUID id,ResourceLocation item,Component title,Component kind,Component state,int color,boolean terminal,long current,long total,long deadline,long bond){}
     private enum Tab{
-        OVERVIEW("gui.createcityexpansioncore.market.tab.overview","minecraft:compass"),EXTERNAL("gui.createcityexpansioncore.market.tab.external","minecraft:emerald"),PLAYER("gui.createcityexpansioncore.market.tab.player","minecraft:player_head"),CONTRACTS("gui.createcityexpansioncore.market.tab.contracts","minecraft:writable_book"),ACTIVITY("gui.createcityexpansioncore.market.tab.activity","minecraft:clock");
+        MINE("gui.createcityexpansioncore.market.board.mine","minecraft:clock"),OVERVIEW("gui.createcityexpansioncore.market.tab.overview","minecraft:compass"),EXTERNAL("gui.createcityexpansioncore.market.tab.external","minecraft:emerald"),PLAYER("gui.createcityexpansioncore.market.tab.player","minecraft:player_head"),CONTRACTS("gui.createcityexpansioncore.market.tab.contracts","minecraft:writable_book"),ACTIVITY("gui.createcityexpansioncore.market.tab.activity","minecraft:clock");
         final String key;final ItemStack icon;Tab(String key,String icon){this.key=key;this.icon=item(icon);}
     }
 }

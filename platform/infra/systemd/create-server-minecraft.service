@@ -1,0 +1,33 @@
+[Unit]
+Description=Create Server Minecraft 1.21.1 NeoForge 21.1.251
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User=createserver
+Group=createserver
+WorkingDirectory=/opt/create-server/minecraft
+ExecStart=/opt/create-server/minecraft/start-linux.sh
+ExecStop=/opt/create-server/minecraft/stop-linux.sh ${MAINPID}
+Restart=on-failure
+RestartSec=15
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=180
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/create-server/minecraft
+MemoryHigh=4G
+MemoryMax=4608M
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
