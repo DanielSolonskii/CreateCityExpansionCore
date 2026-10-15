@@ -1848,5 +1848,7 @@
   "gui.createcityexpansioncore.profile.search_back": "← Back to profile",
   "gui.createcityexpansioncore.profile.search_count": "Found: %s",
   "gui.createcityexpansioncore.profile.search_ambiguous": "Multiple players have that name. Select a profile using search.",
-  "gui.createcityexpansioncore.profile.open_hint": "Open player profile"
+  "gui.createcityexpansioncore.profile.open_hint": "Open player profile",
+  "gui.createcityexpansioncore.world_map.view.reduce_motion": "Reduce motion",
+  "gui.createcityexpansioncore.world_map.view.resume_follow": "Resume following"
 }

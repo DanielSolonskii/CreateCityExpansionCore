@@ -14,7 +14,7 @@ public final class AtlasPreferences {
     public int mode;
     public int territoryMode;
     public boolean plotGrid;
-    public boolean positioned, grid, minimap;
+    public boolean positioned, grid, minimap, reducedMotion;
     public final int[] overlays = {-1, -1, -1, -1};
     public final List<Pin> pins = new ArrayList<>();
     public static final int MAX_PINS = 64;
@@ -50,6 +50,7 @@ public final class AtlasPreferences {
             result.zoom = Double.parseDouble(values.getProperty(prefix + "zoom", "1.25"));
             result.positioned = Boolean.parseBoolean(values.getProperty(prefix + "positioned", "false"));
             result.mode = Math.max(0, Math.min(2, Integer.parseInt(values.getProperty(prefix + "mode", "0"))));
+            result.reducedMotion=Boolean.parseBoolean(values.getProperty(prefix+"reducedMotion","false"));
             result.grid = Boolean.parseBoolean(values.getProperty(prefix + "grid", "false"));
             result.territoryMode=Math.clamp(Integer.parseInt(values.getProperty(prefix+"territoryMode","0")),0,2);
             result.plotGrid=Boolean.parseBoolean(values.getProperty(prefix+"plotGrid","false"));
@@ -77,6 +78,7 @@ public final class AtlasPreferences {
         values.setProperty(prefix + "zoom", Double.toString(zoom));
         values.setProperty(prefix + "positioned", Boolean.toString(positioned));
         values.setProperty(prefix + "mode", Integer.toString(mode));
+        values.setProperty(prefix+"reducedMotion",Boolean.toString(reducedMotion));
         values.setProperty(prefix + "grid", Boolean.toString(grid));
         values.setProperty(prefix+"territoryMode",Integer.toString(territoryMode));
         values.setProperty(prefix+"plotGrid",Boolean.toString(plotGrid));

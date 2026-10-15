@@ -65,19 +65,32 @@ public final class MapMarkerRenderer {
     /** North-up map: Minecraft yaw zero points south, so the arrow rotates by yaw + 180. */
     public static void renderPlayer(GuiGraphics graphics, int centerX, int centerY, ItemStack icon,
                                     boolean hovered, boolean selected) {
-        graphics.fill(centerX - 11, centerY - 11, centerX + 11, centerY + 11, BACKING);
-        graphics.renderOutline(centerX - 11, centerY - 11, 22, 22, selected ? SELECTED : FRAME);
+        var player=Minecraft.getInstance().player;
+        renderPlayer(graphics,centerX,centerY,icon,hovered,selected,player==null?0:player.getYRot()+180);
+    }
+
+    public static void renderPlayer(GuiGraphics graphics, int centerX, int centerY, ItemStack icon,
+                                    boolean hovered, boolean selected, double yaw) {
+        if(hovered||selected) for(int a=0;a<40;a++) {
+            double angle=a*Math.PI/20;
+            int x=centerX+(int)Math.round(Math.cos(angle)*11), y=centerY+(int)Math.round(Math.sin(angle)*11);
+            graphics.fill(x,y,x+1,y+1,OWNED);
+        }
         graphics.pose().pushPose();
-        graphics.pose().translate(centerX, centerY, 0);
-        var player = Minecraft.getInstance().player;
-        graphics.pose().mulPose(Axis.ZP.rotationDegrees(player == null ? 0 : player.getYRot() + 180));
-        drawGlyph(graphics, AtlasGlyph.PLAYER, -8, -8, selected ? SELECTED : PLAYER);
+        graphics.pose().translate(centerX,centerY,0);
+        graphics.pose().mulPose(Axis.ZP.rotationDegrees((float)yaw));
+        pointer(graphics,1,2,0x99070C10);
+        for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++)pointer(graphics,x,y,0xFF172025);
+        pointer(graphics,0,0,0xFFF5F2E9);
+        graphics.fill(-1,-1,1,2,OWNED);
         graphics.pose().popPose();
-        int color = selected ? SELECTED : PLAYER;
-        graphics.hLine(centerX - 13, centerX - 10, centerY, color);
-        graphics.hLine(centerX + 10, centerX + 13, centerY, color);
-        graphics.vLine(centerX, centerY - 13, centerY - 10, color);
-        graphics.vLine(centerX, centerY + 10, centerY + 13, color);
+    }
+    private static void pointer(GuiGraphics g,int x,int y,int color) {
+        for(int row=-7;row<=6;row++) {
+            int half=(row+7)/2;
+            if(row<3) g.fill(x-half,y+row,x+half+1,y+row+1,color);
+            else { int gap=row-2; g.fill(x-half,y+row,x-gap,y+row+1,color); g.fill(x+gap+1,y+row,x+half+1,y+row+1,color); }
+        }
     }
 
     public static void renderCardIcon(GuiGraphics graphics, int x, int y, ItemStack icon,

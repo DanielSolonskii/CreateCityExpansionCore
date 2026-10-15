@@ -277,6 +277,60 @@ public final class CityMapPanel {
     private double centerZ;
     private double zoom = 1.25;
     private boolean dragging;
+    private boolean motionEnabled, reducedMotion;
+    private long motionFrame, cameraStarted, selectionStarted, dragAt;
+    private double fromX, fromZ, fromZoom, toX, toZ, toZoom, velocityX, velocityZ;
+    private boolean cameraMoving;
+    private double zoomAnchorX, zoomAnchorZ, zoomMouseX, zoomMouseY;
+    private boolean anchoredZoom;
+    private double pointerYaw;
+    private boolean pointerInitialized;
+
+    public void setMotion(boolean enabled, boolean reduced) {
+        motionEnabled = enabled; reducedMotion = reduced;
+        if (!enabled || reduced) stopMotion();
+    }
+    public boolean reducedMotion() { return reducedMotion; }
+    private boolean preciseTool() { return projectPicking || placingPin || measuring || pendingClaim != null; }
+    private void stopMotion() { cameraMoving = false; anchoredZoom = false; velocityX = velocityZ = 0; }
+    private void animateTo(double x, double z, double scale) {
+        stopMotion();
+        if (!motionEnabled || reducedMotion || preciseTool()) { restoreView(x,z,scale); return; }
+        fromX=centerX; fromZ=centerZ; fromZoom=zoom;
+        toX=x; toZ=z; toZoom=scale; cameraStarted=System.nanoTime(); cameraMoving=true;
+    }
+    public void followPosition(double x, double z) {
+        if (preciseTool()) return;
+        if (Math.abs(x-centerX)*zoom > viewportWidth*.12 || Math.abs(z-centerZ)*zoom > viewportHeight*.12)
+            if (!cameraMoving || Math.hypot(x-toX,z-toZ)*zoom > 4) animateTo(x,z,zoom);
+    }
+    private void updateMotion() {
+        long now=System.nanoTime();
+        double dt=motionFrame==0?0:Math.clamp((now-motionFrame)/1e9,0,.05); motionFrame=now;
+        if (preciseTool()) stopMotion();
+        if (cameraMoving) {
+            double t=MapMotion.ease((now-cameraStarted)/180_000_000.0);
+            zoom=fromZoom+(toZoom-fromZoom)*t;
+            if (anchoredZoom) {
+                centerX=zoomAnchorX-(zoomMouseX-viewportX-viewportWidth/2.0)/zoom;
+                centerZ=zoomAnchorZ-(zoomMouseY-viewportY-viewportHeight/2.0)/zoom;
+            } else { centerX=fromX+(toX-fromX)*t; centerZ=fromZ+(toZ-fromZ)*t; }
+            if (t>=1) { cameraMoving=false; anchoredZoom=false; }
+        } else if (!dragging && motionEnabled && !reducedMotion && !preciseTool()) {
+            double decay=Math.exp(-dt*14), step=(1-decay)/14;
+            centerX+=velocityX*step; centerZ+=velocityZ*step;
+            velocityX*=decay; velocityZ*=decay;
+            if (Math.hypot(velocityX,velocityZ)*zoom<2) velocityX=velocityZ=0;
+        }
+        clampCenter();
+        var player=Minecraft.getInstance().player;
+        if (player!=null) {
+            double target=player.getYRot()+180;
+            pointerYaw=pointerInitialized && motionEnabled && !reducedMotion?MapMotion.angle(pointerYaw,target,dt):target;
+            pointerInitialized=true;
+        }
+    }
+
 
     private int viewportX;
     private int viewportY;
@@ -562,6 +616,7 @@ public final class CityMapPanel {
                 && (this.selection == null || !value.id().equals(this.selection.id()))) {
             this.routeSelectionStartedAt = System.currentTimeMillis();
         }
+        if (!sameTarget(this.selection,value)) selectionStarted=System.nanoTime();
         this.selection = value;
     }
 
@@ -688,9 +743,7 @@ public final class CityMapPanel {
     }
 
     public void centerOn(BlockPos pos) {
-        this.centerX = pos.getX() + 0.5;
-        this.centerZ = pos.getZ() + 0.5;
-        clampCenter();
+        animateTo(pos.getX()+.5, pos.getZ()+.5, zoom);
     }
 
     public void setEconomyInfrastructure(List<EconomyStatePayload.InfrastructureView> values) {
@@ -776,6 +829,7 @@ public final class CityMapPanel {
         this.centerButtonY = y + height - 15;
         this.layerButtonsX = x + width - 166;
         this.layerButtonsY = y + 4;
+        updateMotion();
         layoutMarkers();
         updateHover(insideViewport(mouseX, mouseY) ? findSelection(mouseX, mouseY) : null);
         this.hoveredPlot = plotAtScreen(mouseX, mouseY);
@@ -827,7 +881,25 @@ public final class CityMapPanel {
                 renderMarkers(guiGraphics, mouseX, mouseY);
                 // Placement previews and project markers must stay visible over city/player icons.
                 if (this.visualOverlay != null) this.visualOverlay.accept(guiGraphics);
-                renderPersonalTools(guiGraphics);
+                renderPersonalTools(guiGraphics,mouseX,mouseY);
+                if (placingPin && insideViewport(mouseX,mouseY)) {
+                    guiGraphics.renderOutline(mouseX-4,mouseY-4,9,9,MapPalette.SELECTED);
+                    var label=Component.literal((int)Math.floor(screenToWorldX(mouseX))+" / "+(int)Math.floor(screenToWorldZ(mouseY)));
+                    var font=Minecraft.getInstance().font;
+                    int lx=Math.max(viewportX+3,Math.min(mouseX+10,viewportX+viewportWidth-font.width(label)-4));
+                    int ly=Math.max(viewportY+3,Math.min(mouseY+12,viewportY+viewportHeight-12));
+                    guiGraphics.fill(lx-3,ly-3,lx+font.width(label)+3,ly+11,MapPalette.PAPER_SUNK);
+                    guiGraphics.drawString(font,label,lx,ly,MapPalette.TEXT,false);
+                }
+                if (motionEnabled && !reducedMotion && selection!=null) {
+                    double t=(System.nanoTime()-selectionStarted)/400_000_000.0;
+                    if(t>=0 && t<1) {
+                        ScreenPoint selectedPoint=markerPoint(selection.kind(),selection.id(),selection.pos());
+                        int sx=selectedPoint.x(), sy=selectedPoint.y();
+                        int r=12+(int)(12*MapMotion.ease(t)), color=((int)(170*(1-t))<<24)|(MapPalette.SELECTED&0xFFFFFF);
+                        for(int a=0;a<48;a++) { double angle=a*Math.PI/24; int px=sx+(int)Math.round(Math.cos(angle)*r),py=sy+(int)Math.round(Math.sin(angle)*r); guiGraphics.fill(px,py,px+1,py+1,color); }
+                    }
+                }
             });
         } finally {
             guiGraphics.disableScissor();
@@ -913,6 +985,7 @@ public final class CityMapPanel {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (insideViewport(mouseX,mouseY)) { stopMotion(); dragAt=0; }
         /*
          * Подтверждение claim владеет кликами, пока открыто: карта под ним
          * не панорамируется и не выбирает объекты, иначе подтверждение
@@ -1085,7 +1158,7 @@ public final class CityMapPanel {
         }
         Selection player = playerSelection();
         if (player != null) addMarker(entries, player.kind(), player.id(), player.pos(),
-                player.pos().getX() + 0.5, player.pos().getZ() + 0.5, 75);
+                Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), 100);
         if (this.showStations && this.zoom >= MIN_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
             if (station.dimension().equals(this.dimensionId)) addMarker(entries, SelectionKind.STATION,
                     station.registrationId(), station.pos(), station.pos().getX() + 0.5,
@@ -1196,6 +1269,10 @@ public final class CityMapPanel {
         if (!this.dragging || button != 0) {
             return false;
         }
+        long now=System.nanoTime();
+        double dt=dragAt==0?1.0/60:Math.clamp((now-dragAt)/1e9,.008,.05); dragAt=now;
+        velocityX=Math.clamp(-dragX/zoom/dt,-1800/zoom,1800/zoom);
+        velocityZ=Math.clamp(-dragY/zoom/dt,-1800/zoom,1800/zoom);
         this.centerX -= dragX / this.zoom;
         this.centerZ -= dragY / this.zoom;
         clampCenter();
@@ -1205,6 +1282,7 @@ public final class CityMapPanel {
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0 && this.dragging) {
             this.dragging = false;
+            if (System.nanoTime()-dragAt>80_000_000L) velocityX=velocityZ=0;
             return true;
         }
         return false;
@@ -1218,11 +1296,17 @@ public final class CityMapPanel {
         double worldXBefore = screenToWorldX(mouseX);
         double worldZBefore = screenToWorldZ(mouseY);
         double factor = scrollY > 0.0 ? ZOOM_STEP : 1.0 / ZOOM_STEP;
-        double newZoom = clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+        double newZoom = clamp((cameraMoving && anchoredZoom ? toZoom : this.zoom) * factor, MIN_ZOOM, MAX_ZOOM);
         if (newZoom == this.zoom) {
             return true;
         }
 
+        if (motionEnabled && !reducedMotion && !preciseTool()) {
+            animateTo(centerX,centerZ,newZoom);
+            anchoredZoom=true; zoomAnchorX=worldXBefore; zoomAnchorZ=worldZBefore;
+            zoomMouseX=mouseX; zoomMouseY=mouseY; return true;
+        }
+        stopMotion();
         this.zoom = newZoom;
         this.centerX += worldXBefore - screenToWorldX(mouseX);
         this.centerZ += worldZBefore - screenToWorldZ(mouseY);
@@ -1430,7 +1514,26 @@ public final class CityMapPanel {
         g.pose().pushPose();g.pose().translate(x,y,0);g.pose().scale(scale,scale,1);
         MapMarkerRenderer.drawGlyph(g,AtlasGlyph.CITY,-8,-8,color);g.pose().popPose();
     }
+    private final List<int[]> cityLabelBounds=new ArrayList<>();
+    private void reserveCityLabel(int x,int y,int width) { cityLabelBounds.add(new int[]{x-3,y-3,x+width+3,y+11}); }
+    private boolean cityLabelFits(int x,int y,int width) {
+        if(cityLabelBounds.size()>=24)return false;
+        for(int[] r:cityLabelBounds) if(x-3<r[2]&&x+width+3>r[0]&&y-3<r[3]&&y+11>r[1])return false;
+        reserveCityLabel(x,y,width);return true;
+    }
     private void renderPeers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        cityLabelBounds.clear();
+        var labelFont=Minecraft.getInstance().font;
+        if(showCities&&hasCityAnchor()) {
+            ScreenPoint anchor=markerPoint(SelectionKind.CITY,null,pylonPos);
+            String name=peers.stream().filter(this::atAnchor).findFirst().map(CityMapPeersPayload.Peer::name).orElse("");
+            reserveCityLabel(anchor.x()+TerritoryPresentation.cityRadius(zoom)+4,anchor.y()-4,labelFont.width(name));
+        }
+        for(var peer:peers) if(matchesTargetAt(selection,SelectionKind.CITY,peer.pylonX(),peer.pylonZ())
+                ||matchesTargetAt(hoveredSelection,SelectionKind.CITY,peer.pylonX(),peer.pylonZ())) {
+            ScreenPoint point=markerPoint(SelectionKind.CITY,peer.cityId(),new BlockPos(peer.pylonX(),pylonPos.getY(),peer.pylonZ()));
+            reserveCityLabel(point.x()+TerritoryPresentation.cityRadius(zoom)+4,point.y()-4,labelFont.width(peer.name()));
+        }
         if (this.showRelations) for (CityMapPeersPayload.Peer peer : this.peers) {
             CityRelationSnapshot.Status status = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
             if (status == CityRelationSnapshot.Status.NONE || peer.own()) continue;
@@ -1508,7 +1611,8 @@ public final class CityMapPanel {
                 if (textX + font.width(name) < viewportX + viewportW
                         && textX > viewportX
                         && textY > viewportY
-                        && textY < viewportY + viewportH) {
+                        && textY < viewportY + viewportH
+                        && (!motionEnabled || emphasized || cityLabelFits(textX,textY,font.width(name)))) {
                     guiGraphics.drawString(
                             font,
                             name,
@@ -1817,6 +1921,7 @@ public final class CityMapPanel {
      * чужих городов не отправляются.
      */
     private void deferCityTooltip(int mouseX, int mouseY, CityMapPeersPayload.Peer peer) {
+        if (motionEnabled && hoveredSelection==null) return;
         Component title = Component.literal(peer.name());
         List<Component> lines = new ArrayList<>();
         lines.add(Component.translatable(
@@ -2052,11 +2157,9 @@ public final class CityMapPanel {
             ScreenPoint player = markerPoint(SelectionKind.PLAYER, playerId, playerPos);
             int playerX = player.x();
             int playerY = player.y();
-            drawMarkerLeader(guiGraphics, playerX, playerY,
-                    worldToScreenX(playerPos.getX() + 0.5), worldToScreenY(playerPos.getZ() + 0.5));
             MapMarkerRenderer.renderPlayer(guiGraphics, playerX, playerY, this.playerIcon,
                     matchesTarget(this.hoveredSelection, SelectionKind.PLAYER, playerId),
-                    matchesTarget(this.selection, SelectionKind.PLAYER, playerId));
+                    matchesTarget(this.selection, SelectionKind.PLAYER, playerId), pointerYaw);
         }
 
         if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : projects) {
@@ -2107,10 +2210,11 @@ public final class CityMapPanel {
                             value.pos().getX(), value.pos().getZ()));
         }
         if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.renderMap(guiGraphics, this.zoom,point.x(),point.y(),this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.literal(freight.address),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=(int)(24+18*Math.sin(System.currentTimeMillis()/180.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=reducedMotion?32:(int)(32+10*Math.sin(System.nanoTime()/650_000_000.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
     }
 
     private void deferTooltip(int mouseX, int mouseY, Component... lines) {
+        if (motionEnabled && hoveredSelection==null) return;
         this.pendingTooltip = lines;
         this.pendingTooltipX = mouseX;
         this.pendingTooltipY = mouseY;
@@ -2499,6 +2603,7 @@ public final class CityMapPanel {
     public double zoom() { return this.zoom; }
     public void restoreView(double x, double z, double zoom) {
         if (!Double.isFinite(x) || !Double.isFinite(z) || !Double.isFinite(zoom)) return;
+        stopMotion();
         this.centerX = x; this.centerZ = z; this.zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM); clampCenter();
     }
     public void centerOnPlayer() { BlockPos player = playerPos(); if (player != null) centerOn(player); }
@@ -2510,10 +2615,9 @@ public final class CityMapPanel {
             minX = Math.min(minX, plot.plotX() * 50); minZ = Math.min(minZ, plot.plotZ() * 50);
             maxX = Math.max(maxX, (plot.plotX() + 1) * 50); maxZ = Math.max(maxZ, (plot.plotZ() + 1) * 50);
         }
-        this.centerX = (minX + (double) maxX) / 2; this.centerZ = (minZ + (double) maxZ) / 2;
-        this.zoom = clamp(Math.min(Math.max(1, this.viewportWidth - 48) / (double) Math.max(1, maxX - minX),
+        double fitZoom = clamp(Math.min(Math.max(1, this.viewportWidth - 48) / (double) Math.max(1, maxX - minX),
                 Math.max(1, this.viewportHeight - 48) / (double) Math.max(1, maxZ - minZ)), MIN_ZOOM, MAX_ZOOM);
-        clampCenter();
+        animateTo((minX+(double)maxX)/2,(minZ+(double)maxZ)/2,fitZoom);
     }
     public void setPersonalPins(List<AtlasPreferences.Pin> pins) { this.personalPins.clear(); this.personalPins.addAll(pins.stream().limit(AtlasPreferences.MAX_PINS).toList()); }
     public List<AtlasPreferences.Pin> personalPins() { return List.copyOf(this.personalPins); }
@@ -2536,7 +2640,7 @@ public final class CityMapPanel {
                 Component.translatable("gui.createcityexpansioncore.world_map.pin", index + 1), new BlockPos(pin.x(), 0, pin.z()),
                 true, List.of(Component.translatable("gui.createcityexpansioncore.world_map.pin.local")), this.cityIcon, false);
     }
-    private void renderPersonalTools(GuiGraphics graphics) {
+    private void renderPersonalTools(GuiGraphics graphics,int mouseX,int mouseY) {
         for (int index = 0; index < this.personalPins.size(); index++) {
             Selection pin = pinSelection(index);
             int x = worldToScreenX(pin.pos().getX()), y = worldToScreenY(pin.pos().getZ());
@@ -2547,10 +2651,12 @@ public final class CityMapPanel {
         if (this.measuring && this.measureStart != null) {
             int x = worldToScreenX(this.measureStart.getX()), y = worldToScreenY(this.measureStart.getZ());
             graphics.renderOutline(x - 3, y - 3, 6, 6, MapPalette.SELECTED);
-            if (this.measureEnd != null) {
-                int ex = worldToScreenX(this.measureEnd.getX()), ey = worldToScreenY(this.measureEnd.getZ());
+            BlockPos end=this.measureEnd!=null?this.measureEnd:insideViewport(mouseX,mouseY)
+                    ?BlockPos.containing(screenToWorldX(mouseX),0,screenToWorldZ(mouseY)):null;
+            if (end != null) {
+                int ex = worldToScreenX(end.getX()), ey = worldToScreenY(end.getZ());
                 drawLine(graphics, x, y, ex, ey, MapPalette.SELECTED);
-                double distance = Math.hypot(this.measureEnd.getX() - (double) this.measureStart.getX(), this.measureEnd.getZ() - (double) this.measureStart.getZ());
+                double distance = Math.hypot(end.getX() - (double) this.measureStart.getX(), end.getZ() - (double) this.measureStart.getZ());
                 Component label = Component.translatable("gui.createcityexpansioncore.world_map.measure.distance", String.format(Locale.ROOT, "%.1f", distance));
                 var font = Minecraft.getInstance().font;
                 int lx = Math.max(this.viewportX + 4, Math.min(this.viewportX + this.viewportWidth - font.width(label) - 4, (x + ex) / 2));
@@ -2560,6 +2666,7 @@ public final class CityMapPanel {
             }
         }
     }
+    public boolean terrainLoading() { return !requestedTiles.isEmpty(); }
     public Component terrainStatus() {
         boolean failed=false,loading=false,unknown=false;int level=terrainLevel();
         int minX=terrainCoordinate(screenToWorldX(viewportX),level),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),level);
@@ -2799,7 +2906,7 @@ public final class CityMapPanel {
     }
     private void drawAnimatedRoute(GuiGraphics graphics,RailwayMapPayload.RouteView route,int color) {
         if(route.segments().isEmpty())return;
-        int alpha=(int)(36+12*Math.sin(System.currentTimeMillis()/1100.0));
+        int alpha=reducedMotion?36:(int)(36+12*Math.sin(System.nanoTime()/1_100_000_000.0));
         drawSegments(graphics,route.segments(),(alpha<<24)|(color&0xFFFFFF),-2,9);
         drawSegments(graphics,route.segments(),0xF011181D,-1,5);
         drawSegments(graphics,route.segments(),color,3);
@@ -2924,6 +3031,7 @@ public final class CityMapPanel {
     }
 
     private void centerOnPylon() {
+        stopMotion();
         this.centerX = this.pylonPos.getX() + 0.5;
         this.centerZ = this.pylonPos.getZ() + 0.5;
         this.dragging = false;

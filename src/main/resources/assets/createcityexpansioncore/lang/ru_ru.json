@@ -1848,5 +1848,7 @@
   "gui.createcityexpansioncore.profile.search_back": "← К профилю",
   "gui.createcityexpansioncore.profile.search_count": "Найдено: %s",
   "gui.createcityexpansioncore.profile.search_ambiguous": "Этот ник принадлежит нескольким игрокам. Выберите профиль через поиск.",
-  "gui.createcityexpansioncore.profile.open_hint": "Открыть профиль игрока"
+  "gui.createcityexpansioncore.profile.open_hint": "Открыть профиль игрока",
+  "gui.createcityexpansioncore.world_map.view.reduce_motion": "Уменьшить анимации",
+  "gui.createcityexpansioncore.world_map.view.resume_follow": "Продолжить слежение"
 }
