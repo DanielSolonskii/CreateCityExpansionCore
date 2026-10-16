@@ -1,0 +1,12 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('checkSocialV1', JavaExec) {
+            dependsOn tasks.named('mineVisualTestClasses')
+            classpath = sourceSets.mineVisualTest.runtimeClasspath
+            mainClass = 'com.example.examplemod.social.SocialCheck'
+            javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+            workingDir = layout.buildDirectory.dir('checks/social').get().asFile
+            doFirst { workingDir.mkdirs() }
+        }
+    }
+}

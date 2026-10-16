@@ -18,6 +18,7 @@ public record PlayerProfileLayout(int screenWidth, int screenHeight, int height,
     }
     public Rect frame() { return new Rect(0, 0, WIDTH, height); }
     public Rect close() { return new Rect(WIDTH - 36, 8, 24, 22); }
+    public Rect socialToggle() { return new Rect(208,8,86,22); }
     public Rect searchToggle() { return new Rect(WIDTH - 132, 8, 90, 22); }
     public Rect searchField() { return new Rect(14, 92, 292, 26); }
     public Rect searchSubmit() { return new Rect(312, 92, 106, 26); }
