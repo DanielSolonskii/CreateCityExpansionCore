@@ -1233,9 +1233,9 @@
   "message.createcityexpansioncore.restriction.shulker_crafted": "Шалкеровые ящики отключены на сервере, поэтому этот использовать или поставить нельзя. Материалы при его получении не тратятся.",
   "message.createcityexpansioncore.restriction.shulker_open": "Шалкеровые ящики отключены на сервере: они работали бы как переносимое хранилище.",
   "message.createcityexpansioncore.restriction.shulker_place": "Шалкеровые ящики отключены на сервере, разместить их нельзя.",
-  "message.createcityexpansioncore.server.alpha_notice": "Сервер RE:CREATED находится в альфе, и могут быть некоторые ошибки — пишите %s, что бы зафиксировать проблему.",
-  "message.createcityexpansioncore.server.welcome": "Добро пожаловать на RE:CREATED:ALPHA, %s!",
-  "message.createcityexpansioncore.server.welcome_back": "С возвращением, %s!",
+  "message.createcityexpansioncore.server.alpha_notice": "Сервер в альфе. Нашли ошибку? %s",
+  "message.createcityexpansioncore.server.welcome": "Добро пожаловать, %s",
+  "message.createcityexpansioncore.server.welcome_back": "С возвращением, %s",
   "message.createcityexpansioncore.steel_converter.status": "Состояние: %s | Структура: %s/%s | Жидкий чугун: %s мБ | Стальные заготовки: %s/%s | Прогресс: %.0f%% | Мощность: %.1f/80.0 кВт",
   "message.createcityexpansioncore.steel_guide.disabled": "Гайд строительства сталеплавильного конвертера выключен",
   "message.createcityexpansioncore.steel_guide.enabled": "Гайд сталеплавильного конвертера: %s | Правильно: %s/%s | Ошибок: %s",
@@ -1904,5 +1904,7 @@
   "gui.createcityexpansioncore.social.result.full": "Достигнут лимит контактов или диалогов",
   "gui.createcityexpansioncore.social.result.self": "Нельзя добавить в друзья самого себя",
   "gui.createcityexpansioncore.social.result.unknown": "Игрок не найден",
-  "gui.createcityexpansioncore.social.result.timeout": "Нет ответа. Отправка не подтверждена; обновление сверит состояние."
+  "gui.createcityexpansioncore.social.result.timeout": "Нет ответа. Отправка не подтверждена; обновление сверит состояние.",
+  "message.createcityexpansioncore.server.report_action": "Сообщить →",
+  "message.createcityexpansioncore.server.report_hint": "Нажмите, чтобы описать ошибку через /report"
 }

@@ -1233,9 +1233,9 @@
   "message.createcityexpansioncore.restriction.shulker_crafted": "Shulker boxes are disabled on this server, so this one cannot be used or placed. Its materials are not consumed by taking it.",
   "message.createcityexpansioncore.restriction.shulker_open": "Shulker boxes are disabled on this server: they would work as portable storage.",
   "message.createcityexpansioncore.restriction.shulker_place": "Shulker boxes are disabled on this server and cannot be placed.",
-  "message.createcityexpansioncore.server.alpha_notice": "The RE:CREATED server is in alpha, so some bugs are expected. Use %s to report a problem.",
-  "message.createcityexpansioncore.server.welcome": "Welcome to RE:CREATED:ALPHA, %s!",
-  "message.createcityexpansioncore.server.welcome_back": "Welcome back, %s!",
+  "message.createcityexpansioncore.server.alpha_notice": "The server is in alpha. Found a bug? %s",
+  "message.createcityexpansioncore.server.welcome": "Welcome, %s",
+  "message.createcityexpansioncore.server.welcome_back": "Welcome back, %s",
   "message.createcityexpansioncore.steel_converter.status": "State: %s | Structure: %s/%s | Hot Metal: %s mB | Steel Billets: %s/%s | Progress: %.0f%% | Power: %.1f/80.0 kW",
   "message.createcityexpansioncore.steel_guide.disabled": "Steelmaking Converter build guide disabled",
   "message.createcityexpansioncore.steel_guide.enabled": "Steelmaking Converter guide: %s | Correct: %s/%s | Errors: %s",
@@ -1904,5 +1904,7 @@
   "gui.createcityexpansioncore.social.result.full": "Contact or conversation limit reached",
   "gui.createcityexpansioncore.social.result.self": "You cannot add yourself",
   "gui.createcityexpansioncore.social.result.unknown": "Player not found",
-  "gui.createcityexpansioncore.social.result.timeout": "No response. Sending is unconfirmed; refresh will reconcile the state."
+  "gui.createcityexpansioncore.social.result.timeout": "No response. Sending is unconfirmed; refresh will reconcile the state.",
+  "message.createcityexpansioncore.server.report_action": "Report →",
+  "message.createcityexpansioncore.server.report_hint": "Click to describe a bug using /report"
 }

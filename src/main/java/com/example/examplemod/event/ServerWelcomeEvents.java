@@ -3,6 +3,8 @@ package com.example.examplemod.event;
 import com.example.examplemod.CreateCityExpansionCore;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -50,15 +52,26 @@ public final class ServerWelcomeEvents {
 
         String name = com.example.examplemod.auth.PlayerNames.name(player);
 
-        player.sendSystemMessage(Component.translatable(
+        var greeting = Component.translatable(
                 firstJoin ? "message.createcityexpansioncore.server.welcome"
                         : "message.createcityexpansioncore.server.welcome_back",
-                Component.literal(name).withStyle(ChatFormatting.WHITE, ChatFormatting.BOLD)
-        ).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+                Component.literal(name).withStyle(ChatFormatting.WHITE)
+        ).withStyle(style -> style.withColor(0xADB7BA).withBold(false));
+
+        player.sendSystemMessage(Component.empty()
+                .append(Component.literal("RE:CREATED").withStyle(style -> style.withColor(0xC5A264)))
+                .append(Component.literal(" · ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(greeting));
+
+        var report = Component.translatable("message.createcityexpansioncore.server.report_action")
+                .withStyle(style -> style.withColor(0x78BFC4).withBold(false)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, REPORT_COMMAND + " "))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.translatable("message.createcityexpansioncore.server.report_hint"))));
 
         player.sendSystemMessage(Component.translatable(
                 "message.createcityexpansioncore.server.alpha_notice",
-                Component.literal(REPORT_COMMAND).withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD)
-        ).withStyle(ChatFormatting.YELLOW));
+                report
+        ).withStyle(style -> style.withColor(0xADB7BA).withBold(false)));
     }
 }
