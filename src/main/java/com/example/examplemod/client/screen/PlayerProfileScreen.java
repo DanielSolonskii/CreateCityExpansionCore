@@ -47,6 +47,10 @@ public final class PlayerProfileScreen extends Screen {
     public PlayerProfileScreen(Screen parent, UUID target) {
         super(tr("title")); this.parent = parent; this.target = target;
     }
+    public static void openSearch(Screen parent) {
+        var client=Minecraft.getInstance(); if(client.player==null)return;
+        var screen=new PlayerProfileScreen(parent,client.player.getUUID()); screen.searching=true; client.setScreen(screen);
+    }
     public static void open(Screen parent, UUID target) {
         Minecraft.getInstance().setScreen(new PlayerProfileScreen(parent, target));
     }
@@ -154,7 +158,8 @@ public final class PlayerProfileScreen extends Screen {
         try {
             g.fillGradient(2, 2, PlayerProfileLayout.WIDTH - 2, 88, 0xFF303737, SURFACE);
             g.fill(15, 14, 17, 23, ACCENT);
-            text(g, tr(searching ? "search_title" : "title"), 24, 14, 270, ACCENT);
+            text(g, tr(searching ? "search_title" : "title"), 24, 14, 178, ACCENT);
+            button(g,layout.socialToggle(),Component.translatable("gui.createcityexpansioncore.social.friends"),false,false,!editing,mx,my);
             button(g, layout.searchToggle(), tr(searching ? "search_profile" : "search_button"), false, searching, !editing, mx, my);
             button(g, layout.close(), Component.literal("×"), false, false, true, mx, my);
             if (searching) {
@@ -320,8 +325,7 @@ public final class PlayerProfileScreen extends Screen {
         }
         if (owner() && profile != null) button(g, layout.footerAction(), tr("edit"), false, false, pending == null, mx, my);
         else {
-            button(g, layout.footerAction(), tr("friends_later"), false, false, false, mx, my);
-            if (layout.footerAction().contains(mx, my)) tooltip = tr("friends_hint");
+            button(g, layout.footerAction(), Component.translatable("gui.createcityexpansioncore.social.open_peer"), false, false, profile!=null, mx, my);
         }
         text(g, tr("result." + (result.equals("ok") ? "public" : result)), 147, layout.height() - 24, tab == 2 && profile != null && profile.completed() > PAGE_SIZE ? 140 : 230, MUTED);
         if (tab == 2 && profile != null && profile.completed() > PAGE_SIZE) {
@@ -387,6 +391,8 @@ public final class PlayerProfileScreen extends Screen {
         double mx = layout.localX(x), my = layout.localY(y, entranceOffset());
         if (button != 0) return false;
         if (layout.close().contains(mx, my)) { onClose(); return true; }
+        if (!editing && layout.socialToggle().contains(mx,my)) { SocialScreen.open(this,null); return true; }
+        if (!editing && !searching && !owner() && profile!=null && layout.footerAction().contains(mx,my)) { SocialScreen.open(this,target); return true; }
         if (!editing && layout.searchToggle().contains(mx,my)) { showSearch(!searching); return true; }
         if (!editing && layout.scrollMaximum(contentHeight) > 0 && layout.scrollTrack().contains(mx, my)) {
             draggingScroll = true; moveScroll(my); return true;
