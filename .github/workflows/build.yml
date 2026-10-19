@@ -26,5 +26,10 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      # Localisation is plain JSON, so a corrupted encoding still parses and no
+      # build step notices -- players just see mojibake on screen. Catch it here.
+      - name: Check localisation encoding and parity
+        run: python3 tools/check-lang-encoding.py
+
       - name: Build with Gradle
         run: ./gradlew build
