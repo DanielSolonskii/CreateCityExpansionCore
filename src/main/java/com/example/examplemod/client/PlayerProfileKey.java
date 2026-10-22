@@ -27,6 +27,6 @@ public final class PlayerProfileKey {
         while (OPEN.consumeClick()) pressed = true;
         Minecraft client = Minecraft.getInstance();
         if (!pressed || client.player == null || client.level == null || client.getConnection() == null || client.screen != null) return;
-        PlayerProfileScreen.open(null, client.player.getUUID());
+        com.example.examplemod.client.screen.CommunityScreen.open(null);
     }
 }

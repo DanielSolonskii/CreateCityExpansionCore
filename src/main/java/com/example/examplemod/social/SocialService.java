@@ -36,17 +36,23 @@ public final class SocialService {
             PacketDistributor.sendToPlayer(viewer,new SocialStatePayload(r.request(),"busy",0,r.target(),"",SocialBook.Relation.NONE,r.filter(),r.page(),0,List.of(),List.of(),false,0,0));return;
         }
         var s=viewer.getServer();var data=SocialSavedData.get(s);var book=data.book;UUID actor=viewer.getUUID();
+        var cities=com.example.examplemod.city.CityManager.get(s.overworld());
         String result="ok";
         if(r.action()!=SocialBook.Action.LIST && (r.target()==null||!known(s,r.target())))result="unknown";
         else if(r.action()!=SocialBook.Action.LIST) {
             result=book.apply(actor,r.target(),r.action(),r.revision(),r.text(),r.before(),System.currentTimeMillis(),r.request());
             if(result.equals("ok")) {
                 data.setDirty();
+                if(r.action()==SocialBook.Action.READ)com.example.examplemod.community.CommunityInbox.get(s).readPeer(actor,r.target(),"message");
+                if(r.action()==SocialBook.Action.ACCEPT||r.action()==SocialBook.Action.DECLINE)com.example.examplemod.community.CommunityInbox.get(s).readPeer(actor,r.target(),"friend_request");
+                if(r.action()==SocialBook.Action.REQUEST||r.action()==SocialBook.Action.SEND||r.action()==SocialBook.Action.ACCEPT)com.example.examplemod.community.CommunityInbox.get(s).add(r.target(),r.request(),r.action()==SocialBook.Action.REQUEST?"friend_request":r.action()==SocialBook.Action.SEND?"message":"friend_accepted",actor,null,null,PlayerNames.name(s,actor),System.currentTimeMillis());
                 if(r.action()==SocialBook.Action.SEND||r.action()==SocialBook.Action.REQUEST||r.action()==SocialBook.Action.ACCEPT) {
                     var peer=s.getPlayerList().getPlayer(r.target());if(peer!=null)notify(peer,actor,r.action()==SocialBook.Action.SEND?"new_message":r.action()==SocialBook.Action.REQUEST?"new_request":"accepted");
                 }
+                if(r.action()==SocialBook.Action.SEND)com.example.examplemod.community.CommunityData.get(s).enqueue(r.target(),actor,"MESSAGE",r.text(),s.getPlayerList().getPlayer(r.target())!=null);
             }
         }
+        if(result.equals("ok")&&r.action()==SocialBook.Action.ACCEPT)com.example.examplemod.auth.ServerTelemetryBridge.emit("FRIEND_ACCEPTED",actor,null,"");
         UUID target=r.target();if(target!=null&&!known(s,target))target=null;
         Set<UUID> ids=new HashSet<>();
         if(r.filter()==2)book.dialogs.keySet().stream().filter(p->p.includes(actor)).forEach(p->ids.add(p.other(actor)));else ids.addAll(book.contacts(actor));
@@ -56,16 +62,17 @@ public final class SocialService {
             case 2->true;default->book.relation(actor,id)==SocialBook.Relation.BLOCKED;
         }).filter(id->PlayerNames.name(s,id).toLowerCase(Locale.ROOT).contains(r.query().toLowerCase(Locale.ROOT))).sorted(Comparator.<UUID>comparingInt(id->s.getPlayerList().getPlayer(id)!=null?0:1).thenComparing(id->PlayerNames.name(s,id),String.CASE_INSENSITIVE_ORDER).thenComparing(UUID::toString)).toList();
         int page=Math.min(r.page(),Math.max(0,(visible.size()-1)/16));List<SocialStatePayload.Contact> contacts=new ArrayList<>();
-        for(UUID id:visible.subList(page*16,Math.min(visible.size(),page*16+16)))contacts.add(new SocialStatePayload.Contact(id,PlayerNames.name(s,id),s.getPlayerList().getPlayer(id)!=null,book.relation(actor,id),book.unread(actor,id)));
+        for(UUID id:visible.subList(page*16,Math.min(visible.size(),page*16+16)))contacts.add(new SocialStatePayload.Contact(id,PlayerNames.name(s,id),s.getPlayerList().getPlayer(id)!=null,book.relation(actor,id),book.unread(actor,id),cities.getMemberCity(id)==null?"":cities.getMemberCity(id).getName(),cities.getMemberCity(id)==null?"":cities.getMemberCity(id).getMember(id).getRole().name()));
         var messages=target==null?List.<SocialBook.Message>of():book.messages(actor,target,r.before());
         boolean older=target!=null&&!messages.isEmpty()&&book.dialogs.getOrDefault(SocialBook.Pair.of(actor,target),List.of()).stream().anyMatch(m->m.id()<messages.getFirst().id());
         int incoming=(int)book.requests.stream().filter(e->e.to().equals(actor)).count();int unread=book.dialogs.keySet().stream().filter(p->p.includes(actor)).mapToInt(p->book.unread(actor,p.other(actor))).sum();
-        PacketDistributor.sendToPlayer(viewer,new SocialStatePayload(r.request(),result,book.revision(actor),target,target==null?"":PlayerNames.name(s,target),target==null?SocialBook.Relation.NONE:book.relation(actor,target),r.filter(),page,visible.size(),contacts,messages,older,incoming,unread));
+        PacketDistributor.sendToPlayer(viewer,new SocialStatePayload(r.request(),result,book.revision(actor),target,target==null?"":PlayerNames.name(s,target),target==null?SocialBook.Relation.NONE:book.relation(actor,target),r.filter(),page,visible.size(),contacts,messages,older,incoming,unread,target==null||cities.getMemberCity(target)==null?"":cities.getMemberCity(target).getName(),target==null||cities.getMemberCity(target)==null?"":cities.getMemberCity(target).getMember(target).getRole().name()));
     }
-    private static void notify(ServerPlayer player,UUID peer,String key) {
+    public static void notify(ServerPlayer player,UUID peer,String key) {
         var text=Component.translatable("gui.createcityexpansioncore.social."+key,PlayerNames.name(player.getServer(),peer));
         text.setStyle(Style.EMPTY.withColor(0xD5AF6A).withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND,"/ccec profile "+peer)));
-        player.sendSystemMessage(text);player.displayClientMessage(text,true);
+        if(com.example.examplemod.community.CommunityData.get(player.getServer()).muted(player.getUUID(),peer))return;
+        if(!key.equals("new_message"))player.sendSystemMessage(text);PacketDistributor.sendToPlayer(player,new CommunityNoticePayload(peer,PlayerNames.name(player.getServer(),peer),key));
     }
     @SubscribeEvent public static void login(PlayerEvent.PlayerLoggedInEvent e) {if(e.getEntity() instanceof ServerPlayer p && !(p instanceof FakePlayer)) {
         var b=SocialSavedData.get(p.getServer()).book;UUID id=p.getUUID();int incoming=(int)b.requests.stream().filter(r->r.to().equals(id)).count();int unread=b.dialogs.keySet().stream().filter(pair->pair.includes(id)).mapToInt(pair->b.unread(id,pair.other(id))).sum();

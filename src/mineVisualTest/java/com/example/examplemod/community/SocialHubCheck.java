@@ -1,0 +1,27 @@
+package com.example.examplemod.community;
+import com.example.examplemod.client.screen.*;
+import net.minecraft.nbt.*;
+import java.util.*;
+/** Production owner-scoped inbox and the actual shell/page/drawer geometry, without a GPU. */
+public final class SocialHubCheck {
+    private static int count;private static void require(boolean v,String label){count++;if(!v)throw new AssertionError(label);}
+    public static void main(String[] args){
+        var inbox=new CommunityInbox();UUID alice=UUID.randomUUID(),bob=UUID.randomUUID(),peer=UUID.randomUUID(),nonce=UUID.randomUUID(),alliance=UUID.randomUUID();
+        inbox.add(alice,nonce,"friend_request",peer,null,null,"Player",1);require(inbox.unread(alice)==1&&inbox.history(bob).isEmpty(),"history belongs only to recipient");inbox.read(bob,nonce);require(inbox.unread(alice)==1,"foreign UUID cannot mark another inbox read");inbox.read(alice,nonce);require(inbox.unread(alice)==0,"owner can read event");
+        inbox.add(alice,nonce,"friend_request",peer,null,null,"Player",2);require(inbox.history(alice).size()==1,"replayed nonce does not duplicate notice");
+        for(int i=0;i<7;i++)inbox.add(alice,UUID.randomUUID(),"message",peer,null,null,"Player",i+3);require(inbox.history(alice).stream().filter(e->e.kind().equals("message")).count()==1,"unread messages coalesce without bodies");inbox.readPeer(alice,peer,"message");require(inbox.unread(alice)==0,"reading actual dialog clears its inbox marker");
+        for(int i=0;i<4;i++)inbox.add(alice,UUID.randomUUID(),"alliance_message",peer,null,alliance,"Union",20+i);require(inbox.history(alice).stream().filter(e->e.kind().equals("alliance_message")).count()==1,"group markers coalesce by alliance");inbox.readAlliance(bob,alliance);require(inbox.unread(alice)==1,"cannot acknowledge another member's group marker");inbox.readAlliance(alice,alliance);require(inbox.unread(alice)==0,"visible group chat read marker");
+        inbox.add(bob,UUID.randomUUID(),"city_invite",alice,UUID.randomUUID(),null,"City",30);var restored=CommunityInbox.load(inbox.save(new CompoundTag(),null),null);require(restored.history(alice).equals(inbox.history(alice))&&restored.history(bob).equals(inbox.history(bob)),"read flags and recipient isolation survive restart");
+        for(int i=0;i<100;i++)inbox.add(alice,UUID.randomUUID(),"council_proposal",peer,null,alliance,"Union",100+i);require(inbox.history(alice).size()==80,"bounded history");var first=inbox.page(alice,0);var second=inbox.page(alice,1);require(first.size()==40&&second.size()==40,"two bounded pages cover retained history");var ids=new HashSet<UUID>();for(Tag t:first)ids.add(((CompoundTag)t).getUUID("Id"));for(Tag t:second)require(ids.add(((CompoundTag)t).getUUID("Id")),"inbox pages do not overlap");
+        require(inbox.page(bob,0).size()==1&&inbox.page(UUID.randomUUID(),0).isEmpty(),"page projection is owner scoped");String encoded=inbox.save(new CompoundTag(),null).toString();require(!encoded.contains("Balance")&&!encoded.contains("Password")&&!encoded.contains("MessageText")&&!encoded.contains("Body"),"event persistence is metadata only");
+        inbox.add(alice,UUID.randomUUID(),"city_invite",peer,null,null,"X".repeat(500),1000);require(inbox.history(alice).getFirst().name().length()==128,"legacy long names cannot fail an already-authorized mutation");
+        for(int[] size:new int[][]{{320,180},{426,240},{640,360},{960,540},{1920,1080}}){var hub=SocialHubLayout.calculate(size[0],size[1]);require(hub.x()>=0&&hub.y()>=0&&hub.scale()>0,"shell centered at GUI scale");require(SocialHubLayout.WIDTH*hub.scale()<=size[0]&&hub.height()*hub.scale()<=size[1],"window fits viewport");
+            var content=hub.content();for(int i=0;i<7;i++){var r=hub.nav(i);require(r.right()<content.x()&&r.bottom()<hub.settings().y(),"sidebar never overlaps content or settings");var screen=hub.screen(r);require(r.contains(hub.localX(screen.x()+screen.width()/2d),hub.localY(screen.y()+screen.height()/2d)),"sidebar draw/hit transforms match");}
+            var community=new CommunityLayout(620,hub.pageHeight(),hub.scale(),hub.pageX(620),hub.pageY(),true);var social=new SocialLayout(620,hub.pageHeight(),hub.scale(),hub.pageX(620),hub.pageY(),true);var group=new AllianceLayout(560,hub.pageHeight(),hub.scale(),hub.pageX(560),hub.pageY());
+            require(community.x()>=hub.x()+content.x()*hub.scale()&&social.x()==community.x(),"embedded social and city pages share one origin");require(group.x()+group.width()*group.scale()<=hub.x()+content.right()*hub.scale(),"alliance page stays inside shell");require(community.body().y()==47&&community.body().bottom()<community.height(),"embedded community does not leave duplicate navigation space");
+            for(double progress:new double[]{0,.25,.5,1}){var drawer=hub.drawer(progress);for(int i=0;i<5;i++){var r=hub.drawerAction(progress,i);require(drawer.contains(r.x(),r.y())&&drawer.contains(r.right()-1,r.bottom()-1),"animated drawer actions use visible geometry");}if(progress==1)require(content.contains(drawer.x(),drawer.y())&&drawer.right()<=content.right(),"drawer fits content when open");}
+        }
+        require(CommunityInbox.load(new CompoundTag(),null).history(alice).isEmpty(),"old worlds need no migration and no invented historical events");
+        System.out.println("PASS: "+count+" social hub inbox privacy, coalescing, persistence, paging and shared GUI geometry assertions");
+    }
+}

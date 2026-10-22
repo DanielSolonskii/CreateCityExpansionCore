@@ -1096,6 +1096,15 @@ public class CreateCityExpansionCore {
 
         PayloadRegistrar registrar =
                 event.registrar("2");
+        registrar.playToServer(com.example.examplemod.network.CommunityRequestPayload.TYPE,
+                com.example.examplemod.network.CommunityRequestPayload.STREAM_CODEC,
+                (p,c)->c.enqueueWork(()->{if(c.player() instanceof ServerPlayer player)com.example.examplemod.community.CommunityService.handle(player,p);}));
+        registrar.playToClient(com.example.examplemod.network.CommunityStatePayload.TYPE,
+                com.example.examplemod.network.CommunityStatePayload.STREAM_CODEC,
+                (p,c)->c.enqueueWork(()->{com.example.examplemod.client.CommunityClient.accept(p);com.example.examplemod.client.screen.CommunityScreen.accept(p);}));
+        registrar.playToClient(com.example.examplemod.network.CommunityNoticePayload.TYPE,
+                com.example.examplemod.network.CommunityNoticePayload.STREAM_CODEC,
+                (p,c)->c.enqueueWork(()->com.example.examplemod.client.screen.CommunityNoticeClient.accept(p)));
         registrar.playToServer(com.example.examplemod.network.SocialRequestPayload.TYPE,
                 com.example.examplemod.network.SocialRequestPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{
@@ -1144,6 +1153,32 @@ public class CreateCityExpansionCore {
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player) com.example.examplemod.city.CityPublicAtlas.edit(player, payload);
                 }));
+        registrar.playToServer(com.example.examplemod.network.ClientTelemetryPayload.TYPE,
+                com.example.examplemod.network.ClientTelemetryPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {if(context.player() instanceof ServerPlayer player) com.example.examplemod.auth.ServerTelemetryBridge.client(player,payload);}));
+        registrar.playToServer(com.example.examplemod.network.OnboardingRequestPayload.TYPE,
+                com.example.examplemod.network.OnboardingRequestPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->{if(context.player() instanceof ServerPlayer player)com.example.examplemod.onboarding.OnboardingServer.request(player,payload);}));
+        registrar.playToClient(com.example.examplemod.network.OnboardingStatePayload.TYPE,
+                com.example.examplemod.network.OnboardingStatePayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->com.example.examplemod.client.OnboardingClient.accept(payload)));
+        registrar.playToServer(com.example.examplemod.network.RequestCityBoundariesPayload.TYPE,
+                com.example.examplemod.network.RequestCityBoundariesPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->{if(context.player() instanceof ServerPlayer player)com.example.examplemod.city.CityBoundaryNetwork.request(player);}));
+        registrar.playToClient(com.example.examplemod.network.CityBoundariesPayload.TYPE,
+                com.example.examplemod.network.CityBoundariesPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->com.example.examplemod.client.CityBoundaryRenderer.accept(payload)));
+        registrar.playToServer(com.example.examplemod.network.RequestMinimapPayload.TYPE,
+                com.example.examplemod.network.RequestMinimapPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.city.CityPublicAtlas.requestMinimap(player,payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.MinimapDirectoryPayload.TYPE,
+                com.example.examplemod.network.MinimapDirectoryPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.map.MinimapClient.directory(payload.directory())));
+        registrar.playToClient(com.example.examplemod.network.MapBorderPayload.TYPE,
+                com.example.examplemod.network.MapBorderPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.map.MapBorderLayer.accept(payload)));
         registrar.playToClient(com.example.examplemod.network.CityDirectoryPayload.TYPE,
                 com.example.examplemod.network.CityDirectoryPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.CityPublicDirectory.accept(payload)));
@@ -1317,8 +1352,10 @@ public class CreateCityExpansionCore {
                 CityMapTilePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                        com.example.examplemod.client.map.MinimapClient.tile(payload);
                         menu.acceptMapTile(payload);
                     } else {
+                        com.example.examplemod.client.map.MinimapClient.tile(payload);
                         CityWorldMapSession.INSTANCE.acceptMapTile(payload);
                     }
                 })
@@ -1598,106 +1635,11 @@ public class CreateCityExpansionCore {
                             return;
                         }
 
-                        ServerLevel level = sender.serverLevel();
-
-                        City city = CityManager.get(level.getServer().overworld())
-                                .getCityByPylon(level.dimension().location(), payload.pylonPos());
-
-                        if (city == null) {
-                            return;
-                        }
-
-                        UUID targetId = payload.targetPlayer();
-
-                        // Отправитель должен быть OWNER или ADMIN
-                        if (!city.isAdmin(sender.getUUID())) {
-                            return;
-                        }
-
-                        // Нельзя исключить самого себя
-                        if (sender.getUUID().equals(targetId)) {
-                            return;
-                        }
-
-                        // Проверяем, что игрок действительно состоит в городе
-                        CityMember targetMember = city.getMember(targetId);
-
-                        if (targetMember == null) {
-                            return;
-                        }
-
-                        // Владельца удалить нельзя
-                        if (city.isOwner(targetId)) {
-                            return;
-                        }
-
-                        /*
-                         * OWNER:
-                         * может исключать ADMIN, BUILDER и RESIDENT.
-                         *
-                         * ADMIN:
-                         * может исключать только BUILDER и RESIDENT.
-                         * Другого ADMIN исключить нельзя.
-                         */
-                        if (targetMember.isAdmin()
-                                && !city.isOwner(sender.getUUID())) {
-                            return;
-                        }
-
-                        // Исключаем игрока
-                        city.removeMember(targetId);
-
-                        // Сохраняем изменения
-                        CityManager.get(level).setDirty();
-                        SyncCityMemberRemovalPayload syncPayload =
-                                new SyncCityMemberRemovalPayload(
-                                        city.getPylonPos(),
-                                        targetId
-                                );
-
-                        for (ServerPlayer player : level.getServer()
-                                .getPlayerList()
-                                .getPlayers()) {
-
-                            if (player.containerMenu
-                                    instanceof CityPylonMenu menu
-                                    && menu.getPylonPos()
-                                    .equals(city.getPylonPos())) {
-
-                                PacketDistributor.sendToPlayer(
-                                        player,
-                                        syncPayload
-                                );
-                            }
-                        }
-                        // Уведомление инициатору
-                        sender.connection.send(
-                                new ClientboundCustomPayloadPacket(
-                                        new CityNotificationPayload(
-                                                "ГОРОД",
-                                                "Игрок «"
-                                                        + targetId
-                                                        + "» исключён из города."
-                                        )
-                                )
-                        );
-
-                        // Если игрок онлайн — уведомляем его тоже
-                        ServerPlayer targetPlayer =
-                                sender.server.getPlayerList().getPlayer(targetId);
-
-                        if (targetPlayer != null) {
-                            targetPlayer.connection.send(
-                                    new ClientboundCustomPayloadPacket(
-                                            new CityNotificationPayload(
-                                                    "ГОРОД",
-                                                    "Вы были исключены из города «"
-                                                            + city.getName()
-                                                            + "»."
-                                            )
-                                    )
-                            );
-                        }
+                        var city = CityManager.get(sender.getServer().overworld()).getCityByPylon(sender.level().dimension().location(), payload.pylonPos());
+                        String result = com.example.examplemod.city.CityMembershipService.change(sender,
+                                com.example.examplemod.city.CityMembershipService.Action.KICK,
+                                city == null ? null : city.getId(), payload.targetPlayer(), UUID.randomUUID());
+                        sender.sendSystemMessage(Component.translatable("gui.createcityexpansioncore.community.result." + result));
                     });
                 }
         );
@@ -2063,6 +2005,11 @@ public class CreateCityExpansionCore {
                             );
                         }
 
+                        if(result==City.InviteResult.SENT){
+                            var community=com.example.examplemod.community.CommunityData.get(serverPlayer.server);
+                            community.audit(city.getId(),serverPlayer.getUUID(),targetId,"invited");
+                            community.enqueue(targetId,serverPlayer.getUUID(),"INVITE",city.getName(),target!=null,city.getId(),city.getInvite(targetId).token());
+                        }
                         CityInviteDirectory.reportResult(
                                 serverPlayer,
                                 payload.pylonPos(),

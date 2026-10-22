@@ -267,6 +267,7 @@ public final class CityMapPanel {
         if (local != null) return local;
         var saved = terrainStore().get(key.tileX(), key.tileZ(),key.level());
         if (saved == null || !terrainWorld.equals(new UUID(0,0))&&!saved.worldId().equals(terrainWorld)) return null;
+        com.example.examplemod.client.ClientTelemetry.diskHit();
         local = new CachedTile(saved.colors(), saved.contours(), saved.complete(), 0L,saved.heights(),saved.revision(),saved.worldId());
         this.tileCache.put(key, local); evictTerrainTiles();
         return local;
@@ -810,6 +811,23 @@ public final class CityMapPanel {
         this.guiScale = guiScale <= 0.0F ? 1.0F : guiScale;
     }
 
+    private boolean hud;
+    private long hudFrame;
+    public void renderMinimap(GuiGraphics g, int x, int y, int size, double scale) {
+        hud = true;
+        drawInternalControls = false;
+        var mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        double tx = mc.player.getX(), tz = mc.player.getZ();
+        if (Math.hypot(centerX-tx,centerZ-tz) > 64) { centerX=tx; centerZ=tz; }
+        else {
+            long now=System.nanoTime();double dt=hudFrame==0?1:Math.min(.1,(now-hudFrame)/1_000_000_000d);
+            double blend=1-Math.exp(-18*dt);centerX+=(tx-centerX)*blend;centerZ+=(tz-centerZ)*blend;
+        }
+        hudFrame=System.nanoTime();
+        zoom=scale;
+        render(g,x,y,size,size,-10000,-10000);
+    }
     private float guiScale = 1.0F;
 
     public void render(
@@ -858,6 +876,7 @@ public final class CityMapPanel {
              */
             guiGraphics.drawManaged(() -> {
                 renderTerrain(guiGraphics);
+                if (hud) return;
                 if (this.focus == Focus.RAILWAY) {
                     guiGraphics.fill(x, y, x + width, y + this.viewportHeight, 0x24101618);
                 } else if (this.focus == Focus.TRADE) {
@@ -901,10 +920,16 @@ public final class CityMapPanel {
                     }
                 }
             });
+                guiGraphics.drawManaged(() -> MapBorderLayer.render(guiGraphics, this, dimensionId, x, y, width, viewportHeight, mouseX, mouseY));
+                if (hud) {
+                    var mc = Minecraft.getInstance();
+                    MapMarkerRenderer.renderPlayer(guiGraphics, worldToScreenX(mc.player.getX()), worldToScreenY(mc.player.getZ()), this.playerIcon, false, false, mc.player.getYRot()+180);
+                }
         } finally {
             guiGraphics.disableScissor();
         }
 
+        if (hud) return;
         if (this.drawInternalControls) {
             renderFooter(guiGraphics, x, y + viewportHeight + 4, width, mouseX, mouseY);
         }
@@ -961,7 +986,7 @@ public final class CityMapPanel {
         }
 
         TileKey key=new TileKey(payload.dimensionId(),payload.tileX(),payload.tileZ(),payload.level());
-        this.requestedTiles.remove(key);this.failedTiles.remove(key);this.tileAttempts.remove(key);
+        Long requested=this.requestedTiles.remove(key);if(requested!=null)com.example.examplemod.client.ClientTelemetry.tile(System.currentTimeMillis()-requested);this.failedTiles.remove(key);this.tileAttempts.remove(key);
         if(!terrainWorld.equals(payload.worldId())) {
             boolean mismatch=this.tileCache.values().stream().anyMatch(t->!t.worldId().equals(payload.worldId()));
             terrainWorld=payload.worldId();if(mismatch)TerrainCache.clearTextures(this.terrainStore);
@@ -985,6 +1010,7 @@ public final class CityMapPanel {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if(button==1 && insideViewport(mouseX,mouseY) && !MapBorderLayer.available(dimensionId,screenToWorldX(mouseX),screenToWorldZ(mouseY))) return true;
         if (insideViewport(mouseX,mouseY)) { stopMotion(); dragAt=0; }
         /*
          * Подтверждение claim владеет кликами, пока открыто: карта под ним
@@ -1522,6 +1548,7 @@ public final class CityMapPanel {
         reserveCityLabel(x,y,width);return true;
     }
     private void renderPeers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        com.example.examplemod.client.AllianceClient.ensure();
         cityLabelBounds.clear();
         var labelFont=Minecraft.getInstance().font;
         if(showCities&&hasCityAnchor()) {
@@ -1581,6 +1608,7 @@ public final class CityMapPanel {
             renderCityMarker(guiGraphics, markerX, markerY, peer.own(),
                     matchesTargetAt(this.hoveredSelection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()),
                     matchesTargetAt(this.selection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()));
+            AllianceMapPresentation.marker(guiGraphics,markerX,markerY,peer.cityId());
             /*
              * Подсказка с фактами о городе — как при наведении очками Create.
              * Без неё наведение на чужой город давало только квадрат вокруг
@@ -2141,6 +2169,7 @@ public final class CityMapPanel {
         if (this.showCities) renderCityMarker(guiGraphics, markerX, markerY, ownedAnchor,
                 matchesTarget(this.hoveredSelection, SelectionKind.CITY, null, this.pylonPos),
                 matchesTarget(this.selection, SelectionKind.CITY, null, this.pylonPos));
+        if(this.showCities)this.peers.stream().filter(this::atAnchor).findFirst().ifPresent(peer->AllianceMapPresentation.marker(guiGraphics,markerX,markerY,peer.cityId()));
         if (this.showCities) guiGraphics.drawString(
                 Minecraft.getInstance().font,
                 this.peers.stream().filter(this::atAnchor).findFirst().map(peer -> Component.literal(peer.name())).orElse(Component.translatable("gui.createcityexpansioncore.map.city_pylon")),
@@ -2221,7 +2250,7 @@ public final class CityMapPanel {
         this.tooltipShown = true;
     }
 
-    private static void drawMarkerLeader(GuiGraphics graphics, int x, int y, int anchorX, int anchorY) {
+    private void drawMarkerLeader(GuiGraphics graphics, int x, int y, int anchorX, int anchorY) {
         int dx = x - anchorX;
         int dy = y - anchorY;
         if (dx * dx + dy * dy < 28 * 28) return;
@@ -2241,11 +2270,10 @@ public final class CityMapPanel {
                         || (segment.z1() > maxWorldZ && segment.z2() > maxWorldZ)) continue;
                 int x1 = worldToScreenX(segment.x1()), y1 = worldToScreenY(segment.z1());
                 int x2 = worldToScreenX(segment.x2()), y2 = worldToScreenY(segment.z2());
-                drawLine(graphics, x1, y1, x2, y2, 0xCC171310);
-                drawLine(graphics,
-                        x1, y1 + (this.focus == Focus.RAILWAY ? 1 : 0),
-                        x2, y2 + (this.focus == Focus.RAILWAY ? 1 : 0),
-                        this.focus == Focus.RAILWAY ? 0xFFE0AD59 : 0xFF9A7040);
+                int color = this.focus == Focus.RAILWAY ? 0xFFB9B2A2 : 0xFF928B7F;
+                for (int ox=-1;ox<=1;ox++) for(int oy=-1;oy<=1;oy++)
+                    drawLine(graphics,x1+ox,y1+oy,x2+ox,y2+oy,0xF00B1013);
+                drawLine(graphics,x1,y1,x2,y2,color);
             }
             for(var section:this.railwaySections){drawSemanticSection(graphics,section);}
             RailwayMapPayload.RouteView focused = this.selection != null && this.selection.kind() == SelectionKind.ROUTE ? route(this.selection.id()) : null;
@@ -2362,7 +2390,10 @@ public final class CityMapPanel {
                 enabled ? 0xFFF2D39A : 0xFF7A8589);
     }
 
-    private static void drawLine(GuiGraphics graphics, int x0, int y0, int x1, int y1, int color) {
+    private void drawLine(GuiGraphics graphics, int x0, int y0, int x1, int y1, int color) {
+        var clipped=MapLineClip.clip(x0,y0,x1,y1,viewportX-3,viewportY-3,viewportX+viewportWidth+3,viewportY+viewportHeight+3);
+        if(clipped==null)return;
+        x0=clipped.x1();y0=clipped.y1();x1=clipped.x2();y1=clipped.y2();
         int dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
         int dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
         int error = dx + dy;
@@ -2599,6 +2630,12 @@ public final class CityMapPanel {
     public boolean coordinateGrid() { return this.showCoordinateGrid; }
     public boolean overviewVisible() { return this.showOverview; }
     public double centerX() { return this.centerX; }
+    public boolean focusAlliance(java.util.Set<UUID> cities) {
+        var members=this.peers.stream().filter(p->cities.contains(p.cityId())).toList();if(members.isEmpty())return false;
+        double minX=members.stream().mapToInt(p->p.pylonX()).min().orElse(0),maxX=members.stream().mapToInt(p->p.pylonX()).max().orElse(0);
+        double minZ=members.stream().mapToInt(p->p.pylonZ()).min().orElse(0),maxZ=members.stream().mapToInt(p->p.pylonZ()).max().orElse(0);
+        restoreView((minX+maxX)/2,(minZ+maxZ)/2,Math.min(viewportWidth/(maxX-minX+200),viewportHeight/(maxZ-minZ+200)));return true;
+    }
     public double centerZ() { return this.centerZ; }
     public double zoom() { return this.zoom; }
     public void restoreView(double x, double z, double zoom) {
@@ -2887,23 +2924,28 @@ public final class CityMapPanel {
         // Dark first, one pixel above and below the colour band, then the semantic colour on top.
         drawSegments(graphics, section.segments(), railOutlineColor(kind), -1, inner + 2);
         drawSegments(graphics, section.segments(), railInnerColor(kind), 0, inner);
-        // A tariff is never spelled out along the line; a repeating tick at close zoom says it
-        // without turning the map into text.
-        if (kind == RailClass.PUBLIC_PAID && this.zoom >= MIN_ZOOM) {
-            int spacing = Math.max(24, (int) (14 / Math.max(0.35, this.zoom)));
-            for (var segment : section.segments()) {
-                int x1 = worldToScreenX(segment.x1()), y1 = worldToScreenY(segment.z1());
-                int x2 = worldToScreenX(segment.x2()), y2 = worldToScreenY(segment.z2());
-                int length = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
-                if (length < spacing) continue;
-                for (int step = spacing; step < length; step += spacing) {
-                    int px = x1 + (x2 - x1) * step / length, py = y1 + (y2 - y1) * step / length;
-                    graphics.fill(px - 1, py, px + 1, py + 3, 0xFF06301A);
-                    graphics.fill(px, py + 1, px + 1, py + 2, 0xFFB6F5CD);
+        // Carry screen distance across tessellated curves: two-block samples still get tariff ticks.
+        if (kind == RailClass.PUBLIC_PAID) {
+            double remaining=28;
+            for (var segment:section.segments()) {
+                int x1=worldToScreenX(segment.x1()),y1=worldToScreenY(segment.z1());
+                int x2=worldToScreenX(segment.x2()),y2=worldToScreenY(segment.z2());
+                double length=Math.hypot((double)x2-x1,(double)y2-y1);
+                if(length<=0)continue;
+                var visible=MapLineClip.clip(x1,y1,x2,y2,viewportX,viewportY,viewportX+viewportWidth,viewportY+viewportHeight);
+                double from=visible==null?length+1:Math.hypot((double)visible.x1()-x1,(double)visible.y1()-y1);
+                double to=visible==null?-1:Math.hypot((double)visible.x2()-x1,(double)visible.y2()-y1);
+                double first=remaining+Math.max(0,Math.ceil((from-remaining)/28))*28;
+                for(double offset=first;offset<=to;offset+=28){
+                    int px=(int)Math.round(x1+(x2-x1)*offset/length),py=(int)Math.round(y1+(y2-y1)*offset/length);
+                    if(px<viewportX||py<viewportY||px>viewportX+viewportWidth||py>viewportY+viewportHeight)continue;
+                    graphics.fill(px-1,py-2,px+2,py+3,0xFF123726);graphics.fill(px,py-1,px+1,py+2,0xFFB6F5CD);
                 }
+                remaining=28-((length-remaining)%28+28)%28;
             }
         }
     }
+
     private void drawAnimatedRoute(GuiGraphics graphics,RailwayMapPayload.RouteView route,int color) {
         if(route.segments().isEmpty())return;
         int alpha=reducedMotion?36:(int)(36+12*Math.sin(System.nanoTime()/1_100_000_000.0));
@@ -2966,6 +3008,8 @@ public final class CityMapPanel {
             int minX=terrainCoordinate(screenToWorldX(viewportX),lod)-1,maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),lod)+1;
             int minZ=terrainCoordinate(screenToWorldZ(viewportY),lod)-1,maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),lod)+1;
             for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+                double span=AtlasMapScale.span(lod);
+                if (!MapBorderLayer.intersects(dimensionId,x*span,z*span,(x+1)*span,(z+1)*span)) continue;
                 TileKey key=new TileKey(dimensionId,x,z,lod);CachedTile known=cachedTerrain(key);
                 if(!terrainStore().ready(x,z,lod))continue;
                 if((known==null||now-known.receivedAtMillis()>=(known.complete()?60_000L:5_000L))&&!requestedTiles.containsKey(key)&&!failedTiles.contains(key))missing.add(key);
@@ -2974,13 +3018,13 @@ public final class CityMapPanel {
         // Cancel obsolete queued view requests; late replies may still enrich the cache.
         requestedTiles.keySet().removeIf(k->{double span=k.span();return (k.tileX()+1)*span<screenToWorldX(viewportX)-span||k.tileX()*span>screenToWorldX(viewportX+viewportWidth)+span||(k.tileZ()+1)*span<screenToWorldZ(viewportY)-span||k.tileZ()*span>screenToWorldZ(viewportY+viewportHeight)+span;});
         missing.sort(Comparator.<TileKey>comparingInt(k->tileCache.containsKey(k)?1:0).thenComparingInt(k->-k.level()).thenComparingDouble(this::distanceFromCenterSquared));
-        int count=Math.min(MAX_REQUESTS_PER_RENDER,missing.size());
+        int count=Math.min(hud?2:MAX_REQUESTS_PER_RENDER,missing.size());
         for(int i=0;i<count;i++) {
             TileKey key=missing.get(i);if(tileAttempts.merge(key,1,Integer::sum)>3){failedTiles.add(key);continue;}
             CachedTile known=cachedTerrain(key);requestedTiles.put(key,now);
             PacketDistributor.sendToServer(new RequestCityMapTilePayload(pylonPos,dimensionId,key.tileX(),key.tileZ(),key.level(),known==null?0:known.revision(),known==null?new UUID(0,0):known.worldId()));
         }
-        if(count>0)nextRequestAtMillis=now+REQUEST_INTERVAL_MILLIS;
+        if(count>0)nextRequestAtMillis=now+(hud?500:REQUEST_INTERVAL_MILLIS);
     }
 
     private double distanceFromCenterSquared(TileKey key) {

@@ -251,7 +251,7 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.map != null) { this.map.setMotion(true,this.preferences!=null && this.preferences.reducedMotion); this.map.setGuiScale(1.0F); this.map.setDrawInternalControls(false); }
         applyMode(this.mode);
         requestSnapshots(true);
-        this.tutorialTicks = tutorialSeen ? 0 : 220;
+        this.tutorialTicks = 0; // Persistent contextual onboarding replaces the session-only intro banner.
         measureLabels();
         // The search field is positioned from the same popover the renderer uses, so the box and the
         // plate around it cannot drift apart at any width.
@@ -284,6 +284,9 @@ public final class PolishedWorldMapScreen extends Screen {
         }
     }
 
+    private Screen communityReturn;
+    public void returnToCommunity(Screen screen){communityReturn=screen;}
+
     @Override
     public void onClose() {
         if (this.map != null) {
@@ -310,11 +313,14 @@ public final class PolishedWorldMapScreen extends Screen {
          * игру — это и есть нужное место. У карты из пилона parent не null, и
          * игрок возвращается к пилону как и раньше.
          */
-        if (this.minecraft != null) this.minecraft.setScreen(this.parent);
+        if (this.minecraft != null) this.minecraft.setScreen(communityReturn==null?this.parent:communityReturn);
     }
 
+    private java.util.UUID framedAlliance;
     @Override
     public void tick() {
+        com.example.examplemod.client.AllianceClient.ensure();
+        if(this.map!=null&&com.example.examplemod.client.AllianceClient.focusedAlliance!=null&&!com.example.examplemod.client.AllianceClient.focusedAlliance.equals(framedAlliance)&&this.map.focusAlliance(com.example.examplemod.client.AllianceClient.focusedCities))framedAlliance=com.example.examplemod.client.AllianceClient.focusedAlliance;
         if (!this.readOnly && this.parent != null) this.parent.refreshMapClaimAccess();
         com.example.examplemod.client.ProjectClientState.tick();
         if (this.tutorialTicks > 0 && --this.tutorialTicks == 0) tutorialSeen = true;
@@ -868,6 +874,8 @@ public final class PolishedWorldMapScreen extends Screen {
                 g.drawString(this.font,WorldMapChrome.fit(this.font,owner,w),x,cursor,MUTED,false);cursor+=SECTION+4;
             }
             if(profile!=null) {
+                var alliance=com.example.examplemod.client.AllianceClient.forCity(profile.id());
+                if(alliance!=null){g.drawString(this.font,WorldMapChrome.fit(this.font,AllianceScreen.tr("badge",alliance.getString("Name")),w),x,cursor,0xFF000000|alliance.getInt("Color"),false);cursor+=SECTION+4;}
                 Component residents=Component.translatable("gui.createcityexpansioncore.city.identity.residents",profile.residents());
                 g.drawString(this.font,WorldMapChrome.fit(this.font,residents,w),x,cursor,MUTED,false);cursor+=SECTION+4;
                 Component description=profile.identity().description().isBlank()?Component.translatable("gui.createcityexpansioncore.city.identity.no_description"):Component.literal(profile.identity().description());
@@ -1183,7 +1191,9 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.searchOpen && this.searchBox.mouseClicked(mouseX, mouseY, button)) return true;
         if (this.layersOpen && handleLayerClick(mouseX, mouseY)) return true;
         if (this.searchOpen && handleSearchClick(mouseX, mouseY)) return true;
-        if(WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY))return true;
+        if(WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)){
+            var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=legendRows();for(int i=0;i<rows.size();i++)if(rows.get(i).key().equals("alliance")&&WorldMapUiLayout.legendRow(panel,i,this.legendScroll).contains(mouseX,mouseY))com.example.examplemod.client.AllianceClient.clearFocus();return true;
+        }
         CityMapPanel.Selection selected = this.map.getSelection();
         if (selected != null && this.cardActionY >= 0 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) {
             for (int index = 0; index < this.cardActionCount; index++) {
@@ -1288,7 +1298,7 @@ public final class PolishedWorldMapScreen extends Screen {
             }
             case CITY -> {
                 if (this.readOnly) { this.map.centerOn(value.pos()); return; }
-                if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this.parent));
+                if (this.minecraft != null) CommunityScreen.openRelations(this);
             }
             case RAILWAY_SECTION -> {
                 if (this.readOnly || this.parent == null) { this.map.centerOn(value.pos()); return; }
@@ -1630,9 +1640,11 @@ public final class PolishedWorldMapScreen extends Screen {
         if (value.kind() == CityMapPanel.SelectionKind.WAYPOINT) actions.add(Component.translatable("gui.createcityexpansioncore.world_map.pin.remove"));
         var profile = value.kind() == CityMapPanel.SelectionKind.CITY ? com.example.examplemod.client.CityPublicDirectory.profile(value.id()) : null;
         if (profile != null && profile.editable()) actions.add(Component.translatable("gui.createcityexpansioncore.city.identity.edit"));
+        if(value.kind()==CityMapPanel.SelectionKind.CITY)actions.add(AllianceScreen.tr("city_entry"));
         return actions;
     }
     private void handleNavigationAction(CityMapPanel.Selection value, int index) {
+        if(value.kind()==CityMapPanel.SelectionKind.CITY&&index==navigationActions(value).size()-1){AllianceScreen.open(this,value.id());return;}
         if (index == 0) { this.followingTrain = null; this.map.centerOn(value.pos()); }
         else if (index == 1 && value.kind() == CityMapPanel.SelectionKind.TRAIN) { this.followingTrain = value.id().equals(this.followingTrain) && !this.followPaused ? null : value.id(); this.followPaused=false; }
         else if (index == 1 && value.kind() == CityMapPanel.SelectionKind.WAYPOINT) this.map.removeSelectedPin();
@@ -1706,6 +1718,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private List<Legend> legendRows() {
         if(this.mode==Mode.RAILWAY) {
             var result=new ArrayList<Legend>();
+            result.add(new Legend("physical_track",0xFFB9B2A2,null,null));
             for(var kind:legendClasses())result.add(new Legend(kind.name().toLowerCase(Locale.ROOT),CityMapPanel.railInnerColor(kind),kind,null));
             result.add(new Legend("selected_route",MapPalette.SELECTED,null,null));
             result.add(new Legend("active_route",0xFF8BCDB1,null,null));
@@ -1721,6 +1734,7 @@ public final class PolishedWorldMapScreen extends Screen {
         if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEXT_FAINT,null,AtlasGlyph.ENERGY));
         return List.of(new Legend("own_city",MapPalette.OWN,null,AtlasGlyph.CITY),
             new Legend("other_city",MapPalette.NEUTRAL,null,AtlasGlyph.CITY),
+            new Legend("alliance",MapPalette.OWN,null,null),
             new Legend("territory",MapPalette.OWN,null,null),
             new Legend("industry",MapPalette.OWN,null,AtlasGlyph.MINE),
             new Legend("partner",0xB365D8AF,null,null),
@@ -1729,12 +1743,13 @@ public final class PolishedWorldMapScreen extends Screen {
     }
     private boolean legendEnabled(Legend entry) {
         var layer=entry.rail()!=null||entry.key().endsWith("_route")?CityMapPanel.Overlay.TRACKS:switch(entry.key()) {
-            case "own_city","other_city" -> CityMapPanel.Overlay.CITIES;
+            case "own_city","other_city","alliance" -> CityMapPanel.Overlay.CITIES;
             case "territory" -> CityMapPanel.Overlay.TERRITORIES;
             case "industry" -> CityMapPanel.Overlay.PROJECTS;
             case "partner","trusted","pending" -> CityMapPanel.Overlay.RELATIONS;
             case "train" -> CityMapPanel.Overlay.TRAINS;
             case "station" -> CityMapPanel.Overlay.STATIONS;
+            case "physical_track" -> CityMapPanel.Overlay.TRACKS;
             default -> CityMapPanel.Overlay.TRADE;
         };
         return this.mode.available()&&this.map.isOverlayEnabled(layer);
@@ -1756,6 +1771,8 @@ public final class PolishedWorldMapScreen extends Screen {
                 g.fill(r.x()+12,r.y()+11,r.x()+17,r.y()+16,WorldMapChrome.INSET);
                 g.fill(r.x()+13,r.y()+12,r.x()+16,r.y()+15,enabled?badge:MapPalette.TEXT_FAINT);
             }
+            else if(entry.key().equals("alliance")){g.renderOutline(r.x()+1,r.y()+3,13,13,enabled?entry.color():MapPalette.TEXT_FAINT);g.renderOutline(r.x()+10,r.y()+1,5,5,enabled?entry.color():MapPalette.TEXT_FAINT);}
+            else if(entry.key().equals("physical_track")){g.fill(r.x(),r.y()+6,r.x()+17,r.y()+9,0xF00B1013);g.fill(r.x(),r.y()+7,r.x()+17,r.y()+8,entry.color());}
             else if(entry.rail()!=null){int inner=CityMapPanel.railInnerWidth(entry.rail());g.fill(r.x(),r.y()+5,r.x()+16,r.y()+7+inner,CityMapPanel.railOutlineColor(entry.rail()));g.fill(r.x(),r.y()+6,r.x()+16,r.y()+6+inner,entry.color());if(entry.rail()==CityMapPanel.RailClass.PUBLIC_PAID)g.fill(r.x()+7,r.y()+5,r.x()+9,r.y()+11,0xFFB6F5CD);}
             else if(entry.key().equals("territory")){g.fill(r.x(),r.y()+3,r.x()+16,r.y()+14,0x1ED3A363);g.renderOutline(r.x(),r.y()+3,16,11,entry.color());}
             else if(entry.key().endsWith("_route")) {
@@ -1767,6 +1784,7 @@ public final class PolishedWorldMapScreen extends Screen {
             Component label=Component.translatable("gui.createcityexpansioncore.world_map.legend."+entry.key());
             g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-24),r.x()+24,r.y()+5,enabled?TEXT:MapPalette.TEXT_FAINT,false);
             Component tooltip=enabled?label:label.copy().append(" · ").append(Component.translatable("gui.createcityexpansioncore.world_map.polish.layer_hidden"));
+            if(entry.key().equals("alliance"))tooltip=AllianceScreen.tr("map_legend_hint");
             offerTooltip(tooltip,r.contains(this.mouseXNow,this.mouseYNow)&&panel.contains(this.mouseXNow,this.mouseYNow));
         }}finally{g.disableScissor();}
     }

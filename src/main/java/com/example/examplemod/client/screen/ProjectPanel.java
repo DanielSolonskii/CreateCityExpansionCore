@@ -189,6 +189,7 @@ final class ProjectPanel {
         }catch(RuntimeException error){validation="invalid";}
     }
     private void renderDetails(Project p,float partial) {
+        com.example.examplemod.client.map.MinimapClient.focus(p);
         button("list",()->{selected=null;scroll=0;fields.clear();reason=null;},false);
         text(tr("category."+p.category().name().toLowerCase(Locale.ROOT)),WorldMapChrome.MUTED);
         heading(Component.literal(p.title()));
@@ -216,7 +217,7 @@ final class ProjectPanel {
         graphics.fill(progress.x(),progress.y(),progress.right(),progress.bottom(),WorldMapChrome.EDGE);
         graphics.fill(progress.x(),progress.y(),progress.x()+progress.width()*done/p.stages().size(),progress.bottom(),ProjectMapStyle.color(p.scope(),p.status()));y+=12;
         boolean server=p.scope()==Scope.SERVER;
-        boolean author=p.author().equals(me()),manage=server?ProjectClientState.op:author||ProjectClientState.admin,executor=p.executor()!=null&&p.executor().representative().equals(me());
+        boolean author=p.author().equals(me()),manage=server?ProjectClientState.op:author||ProjectClientState.admin||ProjectClientState.reviewer,executor=p.executor()!=null&&p.executor().representative().equals(me());
         for(int i=0;i<p.stages().size();i++) {
             int index=i;Stage s=p.stages().get(i);
             if(executor&&(p.status()==Status.BUILDING||p.status()==Status.REWORK))button(Component.literal((s.done()?"[✓] ":"[ ] ")+s.title()),()->send(Action.STAGE,p,null,index,!s.done(),"",null),false,true);
@@ -227,7 +228,7 @@ final class ProjectPanel {
             button("edit",()->start(p),false);
             button(p.funding()==Funding.TREASURY?"request_funding":"publish",()->confirm(operationConfirm(p,tr("reserve_confirm",p.reward())),()->send(Action.PUBLISH,p,null,0,server&&!ProjectClientState.conflicts.getList(p.id().toString(),net.minecraft.nbt.Tag.TAG_STRING).isEmpty(),"",null)),true);
         }
-        if(p.status()==Status.PENDING_FUNDING&&ProjectClientState.admin) {
+        if(p.status()==Status.PENDING_FUNDING&&ProjectClientState.finance) {
             button("approve",()->confirm(tr("reserve_confirm",p.reward()),()->send(Action.APPROVE,p,null,0,false,"",null)),true);
             ensureReason();field(reason,"reason",partial);button("reject_funding",()->confirm(tr("reject_funding"),()->send(Action.REJECT_FUNDING,p,null,0,false,reason.getValue(),null)),false);
         }
@@ -254,7 +255,7 @@ final class ProjectPanel {
             text(tr("zone_size",p.zone().maxX()-p.zone().minX()+1,p.zone().maxZ()-p.zone().minZ()+1),WorldMapChrome.MUTED);
             text(tr("build_rights"),WorldMapChrome.MUTED);
         }
-        if(managementOpen&&(server?manage:p.executor()==null?manage:ProjectClientState.admin)) {
+        if(managementOpen&&(server?manage:p.executor()==null?manage:ProjectClientState.admin||ProjectClientState.reviewer)) {
             if(p.executor()!=null&&!(manage&&!executor&&p.status()==Status.REVIEW)){ensureReason();field(reason,"reason",partial);}
             button("cancel",()->confirm(tr(server?"server_cancel_confirm":"refund_confirm",p.reserved()),()->send(Action.CANCEL,p,null,0,false,reason==null?"":reason.getValue(),null)),false);
         }
@@ -297,6 +298,7 @@ final class ProjectPanel {
         if(viewport==null||!viewport.contains(x,z)||button!=0)return picking;
         if(picking) {
             int wx=(int)Math.floor(map.screenToWorldX(x)),wz=(int)Math.floor(map.screenToWorldZ(z));
+            if(!com.example.examplemod.client.map.MapBorderLayer.covers(dimension,wx,wz,wx+1d,wz+1d)) {validation="outside_border";return true;}
             if(firstX==null){firstX=wx;firstZ=wz;if(shape!=ProjectZone.Shape.POINT)return true;}
             try{zone=new ProjectZone(dimension,shape,firstX,firstZ,wx,wz);picking=false;validation="";}catch(IllegalArgumentException ex){validation="invalid";firstX=firstZ=null;}
             return true;

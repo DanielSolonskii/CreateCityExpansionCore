@@ -23,7 +23,9 @@ public final class ProjectNetworkHandlers {
                 id->city!=null&&city.hasMember(id),
                 zone->city!=null&&zone.dimension().equals(city.getPylonDimension())&&zone.plots().stream().allMatch(p->city==cities.getClaimOwner(p)),
                 player.hasPermissions(2),(id,representative)->{City represented=cities.getCity(id);return represented!=null&&represented.isAdmin(representative);},
-                zone->zone.plots().stream().anyMatch(plot->cities.getClaimOwner(plot)!=null));
+                zone->zone.plots().stream().anyMatch(plot->cities.getClaimOwner(plot)!=null),
+                com.example.examplemod.community.CityAuthority.finance(city,player.getUUID()),
+                com.example.examplemod.community.CityAuthority.review(city,player.getUUID()));
     }
     public static void handle(ServerPlayer player,ProjectCommandPayload payload) {
         CityManager cities=CityManager.get(player.getServer().overworld());City city=cities.getMemberCity(player.getUUID());
@@ -33,9 +35,18 @@ public final class ProjectNetworkHandlers {
         int type=payload.filter()/4,statusFilter=payload.filter()%4;
         if(type==3&&!actor.op()){reply(player,out,"permission",true);return;}
         if(payload.command().draft()!=null&&player.getServer().getLevel(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,payload.command().draft().zone().dimension()))==null){reply(player,out,"dimension",true);return;}
+        if(payload.command().draft()!=null){
+            var zone=payload.command().draft().zone();
+            var level=player.getServer().getLevel(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,zone.dimension()));
+            var border=level.getWorldBorder();
+            if(zone.minX()<border.getMinX()||zone.maxX()+1d>border.getMaxX()||zone.minZ()<border.getMinZ()||zone.maxZ()+1d>border.getMaxZ()){
+                reply(player,out,"outside_border",true);return;
+            }
+        }
         EconomyManager economy=EconomyManager.get(player.serverLevel());ProjectManager manager=economy.projects();
         String result=manager.execute(actor,payload.command());out.putString("Result",result);
-        if(city!=null)out.putUUID("City",city.getId());out.putBoolean("Admin",actor.admin());out.putBoolean("Op",actor.op());
+        if(payload.command().action()!=ProjectManager.Action.REQUEST) com.example.examplemod.auth.ServerTelemetryBridge.emit("PROJECT_ACTION",player.getUUID(),payload.command().project(),payload.command().action().name()+"."+result);
+        if(city!=null)out.putUUID("City",city.getId());out.putBoolean("Admin",actor.admin());out.putBoolean("Finance",actor.finance());out.putBoolean("Reviewer",actor.reviewer());out.putBoolean("Op",actor.op());
         out.putBoolean("CityRepresentative",city!=null&&actor.representsCity().test(city.getId(),player.getUUID()));
         out.putLong("Wallet",economy.wallet(player.getUUID()));out.putLong("Treasury",city==null?0:economy.treasury(city.getId()));
         out.putLong("Maximum",com.example.examplemod.Config.ECONOMY_MAX_TRANSACTION.get());
@@ -64,5 +75,5 @@ public final class ProjectNetworkHandlers {
     }
     static List<Project> filterType(List<Project> projects,int type){return projects.stream().filter(p->type==0||p.scope()==(type==1?Project.Scope.CITY:Project.Scope.SERVER)).toList();}
     private static void addName(CompoundTag names,ServerPlayer player,UUID id){names.putString(id.toString(),com.example.examplemod.auth.PlayerNames.name(player.getServer(),id));}
-    private static void reply(ServerPlayer player,CompoundTag out,String result,boolean keep){out.putString("Result",result);out.putBoolean("KeepState",keep);PacketDistributor.sendToPlayer(player,new ProjectStatePayload(out));}
+    private static void reply(ServerPlayer player,CompoundTag out,String result,boolean keep){com.example.examplemod.auth.ServerTelemetryBridge.emit("UI_ACTION",player.getUUID(),null,"project."+result);out.putString("Result",result);out.putBoolean("KeepState",keep);PacketDistributor.sendToPlayer(player,new ProjectStatePayload(out));}
 }

@@ -9,6 +9,9 @@ import java.util.*;
 /** Additive save; existing profile, city and economy formats are unchanged. */
 public final class SocialSavedData extends SavedData {
     public final SocialBook book=new SocialBook();
+    private final Set<UUID> nearbySharing=new HashSet<>();
+    public boolean sharesNearby(UUID player){return nearbySharing.contains(player);}
+    public void shareNearby(UUID player,boolean enabled){if(enabled?nearbySharing.add(player):nearbySharing.remove(player))setDirty();}
     public static SocialSavedData get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(new Factory<>(SocialSavedData::new,SocialSavedData::load,null),"ccec_social");
     }
@@ -35,6 +38,7 @@ public final class SocialSavedData extends SavedData {
             if(history.size()>SocialBook.HISTORY_LIMIT)history=new ArrayList<>(history.subList(history.size()-SocialBook.HISTORY_LIMIT,history.size()));
             b.dialogs.put(pair,history);
         }catch(IllegalArgumentException ignored){}
+        for(Tag raw:root.getList("NearbySharing",Tag.TAG_INT_ARRAY))try{data.nearbySharing.add(net.minecraft.nbt.NbtUtils.loadUUID(raw));}catch(IllegalArgumentException ignored){}
         // Normalize incompatible relationships after a damaged/hand-edited save.
         b.friends.removeIf(p->b.blocks.contains(new SocialBook.Edge(p.first(),p.second()))||b.blocks.contains(new SocialBook.Edge(p.second(),p.first())));
         b.requests.removeIf(e->b.friends.contains(SocialBook.Pair.of(e.from(),e.to()))||b.blocks.contains(e)||b.blocks.contains(new SocialBook.Edge(e.to(),e.from())));
@@ -49,6 +53,6 @@ public final class SocialSavedData extends SavedData {
         var revisions=new ListTag();book.revisions.forEach((id,v)->{var t=new CompoundTag();t.putUUID("Id",id);t.putLong("Value",v);revisions.add(t);});root.put("Revisions",revisions);
         var dialogs=new ListTag();book.dialogs.forEach((p,messages)->{var t=edge(p.first(),p.second(),"dialog");var list=new ListTag();
             for(var m:messages){var tag=new CompoundTag();tag.putLong("Id",m.id());tag.putUUID("Nonce",m.nonce());tag.putUUID("Sender",m.sender());tag.putLong("Time",m.time());tag.putString("Text",m.text());list.add(tag);}t.put("Messages",list);dialogs.add(t);});
-        root.put("Dialogs",dialogs);return root;
+        root.put("Dialogs",dialogs);var sharing=new ListTag();nearbySharing.forEach(id->sharing.add(net.minecraft.nbt.NbtUtils.createUUID(id)));root.put("NearbySharing",sharing);return root;
     }
 }

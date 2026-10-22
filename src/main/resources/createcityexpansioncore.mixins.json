@@ -8,9 +8,12 @@
     "ServerLoginAdmissionMixin",
     "ConfigurationAdmissionAssertionMixin",
     "PrivateMinecraftTcpMixin",
-    "KelpGrowthMixin"
+    "KelpGrowthMixin",
+    "TelemetryDisconnectMixin"
   ],
-  "client": ["ClientTlsConnectionMixin"],
+  "client": [
+    "ClientTlsConnectionMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

@@ -252,28 +252,10 @@ public class CityInviteClientHandler {
      */
 
     private static void openScreenIfNeeded() {
-
-        Minecraft minecraft =
-                Minecraft.getInstance();
-
-        if (
-                minecraft.screen
-                        instanceof CityInviteScreen
-        ) {
-
-            return;
-        }
-
-        if (
-                INVITES.isEmpty()
-        ) {
-
-            return;
-        }
-
-        minecraft.setScreen(
-                new CityInviteScreen()
-        );
+        if(INVITES.isEmpty())return;
+        var invite=INVITES.getLast();
+        toast(Component.translatable("gui.createcityexpansioncore.community.city_invite",invite.cityName()));
+        CommunityFx.sound("invite");
     }
 
     /*

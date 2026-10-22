@@ -23,7 +23,7 @@ public class CityProtectionManager {
             BlockPos pos
     ) {
 
-        CityManager cityManager = CityManager.get(level);
+        CityManager cityManager = CityManager.get(level.getServer().overworld());
 
         City city = cityManager.getCityAt(level.dimension().location(), pos);
 
@@ -31,7 +31,7 @@ public class CityProtectionManager {
             return true;
         }
 
-        return city.hasMember(player.getUUID());
+        return cityManager.allowsTerritoryAction(city, player.getUUID(), false);
     }
 
     public static boolean canModify(
@@ -40,7 +40,7 @@ public class CityProtectionManager {
             BlockPos pos
     ) {
 
-        CityManager cityManager = CityManager.get(level);
+        CityManager cityManager = CityManager.get(level.getServer().overworld());
 
         City city = cityManager.getCityAt(level.dimension().location(), pos);
 
@@ -52,6 +52,6 @@ public class CityProtectionManager {
 
         // Если участок принадлежит городу —
         // проверяем права игрока.
-        return city.canBuild(player.getUUID());
+        return cityManager.allowsTerritoryAction(city, player.getUUID(), true);
     }
 }

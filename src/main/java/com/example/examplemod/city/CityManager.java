@@ -46,6 +46,8 @@ public class CityManager extends SavedData {
 
     private final Map<UUID, City> cities =
             new HashMap<>();
+    public static final int MAX_CLAIMED_PLOTS = 25;
+    private final Map<UUID, Set<UUID>> territoryAccess = new HashMap<>();
     private final Map<UUID, Set<UUID>> trustedCities = new HashMap<>();
 
     /**
@@ -252,6 +254,8 @@ public class CityManager extends SavedData {
                         playerId,
                         inviteTag.hasUUID("Inviter") ? inviteTag.getUUID("Inviter") : null
                 );
+                if(inviteTag.hasUUID("Token")&&city.getInvite(playerId)!=null)city.getInvite(playerId).restoreToken(inviteTag.getUUID("Token"));
+                else manager.setDirty();
             }
 
             ListTag projects = cityTag.getList("Projects", Tag.TAG_COMPOUND);
@@ -321,6 +325,13 @@ public class CityManager extends SavedData {
             }
         }
 
+        for (Tag raw : tag.getList("TerritoryAccess", Tag.TAG_COMPOUND)) {
+            CompoundTag grant = (CompoundTag) raw;
+            if (!grant.hasUUID("From") || !grant.hasUUID("To")) continue;
+            UUID from=grant.getUUID("From"), to=grant.getUUID("To");
+            if (!from.equals(to) && manager.cities.containsKey(from) && manager.cities.containsKey(to))
+                manager.territoryAccess.computeIfAbsent(from, ignored -> new HashSet<>()).add(to);
+        }
         /*
          * Индекс владения участками строится один раз после того, как
          * все города прочитаны и мигрированы: до этого момента
@@ -577,7 +588,8 @@ public class CityManager extends SavedData {
                 CompoundTag inviteTag =
                         new CompoundTag();
 
-                inviteTag.putUUID("Player", invite.getPlayerId()); inviteTag.putUUID("Inviter", invite.getInvokerId());
+                inviteTag.putUUID("Player", invite.getPlayerId()); if(invite.getInvokerId()!=null)inviteTag.putUUID("Inviter", invite.getInvokerId());
+                inviteTag.putUUID("Token",invite.token());
 
                 invites.add(
                         inviteTag
@@ -609,6 +621,13 @@ public class CityManager extends SavedData {
             }
         }));
         tag.put("Relations", relations);
+        ListTag access = new ListTag();
+        territoryAccess.forEach((from,targets)->targets.forEach(to->{
+            if (!from.equals(to) && cities.containsKey(from) && cities.containsKey(to)) {
+                CompoundTag grant=new CompoundTag();grant.putUUID("From",from);grant.putUUID("To",to);access.add(grant);
+            }
+        }));
+        tag.put("TerritoryAccess",access);
 
         return tag;
     }
@@ -739,7 +758,29 @@ public class CityManager extends SavedData {
         return changed;
     }
 
+    public boolean grantsTerritoryAccess(UUID ownerCity, UUID guestCity) {
+        return ownerCity!=null && guestCity!=null && cities.containsKey(ownerCity) && cities.containsKey(guestCity)
+                && territoryAccess.getOrDefault(ownerCity,Set.of()).contains(guestCity);
+    }
+    /** Actor is checked here as well as by the network handler. No implicit friendship grants. */
+    public boolean setTerritoryAccess(UUID ownerCity, UUID guestCity, UUID actor, boolean allowed) {
+        City owner=cities.get(ownerCity);
+        if(owner==null || actor==null || !owner.isAdmin(actor) || guestCity==null || ownerCity.equals(guestCity) || !cities.containsKey(guestCity))return false;
+        Set<UUID> guests=territoryAccess.computeIfAbsent(ownerCity,ignored->new HashSet<>());
+        boolean changed=allowed?guests.add(guestCity):guests.remove(guestCity);
+        if(guests.isEmpty())territoryAccess.remove(ownerCity);
+        if(changed)setDirty();return changed;
+    }
+    public boolean allowsTerritoryAction(City owner, UUID actor, boolean modify) {
+        if(owner==null || cities.get(owner.getId())!=owner || actor==null)return false;
+        if(owner.hasMember(actor))return modify?owner.canBuild(actor):true;
+        City guest=getMemberCity(actor);
+        return guest!=null && grantsTerritoryAccess(owner.getId(),guest.getId());
+    }
     private void removeRelations(UUID cityId) {
+        territoryAccess.remove(cityId);
+        territoryAccess.values().forEach(targets->targets.remove(cityId));
+        territoryAccess.entrySet().removeIf(entry->entry.getValue().isEmpty());
         trustedCities.remove(cityId);
         trustedCities.values().forEach(targets -> targets.remove(cityId));
         trustedCities.entrySet().removeIf(entry -> entry.getValue().isEmpty());
@@ -1114,7 +1155,7 @@ public class CityManager extends SavedData {
      *       принадлежащему участку — диагональное касание не считается.</li>
      * </ol>
      *
-     * <p>Никакой экономики и лимитов здесь сознательно нет: правила
+     * <p>Плата за расширение не взимается; действует лимит 25 участков. Правила
      * расширения сосредоточены в одном месте, поэтому добавление цены
      * или лимита позже — это ещё одно условие в этом методе, а не
      * переписывание модели.
@@ -1146,6 +1187,7 @@ public class CityManager extends SavedData {
          * из всех, что могут отказать, и она бессмысленна, если
          * участок уже отвергнут по другой причине.
          */
+        if (city.getClaimedPlotCount() >= MAX_CLAIMED_PLOTS) return CityClaimResult.LIMIT_REACHED;
         if (!CityClaims.touchesOwned(city.getClaimedPlots(), plot)) {
             return CityClaimResult.NOT_ADJACENT;
         }

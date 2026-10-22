@@ -1,0 +1,14 @@
+allprojects {
+    afterEvaluate {
+        if (plugins.hasPlugin('java') && sourceSets.findByName('mineVisualTest') != null) {
+            tasks.register('checkDailyRewards', JavaExec) {
+                dependsOn tasks.named('mineVisualTestClasses')
+                classpath = sourceSets.mineVisualTest.runtimeClasspath
+                mainClass = 'com.example.examplemod.daily.DailyRewardsCheck'
+                javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+                workingDir = layout.buildDirectory.dir('checks/checkDailyRewards').get().asFile
+                doFirst { workingDir.mkdirs() }
+            }
+        }
+    }
+}

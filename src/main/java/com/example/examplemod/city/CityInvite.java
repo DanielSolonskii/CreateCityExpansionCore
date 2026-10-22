@@ -12,6 +12,9 @@ import java.util.UUID;
 public class CityInvite {
 
     private final UUID playerId;
+    private UUID token = UUID.randomUUID();
+    public UUID token(){ return token; }
+    public void restoreToken(UUID token){ this.token = java.util.Objects.requireNonNull(token); }
 
     /** Who sent it. Null only for an invite loaded from data written before this field existed. */
     private final UUID inviterId;
