@@ -31,6 +31,12 @@ repositories {
     // This is also where Create: Ponder is published. Ponder is a hard requirement of
     // Create; without it at runtime mod loading fails with
     // "Missing or unsupported mandatory dependencies: Mod ID: 'ponder'".
+    // Checked-in mirror of the pinned createmod artifacts (Create slim + Ponder) so a
+    // build succeeds when maven.createmod.net is unreachable; consulted before the remote.
+    maven {
+        name = "localCcec"
+        url = uri("libs/m2")
+    }
     maven {
         name = "createmod"
         url = "https://maven.createmod.net"
