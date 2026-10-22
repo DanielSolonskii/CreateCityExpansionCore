@@ -90,6 +90,7 @@ public final class EconomyNetworkHandlers {
         };
 
         if(success)com.example.examplemod.auth.ServerTelemetryBridge.emit("ECONOMY_ACTION",player.getUUID(),context.city.getId(),payload.action().name());
+        if(!success)com.example.examplemod.auth.ServerTelemetryBridge.emit("UI_ACTION",player.getUUID(),null,"market."+payload.action().name()+".REFUSED");
         if(payload.action()!=EconomyCommandPayload.Action.REGISTER_FREIGHT&&!specificFeedback)feedback(player,success?"operation_complete":"operation_failed");sendState(context);
     }
 

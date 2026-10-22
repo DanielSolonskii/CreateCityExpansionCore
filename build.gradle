@@ -626,3 +626,56 @@ tasks.register('checkServerHud', JavaExec) {
     doFirst { workingDir.mkdirs() }
 }
 tasks.named('check') { dependsOn tasks.named('checkServerHud') }
+
+// World border masks, long railway clipping, minimap geometry and local preference persistence.
+tasks.register('checkMapHud', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.MapHudCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkMapHud').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkMapHud') }
+
+// Alliance governance, member-only chat, additive persistence and adaptive GUI bounds.
+tasks.register('checkAlliances', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.alliance.AllianceCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkAlliances').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkAlliances') }
+
+tasks.register('checkCityMembership', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.city.CityMembershipCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkCityMembership').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityMembership') }
+
+tasks.register('checkSocialHub', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.community.SocialHubCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkSocialHub').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkSocialHub') }
+
+// Recipient-scoped friend visibility, additive preference persistence and bounded project surveying.
+tasks.register('checkNearbyScene', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.social.NearbySceneCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkNearbyScene').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkNearbyScene') }

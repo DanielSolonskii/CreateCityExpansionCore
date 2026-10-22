@@ -1465,7 +1465,7 @@ private String managementTabName(int tab) {
                 CityPylonUiLayout.Rect cell = cells[i];
                 if (cell.contains(mouseX, mouseY)) {
                     if (i == 4) {
-                        if (this.minecraft != null) this.minecraft.setScreen(new CityRelationsScreen(this));
+                        if (this.minecraft != null) CommunityScreen.openRelations(this);
                     } else if (i == 5) {
                         openTrainManagement();
                     } else {
@@ -1617,7 +1617,7 @@ private String managementTabName(int tab) {
                 }
                 if (layout.listClip().contains(mouseX, mouseY)
                         && layout.row(visibleIndex).contains(mouseX, mouseY) && !clicked) {
-                    PlayerProfileScreen.open(this.minecraft.screen, member.getPlayerId());
+                    CommunityScreen.openMember(this, member.getPlayerId());
                     return true;
                 }
             }
@@ -3037,6 +3037,8 @@ private String managementTabName(int tab) {
                     case BUILDER ->
                             0xFF55AAFF;
 
+                    case ENGINEER -> 0xFF78B7C5;
+                    case TREASURER -> 0xFFB9A16A;
                     case RESIDENT ->
                             0xFF777777;
                 };
@@ -3172,6 +3174,8 @@ private String managementTabName(int tab) {
                     case BUILDER ->
                             tr("role.createcityexpansioncore.builder");
 
+                    case ENGINEER -> tr("role.createcityexpansioncore.engineer");
+                    case TREASURER -> tr("role.createcityexpansioncore.treasurer");
                     case RESIDENT ->
                             tr("role.createcityexpansioncore.resident");
                 };

@@ -19,6 +19,7 @@ public record PlayerProfileLayout(int screenWidth, int screenHeight, int height,
     public Rect frame() { return new Rect(0, 0, WIDTH, height); }
     public Rect close() { return new Rect(WIDTH - 36, 8, 24, 22); }
     public Rect socialToggle() { return new Rect(208,8,86,22); }
+    public Rect allianceBadge() { return new Rect(302,68,112,20); }
     public Rect searchToggle() { return new Rect(WIDTH - 132, 8, 90, 22); }
     public Rect searchField() { return new Rect(14, 92, 292, 26); }
     public Rect searchSubmit() { return new Rect(312, 92, 106, 26); }
@@ -26,6 +27,7 @@ public record PlayerProfileLayout(int screenWidth, int screenHeight, int height,
     public Rect tab(int index) { return new Rect(14 + index * 136, 92, 132, 26); }
     public Rect body() { return new Rect(14, 128, WIDTH - 28, height - 168); }
     public Rect footerAction() { return new Rect(14, height - 31, 124, 22); }
+    public Rect invite() { return new Rect(148,height-31,140,22); }
     public Rect save() { return new Rect(WIDTH - 118, height - 31, 104, 22); }
     public Rect refresh() { return new Rect(WIDTH - 38, height - 31, 24, 22); }
     public Rect aboutField() { return new Rect(body().x() + 12, body().y() + 26, body().width() - 24, 22); }

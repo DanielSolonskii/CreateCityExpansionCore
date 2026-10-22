@@ -9,7 +9,11 @@ import static com.example.examplemod.projects.Project.*;
 public final class ProjectManager {
     public enum Action { REQUEST, CREATE, UPDATE, PUBLISH, APPROVE, REJECT_FUNDING, APPLY, ASSIGN, STAGE, SUBMIT, ACCEPT, RETURN, CANCEL, APPLY_CITY, ASSIGN_CITY, WITHDRAW }
     public record Actor(UUID player, UUID city, boolean admin, Predicate<UUID> member, Predicate<ProjectZone> owns,
-                        boolean op, BiPredicate<UUID,UUID> representsCity, Predicate<ProjectZone> conflicts) {
+                        boolean op, BiPredicate<UUID,UUID> representsCity, Predicate<ProjectZone> conflicts, boolean finance, boolean reviewer) {
+        public Actor(UUID player,UUID city,boolean admin,Predicate<UUID> member,Predicate<ProjectZone> owns,
+                boolean op,BiPredicate<UUID,UUID> representsCity,Predicate<ProjectZone> conflicts) {
+            this(player,city,admin,member,owns,op,representsCity,conflicts,admin,admin);
+        }
         public Actor(UUID player,UUID city,boolean admin,Predicate<UUID> member,Predicate<ProjectZone> owns) {
             this(player,city,admin,member,owns,false,(id,representative)->false,zone->false);
         }
@@ -68,7 +72,7 @@ public final class ProjectManager {
         if(p.revision()!=c.revision())return "stale";
         if(p.revision()==Long.MAX_VALUE)return "invalid";
         if(p.status().terminal())return "terminal";
-        boolean author=p.author().equals(a.player()),manage=server?a.op():author||a.admin(),executor=p.executor()!=null&&p.executor().representative().equals(a.player())&&validApplicant(a,p.executor(),server);
+        boolean author=p.author().equals(a.player()),manage=server?a.op():author||a.admin()||a.reviewer(),executor=p.executor()!=null&&p.executor().representative().equals(a.player())&&validApplicant(a,p.executor(),server);
         Status state=p.status();List<Stage> stages=p.stages();List<Applicant> applications=p.applicants();Applicant assigned=p.executor();
         long reserve=p.reserved();boolean paid=p.paid();String note=p.reviewNote();
         boolean payerCity=p.funding()==Funding.TREASURY;UUID payer=payerCity?p.city():p.author();
@@ -96,13 +100,13 @@ public final class ProjectManager {
                 else { if(p.reward()>0&&!accounts.debit(false,p.author(),p.reward()))return "funds";reserve=p.reward();state=Status.OPEN; }
             }
             case APPROVE -> {
-                if(!a.admin()||state!=Status.PENDING_FUNDING)return "permission";
+                if(!a.finance()||state!=Status.PENDING_FUNDING)return "permission";
                 if(!a.owns().test(p.zone()))return "territory";
                 if(!accounts.debit(true,p.city(),p.reward()))return "funds";
                 reserve=p.reward();state=Status.OPEN;
             }
             case REJECT_FUNDING -> {
-                if(!a.admin()||state!=Status.PENDING_FUNDING)return "permission";
+                if(!a.finance()||state!=Status.PENDING_FUNDING)return "permission";
                 if(c.note().isBlank())return "reason";
                 state=Status.DRAFT;note=c.note();
             }
@@ -152,7 +156,7 @@ public final class ProjectManager {
                 accounts.credit(cityAccount,assigned.id(),reserve);serverIssued=issued;reserve=0;paid=true;state=Status.COMPLETED;
             }
             case CANCEL -> {
-                if(server?!a.op():assigned==null?!manage:!a.admin())return "permission";
+                if(server?!a.op():assigned==null?!manage:!(a.admin()||a.reviewer()))return "permission";
                 if(assigned!=null&&c.note().isBlank())return "reason";
                 if(!server) {
                     if(!accounts.canCredit(payerCity,payer,reserve))return "overflow";

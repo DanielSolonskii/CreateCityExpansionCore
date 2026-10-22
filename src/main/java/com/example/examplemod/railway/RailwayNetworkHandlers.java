@@ -71,6 +71,7 @@ public final class RailwayNetworkHandlers {
             default -> false;
         };
         if(success)com.example.examplemod.auth.ServerTelemetryBridge.emit("RAILWAY_ACTION",player.getUUID(),context.city.getId(),payload.action().name());
+        if(!success)com.example.examplemod.auth.ServerTelemetryBridge.emit("UI_ACTION",player.getUUID(),null,"railway."+payload.action().name()+".REFUSED");
         feedback(player, success ? "operation_complete" : "operation_failed");
         sendState(player, context);
     }
@@ -205,19 +206,7 @@ public final class RailwayNetworkHandlers {
     private static Position trainPosition(Train t){if(t.graph==null||t.carriages.isEmpty())return new Position(null,0,0);var p=t.carriages.getFirst().getLeadingPoint();if(p==null||p.node1==null||p.edge==null||p.edge.isInterDimensional())return new Position(null,0,0);Vec3 v=p.getPosition(t.graph);return new Position(p.node1.getLocation().getDimension().location(),v.x,v.z);}
 
     private static void sendMap(ServerPlayer player, Context c) {
-        var serverCache = MAP_CACHE.computeIfAbsent(player.getServer(), ignored -> new HashMap<>());
-        MapKey key = new MapKey(c.city.getId(), player.serverLevel().dimension().location());
-        CachedRailMap cached = serverCache.get(key);
-        long now = System.currentTimeMillis();
-        if (cached == null || !cached.center().equals(c.city.getPylonPos())
-                || now - cached.createdAt() >= MAP_CACHE_MILLIS) {
-            cached = new CachedRailMap(c.city.getPylonPos().immutable(), now,
-                    buildMapSegments(player, c.city.getPylonPos()));
-            serverCache.put(key, cached);
-        }
-        PacketDistributor.sendToPlayer(player, new RailwayMapPayload(
-                c.city.getPylonPos(), player.serverLevel().dimension().location(), cached.segments(),
-                mapNetworks(player,c),mapSections(player,c),mapRoutes(player,c)));
+        sendAtlasMap(player,c.city.getPylonPos(),player.serverLevel().dimension().location());
     }
 
     private static List<RailwayMapPayload.NetworkView> mapNetworks(ServerPlayer player,Context c){
@@ -239,16 +228,40 @@ public final class RailwayNetworkHandlers {
     private static List<RailwayMapPayload.TrackSegment> edgeSegments(UUID graphId,List<RailwayEdgeReference> refs,ResourceLocation dimension,int[] budget){TrackGraph graph=Create.RAILWAYS.trackNetworks.get(graphId);if(graph==null||budget[0]<=0)return List.of();List<RailwayMapPayload.TrackSegment> result=new ArrayList<>();for(RailwayEdgeReference ref:refs){if(budget[0]<=0)break;if(!ref.first().dimension().equals(dimension)||!ref.second().dimension().equals(dimension))continue;TrackNode a=graph.locateNode(ref.first().resolve()),b=graph.locateNode(ref.second().resolve());if(a==null||b==null)continue;TrackEdge edge=graph.getConnectionsFrom(a).get(b);if(edge==null||edge.isInterDimensional())continue;int steps=edge.isTurn()?Math.max(2,(int)Math.ceil(edge.getLength()/2d)):1;Vec3 previous=edge.getPosition(graph,0);for(int i=1;i<=steps&&budget[0]>0;i++){Vec3 next=edge.getPosition(graph,i/(double)steps);result.add(new RailwayMapPayload.TrackSegment((float)previous.x,(float)previous.z,(float)next.x,(float)next.z));previous=next;budget[0]--;}}return List.copyOf(result);}
     private static String shortId(UUID id){return id.toString().substring(0,8);}
 
+    private static final Map<net.minecraft.server.MinecraftServer,Map<UUID,Long>> ATLAS_WINDOWS = new WeakHashMap<>();
+    public static void sendAtlasMap(ServerPlayer player, net.minecraft.core.BlockPos anchor, ResourceLocation dimension) {
+        // Public directory access must not become an unbounded railway payload endpoint.
+        var windows=ATLAS_WINDOWS.computeIfAbsent(player.getServer(),ignored->new HashMap<>());
+        long realTime=net.minecraft.Util.getMillis();
+        Long previous=windows.get(player.getUUID());
+        if(previous!=null&&realTime-previous<1000)return;
+        windows.entrySet().removeIf(e->realTime-e.getValue()>30_000);
+        windows.put(player.getUUID(),realTime);
+        City city = CityManager.get(player.getServer().overworld()).getMemberCity(player.getUUID());
+        Context c = new Context(player, city, RailwayManager.get(player.serverLevel()), anchor);
+        var cache = MAP_CACHE.computeIfAbsent(player.getServer(), ignored -> new HashMap<>());
+        MapKey key = new MapKey(new UUID(0,0), dimension);
+        CachedRailMap cached = cache.get(key);
+        long now = System.currentTimeMillis();
+        if (cached == null || now - cached.createdAt() >= MAP_CACHE_MILLIS) {
+            cached = new CachedRailMap(anchor.immutable(), now, buildMapSegments(player, dimension));
+            cache.put(key, cached);
+        }
+        boolean current = dimension.equals(player.serverLevel().dimension().location());
+        PacketDistributor.sendToPlayer(player, new RailwayMapPayload(anchor, dimension, cached.segments(),
+                current ? mapNetworks(player,c) : List.of(), current ? mapSections(player,c) : List.of(),
+                current && city != null ? mapRoutes(player,c) : List.of()));
+    }
+
     private static List<RailwayMapPayload.TrackSegment> buildMapSegments(
-            ServerPlayer player, net.minecraft.core.BlockPos center
+            ServerPlayer player, ResourceLocation dimension
     ) {
         List<RailwayMapPayload.TrackSegment> segments = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        double radius = 768;
         graphLoop:
         for (TrackGraph graph : Create.RAILWAYS.trackNetworks.values()) {
             for (TrackNodeLocation loc : graph.getNodes()) {
-                if (!loc.getDimension().location().equals(player.serverLevel().dimension().location())) continue;
+                if (!loc.getDimension().location().equals(dimension)) continue;
                 TrackNode node = graph.locateNode(loc);
                 var connections = graph.getConnectionsFrom(node);
                 if (connections == null) continue;
@@ -260,9 +273,6 @@ public final class RailwayNetworkHandlers {
                     if (!seen.add(graph.id + ":" + edgeKey)) continue;
                     TrackEdge edge = entry.getValue();
                     if (edge.isInterDimensional()) continue;
-                    Vec3 a = loc.getLocation(), z = other.getLocation().getLocation();
-                    if (Math.min(Math.abs(a.x - center.getX()), Math.abs(z.x - center.getX())) > radius
-                            || Math.min(Math.abs(a.z - center.getZ()), Math.abs(z.z - center.getZ())) > radius) continue;
                     int steps = edge.isTurn() ? Math.max(2, (int) Math.ceil(edge.getLength() / 2.0)) : 1;
                     Vec3 previous = edge.getPosition(graph, 0);
                     for (int i = 1; i <= steps; i++) {

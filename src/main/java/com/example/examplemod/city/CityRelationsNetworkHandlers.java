@@ -16,13 +16,16 @@ public final class CityRelationsNetworkHandlers {
         if (!(player.containerMenu instanceof CityPylonMenu menu) || !menu.getPylonPos().equals(payload.pylonPos())
                 || !player.level().dimension().location().equals(menu.getDimensionId())
                 || player.distanceToSqr(payload.pylonPos().getCenter()) > 64.0D) return;
-        CityManager manager = CityManager.get(player.serverLevel());
+        CityManager manager = CityManager.get(player.getServer().overworld());
         City city = manager.getCityByPylon(player.serverLevel().dimension().location(), payload.pylonPos());
         if (city == null || !city.hasMember(player.getUUID())) return;
         if (payload.action() != CityRelationsCommandPayload.Action.REQUEST_STATE) {
             if (!city.isAdmin(player.getUUID()) || payload.targetCityId() == null) return;
-            manager.setTrusted(city.getId(), payload.targetCityId(),
-                    payload.action() == CityRelationsCommandPayload.Action.ADD_TRUST);
+            switch(payload.action()) {
+                case ADD_TRUST, REMOVE_TRUST -> manager.setTrusted(city.getId(),payload.targetCityId(),payload.action()==CityRelationsCommandPayload.Action.ADD_TRUST);
+                case ALLOW_TERRITORY, DENY_TERRITORY -> manager.setTerritoryAccess(city.getId(),payload.targetCityId(),player.getUUID(),payload.action()==CityRelationsCommandPayload.Action.ALLOW_TERRITORY);
+                default -> {}
+            }
         }
         sendState(player, manager, city);
     }
@@ -30,7 +33,7 @@ public final class CityRelationsNetworkHandlers {
     private static void sendState(ServerPlayer player, CityManager manager, City city) {
         var snapshots = manager.getCities().stream().filter(other -> !other.getId().equals(city.getId()))
                 .sorted(Comparator.comparing(City::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(other -> new CityRelationSnapshot(other.getId(), other.getName(), status(manager, city, other)))
+                .map(other -> new CityRelationSnapshot(other.getId(), other.getName(), status(manager, city, other), manager.grantsTerritoryAccess(city.getId(),other.getId()),manager.grantsTerritoryAccess(other.getId(),city.getId())))
                 .toList();
         PacketDistributor.sendToPlayer(player, new CityRelationsStatePayload(city.getPylonPos(), city.getId(),
                 city.isAdmin(player.getUUID()), snapshots));
@@ -48,7 +51,7 @@ public final class CityRelationsNetworkHandlers {
      * cannot act on them, which is why the read-only map needs no extra check.
      */
     public static boolean sendMemberView(ServerPlayer player) {
-        CityManager manager = CityManager.get(player.serverLevel());
+        CityManager manager = CityManager.get(player.getServer().overworld());
         City city = manager.getMemberCity(player.getUUID());
         if (city == null) {
             return false;

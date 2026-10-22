@@ -1,0 +1,10 @@
+allprojects {
+ afterEvaluate {
+  tasks.register('checkOnboarding',JavaExec) {
+   dependsOn tasks.named('mineVisualTestClasses')
+   classpath=sourceSets.mineVisualTest.runtimeClasspath
+   mainClass='com.example.examplemod.onboarding.OnboardingCheck'
+   javaLauncher=javaToolchains.launcherFor { languageVersion=JavaLanguageVersion.of(21) }
+  }
+ }
+}
