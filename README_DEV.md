@@ -12,30 +12,66 @@ Missing or unsupported mandatory dependencies:
 	Mod ID: 'flywheel', Requested by: 'create'
 ```
 
-Они должны лежать в `run/mods/`, а не подключаться как Gradle-зависимости.
+Runtime-моды должны лежать в `run/mods/`, отдельно от dev classpath. Теперь
+Gradle скачивает и подготавливает их автоматически — копировать JAR вручную не нужно.
 
-### Почему не через Gradle dependencies
+## После клонирования GitHub
 
-Добавление jar-мода в dev classpath (`localRuntime` / `implementation`) ломает
-запуск NeoForge:
+Нужны JDK 21 и интернет. Укажите `JAVA_HOME` на JDK 21, если он указывает на другую Java.
+Gradle устанавливать отдельно не требуется: wrapper включён в репозиторий.
+
+Windows PowerShell:
+
+```powershell
+.\gradlew.bat build verifyDevMods
+.\gradlew.bat runClient
+```
+
+macOS/Linux:
+
+```sh
+bash ./gradlew build verifyDevMods
+bash ./gradlew runClient
+```
+
+`build` больше не зависит от заранее существующего `run/mods/ponder-*.jar`:
+compile-only Ponder загружается с Maven Create. `prepareDevMods` скачивает полные
+Create/Ponder в отдельной конфигурации `devRuntimeMods` и копирует их вместе с
+отслеживаемым Git `libs/electroenergetics-1.21.1-1.1.2.jar` в `run/mods/`.
+`runClient`, `runServer`, `runData` и `runGameTestServer` вызывают подготовку автоматически.
+`verifyDevMods` проверяет JAR и вложенные зависимости, не запуская Minecraft.
+
+Задача не удаляет другие моды, конфиги, мир или пользовательские файлы. Если найдена
+другая версия Create/Ponder/EE в `run/mods/`, она останавливается с понятной ошибкой:
+сначала самостоятельно переместите конфликтующий JAR в backup. На production задача
+ничего не устанавливает. Сборка не является деплоем.
+
+### Почему runtime-моды не входят в runtimeClasspath
+
+Для этого проекта полные mod JAR оставлены вне dev classpath (`localRuntime` /
+`implementation`): предыдущая такая конфигурация вызывала ошибку NeoForge:
 
 ```
 Caused by: java.lang.NoClassDefFoundError: com/tterrag/registrate/AbstractRegistrate
 ```
 
-Create, Ponder и Catnip используют Registrate. Когда jar мода попадает в
-classpath вместо mods-папки, module layer NeoForge собирается некорректно.
+Поэтому Gradle разрешает compile API и полные runtime-моды отдельно. Сохраняется
+проверенная проектом схема module layer; переход на другую схему не выполняется.
 
 ### Состав run/mods
 
 | Файл | Источник |
 |---|---|
-| `create-1.21.1-6.0.10.jar` | полный (не slim) jar Create |
+| `create-1.21.1-6.0.10.jar` | Maven `com.simibubi.create:create-1.21.1:6.0.10-280`, полный JAR |
 | `electroenergetics-1.21.1-1.1.2.jar` | `libs/electroenergetics-1.21.1-1.1.2.jar` |
-| `ponder-neoforge-1.0.82+mc1.21.1.jar` | `https://maven.createmod.net/net/createmod/ponder/ponder-neoforge/1.0.82%2Bmc1.21.1/` |
-| `flywheel-neoforge-1.0.6+mc1.21.1.jar` | распространяется вместе с Create |
+| `ponder-neoforge-1.0.82+mc1.21.1.jar` | Maven `net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1` |
 
-Полный Create jar берётся из gradle-кэша:
+Flywheel **1.0.6**, Registrate **MC1.21-1.3.0+67** и Ponder **1.0.82** также присутствуют
+в `META-INF/jarjar/` полного Create JAR. Отдельный Flywheel скачивать не требуется;
+внешний Ponder сохраняется согласно существующей dev-схеме проекта. Новые сторонние
+JAR в Git не добавляются; версии закреплены в `gradle/dev-mods.gradle`.
+
+Полный Create JAR автоматически разрешается Gradle по координатам:
 
 ```
 com.simibubi.create:create-1.21.1:6.0.10-280

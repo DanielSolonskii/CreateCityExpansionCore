@@ -122,6 +122,9 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
+// Reproducible compile dependencies and isolated NeoForge development mods.
+apply from: rootProject.file('gradle/dev-mods.gradle')
+
 dependencies {
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
@@ -144,19 +147,17 @@ dependencies {
     implementation("com.simibubi.create:create-1.21.1:6.0.10-280:slim") {
         transitive = false
     }
-    // Create's KineticBlockEntity API exposes Ponder's VirtualBlockEntity in its
-    // type hierarchy. Compile against the already installed companion without
-    // adding the mod jar to the runtime/module layer.
-    compileOnly files("run/mods/ponder-neoforge-1.0.82+mc1.21.1.jar")
+    // Ponder compile-only API and runtime preparation are declared in
+    // gradle/dev-mods.gradle; compilation never depends on an existing run/.
     // Create: Electro Energetics
     implementation files("libs/electroenergetics-1.21.1-1.1.2.jar")
 
     // NOTE: Create's own runtime companions (Ponder, Flywheel) must be present in the
     // run directory's mods folder for `runClient` / `runServer` to boot.
-    // They are deliberately NOT declared as Gradle dependencies: adding a mod jar to
-    // the dev classpath breaks NeoForge's module layer
+    // Full mod artifacts use a separate Gradle configuration, NOT runtimeClasspath:
+    // putting those jars on the dev classpath breaks NeoForge's module layer
     // ("ClassNotFoundException: com.tterrag.registrate.AbstractRegistrate").
-    // See README_DEV.md for the exact list and where to obtain them.
+    // prepareDevMods downloads/copies them automatically; see README_DEV.md.
 
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
