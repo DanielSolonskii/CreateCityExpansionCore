@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
+import com.example.examplemod.client.screen.CityPylonWorkspaceLayout;
+
 /**
  * Headless-проверка редактора UI: модель дельт, JSON, файловое хранилище,
  * экспорт и allowlist — без запуска игры.
@@ -33,6 +35,7 @@ public final class UiEditCheck {
         exportText();
         allowlist();
         layoutHooks();
+        workspaceChrome();
 
         System.out.println("ok: ui edit " + checks + " checks");
     }
@@ -381,6 +384,57 @@ public final class UiEditCheck {
 
         UiEditLayout.installForTests(new UiEditStore(root), () -> true);
         Files.deleteIfExists(root.resolve("PlayerProfile.json"));
+        Files.deleteIfExists(root);
+    }
+
+    // ------------------------------------------------------------------
+    // Хром пилона (CityPylonWorkspace)
+    // ------------------------------------------------------------------
+
+    private static void workspaceChrome() throws Exception {
+        Path root = Files.createTempDirectory("ui-edit-pylon");
+        UiEditLayout.installForTests(new UiEditStore(root), () -> true);
+        UiEditLayout.activateForTests("CityPylonWorkspace");
+
+        // 1. Без правок calculate отдаёт базовую геометрию и регистрирует хром.
+        var base = CityPylonWorkspaceLayout.calculate(854, 480, false);
+        var names = UiEditLayout.registeredNames("CityPylonWorkspace");
+        require(names.contains("frame") && names.contains("content"), "pylon chrome registered");
+        require(UiEditLayout.registeredFor("PlayerProfileScreen").isEmpty(),
+                "pylon chrome does not leak to other screens");
+
+        // 2. Рамка: дельта двигает всё, что из неё выводится (контент, pose-начало).
+        UiEditLayout.overridesFor("CityPylonWorkspace")
+                .putElement("frame", new UiEditModel.WidgetOverride(12, 6, 0, 0, null));
+        var framed = CityPylonWorkspaceLayout.calculate(854, 480, false);
+        require(framed.frameX() == base.frameX() + 12 && framed.frameY() == base.frameY() + 6,
+                "frame delta moves the frame");
+        require(framed.x() == base.x() + 12 && framed.originX() == base.originX() + 12,
+                "content viewport follows the frame");
+        require(framed.originY() == base.originY() + 6, "pose origin follows the frame");
+
+        // 3. Контент: дельта двигает окно просмотра и pose-начало страницы.
+        UiEditLayout.overridesFor("CityPylonWorkspace")
+                .putElement("content", new UiEditModel.WidgetOverride(0, 9, 0, 0, null));
+        var content = CityPylonWorkspaceLayout.calculate(854, 480, false);
+        require(content.y() == framed.y() + 9 && content.originY() == framed.originY() + 9,
+                "content delta moves viewport and pose origin");
+        require(content.contains(content.x(), content.y()), "shifted viewport accepts input");
+
+        // 4. Навигация: пункт несёт свою дельту (navY — int, доступен из другого
+        // пакета; в игре тот же apply вызывает navRect).
+        int navBase = content.frameY()
+                + (content.frameHeight() < 240 ? 54 : content.frameHeight() < 300 ? 82 : 96);
+        require(content.navY(0) == navBase, "nav rail sits below the title bar");
+        UiEditLayout.overridesFor("CityPylonWorkspace")
+                .putElement("nav[0]", new UiEditModel.WidgetOverride(0, 4, 0, 0, null));
+        require(content.navY(0) == navBase + 4, "nav item delta applied");
+        require(UiEditLayout.registeredNames("CityPylonWorkspace").contains("nav[0]"),
+                "nav item registered");
+
+        UiEditLayout.reload("CityPylonWorkspace");
+        UiEditLayout.activateForTests(null);
+        UiEditLayout.installForTests(new UiEditStore(root), () -> true);
         Files.deleteIfExists(root);
     }
 

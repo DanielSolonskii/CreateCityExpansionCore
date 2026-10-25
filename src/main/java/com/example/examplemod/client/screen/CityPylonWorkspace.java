@@ -137,24 +137,25 @@ public final class CityPylonWorkspace extends Screen {
                 Component.translatable("gui.createcityexpansioncore.profile.my_profile"),false,
                 motion.hover(profileEntry.x()*7919+profileEntry.y(),profileEntry.contains(mx,my),frameDelta));
         // The close control had no hover feedback at all -- a bare glyph with a hit test behind it.
-        float closeLit=motion.hover((fx+fw-29)*7919+fy+3,in(mx,my,fx+fw-29,fy+3,26,24),frameDelta);
-        if(closeLit>0.02f)rounded(g,fx+fw-25,fy+6,18,18,4,UiMotion.mix(METAL,0xFF4A342E,closeLit));
-        g.drawString(font,Component.literal("×"),fx+fw-19,fy+10,TEXT,false);
+        var close=geometry.closeRect();
+        float closeLit=motion.hover((close.x()+4)*7919+close.y(),in(mx,my,close.x(),close.y(),close.width(),close.height()),frameDelta);
+        if(closeLit>0.02f)rounded(g,close.x()+4,close.y()+3,18,18,4,UiMotion.mix(METAL,0xFF4A342E,closeLit));
+        g.drawString(font,Component.literal("×"),close.x()+10,close.y()+7,TEXT,false);
         g.fill(fx+1,fy+30,fx+sidebar,fy+fh-1,METAL);
         g.fill(fx+sidebar,fy+30,fx+sidebar+1,fy+fh-1,LINE);
         int cityY=fy+(fh<240?36:44);
         g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),sidebar-26),fx+13,cityY,TEXT,false);
         if(fh>=240)g.drawString(font,Component.translatable("gui.createcityexpansioncore.workspace.level",root.getMenu().getCityLevel()),fx+13,cityY+17,MUTED,false);
         for(int i=0;i<5;i++) {
-            int y=geometry.navY(i),h=geometry.navHeight();boolean selected=section==i;
+            var nav=geometry.navRect(i);boolean selected=section==i;
             // Keyed by the rail index, which never moves: the highlight follows the cursor across
             // the rail instead of snapping from one entry to the next.
-            float lit=motion.hover(i,in(mx,my,fx+7,y,sidebar-14,h),frameDelta);
-            rounded(g,fx+7,y,sidebar-14,h,4,selected?0xFF383123:UiMotion.mix(METAL,PANEL,lit));
-            if(selected)g.fill(fx+7,y+4,fx+9,y+h-4,BRASS);
-            if(h>=20)g.renderItem(new ItemStack(ICONS[i]),fx+14,y+(h-16)/2);
-            int tx=fx+(h>=20?36:14);
-            g.drawString(font,fit(font,navLabel(i),sidebar-(tx-fx)-12),tx,y+(h-8)/2,selected?TEXT:MUTED,false);
+            float lit=motion.hover(i,in(mx,my,nav.x(),nav.y(),nav.width(),nav.height()),frameDelta);
+            rounded(g,nav.x(),nav.y(),nav.width(),nav.height(),4,selected?0xFF383123:UiMotion.mix(METAL,PANEL,lit));
+            if(selected)g.fill(nav.x(),nav.y()+4,nav.x()+2,nav.y()+nav.height()-4,BRASS);
+            if(nav.height()>=20)g.renderItem(new ItemStack(ICONS[i]),nav.x()+7,nav.y()+(nav.height()-16)/2);
+            int tx=nav.x()+(nav.height()>=20?29:7);
+            g.drawString(font,fit(font,navLabel(i),fx+sidebar-12-tx),tx,nav.y()+(nav.height()-8)/2,selected?TEXT:MUTED,false);
         }
         if(page!=overview)g.drawString(font,Component.translatable("gui.createcityexpansioncore.common.back"),fx+13,fy+fh-20,MUTED,false);
         g.drawString(font,fit(font,navLabel(section),fw-sidebar-30),fx+sidebar+13,fy+fh-15,MUTED,false);
@@ -173,14 +174,13 @@ public final class CityPylonWorkspace extends Screen {
     @Override public boolean mouseClicked(double x,double y,int button) {
         int fx=geometry.frameX(),fy=geometry.frameY();
         if(button==0) {
-            if(in(x,y,fx+geometry.frameWidth()-29,fy+3,26,24)){root.onClose();return true;}
+            var close=geometry.closeRect();
+            if(in(x,y,close.x(),close.y(),close.width(),close.height())){root.onClose();return true;}
             if(PlayerProfileLayout.workspaceEntry(fx,fy,geometry.frameWidth()).contains(x,y)) {
                 PlayerProfileScreen.open(this,minecraft.player.getUUID());return true;
             }
-            if(x>=fx+7&&x<fx+geometry.sidebarWidth()-7) {
-                for(int i=0;i<5;i++)if(in(x,y,fx+7,geometry.navY(i),geometry.sidebarWidth()-14,geometry.navHeight())){navigate(i);return true;}
-                if(y>=fy+geometry.frameHeight()-26&&y<fy+geometry.frameHeight()-4&&page!=overview){onClose();return true;}
-            }
+            for(int i=0;i<5;i++){var nav=geometry.navRect(i);if(in(x,y,nav.x(),nav.y(),nav.width(),nav.height())){navigate(i);return true;}}
+            if(x>=fx+7&&x<fx+geometry.sidebarWidth()-7&&y>=fy+geometry.frameHeight()-26&&y<fy+geometry.frameHeight()-4&&page!=overview){onClose();return true;}
         }
         pointerCaptured=geometry.contains(x,y)&&page.mouseClicked(geometry.localX(x),geometry.localY(y),button);return pointerCaptured;
     }

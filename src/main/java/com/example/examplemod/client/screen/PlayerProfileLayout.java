@@ -16,7 +16,10 @@ public record PlayerProfileLayout(int screenWidth, int screenHeight, int height,
         return new PlayerProfileLayout(screenWidth, screenHeight, height, scale, (screenWidth - WIDTH * scale) / 2, (screenHeight - height * scale) / 2);
     }
     public static Rect workspaceEntry(int frameX, int frameY, int frameWidth) {
-        return new Rect(frameX + frameWidth - 154, frameY + 4, 112, 22);
+        // UI-редактор (F7): правится как элемент того экрана, где кнопка
+        // нарисована (в игре это CityPylonWorkspace — хук сам берёт его ключ).
+        return UiEditLayout.apply("profileEntry", frameX + frameWidth - 154, frameY + 4, 112, 22,
+                Rect::new);
     }
     // Хук UI-редактора (F7): правки элементов применяются здесь и регистрируются
     // для оверлея; при пустых правках возвращает ровно те же координаты.

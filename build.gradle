@@ -484,6 +484,14 @@ tasks.register('checkCityPylonMembersLayout', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkCityPylonMembersLayout') }
 
+tasks.register('checkCityPylonWorkspaceLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.CityPylonWorkspaceLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityPylonWorkspaceLayout') }
+
 def ccecProductionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
 tasks.register('checkGeologyProcedural', JavaExec) {
     dependsOn tasks.named('mineVisualTestClasses')
@@ -568,7 +576,7 @@ tasks.named('check') { dependsOn tasks.named('checkNoCreateSplitPackage') }
 
 // Each headless JVM owns its log directory even when Gradle runs checks in parallel.
 tasks.withType(JavaExec).configureEach {
-    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkCityTerritory', 'checkCityTerritoryDelivery', 'checkCityMapTextLayout', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkGameplayRestrictions', 'checkKelpGrowthPolicy', 'checkCityMapReadAccess', 'checkCityWorldMapSession', 'checkWorldMapPanelLifecycle', 'checkChunkLoader', 'checkDependencyRecipeOverrides', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout', 'checkCityPylonMembersLayout', 'checkConnectionAdmission', 'checkAuthenticationStartupPolicy', 'checkReportLimits']) {
+    if (name in ['checkMineVisualCoordinates', 'checkFreightLogistics', 'checkLogisticsLayout', 'checkRailwayOwnership', 'checkRailwayTripAccounting', 'checkCityRelations', 'checkCityTerritory', 'checkCityTerritoryDelivery', 'checkCityMapTextLayout', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkUnifiedStatus', 'checkFreightDispatch', 'checkFreightReconciliation', 'checkTrainManagement', 'checkFreightHandoff', 'checkShipmentPackageIdentity', 'checkFreightArrivalSettlement', 'checkGameplayRestrictions', 'checkKelpGrowthPolicy', 'checkCityMapReadAccess', 'checkCityWorldMapSession', 'checkWorldMapPanelLifecycle', 'checkChunkLoader', 'checkDependencyRecipeOverrides', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout', 'checkCityPylonMembersLayout', 'checkCityPylonWorkspaceLayout', 'checkConnectionAdmission', 'checkAuthenticationStartupPolicy', 'checkReportLimits']) {
         workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
         doFirst { workingDir.mkdirs() }
     }
