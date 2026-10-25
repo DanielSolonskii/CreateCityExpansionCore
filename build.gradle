@@ -251,6 +251,15 @@ tasks.register('checkLogisticsLayout', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkLogisticsLayout') }
 
+// UI-редактор: модель дельт, JSON, файлы, экспорт и allowlist — headless.
+tasks.register('checkUiEdit', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.uiedit.UiEditCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkUiEdit') }
+
 tasks.register('checkRailwayOwnership', JavaExec) {
     dependsOn tasks.named('mineVisualTestClasses')
     classpath = sourceSets.mineVisualTest.runtimeClasspath
