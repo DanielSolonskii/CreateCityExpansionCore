@@ -19,10 +19,17 @@ import java.util.function.BooleanSupplier;
  * public Rect close() { return hook("close", new Rect(WIDTH - 36, 8, 24, 22)); }
  *
  * private Rect hook(String name, Rect r) {
- *     return UiEditLayout.apply("PlayerProfile", name, r.x(), r.y(), r.width(), r.height(),
+ *     return UiEditLayout.apply(name, r.x(), r.y(), r.width(), r.height(),
  *             scale(), x(), y(), Rect::new);
  * }
  * </pre>
+ *
+ * <p><b>Ключ экрана — текущий экран, а не строка в точке вызова.</b>
+ * {@link UiEditEvents} объявляет его в {@code Init.Pre} ({@link #setActiveScreen}),
+ * до {@code init()}, когда layout-класс только считается. Хук не передаёт имя
+ * экрана вовсе — это структурно исключает рассинхрон ключа именем класса
+ * (однажды уже пойманный баг: хук писал {@code "PlayerProfile"}, а сессия
+ * читала {@code "PlayerProfileScreen"} — обводок не было и правка не работала).
  *
  * <p><b>Три обязанности.</b>
  * <ol>
@@ -76,8 +83,30 @@ public final class UiEditLayout {
     private static BooleanSupplier gate = UiEditLayout::allowedByDefault;
     private static long gateCheckedAt;
     private static boolean gateCached;
+    /** Ключ текущего экрана (className) — объявляется в Init.Pre до init(). */
+    private static volatile String activeScreen;
 
     private UiEditLayout() {
+    }
+
+    // ------------------------------------------------------------------
+    // Текущий экран
+    // ------------------------------------------------------------------
+
+    /**
+     * Объявить текущий экран: вызывается из {@code ScreenEvent.Init.Pre},
+     * <b>до</b> {@code init()}, когда layout-класс считает геометрию.
+     *
+     * <p>Вне игрового экрана (headless-проверки, статический код) ключа нет —
+     * {@link #apply} работает чистой проходной функцией и ничего не регистрирует.
+     */
+    public static void setActiveScreen(Object screen) {
+        activeScreen = screen == null ? null : UiEditSession.className(screen);
+    }
+
+    /** Тесты: ключ активного экрана напрямую (или {@code null} — вне игры). */
+    static void activateForTests(String screenKey) {
+        activeScreen = screenKey;
     }
 
     // ------------------------------------------------------------------
@@ -87,14 +116,15 @@ public final class UiEditLayout {
     /**
      * Применить правку элемента и зарегистрировать его для оверлея.
      *
-     * @param screen    имя экрана (simple name класса экрана)
+     * <p>Имя экрана берётся из {@link #setActiveScreen}: вызывающему коду его
+     * передавать не нужно (см. класс javadoc — так исключён баг рассинхрон ключа).
+     *
      * @param element   имя элемента в layout, например {@code "close"} или {@code "tab[0]"}
      * @param x, y, w, h логические координаты из layout-класса
      * @param scale, originX, originY параметры pose-преобразования экрана
      * @param factory   фабрика_Rect конкретного layout-класса
      */
     public static <R> R apply(
-            String screen,
             String element,
             int x,
             int y,
@@ -104,6 +134,11 @@ public final class UiEditLayout {
             float originX,
             float originY,
             BoxFactory<R> factory) {
+        String screen = activeScreen;
+        if (screen == null) {
+            // Нет активного экрана (headless) — проходная функция без регистрации.
+            return factory.create(x, y, w, h);
+        }
         TRANSFORMS.put(screen, new Transform(scale, originX, originY));
         UiEditModel.Bounds local = new UiEditModel.Bounds(x, y, w, h);
         REGISTERED.computeIfAbsent(screen, key -> new LinkedHashMap<>()).put(element, local);
@@ -117,8 +152,8 @@ public final class UiEditLayout {
 
     /** Хук без преобразования координат — экраны, рисующие без pose-масштаба. */
     public static <R> R apply(
-            String screen, String element, int x, int y, int w, int h, BoxFactory<R> factory) {
-        return apply(screen, element, x, y, w, h, 1f, 0f, 0f, factory);
+            String element, int x, int y, int w, int h, BoxFactory<R> factory) {
+        return apply(element, x, y, w, h, 1f, 0f, 0f, factory);
     }
 
     /**
@@ -287,6 +322,7 @@ public final class UiEditLayout {
         REGISTERED.clear();
         FILES.clear();
         TRANSFORMS.clear();
+        activeScreen = null;
         gateCheckedAt = 0L;
         gateCached = false;
     }

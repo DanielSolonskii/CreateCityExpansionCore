@@ -304,13 +304,25 @@ public final class UiEditCheck {
         Path root = Files.createTempDirectory("ui-edit-layout");
         UiEditLayout.installForTests(new UiEditStore(root), () -> true);
 
-        // 1. Без правок хук отдаёт ровно те же координаты и регистрирует элемент.
-        int[] raw = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+        // 0. Без активного экрана хук — чистая проходная функция и ничего не пишет
+        // (так живут headless-проверки layout-классов без Minecraft).
+        int[] inert = UiEditLayout.apply("close", 10, 20, 30, 40,
+                2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
+        require(inert[0] == 10 && inert[1] == 20, "no active screen: pass-through");
+        require(UiEditLayout.registeredNames("TestScreen").isEmpty(),
+                "no active screen: nothing registered");
+
+        // 1. Без правок хук отдаёт ровно те же координаты и регистрирует элемент
+        // под ключом АКТИВНОГО экрана (то, что видит сессия редактора).
+        UiEditLayout.activateForTests("TestScreen");
+        int[] raw = UiEditLayout.apply("close", 10, 20, 30, 40,
                 2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
         require(raw[0] == 10 && raw[1] == 20 && raw[2] == 30 && raw[3] == 40,
                 "hook is pass-through without edits");
         require(UiEditLayout.registeredFor("TestScreen").containsKey("close"),
-                "hook registers element");
+                "hook registers element under active screen key");
+        require(UiEditLayout.registeredFor("PlayerProfileScreen").isEmpty(),
+                "registration never leaks to a guessed screen key");
 
         // 2. Экранные координаты: screen = origin + local * scale.
         UiEditModel.Bounds screen =
@@ -321,7 +333,7 @@ public final class UiEditCheck {
         // 3. Правка применяется в логических единицах (переживает GUI scale).
         UiEditLayout.overridesFor("TestScreen")
                 .putElement("close", new UiEditModel.WidgetOverride(5, -3, 0, 0, null));
-        int[] moved = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+        int[] moved = UiEditLayout.apply("close", 10, 20, 30, 40,
                 2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
         require(moved[0] == 15 && moved[1] == 17, "delta applied in layout units");
 
@@ -341,12 +353,13 @@ public final class UiEditCheck {
         UiEditModel.ScreenOverrides reloaded = UiEditLayout.reload("PlayerProfile");
         require(reloaded.getElement("body").dx() == -8, "file round trip via hook");
         UiEditLayout.reload("TestScreen");
-        int[] afterReload = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+        int[] afterReload = UiEditLayout.apply("close", 10, 20, 30, 40,
                 2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
         require(afterReload[0] == 10, "reload discards unsaved in-memory edit");
 
         // 6. Экран без pose-масштаба — координаты не конвертируются.
-        UiEditLayout.apply("Plain", "body", 1, 2, 3, 4, (x, y, w, h) -> new int[]{x, y, w, h});
+        UiEditLayout.activateForTests("Plain");
+        UiEditLayout.apply("body", 1, 2, 3, 4, (x, y, w, h) -> new int[]{x, y, w, h});
         UiEditModel.Bounds plain =
                 UiEditLayout.toScreen("Plain", new UiEditModel.Bounds(1, 2, 3, 4));
         require(plain.x() == 1 && plain.w() == 3, "identity transform");
@@ -359,9 +372,10 @@ public final class UiEditCheck {
 
         // 8. Доступ закрыт — правка в памяти есть, но не применяется.
         UiEditLayout.installForTests(new UiEditStore(root), () -> false);
+        UiEditLayout.activateForTests("TestScreen");
         UiEditLayout.overridesFor("TestScreen")
                 .putElement("close", new UiEditModel.WidgetOverride(5, 0, 0, 0, null));
-        int[] gated = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+        int[] gated = UiEditLayout.apply("close", 10, 20, 30, 40,
                 1f, 0f, 0f, (x, y, w, h) -> new int[]{x, y, w, h});
         require(gated[0] == 10, "closed gate: override not applied");
 

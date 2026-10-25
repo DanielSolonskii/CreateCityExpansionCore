@@ -83,6 +83,9 @@ public final class UiEditEvents {
 
     @SubscribeEvent
     public static void onInitPre(ScreenEvent.Init.Pre event) {
+        // Сначала объявляем ключ экрана: layout-классы посчитают геометрию в
+        // init() между Pre и Post, и хук зарегистрирует элементы под ним же.
+        UiEditLayout.setActiveScreen(event.getScreen());
         // Реестр layout-элементов живёт в статике: без очистки на новом экране
         // остались бы имена и координаты предыдущего. Сам экран наполнит реестр
         // заново, пока идёт init() между Pre и Post.

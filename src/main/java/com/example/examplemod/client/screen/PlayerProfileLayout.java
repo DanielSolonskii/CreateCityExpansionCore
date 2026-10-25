@@ -23,7 +23,8 @@ public record PlayerProfileLayout(int screenWidth, int screenHeight, int height,
     // searchRow/scrollThumb намеренно без хука — их позиция зависит от скролла,
     // который считает экран, а не layout.
     private Rect hook(String name, Rect r) {
-        return UiEditLayout.apply("PlayerProfile", name, r.x(), r.y(), r.width(), r.height(),
+        // Ключ экрана — активный (Init.Pre), не строка: см. UiEditLayout javadoc.
+        return UiEditLayout.apply(name, r.x(), r.y(), r.width(), r.height(),
                 scale, x, y, Rect::new);
     }
     public Rect frame() { return hook("frame", new Rect(0, 0, WIDTH, height)); }
