@@ -34,6 +34,18 @@ public abstract class ModalOverlayScreen extends Screen {
     /** Экран, который нужно нарисовать размытым под модалкой. */
     private final Screen underlying;
 
+    private final UiMotion motion = new UiMotion();
+    /**
+     * Сдвиг, применённый к содержимому в этом кадре.
+     *
+     * <p>Виджеты модалки рисуются внутри pose, сдвинутого на это значение, поэтому
+     * хит-тест обязан вычесть его же — иначе в первые 180 мс после открытия кнопки
+     * оказываются там, где их рисовали в прошлом кадре. Значение хранится, а не
+     * пересчитывается: обработчики мыши приходят вне кадра и должны видеть ровно то,
+     * что было показано последним кадром.
+     */
+    private float entranceOffset;
+
     protected ModalOverlayScreen(Screen underlying, Component title) {
         super(title);
         this.underlying = underlying;
@@ -41,6 +53,11 @@ public abstract class ModalOverlayScreen extends Screen {
 
     protected Screen underlying() {
         return this.underlying;
+    }
+
+    /** Экранные координаты мыши -> координаты содержимого модалки. */
+    protected final double localY(double mouseY) {
+        return mouseY - this.entranceOffset;
     }
 
     /**
@@ -80,6 +97,9 @@ public abstract class ModalOverlayScreen extends Screen {
             renderModalContent(guiGraphics, mouseX, mouseY, partialTick);
             return;
         }
+        long now = net.minecraft.Util.getMillis();
+        motion.opened(now);
+        this.entranceOffset = motion.entranceOffset(now);
         boolean underlying = drawsUnderlyingScreen() && this.underlying != null;
 
         /*
@@ -114,6 +134,9 @@ public abstract class ModalOverlayScreen extends Screen {
         // Container labels/items/tooltips have their own positive Z offsets.
         // Both the modal's opaque panels and its widgets must cover those layers.
         guiGraphics.pose().translate(0.0F, 0.0F, 1000.0F);
+        // Same slide the profile window uses: the panel eases in from just below its resting
+        // place instead of appearing mid-frame.
+        guiGraphics.pose().translate(0.0F, this.entranceOffset, 0.0F);
         try {
             guiGraphics.fill(
                     0,
@@ -149,6 +172,34 @@ public abstract class ModalOverlayScreen extends Screen {
         for (Renderable renderable : this.renderables) {
             renderable.render(guiGraphics, mouseX, mouseY, partialTick);
         }
+    }
+
+    /**
+     * Ввод передаётся виджетам в координатах содержимого.
+     *
+     * <p>Виджеты рисуются внутри сдвинутого pose, поэтому их собственные границы —
+     * это координаты содержимого, а не экрана. Без этого сдвига кнопка на открытии
+     * модалки принимала бы клики на 8 пикселей выше, чем нарисована. Сдвиг к этому
+     * моменту уже равен нулю, так что на установившемся окне это честное тождество.
+     */
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        return super.mouseClicked(mouseX, localY(mouseY), button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        return super.mouseReleased(mouseX, localY(mouseY), button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return super.mouseDragged(mouseX, localY(mouseY), button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        return super.mouseScrolled(mouseX, localY(mouseY), scrollX, scrollY);
     }
 
     /**

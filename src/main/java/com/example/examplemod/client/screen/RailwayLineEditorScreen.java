@@ -6,7 +6,6 @@ import com.example.examplemod.railway.RailwayLineSnapshot;
 import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTypes;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
@@ -55,24 +54,27 @@ public final class RailwayLineEditorScreen extends ModalOverlayScreen {
         this.name.setHint(Component.translatable("gui.createcityexpansioncore.railway.line_name"));
         this.addRenderableWidget(this.name);
 
-        this.addRenderableWidget(Button.builder(
+        this.addRenderableWidget(new ChromeButton(
+                left + 20, top + 226, 125, 22,
                 Component.translatable("gui.createcityexpansioncore.railway.add_stop"),
-                button -> addStop()).bounds(left + 20, top + 226, 125, 22).build());
-        this.addRenderableWidget(Button.builder(
+                button -> addStop()));
+        this.addRenderableWidget(new ChromeButton(
+                left + 152, top + 226, 125, 22,
                 Component.translatable("gui.createcityexpansioncore.railway.change_type"),
                 button -> this.type = RailwayTypes.LineType.values()[
-                        (this.type.ordinal() + 1) % RailwayTypes.LineType.values().length])
-                .bounds(left + 152, top + 226, 125, 22).build());
-        this.addRenderableWidget(Button.builder(
+                        (this.type.ordinal() + 1) % RailwayTypes.LineType.values().length]));
+        this.addRenderableWidget(new ChromeButton(
+                left + 284, top + 226, 126, 22,
                 Component.translatable("gui.createcityexpansioncore.railway.cyclic"),
-                button -> this.cyclic = !this.cyclic)
-                .bounds(left + 284, top + 226, 126, 22).build());
-        this.addRenderableWidget(Button.builder(
+                button -> this.cyclic = !this.cyclic));
+        this.addRenderableWidget(new ChromeButton(
+                left + 20, top + 260, 190, 22,
                 Component.translatable("gui.createcityexpansioncore.common.cancel"),
-                button -> onClose()).bounds(left + 20, top + 260, 190, 22).build());
-        this.addRenderableWidget(Button.builder(
+                button -> onClose()));
+        this.addRenderableWidget(new ChromeButton(
+                left + 220, top + 260, 190, 22,
                 Component.translatable("gui.createcityexpansioncore.common.save"),
-                button -> save()).bounds(left + 220, top + 260, 190, 22).build());
+                button -> save(), true));
         this.setInitialFocus(this.name);
     }
 
@@ -109,13 +111,16 @@ public final class RailwayLineEditorScreen extends ModalOverlayScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Stops are painted inside the modal's sliding pose; the cursor is converted first so a
+        // click during the entrance lands on the row the player is looking at.
+        double contentY = localY(mouseY);
         if (button == 0) {
             int left = (this.width - 430) / 2;
             int top = (this.height - 300) / 2;
             int end = Math.min(this.stops.size(), this.stopScroll + 6);
             for (int i = this.stopScroll; i < end; i++) {
                 int rowY = top + 84 + (i - this.stopScroll) * 22;
-                if (mouseY < rowY || mouseY >= rowY + 19) continue;
+                if (contentY < rowY || contentY >= rowY + 19) continue;
                 RailLineStop current = this.stops.get(i);
                 if (current.mode() == RailwayTypes.StopMode.TIMED
                         && mouseX >= left + 228 && mouseX < left + 246) {
@@ -160,8 +165,9 @@ public final class RailwayLineEditorScreen extends ModalOverlayScreen {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int left = (this.width - 430) / 2;
         int top = (this.height - 300) / 2;
+        double contentY = localY(mouseY);
         if (mouseX >= left + 20 && mouseX < left + 410
-                && mouseY >= top + 84 && mouseY < top + 216) {
+                && contentY >= top + 84 && contentY < top + 216) {
             this.stopScroll = Math.clamp(this.stopScroll + (scrollY < 0 ? 1 : -1),
                     0, Math.max(0, this.stops.size() - 6));
             return true;

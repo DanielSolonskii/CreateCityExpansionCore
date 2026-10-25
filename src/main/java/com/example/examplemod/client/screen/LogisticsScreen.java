@@ -532,13 +532,22 @@ public final class LogisticsScreen extends CityPylonPageScreen {
     }
 
     @Override public void render(GuiGraphics g,int mx,int my,float pt) {
+        // The name box is a real widget and is moved onto the panel; everything painted below lives
+        // in the matching pose. Scissor ignores the pose entirely, so the clip window has to carry
+        // the slide itself or the first row is cut off for the length of the entrance.
+        float offset=entranceOffset();
+        slideWidgets(offset);
+        double localY=my-offset;
         g.fill(0,0,width,height,BG);
+        g.pose().pushPose();
+        g.pose().translate(0,offset,0);
+        try{
         g.fill(0,0,width,38,0xFF192A32);g.fill(0,37,width,38,BORDER);
         icon(g,"create:package_postbox",layout.left(),10);
         line(g,title,layout.left()+24,8,layout.width()-24,GOLD);
         line(g,Component.literal(menu.getCityName()),layout.left()+24,22,layout.width()-24,MUTED);
-        CityPylonWorkspace.clip(g,layout.left(),layout.top(),layout.right(),layout.bottom());
-        compose(g,mx,my);
+        CityPylonWorkspace.clip(g,layout.left(),layout.top()+(int)offset,layout.right(),layout.bottom()+(int)offset);
+        compose(g,mx,(int)localY);
         g.disableScissor();
         if(contentHeight>layout.viewport()){
             int track=layout.viewport(),thumb=Math.max(16,track*track/contentHeight);
@@ -547,17 +556,25 @@ public final class LogisticsScreen extends CityPylonPageScreen {
             g.fill(layout.right()+4,sy,layout.right()+6,sy+thumb,GOLD);
         }
         for(Runnable check:enabledChecks)check.run();
+        }finally{
+            g.pose().popPose();
+        }
         super.render(g,mx,my,pt);
     }
     @Override public boolean mouseClicked(double x,double y,int button) {
+        // Widgets take the raw cursor -- slideWidgets already moved them onto the panel. The hit
+        // rectangles were registered in the untranslated space, so the slide comes off first.
         if(super.mouseClicked(x,y,button))return true;
-        if(button==0&&!waitingRegistration&&layout.contains(x,y)){
-            for(Hit hit:hits)if(hit.contains(x,y)){hit.action.run();return true;}
+        double localY=y-entranceOffset();
+        if(button==0&&!waitingRegistration&&layout.contains(x,localY)){
+            for(Hit hit:hits)if(hit.contains(x,localY)){hit.action.run();return true;}
         }
         return false;
     }
     @Override public boolean mouseScrolled(double x,double y,double dx,double dy) {
-        if(!layout.contains(x,y)||dy==0)return super.mouseScrolled(x,y,dx,dy);
+        // Scrolling only counts over the sliding content area, so the slide comes off the cursor
+        // here too. Widgets below still get the raw value.
+        if(!layout.contains(x,y-entranceOffset())||dy==0)return super.mouseScrolled(x,y,dx,dy);
         int next=layout.clampScroll(scroll+(dy<0?28:-28),contentHeight);
         if(next!=scroll){scroll=next;rebuild();}return true;
     }

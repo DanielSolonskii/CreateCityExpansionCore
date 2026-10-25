@@ -56,6 +56,15 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
     private static final int COLOR_TOGGLE_ON = 0xFF6B4D24;
     private static final int COLOR_FIELD = 0xFF20272B;
 
+    /**
+     * Lerp step for the frame being painted, sampled once in {@link #render}.
+     *
+     * <p>Asking the motion twice in the same frame returns a step for the second read only -- the
+     * first one has already advanced the clock -- so a second sample would report zero and the
+     * highlight would never move. Sampling here keeps every control on the same clock.
+     */
+    private float frameStep = 1f;
+
     private final Screen parent;
     private final Mode mode;
     private final BlockPos pylonPos;
@@ -328,10 +337,12 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
             selector.mouseClicked(mouseX, mouseY, button);
             return true;
         }
+        // The EditBoxes were moved onto the panel by slideWidgets and take the raw cursor. The Hit
+        // rectangles were registered in the untranslated space, so the slide comes off for those.
         if (button == 0 && overAnyBox(mouseX, mouseY)) {
             return super.mouseClicked(mouseX, mouseY, button);
         }
-        if (button == 0 && handleClick(mouseX, mouseY)) {
+        if (button == 0 && handleClick(mouseX, mouseY - entranceOffset())) {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -580,31 +591,44 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        // The EditBoxes are widgets at plain screen coordinates and are moved onto the panel by
+        // slideWidgets; the form itself is painted inside the matching pose. Painting the boxes
+        // inside that pose too would drop them twice as far as the panel they belong to.
+        float offset = entranceOffset();
+        frameStep = frameDelta();
+        slideWidgets(offset);
+        double localY = mouseY - offset;
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
         if (selector.isOpen()) {
             selector.render(graphics, mouseX, mouseY, partialTick);
             return;
         }
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + panelH, COLOR_PANEL);
-        graphics.fill(panelX, panelY, panelX + panelW, panelY + 3, COLOR_ACCENT);
-        graphics.renderOutline(panelX, panelY, panelW, panelH, COLOR_ACCENT);
-        graphics.drawCenteredString(this.font, titleComponent(), panelX + panelW / 2, panelY + 9, COLOR_LABEL);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, offset, 0);
+        try {
+            WorldMapChrome.panel(graphics, panelX, panelY, panelW, panelH, COLOR_ACCENT, COLOR_PANEL);
+            graphics.fill(panelX + WorldMapChrome.RADIUS, panelY + 1,
+                    panelX + panelW - WorldMapChrome.RADIUS, panelY + 4, COLOR_ACCENT);
+            graphics.drawCenteredString(this.font, titleComponent(), panelX + panelW / 2, panelY + 9, COLOR_LABEL);
 
-        if (isPrivate()) {
-            drawPrivate(graphics, mouseX, mouseY);
-        } else {
-            drawContract(graphics, mouseX, mouseY);
+            if (isPrivate()) {
+                drawPrivate(graphics, mouseX, (int) localY);
+            } else {
+                drawContract(graphics, mouseX, (int) localY);
+            }
+
+            if (!error.getString().isEmpty()) {
+                graphics.drawCenteredString(this.font, ellipsize(error, innerW),
+                        panelX + panelW / 2, errorY, COLOR_ERROR);
+            }
+
+            button(graphics, backHit, Component.translatable("gui.createcityexpansioncore.common.back"),
+                    true, mouseX, (int) localY);
+            button(graphics, submitHit, Component.translatable("gui.createcityexpansioncore.economy.publish"),
+                    true, mouseX, (int) localY);
+        } finally {
+            graphics.pose().popPose();
         }
-
-        if (!error.getString().isEmpty()) {
-            graphics.drawCenteredString(this.font, ellipsize(error, innerW),
-                    panelX + panelW / 2, errorY, COLOR_ERROR);
-        }
-
-        button(graphics, backHit, Component.translatable("gui.createcityexpansioncore.common.back"),
-                true, mouseX, mouseY);
-        button(graphics, submitHit, Component.translatable("gui.createcityexpansioncore.economy.publish"),
-                true, mouseX, mouseY);
 
         for (EditBox box : activeBoxes()) {
             box.render(graphics, mouseX, mouseY, partialTick);
@@ -750,9 +774,9 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
     private void toggle(GuiGraphics graphics, Hit hit, String key, boolean selected,
                         int mouseX, int mouseY) {
         if (hit == null) return;
-        boolean hover = hit.contains(mouseX, mouseY);
+        float lit = hover(hit.x() * 7919 + hit.y(), !selected && hit.contains(mouseX, mouseY), frameStep);
         graphics.fill(hit.x(), hit.y(), hit.x() + hit.w(), hit.y() + hit.h(),
-                selected ? COLOR_TOGGLE_ON : (hover ? 0xFF31404A : COLOR_TOGGLE));
+                selected ? COLOR_TOGGLE_ON : UiMotion.mix(COLOR_TOGGLE, 0xFF31404A, lit));
         graphics.drawCenteredString(this.font, Component.translatable(key),
                 hit.x() + hit.w() / 2, hit.y() + 5, selected ? COLOR_GOLD : COLOR_MUTED);
     }
@@ -760,9 +784,9 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
     private void button(GuiGraphics graphics, Hit hit, Component label, boolean active,
                         int mouseX, int mouseY) {
         if (hit == null) return;
-        boolean hover = active && hit.contains(mouseX, mouseY);
+        float lit = hover(hit.x() * 7919 + hit.y(), active && hit.contains(mouseX, mouseY), frameStep);
         graphics.fill(hit.x(), hit.y(), hit.x() + hit.w(), hit.y() + hit.h(),
-                !active ? COLOR_BTN_OFF : (hover ? COLOR_BTN_HOVER : COLOR_BTN));
+                !active ? COLOR_BTN_OFF : UiMotion.mix(COLOR_BTN, COLOR_BTN_HOVER, lit));
         graphics.drawCenteredString(this.font, ellipsize(label, hit.w() - 6),
                 hit.x() + hit.w() / 2, hit.y() + 6, active ? COLOR_GOLD : 0xFF727A7D);
     }

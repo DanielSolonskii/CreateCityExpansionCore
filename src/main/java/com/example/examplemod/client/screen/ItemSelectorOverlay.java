@@ -50,6 +50,10 @@ public final class ItemSelectorOverlay {
     private static List<Entry> cache;
 
     private boolean open;
+    /** Smoothed hover for the grid cells and the close control. */
+    private final UiMotion motion = new UiMotion();
+    /** One lerp step per frame, measured once in render -- not per cell. */
+    private float frameDelta;
     private int x;
     private int y;
     private int w;
@@ -171,6 +175,7 @@ public final class ItemSelectorOverlay {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (!open) return;
         reindex();
+        this.frameDelta = motion.delta(net.minecraft.Util.getMillis());
 
         Minecraft minecraft = Minecraft.getInstance();
         int screenW = minecraft.getWindow().getGuiScaledWidth();
@@ -178,19 +183,24 @@ public final class ItemSelectorOverlay {
 
         // Затемнение подложки: клики по ней блокируются в mouseClicked.
         graphics.fill(0, 0, screenW, screenH, 0x96000000);
-        graphics.fill(x, y, x + w, y + h, COLOR_PANEL);
-        graphics.renderOutline(x, y, w, h, COLOR_BORDER);
-        graphics.fill(x + 1, y + 1, x + w - 1, y + 4, 0xFFD09A3A);
+        // Drop shadow first, then the gold rim, then the surface: the rim reads as the panel's
+        // edge instead of as a line drawn on top of it.
+        WorldMapChrome.rounded(graphics, x, y + 3, w, h, WorldMapChrome.RADIUS, 0x50000000);
+        WorldMapChrome.rounded(graphics, x, y, w, h, WorldMapChrome.RADIUS, COLOR_BORDER);
+        WorldMapChrome.rounded(graphics, x + 1, y + 1, w - 2, h - 2, WorldMapChrome.RADIUS - 1, COLOR_PANEL);
+        graphics.fill(x + WorldMapChrome.RADIUS, y + 1, x + w - WorldMapChrome.RADIUS, y + 4, 0xFFD09A3A);
 
         graphics.drawString(minecraft.font,
                 Component.translatable("gui.createcityexpansioncore.item_selector.title"),
                 x + PAD, y + 11, COLOR_TEXT, false);
 
-        // Кнопка закрытия.
+        // Кнопка закрытия. A fixed control, so its position is already a stable id.
         int closeX = x + w - 20;
         int closeY = y + 9;
+        float closeLit = motion.hover(closeX * 7919 + closeY,
+                inside(mouseX, mouseY, closeX, closeY, 13, 13), frameDelta);
         graphics.fill(closeX, closeY, closeX + 13, closeY + 13,
-                inside(mouseX, mouseY, closeX, closeY, 13, 13) ? 0xFF8A4B3F : 0xFF3A2A27);
+                UiMotion.mix(0xFF3A2A27, 0xFF8A4B3F, closeLit));
         graphics.drawCenteredString(minecraft.font, "x", closeX + 6, closeY + 3, 0xFFF0D9D4);
 
         if (search != null) search.render(graphics, mouseX, mouseY, partialTick);
@@ -211,9 +221,12 @@ public final class ItemSelectorOverlay {
             int cellY = gy + (cell / cols) * CELL;
             boolean hover = inside(mouseX, mouseY, cellX, cellY, CELL - 1, CELL - 1);
             if (hover) hoverIndex = index;
-            graphics.fill(cellX, cellY, cellX + CELL - 2, cellY + CELL - 2,
-                    hover ? COLOR_CELL_HOVER : COLOR_CELL);
             Entry entry = filtered.get(index);
+            // Keyed by the item, not the slot: scrolling under the cursor must not carry the
+            // highlight onto whichever item has moved into view.
+            float lit = motion.hover(entry.id().hashCode(), hover, frameDelta);
+            graphics.fill(cellX, cellY, cellX + CELL - 2, cellY + CELL - 2,
+                    UiMotion.mix(COLOR_CELL, COLOR_CELL_HOVER, lit));
             graphics.renderItem(new ItemStack(entry.item()), cellX + 1, cellY + 1);
         }
         graphics.disableScissor();

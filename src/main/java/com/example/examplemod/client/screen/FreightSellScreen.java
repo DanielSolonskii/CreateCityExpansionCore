@@ -54,18 +54,31 @@ public final class FreightSellScreen extends CityPylonPageScreen {
     @Override public boolean isPauseScreen(){return false;}
     @Override public void onClose(){minecraft.setScreen(new MarketScreen(pylon));}
     @Override public void render(GuiGraphics g,int mx,int my,float pt){
+        // The buttons are widgets and ride the slide; the sale cards are drawn in the matching pose.
+        float offset=entranceOffset();
+        slideWidgets(offset);
+        double localY=my-offset;
         g.fill(0,0,width,height,BG);g.fill(0,0,width,34,0xFF192A32);
+        g.pose().pushPose();
+        g.pose().translate(0,offset,0);
+        try{
         g.drawCenteredString(font,title,width/2,12,GOLD);
         var list=sales();scroll=Math.clamp(scroll,0,Math.max(0,list.size()-rows()));
-        CityPylonWorkspace.clip(g,20,40,width-20,height-104);
+        // Scissor ignores the pose, so the clip window carries the slide itself.
+        CityPylonWorkspace.clip(g,20,40+(int)offset,width-20,height-104+(int)offset);
         if(state()==null)text(g,font,FreightUi.tr("loading"),26,48,width-52,MUTED);
         else if(list.isEmpty()){
             icon(g,"minecraft:chest",26,47);text(g,font,tr("sales_empty"),50,50,width-76,GOLD);
             g.drawWordWrap(font,tr("sales_empty_help"),26,72,width-52,MUTED);
         }
+        float delta=frameDelta();
         for(int i=scroll;i<Math.min(list.size(),scroll+rows());i++){
             CompoundTag s=list.getCompound(i);int y=40+(i-scroll)*64;
-            panel(g,20,y,width-40,58,s.getUUID("Id").equals(selected)?0xFF354438:PANEL);
+            // Keyed by the sale, not the slot: scrolling under the cursor must not carry the
+            // highlight onto whichever row has moved into that position.
+            boolean over=mx>=20&&mx<width-20&&localY>=y&&localY<y+58;
+            float lit=hover(s.getUUID("Id").hashCode(),over,delta);
+            panel(g,20,y,width-40,58,s.getUUID("Id").equals(selected)?0xFF354438:UiMotion.mix(PANEL,0xFF2A3A42,lit));
             if(g!=null)g.renderItem(item(s.getString("Item")),28,y+8);
             text(g,font,FreightUi.tr("cargo",s.getLong("Amount"),item(s.getString("Item")).getHoverName()),52,y+9,width-80,TEXT);
             text(g,font,Component.literal(s.getString("CityName")).append(" · "+s.getLong("Reward")+" CR"),28,y+27,width-56,GOLD);
@@ -82,19 +95,25 @@ public final class FreightSellScreen extends CityPylonPageScreen {
         confirm.setMessage(submitted?FreightUi.tr("loading"):s==null?tr("select_sale"):
                 FreightUi.tr("confirm").copy().append(" · "+s.getLong("Reward")+" CR"));
         if(list.size()>rows())text(g,font,tr("list_count",scroll+1,Math.min(list.size(),scroll+rows()),list.size()),20,height-99,width-40,MUTED);
+        }finally{
+            g.pose().popPose();
+        }
         super.render(g,mx,my,pt);
     }
     @Override public boolean mouseClicked(double x,double y,int button){
         if(super.mouseClicked(x,y,button))return true;
-        if(button==0&&!submitted&&x>=20&&x<width-20&&y>=40&&y<height-104){
-            int row=(int)(y-40)/64,i=scroll+row;
-            if(row<rows()&&i<sales().size()&&(y-40)%64<58)selected=sales().getCompound(i).getUUID("Id");
+        // The cards are painted inside the sliding pose, so the cursor is read in that space too.
+        double localY=y-entranceOffset();
+        if(button==0&&!submitted&&x>=20&&x<width-20&&localY>=40&&localY<height-104){
+            int row=(int)(localY-40)/64,i=scroll+row;
+            if(row<rows()&&i<sales().size()&&(localY-40)%64<58)selected=sales().getCompound(i).getUUID("Id");
             return true;
         }
         return false;
     }
     @Override public boolean mouseScrolled(double x,double y,double dx,double dy){
-        if(y<40||y>=height-104||dy==0)return false;
+        double localY=y-entranceOffset();
+        if(localY<40||localY>=height-104||dy==0)return false;
         scroll=Math.clamp(scroll+(dy<0?1:-1),0,Math.max(0,sales().size()-rows()));return true;
     }
 }

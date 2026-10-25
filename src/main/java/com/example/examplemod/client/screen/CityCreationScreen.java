@@ -119,9 +119,12 @@ public class CityCreationScreen extends Screen {
     }
     private static final class FoundingButton extends Button {
         private final boolean primary;
+        /** Smoothed hover. Keyed by position: a fixed control never moves, so position is stable. */
+        private final UiMotion motion = new UiMotion();
         FoundingButton(WorldMapUiLayout.Rect r,Component label,boolean primary,OnPress press){super(r.x(),r.y(),r.width(),r.height(),label,press,DEFAULT_NARRATION);this.primary=primary;}
         @Override protected void renderWidget(GuiGraphics g,int mx,int my,float pt){
-            CityPylonTheme.button(g,Minecraft.getInstance().font,getX(),getY(),getWidth(),getHeight(),getMessage(),primary&&active,isHoveredOrFocused());
+            float lit=motion.hover(getX()*7919+getY(),isHoveredOrFocused(),motion.delta(net.minecraft.Util.getMillis()));
+            CityPylonTheme.button(g,Minecraft.getInstance().font,getX(),getY(),getWidth(),getHeight(),getMessage(),primary&&active,lit);
             if(!active)g.fill(getX(),getY(),getX()+getWidth(),getY()+getHeight(),0x55222C30);
         }
     }

@@ -45,6 +45,10 @@ final class ProjectPanel {
     private Font font;
     private GuiGraphics graphics;
     private int mouseX,mouseY;
+    /** Smoothed hover, keyed by a control's label: stable across frames and across scrolling. */
+    private final UiMotion motion=new UiMotion();
+    /** One lerp step per frame, measured once in render -- never per control. */
+    private float frameDelta;
     private CityMapPanel map;
     private net.minecraft.resources.ResourceLocation dimension;
     public boolean open(){return open;}
@@ -66,8 +70,9 @@ final class ProjectPanel {
     public void render(GuiGraphics g,Font font,CityMapPanel map,net.minecraft.resources.ResourceLocation dimension,
                        int width,int height,int top,WorldMapUiLayout.Rect viewport,int mx,int my,float partial,boolean enabled) {
         this.graphics=g;this.font=font;this.map=map;this.dimension=dimension;this.width=width;this.height=height;this.top=top;this.viewport=viewport;this.mouseX=mx;this.mouseY=my;
+        this.frameDelta=motion.delta(net.minecraft.Util.getMillis());
         if(!enabled)return;
-        var toggle=ProjectLayout.toggle(width,height);WorldMapChrome.control(g,toggle,open,toggle.contains(mx,my),true,false);
+        var toggle=ProjectLayout.toggle(width,height);WorldMapChrome.control(g,toggle,open,motion.hover(toggle.x()*7919+toggle.y(),toggle.contains(mx,my),frameDelta),true,false);
         g.drawCenteredString(font,tr(open?"close_workspace":"open_workspace"),toggle.x()+toggle.width()/2,toggle.y()+7,WorldMapChrome.ACCENT);
         if(!open)return;
         panel=ProjectLayout.panel(width,height,top);body=ProjectLayout.body(panel);
@@ -102,7 +107,10 @@ final class ProjectPanel {
     }
     private void button(Component label,Runnable action,boolean primary,boolean enabled) {
         var r=ProjectLayout.row(body,scroll,y,24);boolean available=enabled&&!ProjectClientState.pending();
-        WorldMapChrome.control(graphics,r,false,r.contains(mouseX,mouseY)&&body.contains(mouseX,mouseY),available,primary);
+        // Keyed by the caption, not the slot: scrolling the list under the cursor must carry the
+        // highlight away with the row rather than leave it on whatever slid into view.
+        float lit=motion.hover(label.getString().hashCode(),r.contains(mouseX,mouseY)&&body.contains(mouseX,mouseY),frameDelta);
+        WorldMapChrome.control(graphics,r,false,lit,available,primary);
         graphics.drawString(font,WorldMapChrome.fit(font,label,r.width()-12),r.x()+6,r.y()+8,available?WorldMapChrome.TEXT:WorldMapChrome.MUTED,false);
         if(available)hits.add(new Hit(r,action));y+=29;
     }

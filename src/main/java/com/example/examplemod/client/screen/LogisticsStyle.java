@@ -23,10 +23,17 @@ final class LogisticsStyle {
     static void text(GuiGraphics g,Font f,Component t,int x,int y,int w,int color) {
         if(g!=null)g.drawString(f,fit(f,t,w),x,y,color,false);
     }
+    /**
+     * Raised surface in the console's own colours.
+     *
+     * <p>Was a flat fill with two one-pixel rules top and bottom -- no rounding, no shadow, so a
+     * logistics panel read as a table cell while every other window in the mod read as a card.
+     * Delegating to the shared chrome fixes that without moving a single coordinate, which matters
+     * here: these screens are embedded in the Pylon workspace and their geometry is load-bearing.
+     */
     static void panel(GuiGraphics g,int x,int y,int w,int h,int color) {
         if(g==null)return;
-        g.fill(x,y,x+w,y+h,color);g.fill(x,y,x+w,y+1,BORDER);
-        g.fill(x,y+h-1,x+w,y+h,BORDER);
+        WorldMapChrome.panel(g,x,y,w,h,BORDER,color);
     }
     static ItemStack item(String id) {
         ResourceLocation key=ResourceLocation.tryParse(id);
@@ -58,15 +65,22 @@ final class LogisticsStyle {
     }
     static final class Action extends Button {
         private final boolean primary;
+        /** Smoothed hover, keyed by position: the button never moves, so that is its identity. */
+        private final UiMotion motion = new UiMotion();
         Action(int x,int y,int w,Component label,boolean primary,Runnable action) {
             super(x,y,w,22,label,b->action.run(),DEFAULT_NARRATION);
             this.primary=primary;setTooltip(Tooltip.create(label));
         }
         @Override protected void renderWidget(GuiGraphics g,int mx,int my,float pt) {
-            int edge=!active?BORDER:primary?GOLD:isHoveredOrFocused()?BLUE:BORDER;
+            float lit=motion.hover(getX()*7919+getY(),active&&isHoveredOrFocused(),
+                    motion.delta(net.minecraft.Util.getMillis()));
+            // Both ends of the blend are the colours this control used before it lerped, so a
+            // settled button is pixel-identical to the old one and only the travel is new.
+            int edge=!active?BORDER:primary?GOLD:UiMotion.mix(BORDER,BLUE,lit);
+            int fill=primary?0xFF3E3529:PANEL;
             g.fill(getX(),getY(),getX()+width,getY()+height,edge);
             g.fill(getX()+1,getY()+1,getX()+width-1,getY()+height-1,
-                    isHoveredOrFocused()&&active?0xFF304753:primary?0xFF3E3529:PANEL);
+                    active?UiMotion.mix(fill,0xFF304753,lit):fill);
             Font f=Minecraft.getInstance().font;
             String s=fit(f,getMessage(),width-12);
             g.drawString(f,s,getX()+(width-f.width(s))/2,getY()+7,

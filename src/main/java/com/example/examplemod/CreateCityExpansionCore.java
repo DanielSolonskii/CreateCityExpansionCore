@@ -1096,6 +1096,14 @@ public class CreateCityExpansionCore {
 
         PayloadRegistrar registrar =
                 event.registrar("2");
+        registrar.playToServer(com.example.examplemod.network.SocialRequestPayload.TYPE,
+                com.example.examplemod.network.SocialRequestPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->{
+                    if(context.player() instanceof ServerPlayer player) com.example.examplemod.social.SocialService.handle(player,payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.SocialStatePayload.TYPE,
+                com.example.examplemod.network.SocialStatePayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->com.example.examplemod.client.screen.SocialScreen.accept(payload)));
         registrar.playToServer(com.example.examplemod.network.ProfileSearchPayload.TYPE,
                 com.example.examplemod.network.ProfileSearchPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {

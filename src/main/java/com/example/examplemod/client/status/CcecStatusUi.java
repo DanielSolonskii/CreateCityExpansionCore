@@ -1,6 +1,7 @@
 package com.example.examplemod.client.status;
 
 import com.example.examplemod.economy.FreightPointRules;
+import com.example.examplemod.client.screen.WorldMapChrome;
 import com.example.examplemod.status.CcecStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -27,7 +28,14 @@ public final class CcecStatusUi {
     public static int color(CcecStatus s){return switch(s.category()){case SUCCESS->0xFF63B47D;case ACTION_REQUIRED->0xFFD6A342;case BLOCKED->0xFFD06363;case WARNING->0xFFE08045;};}
     public static String icon(CcecStatus s){return switch(s.category()){case SUCCESS->"✔";case ACTION_REQUIRED->"☀";case BLOCKED->"⊘";case WARNING->"▲";};}
     public static void render(GuiGraphics g,Font font,CcecStatus s,int x,int y,int w,boolean hint){
-        if(g==null)return;int h=hint?48:36,c=color(s);g.fill(x,y,x+w,y+h,0xFF252C2F);g.fill(x,y,x+3,y+h,c);g.renderOutline(x,y,w,h,0xFF465055);
+        if(g==null)return;int h=hint?48:36,c=color(s);
+        // Rounded surface with the shared drop shadow, so the strip reads as a raised object rather
+        // than a painted band. The accent bar keeps its full height and stays flush with the left
+        // edge, so the corner rounding frames it instead of cutting it off.
+        WorldMapChrome.rounded(g,x,y+3,w,h,4,0x50000000);
+        WorldMapChrome.rounded(g,x,y,w,h,4,0xFF465055);
+        WorldMapChrome.rounded(g,x+1,y+1,w-2,h-2,3,0xFF252C2F);
+        g.fill(x,y+4,x+3,y+h-4,c);
         int textWidth=Math.max(20,w-38);g.drawString(font,icon(s),x+10,y+8,c,false);
         g.drawString(font,Component.literal(font.plainSubstrByWidth(title(s).getString(),textWidth)),x+28,y+6,0xFFF1F3F4,false);
         g.drawString(font,Component.literal(font.plainSubstrByWidth(reason(s).getString(),textWidth)),x+28,y+18,0xFFB4BEC1,false);

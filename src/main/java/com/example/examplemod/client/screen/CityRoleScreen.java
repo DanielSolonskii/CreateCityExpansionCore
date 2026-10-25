@@ -228,12 +228,12 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * =========================================
          */
 
-        guiGraphics.fill(
+        WorldMapChrome.panel(
+                guiGraphics,
                 left,
                 top,
-                left + panelWidth,
-                top + panelHeight,
-                0xFF202020
+                panelWidth,
+                panelHeight
         );
 
         /*
@@ -242,12 +242,14 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * =========================================
          */
 
-        guiGraphics.fill(
-                left,
-                top,
-                left + panelWidth,
-                top + 45,
-                0xFF353535
+        WorldMapChrome.rounded(
+                guiGraphics,
+                left + 1,
+                top + 1,
+                panelWidth - 2,
+                44,
+                WorldMapChrome.RADIUS - 1,
+                WorldMapChrome.RAISED
         );
 
         /*
@@ -256,12 +258,11 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * =========================================
          */
 
-        guiGraphics.fill(
-                left,
-                top + 43,
-                left + panelWidth,
-                top + 46,
-                0xFFD09A3A
+        guiGraphics.hLine(
+                left + WorldMapChrome.RADIUS,
+                left + panelWidth - WorldMapChrome.RADIUS - 1,
+                top + 44,
+                WorldMapChrome.ACCENT
         );
 
         /*
@@ -275,7 +276,7 @@ public class CityRoleScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.role.heading"),
                 left + 15,
                 top + 10,
-                0xFFFFFF
+                WorldMapChrome.ACCENT
         );
 
         /*
@@ -286,12 +287,14 @@ public class CityRoleScreen extends ModalOverlayScreen {
 
         guiGraphics.drawString(
                 this.font,
-                Component.literal(
-                        playerName
+                WorldMapChrome.fit(
+                        this.font,
+                        Component.literal(playerName),
+                        panelWidth - 30
                 ),
                 left + 15,
                 top + 29,
-                0xAAAAAA
+                WorldMapChrome.TEXT
         );
 
         /*
@@ -305,7 +308,7 @@ public class CityRoleScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.role.select"),
                 left + 25,
                 top + 48,
-                0x777777
+                WorldMapChrome.MUTED
         );
 
         /*

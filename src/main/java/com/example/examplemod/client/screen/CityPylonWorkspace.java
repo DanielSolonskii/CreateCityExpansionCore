@@ -96,6 +96,9 @@ public final class CityPylonWorkspace extends Screen {
         else if(next==overview)section=0;
         if(page!=next)page.setFocused(null);
         page=next;if(minecraft!=null)layout();
+        // The tabs are cached, so a page object outlives its visit. Without an explicit restart the
+        // entrance would play once per session and every later visit would show it already settled.
+        if(next instanceof CityPylonPageScreen form)form.replayEntrance();
     }
     private void navigate(int index) {
         if(index==4){minecraft.setScreen(new PolishedWorldMapScreen(root));return;}
@@ -112,7 +115,12 @@ public final class CityPylonWorkspace extends Screen {
         if(page==root||page==overview)root.tick();
         if(page!=root)page.tick();
     }
+    /** Smoothed hover for the nav rail, the profile entry and the close control. */
+    private final UiMotion motion=new UiMotion();
+    /** One lerp step per frame, measured once in render -- never per control. */
+    private float frameDelta;
     @Override public void render(GuiGraphics g,int mx,int my,float pt) {
+        this.frameDelta=motion.delta(net.minecraft.Util.getMillis());
         int fx=geometry.frameX(),fy=geometry.frameY(),fw=geometry.frameWidth(),fh=geometry.frameHeight();
         int sidebar=geometry.sidebarWidth();
         // The world remains visible outside this bounded frame.
@@ -124,8 +132,13 @@ public final class CityPylonWorkspace extends Screen {
         g.drawString(font,Component.literal("CITY PYLON"),fx+13,fy+11,BRASS_TEXT,false);
         if(fw>=600)g.drawString(font,Component.translatable("gui.createcityexpansioncore.workspace.terminal"),fx+105,fy+11,MUTED,false);
         var profileEntry=PlayerProfileLayout.workspaceEntry(fx,fy,fw);
+        // Keyed by position: both controls are fixed, so their coordinates are a stable identity.
         button(g,font,profileEntry.x(),profileEntry.y(),profileEntry.width(),profileEntry.height(),
-                Component.translatable("gui.createcityexpansioncore.profile.my_profile"),false,profileEntry.contains(mx,my));
+                Component.translatable("gui.createcityexpansioncore.profile.my_profile"),false,
+                motion.hover(profileEntry.x()*7919+profileEntry.y(),profileEntry.contains(mx,my),frameDelta));
+        // The close control had no hover feedback at all -- a bare glyph with a hit test behind it.
+        float closeLit=motion.hover((fx+fw-29)*7919+fy+3,in(mx,my,fx+fw-29,fy+3,26,24),frameDelta);
+        if(closeLit>0.02f)rounded(g,fx+fw-25,fy+6,18,18,4,UiMotion.mix(METAL,0xFF4A342E,closeLit));
         g.drawString(font,Component.literal("×"),fx+fw-19,fy+10,TEXT,false);
         g.fill(fx+1,fy+30,fx+sidebar,fy+fh-1,METAL);
         g.fill(fx+sidebar,fy+30,fx+sidebar+1,fy+fh-1,LINE);
@@ -134,8 +147,10 @@ public final class CityPylonWorkspace extends Screen {
         if(fh>=240)g.drawString(font,Component.translatable("gui.createcityexpansioncore.workspace.level",root.getMenu().getCityLevel()),fx+13,cityY+17,MUTED,false);
         for(int i=0;i<5;i++) {
             int y=geometry.navY(i),h=geometry.navHeight();boolean selected=section==i;
-            boolean hover=in(mx,my,fx+7,y,sidebar-14,h);
-            rounded(g,fx+7,y,sidebar-14,h,4,selected?0xFF383123:hover?PANEL:METAL);
+            // Keyed by the rail index, which never moves: the highlight follows the cursor across
+            // the rail instead of snapping from one entry to the next.
+            float lit=motion.hover(i,in(mx,my,fx+7,y,sidebar-14,h),frameDelta);
+            rounded(g,fx+7,y,sidebar-14,h,4,selected?0xFF383123:UiMotion.mix(METAL,PANEL,lit));
             if(selected)g.fill(fx+7,y+4,fx+9,y+h-4,BRASS);
             if(h>=20)g.renderItem(new ItemStack(ICONS[i]),fx+14,y+(h-16)/2);
             int tx=fx+(h>=20?36:14);

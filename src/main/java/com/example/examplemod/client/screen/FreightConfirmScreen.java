@@ -73,7 +73,9 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
     @Override public void onClose(){minecraft.setScreen(parent);}
     private int maxScroll(){return Math.max(0,contentHeight-Math.max(1,height-136));}
     @Override public boolean mouseScrolled(double x,double y,double dx,double dy){
-        if(y<40||y>=height-94||dy==0)return false;
+        // The rows are painted in the sliding pose, so the band they occupy moves with it.
+        double localY=y-entranceOffset();
+        if(localY<40||localY>=height-94||dy==0)return false;
         scroll=Math.max(0,Math.min(maxScroll(),scroll+(dy<0?24:-24)));return true;
     }
     private int row(GuiGraphics g,Component value,int y,int color) {
@@ -83,7 +85,14 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
         return y+h+5;
     }
     @Override public void render(GuiGraphics g,int mx,int my,float pt){
+        // The action buttons are real widgets and ride the slide; the summary below is drawn inside
+        // the matching pose so both halves move as one panel.
+        float offset=entranceOffset();
+        slideWidgets(offset);
         g.fill(0,0,width,height,BG);g.fill(0,0,width,34,0xFF192A32);
+        g.pose().pushPose();
+        g.pose().translate(0,offset,0);
+        try{
         g.drawCenteredString(font,title,width/2,12,GOLD);
         var s=menu.getEconomyState();var o=offer();var c=contract();
         FreightPoint own=FreightUi.point(s,selected),destination=null,source=null;
@@ -94,7 +103,9 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
             destination=FreightUi.point(s,destId);
             source=importing()?FreightUi.point(s,s.logistics().hasUUID("MasterSend")?s.logistics().getUUID("MasterSend"):null):own;
             int start=42-scroll,y=start;
-            CityPylonWorkspace.clip(g,18,40,width-18,height-94);
+            // Scissor ignores the pose, so the clip window carries the slide itself. Without that
+            // the first row is cut off for the whole entrance.
+            CityPylonWorkspace.clip(g,18,40+(int)offset,width-18,height-94+(int)offset);
             if(o!=null||c!=null){
                 var item=o!=null?o.itemId():c.itemId();
                 long amount=o!=null?quantity:c.amount();
@@ -129,6 +140,9 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
             g.fill(width-12,y,width-10,y+thumb,GOLD);
         }
         if(scroll>maxScroll())scroll=maxScroll();
+        }finally{
+            g.pose().popPose();
+        }
         super.render(g,mx,my,pt);
     }
 }

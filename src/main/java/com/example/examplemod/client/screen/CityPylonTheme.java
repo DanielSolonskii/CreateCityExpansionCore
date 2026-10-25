@@ -23,15 +23,32 @@ public final class CityPylonTheme {
             g.fill(x+inset,y+h-row-1,x+w-inset,y+h-row,color);
         }
     }
+    /**
+     * Raised surface in the theme's own colours.
+     *
+     * <p>Delegates to the shared chrome so this window carries the same drop shadow and lit top
+     * edge as the profile. It used to be a flat two-layer fill, which is the difference between a
+     * panel that looks placed on the screen and one that looks painted into it.
+     */
     public static void panel(GuiGraphics g,int x,int y,int w,int h) {
-        rounded(g,x,y,w,h,RADIUS,LINE);rounded(g,x+1,y+1,w-2,h-2,RADIUS-1,PANEL);
+        WorldMapChrome.panel(g,x,y,w,h,LINE,PANEL);
     }
     public static Component fit(Font font,Component text,int width) {
         return font.width(text)<=width?text:Component.literal(font.plainSubstrByWidth(text.getString(),Math.max(1,width-6))+"…");
     }
     public static void button(GuiGraphics g,Font font,int x,int y,int w,int h,Component text,boolean primary,boolean hover) {
-        rounded(g,x,y,w,h,4,primary?BRASS:hover?0xFF3C484D:LINE);
-        if(!primary)rounded(g,x+1,y+1,w-2,h-2,3,hover?0xFF303B40:DEEP);
+        button(g,font,x,y,w,h,text,primary,hover?1f:0f);
+    }
+    /**
+     * The same button driven by a hover lerp rather than a switch.
+     *
+     * <p>The boolean form stays for callers that have no animation clock; screens that own a
+     * {@link UiMotion} pass the smoothed value so the highlight grows under the cursor instead of
+     * snapping to it.
+     */
+    public static void button(GuiGraphics g,Font font,int x,int y,int w,int h,Component text,boolean primary,float lit) {
+        rounded(g,x,y,w,h,4,primary?BRASS:UiMotion.mix(LINE,0xFF3C484D,lit));
+        if(!primary)rounded(g,x+1,y+1,w-2,h-2,3,UiMotion.mix(DEEP,0xFF303B40,lit));
         g.drawCenteredString(font,fit(font,text,w-14),x+w/2,y+(h-8)/2,TEXT);
     }
 }

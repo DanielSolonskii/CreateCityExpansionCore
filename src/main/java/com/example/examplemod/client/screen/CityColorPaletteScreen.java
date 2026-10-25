@@ -3,7 +3,6 @@ package com.example.examplemod.client.screen;
 import com.example.examplemod.city.CityColors;
 import com.example.examplemod.network.SetCityColorPayload;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -119,15 +118,14 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         Layout layout = layout();
 
         this.addRenderableWidget(
-                Button.builder(
-                        Component.translatable("gui.createcityexpansioncore.common.close"),
-                        button -> this.minecraft.setScreen(this.parent)
-                ).bounds(
+                new ChromeButton(
                         layout.left() + layout.buttonX(),
                         layout.top() + layout.buttonY(),
                         layout.buttonWidth(),
-                        layout.buttonHeight()
-                ).build()
+                        layout.buttonHeight(),
+                        Component.translatable("gui.createcityexpansioncore.common.close"),
+                        button -> this.minecraft.setScreen(this.parent)
+                )
         );
     }
 
@@ -145,13 +143,16 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // The swatches are painted inside the sliding pose, so the cursor has to be read in the
+        // same space or the first frames of the entrance would pick the wrong colour.
+        double contentY = localY(mouseY);
         if (button == 0) {
             Layout layout = layout();
             for (Swatch swatch : layout.swatches()) {
                 int x = layout.left() + swatch.x();
                 int y = layout.top() + swatch.y();
                 if (mouseX >= x && mouseX < x + swatch.width()
-                        && mouseY >= y && mouseY < y + swatch.height()) {
+                        && contentY >= y && contentY < y + swatch.height()) {
                     /*
                      * Повторный выбор текущего цвета не отправляется:
                      * сервер всё равно отклонил бы его как «без изменений»,

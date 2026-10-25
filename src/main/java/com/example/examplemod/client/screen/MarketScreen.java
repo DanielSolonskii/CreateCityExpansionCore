@@ -38,6 +38,15 @@ public final class MarketScreen extends CityPylonPageScreen {
     private int scroll,refreshTicks;
     private Pending pending;
     private Component tooltip;
+    /** Entrance slide, the per-frame lerp step and smoothed hover, shared by every control. */
+    private final UiMotion motion = new UiMotion();
+    /** Current entrance offset in px; the two EditBoxes are moved to it so they stay on the panel. */
+    private float slide;
+    /**
+     * One lerp step per frame. Measured once in render, never per control: asking each button for
+     * its own delta would make controls on the same frame drift apart.
+     */
+    private float frameDelta;
 
     public MarketScreen(CityPylonScreen parent){
         super(Component.translatable("gui.createcityexpansioncore.market.title"));
@@ -67,22 +76,40 @@ public final class MarketScreen extends CityPylonPageScreen {
 
     private void layoutFields(){
         if(search==null||quantity==null)return;Layout l=layout();
-        search.setX(l.leftX+9);search.setY(l.y+32);search.setWidth(Math.max(64,l.leftW-18));
+        // Widgets live in screen coordinates while the panel is drawn inside the sliding pose, so
+        // they have to be moved to the same offset or they hang off the panel during the entrance.
+        int off=(int)slide;
+        search.setX(l.leftX+9);search.setY(l.y+32+off);search.setWidth(Math.max(64,l.leftW-18));
         search.setVisible(tab==Tab.EXTERNAL||tab==Tab.PLAYER||tab==Tab.MINE);
-        if(tab==Tab.PLAYER||tab==Tab.MINE){search.setX(16);search.setY(97);search.setWidth(146);}
-        quantity.setX(l.detailX+31);quantity.setY(height-78);quantity.setWidth(Math.max(38,l.detailW-62));
+        if(tab==Tab.PLAYER||tab==Tab.MINE){search.setX(16);search.setY(97+off);search.setWidth(146);}
+        quantity.setX(l.detailX+31);quantity.setY(height-78+off);quantity.setWidth(Math.max(38,l.detailW-62));
         quantity.setVisible(tab==Tab.EXTERNAL&&selectedOffer()!=null&&pending==null);
     }
 
     @Override public void render(GuiGraphics g,int mx,int my,float pt){
+        long now=net.minecraft.Util.getMillis();
+        motion.opened(now);
+        this.frameDelta=motion.delta(now);
+        this.slide=motion.entranceOffset(now);
+        // Hit-testing for everything painted below happens in the panel's own space, so the cursor
+        // is read with the slide removed. The two EditBoxes are excluded: they are real widgets at
+        // screen coordinates and take raw input.
+        double localY=my-this.slide;
+        layoutFields();
         tooltip=null;g.fill(0,0,width,height,BG);EconomyStatePayload s=menu.getEconomyState();
-        header(g,s,mx,my);
-        if(pending!=null){confirmation(g,mx,my);return;}
-        tabs(g,mx,my);
-        if(s==null)g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.economy.loading"),width/2,height/2,MUTED);
-        else switch(tab){case OVERVIEW->overview(g,s);case EXTERNAL->external(g,s,mx,my);case PLAYER,MINE->player(g,s,mx,my);case CONTRACTS->contracts(g,s,mx,my);case ACTIVITY->activity(g,s,mx,my);}
+        g.pose().pushPose();
+        g.pose().translate(0,this.slide,0);
+        try{
+            header(g,s,mx,(int)localY);
+            if(pending!=null){confirmation(g,mx,(int)localY);return;}
+            tabs(g,mx,(int)localY);
+            if(s==null)g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.economy.loading"),width/2,height/2,MUTED);
+            else switch(tab){case OVERVIEW->overview(g,s);case EXTERNAL->external(g,s,mx,(int)localY);case PLAYER,MINE->player(g,s,mx,(int)localY);case CONTRACTS->contracts(g,s,mx,(int)localY);case ACTIVITY->activity(g,s,mx,(int)localY);}
+        }finally{
+            g.pose().popPose();
+        }
         super.render(g,mx,my,pt);
-        if(pending!=null)confirmation(g,mx,my);
+        if(pending!=null)confirmation(g,mx,(int)localY);
         else if(tooltip!=null)g.renderTooltip(font,font.split(tooltip,Math.min(240,width-24)),net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner.INSTANCE,mx,my);
     }
 
@@ -125,7 +152,7 @@ public final class MarketScreen extends CityPylonPageScreen {
     private void offerRows(GuiGraphics g,List<EconomyStatePayload.OfferView> values,Layout l,int mx,int my){
         int top=l.y+27,visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
         if(values.isEmpty()){empty(g,l.listX+12,top+16,tr("empty.external"),l.listW-24);return;}
-        for(int i=start;i<Math.min(values.size(),start+visible);i++){var o=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,o.id().equals(selected),mx,my);ItemStack stack=icon(o.itemId());g.renderItem(stack,l.listX+11,y+5);g.drawString(font,ellipsize(stack.getHoverName(),l.listW-126),l.listX+33,y+5,TEXT,false);g.drawString(font,ellipsize(tr("offer_meta",categoryLabel(o.category()),o.unitPrice(),o.remaining(),o.marketTarget()),l.listW-45),l.listX+33,y+18,MUTED,false);g.drawString(font,status(o.status()),l.listX+l.listW-82,y+5,statusColor(o.status()),false);progress(g,l.listX+33,y+31,l.listW-45,o.marketAvailable(),o.marketTarget());}
+        for(int i=start;i<Math.min(values.size(),start+visible);i++){var o=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,o.id().equals(selected),mx,my,o.id().hashCode());ItemStack stack=icon(o.itemId());g.renderItem(stack,l.listX+11,y+5);g.drawString(font,ellipsize(stack.getHoverName(),l.listW-126),l.listX+33,y+5,TEXT,false);g.drawString(font,ellipsize(tr("offer_meta",categoryLabel(o.category()),o.unitPrice(),o.remaining(),o.marketTarget()),l.listW-45),l.listX+33,y+18,MUTED,false);g.drawString(font,status(o.status()),l.listX+l.listW-82,y+5,statusColor(o.status()),false);progress(g,l.listX+33,y+31,l.listW-45,o.marketAvailable(),o.marketTarget());}
     }
 
     private void offerDetail(GuiGraphics g,EconomyStatePayload.OfferView o,EconomyStatePayload s,Layout l,int mx,int my){
@@ -147,7 +174,7 @@ public final class MarketScreen extends CityPylonPageScreen {
         int visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
         if(values.isEmpty())empty(g,l.listX+12,l.y+45,tr(tab==Tab.MINE?"board.empty_mine":"empty.player"),l.listW-24);
         for(int i=start;i<Math.min(values.size(),start+visible);i++){
-            var v=values.get(i);int y=l.y+27+(i-start)*ROW_H;row(g,l,y,v.id().equals(selected),mx,my);
+            var v=values.get(i);int y=l.y+27+(i-start)*ROW_H;row(g,l,y,v.id().equals(selected),mx,my,v.id().hashCode());
             g.renderItem(icon(v.itemId()),l.listX+10,y+5);
             g.drawString(font,ellipsize(tr("item_amount",v.amount(),icon(v.itemId()).getHoverName()),l.listW-112),l.listX+32,y+5,TEXT,false);
             g.drawString(font,ellipsize(tr("board.listing_actor",v.creatorName(),status(v.state())),l.listW-42),l.listX+32,y+20,MUTED,false);
@@ -189,7 +216,7 @@ public final class MarketScreen extends CityPylonPageScreen {
     private void contracts(GuiGraphics g,EconomyStatePayload s,int mx,int my){
         Layout l=wideLayout();twoPanels(g,l);List<EconomyStatePayload.ContractView> values=sortedContracts(s);title(g,tr("contracts.count",values.size()),l.listX+9,l.y+10);int top=l.y+27,visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
         if(values.isEmpty())empty(g,l.listX+12,top+16,tr("empty.contracts"),l.listW-24);
-        for(int i=start;i<Math.min(values.size(),start+visible);i++){var c=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,c.id().equals(selected),mx,my);g.renderItem(icon(c.itemId()),l.listX+11,y+5);g.drawString(font,ellipsize(contractTitle(c),l.listW-150),l.listX+33,y+5,TEXT,false);g.drawString(font,tr("contract.line",c.delivered(),c.amount(),c.reward()),l.listX+33,y+18,MUTED,false);g.drawString(font,status(c.state()),l.listX+l.listW-88,y+5,statusColor(c.state()),false);progress(g,l.listX+33,y+31,l.listW-45,c.delivered(),c.amount());}
+        for(int i=start;i<Math.min(values.size(),start+visible);i++){var c=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,c.id().equals(selected),mx,my,c.id().hashCode());g.renderItem(icon(c.itemId()),l.listX+11,y+5);g.drawString(font,ellipsize(contractTitle(c),l.listW-150),l.listX+33,y+5,TEXT,false);g.drawString(font,tr("contract.line",c.delivered(),c.amount(),c.reward()),l.listX+33,y+18,MUTED,false);g.drawString(font,status(c.state()),l.listX+l.listW-88,y+5,statusColor(c.state()),false);progress(g,l.listX+33,y+31,l.listW-45,c.delivered(),c.amount());}
         contractDetail(g,selectedContract(values),s,l,mx,my);
         button(g,l.listX+l.listW-190,l.y+3,90,20,FreightUi.tr("create_buy"),true,mx,my,false);
         button(g,l.listX+l.listW-95,l.y+3,90,20,FreightUi.tr("city_sales"),true,mx,my,false);
@@ -205,14 +232,17 @@ public final class MarketScreen extends CityPylonPageScreen {
     private void activity(GuiGraphics g,EconomyStatePayload s,int mx,int my){
         Layout l=wideLayout();twoPanels(g,l);List<Activity> values=activities(s);title(g,tr("activity.count",values.size()),l.listX+9,l.y+10);int top=l.y+27,visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
         if(values.isEmpty())empty(g,l.listX+12,top+16,tr("empty.activity"),l.listW-24);
-        for(int i=start;i<Math.min(values.size(),start+visible);i++){Activity a=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,a.id.equals(selected),mx,my);g.renderItem(icon(a.item),l.listX+11,y+5);g.drawString(font,ellipsize(a.title,l.listW-128),l.listX+33,y+5,TEXT,false);g.drawString(font,a.total>0?tr("activity.progress",a.current,a.total):a.kind,l.listX+33,y+18,MUTED,false);g.drawString(font,a.state,l.listX+l.listW-88,y+5,a.color,false);if(a.total>0)progress(g,l.listX+33,y+31,l.listW-45,a.current,a.total);}
+        for(int i=start;i<Math.min(values.size(),start+visible);i++){Activity a=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,a.id.equals(selected),mx,my,a.id.hashCode());g.renderItem(icon(a.item),l.listX+11,y+5);g.drawString(font,ellipsize(a.title,l.listW-128),l.listX+33,y+5,TEXT,false);g.drawString(font,a.total>0?tr("activity.progress",a.current,a.total):a.kind,l.listX+33,y+18,MUTED,false);g.drawString(font,a.state,l.listX+l.listW-88,y+5,a.color,false);if(a.total>0)progress(g,l.listX+33,y+31,l.listW-45,a.current,a.total);}
         title(g,tr("details"),l.detailX+10,l.y+10);Activity a=values.stream().filter(v->v.id.equals(selected)).findFirst().orElse(null);if(a==null)empty(g,l.detailX+10,l.y+42,tr("empty.selection"),l.detailW-20);else{g.renderItem(icon(a.item),l.detailX+10,l.y+31);g.drawString(font,ellipsize(a.title,l.detailW-42),l.detailX+32,l.y+35,TEXT,false);detail(g,l,l.y+63,a.kind);detail(g,l,l.y+81,tr("activity.state",a.state));if(a.total>0)detail(g,l,l.y+99,tr("activity.progress",a.current,a.total));if(a.deadline>0)detail(g,l,l.y+117,tr("contract.deadline",remainingTime(a.deadline)));if(a.bond>0)detail(g,l,l.y+135,tr("bond",a.bond));}
     }
 
     @Override public boolean mouseClicked(double mx,double my,int button){
-        if(button!=0)return super.mouseClicked(mx,my,button);if(pending!=null)return confirmClick(mx,my);if(tabClick(mx,my))return true;
+        // The custom-drawn content lives in the sliding pose and is hit-tested with the slide
+        // removed; the EditBoxes are widgets at plain screen coordinates and get the raw cursor.
+        double localY=my-motion.entranceOffset(net.minecraft.Util.getMillis());
+        if(button!=0)return super.mouseClicked(mx,my,button);if(pending!=null)return confirmClick(mx,localY);if(tabClick(mx,localY))return true;
         EconomyStatePayload s=menu.getEconomyState();if(s==null)return super.mouseClicked(mx,my,button);
-        boolean handled=switch(tab){case OVERVIEW->false;case EXTERNAL->externalClick(mx,my,s);case PLAYER,MINE->playerClick(mx,my,s);case CONTRACTS->contractClick(mx,my,s);case ACTIVITY->activityClick(mx,my,s);};
+        boolean handled=switch(tab){case OVERVIEW->false;case EXTERNAL->externalClick(mx,localY,s);case PLAYER,MINE->playerClick(mx,localY,s);case CONTRACTS->contractClick(mx,localY,s);case ACTIVITY->activityClick(mx,localY,s);};
         return handled||super.mouseClicked(mx,my,button);
     }
 
@@ -283,7 +313,14 @@ public final class MarketScreen extends CityPylonPageScreen {
         return true;
     }
 
-    @Override public boolean mouseScrolled(double mx,double my,double sx,double sy){if(pending==null)scroll=Math.max(0,scroll+(sy<0?1:-1));return true;}
+    /**
+     * The slide is removed before delegating, so a scroll over the sliding panel reaches the list
+     * in the panel's own space. Widgets receive the raw cursor: they sit at screen coordinates.
+     */
+    @Override public boolean mouseScrolled(double mx,double my,double sx,double sy){
+        if(pending==null)scroll=Math.max(0,scroll+(sy<0?1:-1));
+        return super.mouseScrolled(mx,my-motion.entranceOffset(net.minecraft.Util.getMillis()),sx,sy);
+    }
 
     private List<EconomyStatePayload.OfferView> visibleOffers(EconomyStatePayload s){String q=query();return s.offers().stream().filter(o->o.direction()==direction).filter(o->!o.status().terminal()||o.mine()).filter(o->category.equals("all")||category.equals(o.category())).filter(o->q.isBlank()||searchable(o.itemId()).contains(q)).sorted(Comparator.comparing((EconomyStatePayload.OfferView o)->o.status()!=EconomyTypes.MarketOfferStatus.OPEN).thenComparing(o->icon(o.itemId()).getHoverName().getString())).toList();}
     private List<EconomyStatePayload.ListingView> visibleListings(EconomyStatePayload s){
@@ -313,16 +350,47 @@ public final class MarketScreen extends CityPylonPageScreen {
 
     private void threePanels(GuiGraphics g,Layout l){plate(g,l.leftX,l.y,l.leftW,l.h);twoPanels(g,l);}
     private void twoPanels(GuiGraphics g,Layout l){plate(g,l.listX,l.y,l.listW,l.h);plate(g,l.detailX,l.y,l.detailW,l.h);}
-    private void row(GuiGraphics g,Layout l,int y,boolean chosen,int mx,int my){boolean hover=in(mx,my,l.listX+5,y,l.listW-10,ROW_H-3);g.fill(l.listX+5,y,l.listX+l.listW-5,y+ROW_H-3,chosen?0xFF493A29:hover?0xFF303A3D:PANEL_ALT);if(chosen||hover)g.renderOutline(l.listX+5,y,l.listW-10,ROW_H-3,chosen?ACCENT:FRAME);}
+    /**
+     * @param key stable identity of the row's subject, not its slot: sorting the list under the
+     *            cursor must carry the highlight away with the row, not leave it on whichever row
+     *            has moved into that position
+     */
+    private void row(GuiGraphics g,Layout l,int y,boolean chosen,int mx,int my,int key){
+        boolean over=in(mx,my,l.listX+5,y,l.listW-10,ROW_H-3);
+        float lit=motion.hover(key,over,frameDelta);
+        g.fill(l.listX+5,y,l.listX+l.listW-5,y+ROW_H-3,chosen?0xFF493A29:UiMotion.mix(PANEL_ALT,0xFF303A3D,lit));
+        if(chosen||lit>0.02f)g.renderOutline(l.listX+5,y,l.listW-10,ROW_H-3,chosen?ACCENT:FRAME);
+    }
     private void stat(GuiGraphics g,int x,int y,int w,Component label,Component value){g.fill(x,y,x+w,y+34,0xD5182023);g.fill(x,y,x+2,y+34,0xA9D09A3A);g.drawString(font,ellipsize(label,w-10),x+7,y+6,MUTED,false);g.drawString(font,ellipsize(value,w-10),x+7,y+19,TEXT,false);}
     private void overviewCard(GuiGraphics g,int x,int y,int w,ItemStack icon,Component value,Component hint){plate(g,x,y,w,56);g.renderItem(icon,x+10,y+10);g.drawString(font,ellipsize(value,w-40),x+33,y+12,TEXT,false);g.drawString(font,ellipsize(hint,w-20),x+10,y+36,MUTED,false);}
     private void detail(GuiGraphics g,Layout l,int y,Component value){g.drawString(font,ellipsize(value,l.detailW-20),l.detailX+10,y,MUTED,false);}
     private void title(GuiGraphics g,Component value,int x,int y){g.drawString(font,value,x,y,0xFFFFD59A,false);}
     private void empty(GuiGraphics g,int x,int y,Component value,int w){g.drawWordWrap(font,value,x,y,Math.max(60,w),MUTED);}
     private void fieldBack(GuiGraphics g,EditBox field){if(field==null||!field.visible)return;g.fill(field.getX()-3,field.getY()-2,field.getX()+field.getWidth()+3,field.getY()+18,0xFF111719);g.renderOutline(field.getX()-3,field.getY()-2,field.getWidth()+6,20,FRAME);}
-    private void choice(GuiGraphics g,int x,int y,int w,Component label,boolean selected,int mx,int my){boolean hover=in(mx,my,x,y,w,20);g.fill(x,y,x+w,y+20,selected?0xFF4A391E:hover?0xFF303A3D:PANEL_ALT);if(selected)g.fill(x,y,x+2,y+20,ACCENT);g.drawString(font,ellipsize(label,w-14),x+8,y+6,selected?0xFFFFD59A:TEXT,false);}
-    private void button(GuiGraphics g,int x,int y,int w,int h,Component label,boolean enabled,int mx,int my,boolean strong){boolean hover=enabled&&in(mx,my,x,y,w,h);int color=!enabled?0xFF282E30:strong?(hover?0xFF76562E:0xFF493A29):(hover?0xFF39464A:PANEL_ALT);CityPylonTheme.rounded(g,x,y,w,h,4,enabled?(strong?ACCENT:FRAME):0xFF394043);CityPylonTheme.rounded(g,x+1,y+1,w-2,h-2,3,color);g.drawCenteredString(font,ellipsize(label,w-8),x+w/2,y+(h-8)/2,enabled?(strong?0xFFFFD59A:TEXT):0xFF687174);}
-    private void iconButton(GuiGraphics g,int x,int y,ItemStack icon,int mx,int my,Component tip){boolean hover=in(mx,my,x,y,26,26);g.fill(x,y,x+26,y+26,hover?0xFF303A3D:PANEL_ALT);g.renderOutline(x,y,26,26,FRAME);g.renderItem(icon,x+5,y+5);if(hover)tooltip=tip;}
+    /** Fixed controls do not move with scrolling, so their position is already a stable identity. */
+    private void choice(GuiGraphics g,int x,int y,int w,Component label,boolean selected,int mx,int my){
+        boolean over=in(mx,my,x,y,w,20);
+        float lit=motion.hover(x*7919+y,over,frameDelta);
+        g.fill(x,y,x+w,y+20,selected?0xFF4A391E:UiMotion.mix(PANEL_ALT,0xFF303A3D,lit));
+        if(selected)g.fill(x,y,x+2,y+20,ACCENT);
+        g.drawString(font,ellipsize(label,w-14),x+8,y+6,selected?0xFFFFD59A:TEXT,false);
+    }
+    private void button(GuiGraphics g,int x,int y,int w,int h,Component label,boolean enabled,int mx,int my,boolean strong){
+        boolean over=enabled&&in(mx,my,x,y,w,h);
+        float lit=motion.hover(x*7919+y+h,over,frameDelta);
+        int color=!enabled?0xFF282E30:strong?UiMotion.mix(0xFF493A29,0xFF76562E,lit):UiMotion.mix(PANEL_ALT,0xFF39464A,lit);
+        CityPylonTheme.rounded(g,x,y,w,h,4,enabled?(strong?ACCENT:FRAME):0xFF394043);
+        CityPylonTheme.rounded(g,x+1,y+1,w-2,h-2,3,color);
+        g.drawCenteredString(font,ellipsize(label,w-8),x+w/2,y+(h-8)/2,enabled?(strong?0xFFFFD59A:TEXT):0xFF687174);
+    }
+    private void iconButton(GuiGraphics g,int x,int y,ItemStack icon,int mx,int my,Component tip){
+        boolean over=in(mx,my,x,y,26,26);
+        float lit=motion.hover(x*7919+y+1,over,frameDelta);
+        g.fill(x,y,x+26,y+26,UiMotion.mix(PANEL_ALT,0xFF303A3D,lit));
+        g.renderOutline(x,y,26,26,FRAME);
+        g.renderItem(icon,x+5,y+5);
+        if(over)tooltip=tip;
+    }
     private static void progress(GuiGraphics g,int x,int y,int w,long value,long max){g.fill(x,y,x+w,y+3,0xFF30383B);int filled=max<=0?0:(int)Math.min(w,Math.max(0,java.math.BigInteger.valueOf(value).multiply(java.math.BigInteger.valueOf(w)).divide(java.math.BigInteger.valueOf(max)).longValue()));g.fill(x,y,x+filled,y+3,ACCENT);}
     private static void plate(GuiGraphics g,int x,int y,int w,int h){CityPylonTheme.panel(g,x,y,w,h);}
 

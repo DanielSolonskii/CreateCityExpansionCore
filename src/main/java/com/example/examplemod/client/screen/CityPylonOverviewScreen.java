@@ -27,18 +27,26 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
     private static boolean in(double x,double y,int left,int top,int w,int h) {return x>=left&&x<left+w&&y>=top&&y<top+h;}
     private void line(GuiGraphics g,Component text,int x,int y,int w,int color) {g.drawString(font,fit(font,text,w),x,y,color,false);}
     @Override public void render(GuiGraphics g,int mx,int my,float pt) {
+        // No vanilla widgets here, so the page travels as one pose. The cursor is read with the
+        // slide removed, otherwise every hit test below would sit a few pixels above what is
+        // painted for the length of the entrance.
+        float offset=entranceOffset();
+        double localY=my-offset;
         g.fill(0,0,width,height,BG);
+        g.pose().pushPose();
+        g.pose().translate(0,offset,0);
+        try{
         root.workspaceSyncMapData();
         line(g,tr("overview.eyebrow"),0,2,width-86,BRASS_TEXT);
         line(g,title,0,19,width-86,TEXT);
-        button(g,font,width-78,5,78,23,tr("overview.help"),false,in(mx,my,width-78,5,78,23));
-        if(view!=0){renderDetail(g,mx,my);return;}
+        button(g,font,width-78,5,78,23,tr("overview.help"),false,hover(width-78,in(mx,localY,width-78,5,78,23),frameDelta()));
+        if(view!=0){renderDetail(g,mx,localY);return;}
         int count=problems();
         rounded(g,0,43,width,43,6,DEEP);
         g.fill(0,49,2,80,count>0?0xFFB98C58:GREEN);
         line(g,count>0?hub("problem_count",count):hub("ready"),12,52,width-150,count>0?0xFFE0B58B:GREEN);
         line(g,Component.translatable(CcecProblemCenter.nextStepKey(menu.getEconomyState(),count)),12,68,width-150,MUTED);
-        button(g,font,width-130,53,118,23,count>0?tr("overview.show_tasks"):tr("overview.trade"),count==0,in(mx,my,width-130,53,118,23));
+        button(g,font,width-130,53,118,23,count>0?tr("overview.show_tasks"):tr("overview.trade"),count==0,hover(width-130,in(mx,localY,width-130,53,118,23),frameDelta()));
         var economy=menu.getEconomyState();
         String treasury=economy==null?"—":economy.treasury()+" CR";
         long contracts=economy==null?0:economy.contracts().stream().filter(c->!c.state().terminal()).count();
@@ -57,7 +65,7 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
         panel(g,0,lower,leftW,cardH);
         line(g,hub("members_list"),11,lower+11,leftW-22,TEXT);
         line(g,root.workspaceMemberNames(),11,lower+29,leftW-22,MUTED);
-        button(g,font,11,height-34,leftW-22,23,tr("overview.manage"),false,in(mx,my,11,height-34,leftW-22,23));
+        button(g,font,11,height-34,leftW-22,23,tr("overview.manage"),false,hover(11,in(mx,localY,11,height-34,leftW-22,23),frameDelta()));
         panel(g,rightX,lower,rightW,cardH);
         line(g,tr("overview.territory"),rightX+11,lower+11,rightW-22,TEXT);
         line(g,tr("overview.plots",menu.getPlotCount()),rightX+11,lower+27,rightW-22,MUTED);
@@ -65,9 +73,15 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
             var map=root.getMapPanel();map.setDrawInternalControls(false);
             map.render(g,rightX+11,lower+43,rightW-22,cardH-84,-10000,-10000);
         }
-        button(g,font,rightX+11,height-34,rightW-22,23,hub("open_map"),false,in(mx,my,rightX+11,height-34,rightW-22,23));
+        button(g,font,rightX+11,height-34,rightW-22,23,hub("open_map"),false,hover(rightX,in(mx,localY,rightX+11,height-34,rightW-22,23),frameDelta()));
+        }finally{
+            // Popped even for the early return into the detail view, or the next page to render
+            // would inherit the slide and drift off-centre.
+            g.pose().popPose();
+        }
     }
-    private void renderDetail(GuiGraphics g,int mx,int my) {
+    /** @param localY cursor already reduced by the entrance slide, matching what is painted. */
+    private void renderDetail(GuiGraphics g,int mx,double localY) {
         panel(g,0,43,width,height-44);
         line(g,view==1?hub("problems"):hub("guide.title"),13,57,width-26,TEXT);
         Component text=view==1?Component.translatable(CcecProblemCenter.nextStepKey(menu.getEconomyState(),problems())):hub("guide.text");
@@ -75,12 +89,14 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
         if(view==1) {
             line(g,hub("problem_count",problems()),13,126,width-26,BRASS_TEXT);
             g.drawWordWrap(font,hub("problem_hint"),13,148,width-26,MUTED);
-            button(g,font,width-169,height-36,156,23,hub("open_logistics"),true,in(mx,my,width-169,height-36,156,23));
+            button(g,font,width-169,height-36,156,23,hub("open_logistics"),true,hover(width-169,in(mx,localY,width-169,height-36,156,23),frameDelta()));
         }
-        button(g,font,13,height-36,94,23,Component.translatable("gui.createcityexpansioncore.common.back"),false,in(mx,my,13,height-36,94,23));
+        button(g,font,13,height-36,94,23,Component.translatable("gui.createcityexpansioncore.common.back"),false,hover(13,in(mx,localY,13,height-36,94,23),frameDelta()));
     }
     @Override public boolean mouseClicked(double x,double y,int button) {
         if(button!=0)return false;
+        // The painter added the slide; the cursor has to give it back or clicks land off-target.
+        y=y-entranceOffset();
         if(in(x,y,width-78,5,78,23)){view=2;return true;}
         if(view!=0) {
             if(in(x,y,13,height-36,94,23)){view=0;return true;}

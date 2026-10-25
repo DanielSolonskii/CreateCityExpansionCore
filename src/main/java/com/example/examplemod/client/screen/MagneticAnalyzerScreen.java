@@ -250,6 +250,25 @@ public final class MagneticAnalyzerScreen extends Screen {
         }
     }
 
+    /**
+     * Entrance slide. This screen is not a Pylon form and renders its widgets by hand, so it keeps
+     * its own animation state rather than inheriting any.
+     */
+    private final UiMotion motion = new UiMotion();
+    /**
+     * Resting Y of every widget, captured before the first slide is applied. Identity keys: init()
+     * rebuilds the widgets on every resize, and an index-keyed map would hand a new widget the
+     * position of whatever used to sit there.
+     */
+    private final java.util.Map<net.minecraft.client.gui.components.AbstractWidget, Integer> restingY =
+            new java.util.IdentityHashMap<>();
+
+    private float entranceOffset() {
+        long now = net.minecraft.Util.getMillis();
+        motion.opened(now);
+        return motion.entranceOffset(now);
+    }
+
     @Override
     public void render(
             GuiGraphics graphics,
@@ -261,19 +280,40 @@ public final class MagneticAnalyzerScreen extends Screen {
             layout = Layout.of(width, height);
         }
 
+        // The shell and everything inside it travel in one pose. The widgets do not: they are
+        // rendered by hand below in plain screen coordinates, so each one is moved to the slide
+        // itself. Their hit-testing uses those same coordinates, so clicking stays correct.
+        float offset = entranceOffset();
         graphics.fill(0, 0, width, height, 0xA8070909);
 
-        drawShell(graphics);
-        drawHeader(graphics);
-        drawLocator(graphics, elapsedSeconds());
-        drawData(graphics);
-        drawFooter(graphics);
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, offset, 0);
+        try {
+            drawShell(graphics);
+            drawHeader(graphics);
+            drawLocator(graphics, elapsedSeconds());
+            drawData(graphics);
+            drawFooter(graphics);
+        } finally {
+            // Popped unconditionally: an early exit that leaked the pose would shift every later
+            // screen by the remainder of the slide.
+            graphics.pose().popPose();
+        }
 
         /*
          * Виджеты рисуются ДО фона: super.render() вызывает
          * renderBackground(), который применяет blur.
          */
+        int shift = (int) offset;
         for (var renderable : this.renderables) {
+            if (renderable instanceof net.minecraft.client.gui.components.AbstractWidget widget) {
+                Integer resting = this.restingY.get(widget);
+                if (resting == null) {
+                    resting = widget.getY();
+                    this.restingY.put(widget, resting);
+                }
+                widget.setY(resting + shift);
+            }
             renderable.render(graphics, mouseX, mouseY, partialTick);
         }
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
