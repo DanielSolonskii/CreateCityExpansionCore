@@ -244,6 +244,7 @@ public final class UiEditCheck {
 
         String defaults = UiEditAccess.defaultFileText();
         require(defaults.contains("goddzerzh"), "default file contains owner nick");
+        require(defaults.contains("drannch1k"), "default file contains lead developer nick");
         require(defaults.contains("#"), "default file has instructions");
     }
 
