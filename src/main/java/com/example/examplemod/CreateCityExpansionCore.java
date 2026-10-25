@@ -858,6 +858,8 @@ public class CreateCityExpansionCore {
 
         );
         NeoForge.EVENT_BUS.register(CityMapSavedData.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.knowledge.KnowledgeBaseServer.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.knowledge.KnowledgeCommands.class);
 
         modEventBus.addListener(
                 this::addCreative
@@ -1162,6 +1164,9 @@ public class CreateCityExpansionCore {
         registrar.playToClient(com.example.examplemod.network.OnboardingStatePayload.TYPE,
                 com.example.examplemod.network.OnboardingStatePayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->com.example.examplemod.client.OnboardingClient.accept(payload)));
+        registrar.playToClient(com.example.examplemod.network.KnowledgeAccessPayload.TYPE,
+                com.example.examplemod.network.KnowledgeAccessPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->com.example.examplemod.knowledge.KnowledgeBaseClient.acceptAccess(payload)));
         registrar.playToServer(com.example.examplemod.network.RequestCityBoundariesPayload.TYPE,
                 com.example.examplemod.network.RequestCityBoundariesPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{if(context.player() instanceof ServerPlayer player)com.example.examplemod.city.CityBoundaryNetwork.request(player);}));
