@@ -56,6 +56,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 import net.neoforged.neoforge.network.PacketDistributor;
+import com.example.examplemod.client.uiedit.UiEditLayout;
 
 public class CityPylonScreen
         extends AbstractContainerScreen<CityPylonMenu> {
@@ -695,6 +696,9 @@ public class CityPylonScreen
             this.leftPos = Math.round((this.width / this.interfaceScale - this.imageWidth) / 2.0F);
             this.topPos = Math.round((this.height / this.interfaceScale - this.imageHeight) / 2.0F);
         }
+        // UI-редактор (F7): дочерние виджеты рисуются внутри pose().scale(interfaceScale),
+        // их координаты логические — сообщаем масштаб для обводки и попаданий мышью.
+        UiEditLayout.registerTransform(this, this.interfaceScale, 0f, 0f);
 
         /*
          * GuiGraphics.enableScissor работает в экранных координатах,

@@ -121,6 +121,20 @@ public final class UiEditLayout {
         return apply(screen, element, x, y, w, h, 1f, 0f, 0f, factory);
     }
 
+    /**
+     * Зарегистрировать pose-масштаб экрана, у которого layout-класса нет.
+     *
+     * <p>{@code CityPylonScreen} и {@code MineControllerScreen} сами считают
+     * {@code interfaceScale} и рисуют дочерние виджеты внутри
+     * {@code pose().scale(interfaceScale)} — их координаты логические, а мышь
+     * экранные. Без этой регистрации обводка и попадания по виджетам не
+     * сходились. Вызывается из {@code init()} экрана сразу после вычисления
+     * масштаба; origin (0,0), потому что pose делит только на масштаб.
+     */
+    public static void registerTransform(Object screenKey, float scale, float originX, float originY) {
+        TRANSFORMS.put(UiEditSession.className(screenKey), new Transform(scale, originX, originY));
+    }
+
     // ------------------------------------------------------------------
     // Правки: общий с сессией источник
     // ------------------------------------------------------------------

@@ -20,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.network.PacketDistributor;
+import com.example.examplemod.client.uiedit.UiEditLayout;
 import com.mojang.math.Axis;
 
 import java.util.List;
@@ -147,6 +148,9 @@ public final class MineControllerScreen extends Screen {
                 (height - 12.0F) / PANEL_HEIGHT));
         left = Math.round((width / interfaceScale - PANEL_WIDTH) / 2.0F);
         top = Math.round((height / interfaceScale - PANEL_HEIGHT) / 2.0F);
+        // UI-редактор (F7): панель рисуется внутри pose().scale(interfaceScale) —
+        // сообщаем масштаб, чтобы обводка и клики шли в тех же координатах.
+        UiEditLayout.registerTransform(this, interfaceScale, 0f, 0f);
 
         schematicButton = addRenderableWidget(new CityButton(
                 left + 565, top + 445, 170, 26,

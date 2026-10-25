@@ -781,7 +781,7 @@ public final class UiEditSession {
     }
 
     /** Имя ключа: simple name, а для анонимных классов — фрагмент полного имени. */
-    static String className(Object object) {
+    public static String className(Object object) {
         String simple = object.getClass().getSimpleName();
         if (!simple.isEmpty()) {
             return simple;
