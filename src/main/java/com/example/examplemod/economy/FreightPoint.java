@@ -7,6 +7,11 @@ import java.util.UUID;
 
 /** Logical identity survives replacement/unloading of physical infrastructure. */
 public final class FreightPoint {
+    public enum Kind { ENDPOINT, HUB }
+    public Kind kind=Kind.ENDPOINT;
+    public boolean publicTransit, forwarding=true;
+    /** Explicit custody buffer; rotating a Packager must not silently move the stored cargo. */
+    public BlockPos hubBuffer;
     public enum Mode { SEND, RECEIVE, BOTH; public boolean sends(){return this!=RECEIVE;} public boolean receives(){return this!=SEND;} }
     public final UUID id, cityId;
     public final ResourceLocation dimension;
@@ -35,6 +40,8 @@ public final class FreightPoint {
         CompoundTag t=new CompoundTag();t.putUUID("Id",id);t.putUUID("City",cityId);t.putString("Dimension",dimension.toString());
         t.putLong("Postbox",postbox.asLong());t.putLong("Packager",packager.asLong());t.putString("Name",name);t.putString("Mode",mode.name());
         t.putBoolean("Enabled",enabled);t.putBoolean("Removed",removed);t.putBoolean("DefaultReceive",defaultReceive);t.putBoolean("DefaultSend",defaultSend);
+        t.putString("Kind",kind.name());t.putBoolean("PublicTransit",publicTransit);t.putBoolean("Forwarding",forwarding);
+        if(hubBuffer!=null)t.putLong("HubBuffer",hubBuffer.asLong());
         if(station!=null)t.putUUID("Station",station);t.putString("StationName",stationName);t.putString("Status",status);
         if(stationPos!=null)t.putLong("StationPos",stationPos);t.putBoolean("StationMatched",stationMatched);
         t.putBoolean("PostboxPresent",postboxPresent);t.putBoolean("PackagerPresent",packagerPresent);t.putBoolean("StationPresent",stationPresent);return t;
@@ -42,6 +49,8 @@ public final class FreightPoint {
     public static FreightPoint load(CompoundTag t){
         FreightPoint p=new FreightPoint(t.getUUID("Id"),t.getUUID("City"),ResourceLocation.parse(t.getString("Dimension")),BlockPos.of(t.getLong("Postbox")),BlockPos.of(t.getLong("Packager")),t.getString("Name"),Mode.valueOf(t.getString("Mode")));
         p.enabled=t.getBoolean("Enabled");p.removed=t.getBoolean("Removed");p.defaultReceive=t.getBoolean("DefaultReceive");p.defaultSend=t.getBoolean("DefaultSend");
+        p.kind="HUB".equals(t.getString("Kind"))?Kind.HUB:Kind.ENDPOINT;p.publicTransit=t.getBoolean("PublicTransit");p.forwarding=!t.contains("Forwarding")||t.getBoolean("Forwarding");
+        p.hubBuffer=t.contains("HubBuffer",4)?BlockPos.of(t.getLong("HubBuffer")):null;
         p.station=t.hasUUID("Station")?t.getUUID("Station"):null;p.stationName=t.getString("StationName");p.status=t.getString("Status");
         p.stationPos=t.contains("StationPos")?t.getLong("StationPos"):null;p.stationMatched=t.getBoolean("StationMatched")||!t.contains("StationMatched");
         p.postboxPresent=t.getBoolean("PostboxPresent");p.packagerPresent=t.getBoolean("PackagerPresent");p.stationPresent=t.getBoolean("StationPresent");return p;

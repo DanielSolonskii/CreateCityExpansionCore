@@ -225,7 +225,7 @@ public final class ProjectCheck {
         var load=EconomyManager.class.getDeclaredMethod("load",CompoundTag.class,HolderLookup.Provider.class);load.setAccessible(true);
         EconomyManager migrated=(EconomyManager)load.invoke(null,old,null);
         require(migrated.wallet(player)==1234&&migrated.treasury(city)==5678&&migrated.projects().all().isEmpty(),"v7 save loads with unchanged balances and no projects");
-        CompoundTag round=migrated.save(new CompoundTag(),null);require(round.getInt("FormatVersion")==8&&round.contains("FreightLogistics"),"v8 retains Freight subsection");
+        CompoundTag round=migrated.save(new CompoundTag(),null);require(round.getInt("FormatVersion")==12&&round.contains("FreightLogistics")&&round.contains("PersonalBank")&&round.getCompound("FreightLogistics").contains("Routing"),"v10 retains Freight, personal banking and regional routing after legacy migration");
     }
     private static void cityGuards()throws Exception {
         CityManager cities=new CityManager();UUID owner=UUID.randomUUID();City city=cities.createCity("Test",owner,DIM,new BlockPos(0,64,0));

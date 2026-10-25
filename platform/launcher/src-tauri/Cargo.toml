@@ -1,6 +1,6 @@
 [package]
 name = "create-server-launcher"
-version = "0.1.6"
+version = "0.1.13"
 description = "Desktop launcher for RE:CREATED"
 authors = ["RE:CREATED Team"]
 edition = "2021"
@@ -24,12 +24,14 @@ sha2 = "0.10"
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
 webpki-roots = "1"
 md-5 = "0.10"
+base64 = "0.22.1"
 ed25519-dalek = "2"
 semver = "1"
+discord-rich-presence = "=1.1.0"
 tokio = { version = "1", features = ["sync"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_SystemInformation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Pipes"] }
 
 [features]
 window-smoke = []

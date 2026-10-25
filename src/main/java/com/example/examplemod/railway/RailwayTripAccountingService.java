@@ -24,6 +24,7 @@ public final class RailwayTripAccountingService {
     public static void tick(MinecraftServer server) {
         ServerLevel level=server.overworld(); RailwayManager railway=RailwayManager.get(level); EconomyManager economy=EconomyManager.get(level);
         long now=level.getGameTime();
+        economy.freight().roadCharges.reconcile(railway);
         for(RailwayTripLedger trip:railway.tripLedgers())if(trip.active())updateActive(railway,economy,trip,now);
         for(CityFleetTrain fleet:railway.trainsForCityIdsAndPersonal()){
             if(fleet.type()!=RailwayTypes.TrainType.FREIGHT&&fleet.type()!=RailwayTypes.TrainType.MIXED)continue;
@@ -40,6 +41,7 @@ public final class RailwayTripAccountingService {
             if(planned<=0)continue;
             RailwayOwnershipTypes.OwnerType payerType=fleet.cityId()==null?RailwayOwnershipTypes.OwnerType.PLAYER:RailwayOwnershipTypes.OwnerType.CITY;
             UUID payer=fleet.cityId()==null?fleet.registeredBy():fleet.cityId();
+            UUID freightPayer=economy.freight().carriers.payer(fleet.fleetTrainId(),destination.id,railway);if(freightPayer!=null){payerType=RailwayOwnershipTypes.OwnerType.CITY;payer=freightPayer;}
             TravellingPoint leading=discovered.distance<0?train.carriages.getLast().getTrailingPoint():train.carriages.getFirst().getLeadingPoint();
             List<RailwayEdgeReference> route=new ArrayList<>();
             route.add(edge(leading.node1,leading.node2));for(RailwayEdgeReference edge:route(discovered.path))if(!route.getLast().equals(edge))route.add(edge);
@@ -48,12 +50,10 @@ public final class RailwayTripAccountingService {
             try{reserve=legs.stream().map(RailwayTariffLeg::reservedAmount).reduce(0L,Math::addExact);}
             catch(ArithmeticException ex){train.navigation.cancelNavigation();continue;}
             UUID tripId=UUID.randomUUID();
-            if(!economy.reserveTransport(tripId,payerType==RailwayOwnershipTypes.OwnerType.CITY,payer,reserve)){
-                train.navigation.cancelNavigation();
-                continue;
-            }
+            Boolean commercial=economy.freight().roadCharges.reserve(train,fleet,destination.id,tripId,reserve,railway);
+            if(Boolean.FALSE.equals(commercial)||commercial==null&&!economy.reserveTransport(tripId,payerType==RailwayOwnershipTypes.OwnerType.CITY,payer,reserve)){train.navigation.cancelNavigation();continue;}
             railway.addTrip(new RailwayTripLedger(tripId,fleet.createTrainId(),fleet.fleetTrainId(),payerType,payer,
-                    source.id,destination.id,planned,reserve,now,legs));
+                    source.id,destination.id,planned,reserve,now,legs).commercial(Boolean.TRUE.equals(commercial)));
             railway.addReservation(new RouteReservation(UUID.randomUUID(),tripId,train.graph.id,route,legs));
             if(selected!=null)railway.consumeSelectedRoute(fleet.fleetTrainId());
             if(train.navigation.startNavigation(discovered)<0){
@@ -65,6 +65,12 @@ public final class RailwayTripAccountingService {
 
     private static void updateActive(RailwayManager railway,EconomyManager economy,RailwayTripLedger trip,long now){
         Train train=CreateRailwayAdapter.train(trip.createTrainId());
+        if(trip.commercial()&&!economy.freight().roadCharges.managed(trip.id())){
+            // Railway data reached disk before economy data: there is no persisted debit to spend.
+            if(train!=null){train.navigation.cancelNavigation();train.speed=0;train.targetSpeed=0;}
+            var missing=railway.reservationForTrip(trip.id());if(missing!=null)missing.close(RouteReservation.Status.CANCELLED,now);
+            trip.close(RailwayTripLedger.Status.INTERRUPTED,now);railway.markChanged();return;
+        }
         RouteReservation reservation=railway.reservationForTrip(trip.id());
         if(train==null){if(reservation!=null)reservation.close(RouteReservation.Status.CANCELLED,now);settle(railway,economy,trip,RailwayTripLedger.Status.INTERRUPTED,now);return;}
         if(reservation==null){train.navigation.cancelNavigation();settle(railway,economy,trip,RailwayTripLedger.Status.ROUTE_INVALIDATED,now);return;}
@@ -93,8 +99,8 @@ public final class RailwayTripAccountingService {
         Map<Account,Long> totals=new LinkedHashMap<>();
         for(RailwayTariffLeg leg:trip.legs())totals.merge(new Account(leg.ownerType(),leg.ownerId()),leg.charge(leg.usedLength(trip.actualDistance())),Math::addExact);
         List<EconomyManager.TransportPayout> payouts=totals.entrySet().stream().map(e->new EconomyManager.TransportPayout(e.getKey().type==RailwayOwnershipTypes.OwnerType.CITY,e.getKey().id,e.getValue())).toList();
-        if(economy.settleTransport(trip.id(),trip.payerType()==RailwayOwnershipTypes.OwnerType.CITY,trip.payerId(),trip.reservedAmount(),payouts)
-                &&trip.close(status,now))railway.markChanged();
+        if((economy.freight().roadCharges.managed(trip.id())?economy.freight().roadCharges.settle(trip.id(),payouts):economy.settleTransport(trip.id(),trip.payerType()==RailwayOwnershipTypes.OwnerType.CITY,trip.payerId(),trip.reservedAmount(),payouts))
+                &&trip.close(status,now)){railway.markChanged();}
     }
 
     private record Account(RailwayOwnershipTypes.OwnerType type,UUID id){}

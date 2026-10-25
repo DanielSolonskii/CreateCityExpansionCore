@@ -28,7 +28,7 @@ class InfrastructureIntegrationTest {
 
     @Test
     void contextStartsAndFlywayCreatesTechnicalMarker() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("10");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("11");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM platform_infrastructure", Integer.class))
                 .isEqualTo(1);
         assertThat(health.isAvailable()).isTrue();

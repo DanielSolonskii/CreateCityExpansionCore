@@ -5,7 +5,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 public record CommunityRequestPayload(UUID request,Action action,UUID city,UUID target,UUID token,int value,int page,String query) implements CustomPacketPayload {
-    public enum Action { VIEW, INVITE, ACCEPT, DECLINE, REVOKE, ROLE, PREFERENCE, MUTE, LEAVE, KICK, TRANSFER, READ_INBOX, INBOX, READ_ALLIANCE, RELATIONS, SET_TRUST, SET_TERRITORY }
+    public enum Action { VIEW, INVITE, ACCEPT, DECLINE, REVOKE, ROLE, PREFERENCE, MUTE, LEAVE, KICK, TRANSFER, READ_INBOX, INBOX, READ_ALLIANCE, RELATIONS, SET_TRUST, SET_TERRITORY, SUMMARY }
     public CommunityRequestPayload{if(page<0||page>100000||query==null||query.length()>16)throw new IllegalArgumentException("Community request");}
     public static final Type<CommunityRequestPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath("createcityexpansioncore","community_request"));
     private static void uuid(RegistryFriendlyByteBuf b,UUID id){b.writeBoolean(id!=null);if(id!=null)b.writeUUID(id);}

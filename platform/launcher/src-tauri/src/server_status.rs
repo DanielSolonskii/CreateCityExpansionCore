@@ -70,13 +70,43 @@ fn probe(host:&str,port:u16)->Result<ServerStatus,String>{
 #[tauri::command]
 pub async fn server_status()->ServerStatus {
     tauri::async_runtime::spawn_blocking(|| {
+        if let Ok(status)=https_status(){return status}
         let host=option_env!("RECREATED_GAME_TLS_HOST").unwrap_or("");
         let port=option_env!("RECREATED_GAME_TLS_PORT").unwrap_or("25565").parse().unwrap_or(0);
         probe(host,port).unwrap_or_else(|_|unavailable())
     }).await.unwrap_or_else(|_|unavailable())
 }
+fn https_status()->Result<ServerStatus,String>{
+    let client=reqwest::blocking::Client::builder().redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(5)).timeout(Duration::from_secs(8)).build().map_err(|_|"HTTP unavailable")?;
+    let response=crate::network::blocking_send(client.get("https://api.recreated.ru/api/launcher/server-status")).map_err(|_|"HTTPS unavailable")?;
+    if !response.status().is_success(){return Err("HTTPS status unavailable".into())}
+    let mut bytes=Vec::new();response.take(4097).read_to_end(&mut bytes).map_err(|_|"HTTPS interrupted")?;
+    if bytes.len()>4096{return Err("Status too large".into())}
+    parse_https(&bytes)
+}
+fn parse_https(bytes:&[u8])->Result<ServerStatus,String>{
+    let value:serde_json::Value=serde_json::from_slice(bytes).map_err(|_|"Invalid status")?;
+    match value["state"].as_str(){
+        Some("ONLINE")=>{
+            let online=value["playersOnline"].as_u64().filter(|n|*n<=1_000_000).ok_or("Invalid count")?;
+            let max=value["playersMax"].as_u64().filter(|n|*n>0&&*n<=1_000_000).ok_or("Invalid maximum")?;
+            Ok(ServerStatus{state:"online",label:"Сервер работает",players_online:Some(online as u32),players_max:Some(max as u32),ping:None,message:"Альфа тестирование"})
+        },
+        Some("OFFLINE")=>Ok(ServerStatus{state:"offline",label:"Сервер выключен",..unavailable()}),
+        Some("UNKNOWN")=>Ok(unavailable()),_=>Err("Invalid state".into())
+    }
+}
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn https_aggregate_preserves_unknown_and_offline(){
+        let online=parse_https(br#"{"state":"ONLINE","playersOnline":2,"playersMax":15}"#).unwrap();
+        assert_eq!(online.players_online,Some(2));assert!(online.ping.is_none());
+        let stale=parse_https(br#"{"state":"UNKNOWN","playersOnline":null,"playersMax":null}"#).unwrap();
+        assert_eq!(stale.state,"unknown");assert!(stale.players_online.is_none());
+        assert_eq!(parse_https(br#"{"state":"OFFLINE"}"#).unwrap().state,"offline");
+        assert!(parse_https(br#"{"state":"ONLINE","playersOnline":-1,"playersMax":15}"#).is_err());
+    }
     fn response(value:&str)->Vec<u8>{let mut data=vec![0];data.extend(varint(value.len() as u32));data.extend(value.as_bytes());data}
     #[test] fn real_counts(){assert_eq!(parse(&response(r#"{"players":{"online":3,"max":20}}"#)).unwrap(),(3,20));}
     #[test] fn reject_invalid_counts(){for text in [r#"{"players":{"online":-1,"max":20}}"#,r#"{"players":{"online":1,"max":0}}"#,r#"{}"#]{assert!(parse(&response(text)).is_err());}}

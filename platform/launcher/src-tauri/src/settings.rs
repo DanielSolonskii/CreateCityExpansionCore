@@ -2,8 +2,9 @@ use serde::{Deserialize,Serialize};
 use std::fs;
 #[derive(Clone,Deserialize,Serialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
-pub struct Settings { pub memory_gb:u8,pub width:u16,pub height:u16,pub hide_after_launch:bool }
-impl Default for Settings {fn default()->Self{Self{memory_gb:4,width:1280,height:720,hide_after_launch:false}}}
+pub struct Settings { pub memory_gb:u8,pub width:u16,pub height:u16,pub hide_after_launch:bool,#[serde(default="yes")]pub auto_start:bool,#[serde(default="yes")]pub diagnostics_enabled:bool }
+fn yes()->bool{true}
+impl Default for Settings {fn default()->Self{Self{memory_gb:4,width:1280,height:720,hide_after_launch:false,auto_start:true,diagnostics_enabled:true}}}
 impl Settings { fn validate(&self)->Result<(),String>{if !(4..=16).contains(&self.memory_gb) || ![(1280,720),(1600,900),(1920,1080)].contains(&(self.width,self.height)){return Err("Недопустимые параметры игры".into());}Ok(())} }
 pub fn load()->Result<Settings,String>{
     match fs::read(crate::game::root()?.join("launcher-settings.json")){Ok(bytes)=>{let value:Settings=serde_json::from_slice(&bytes).map_err(|_|"Не удалось прочитать настройки")?;value.validate()?;Ok(value)},Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(Settings::default()),Err(_)=>Err("Не удалось открыть настройки".into())}
@@ -15,3 +16,5 @@ pub fn load()->Result<Settings,String>{
 }
 #[tauri::command]pub fn open_game_folder()->Result<(),String>{let dir=crate::game::root()?.join("instances/alpha");fs::create_dir_all(&dir).map_err(|_|"Не удалось открыть папку игры")?;std::process::Command::new("explorer.exe").arg(dir).spawn().map_err(|_|"Не удалось открыть проводник")?;Ok(())}
 #[cfg(test)]mod tests {use super::*;#[test]fn validates_settings(){let s=Settings::default();assert!(s.validate().is_ok());let s:Settings=serde_json::from_slice(&serde_json::to_vec(&s).unwrap()).unwrap();assert_eq!(s.memory_gb,4);for memory_gb in [0,3,17,255]{assert!(Settings{memory_gb,..Settings::default()}.validate().is_err());}assert!(Settings{width:1,..Settings::default()}.validate().is_err());}}
+
+#[cfg(test)]mod compatibility {use super::*;#[test]fn old_settings_enable_auto_start(){let s:Settings=serde_json::from_str(r#"{"memoryGb":4,"width":1280,"height":720,"hideAfterLaunch":false}"#).unwrap();assert!(s.auto_start);}}

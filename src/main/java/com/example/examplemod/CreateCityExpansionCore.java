@@ -1283,6 +1283,7 @@ public class CreateCityExpansionCore {
                 com.example.examplemod.network.RailwayRouteOptionsPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player().containerMenu instanceof CityPylonMenu menu) menu.acceptRouteOptions(payload);
+                    else CityWorldMapSession.INSTANCE.acceptRouteOptions(payload);
                 })
         );
 

@@ -13,6 +13,9 @@ public final class RailwayTripLedger {
     private double actualDistance;
     private long settledAt;
     private Status status;
+    private boolean commercial;
+    public RailwayTripLedger commercial(boolean value){commercial=value;return this;}
+    public boolean commercial(){return commercial;}
 
     public RailwayTripLedger(UUID id, UUID createTrainId, UUID fleetTrainId,
                              RailwayOwnershipTypes.OwnerType payerType, UUID payerId,

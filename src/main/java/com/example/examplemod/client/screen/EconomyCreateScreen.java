@@ -58,6 +58,8 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
 
     private final Screen parent;
     private final Mode mode;
+    private java.util.UUID linkedProject;
+    public EconomyCreateScreen forProject(java.util.UUID id,String name){linkedProject=id;titleText=name;return this;}
     private final BlockPos pylonPos;
     private final EconomyStatePayload state;
     private final ItemSelectorOverlay selector = new ItemSelectorOverlay();
@@ -315,7 +317,7 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
     }
 
     private List<com.example.examplemod.economy.FreightPoint> intakes() {
-        return FreightUi.choices(state,true);
+        return FreightUi.choices(state,mode!=Mode.CITY_SELL);
     }
 
     // ---------------------------------------------------------------------
@@ -538,7 +540,7 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
 
     private void submitContract() {
         List<com.example.examplemod.economy.FreightPoint> values = intakes();
-        if (values.isEmpty() && mode != Mode.CITY_SELL) {
+        if (values.isEmpty()) {
             error = Component.translatable("gui.createcityexpansioncore.freight.no_receive");
             return;
         }
@@ -565,12 +567,12 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
                 mode == Mode.CITY_SELL ? EconomyCommandPayload.Action.CREATE_FREIGHT_SELL : mode == Mode.MASTER_SPECIAL
                         ? EconomyCommandPayload.Action.CREATE_MASTER_SPECIAL
                         : EconomyCommandPayload.Action.CREATE_CITY_CONTRACT,
-                mode == Mode.CITY_SELL ? null : values.get(Math.floorMod(intakeIndex, values.size())).id,
+                values.get(Math.floorMod(intakeIndex, values.size())).id,
                 null, contractItem, null, amountValue, money, deadlineTicks,
                 mode == Mode.MASTER_SPECIAL ? contractMode.ordinal() : EconomyTypes.ContractMode.EXCLUSIVE.ordinal(),
                 titleBox == null ? "" : titleBox.getValue(),
                 noteBox == null ? "" : noteBox.getValue(),
-                ""));
+                linkedProject==null?"":"project:"+linkedProject));
         onClose();
     }
 
@@ -700,13 +702,13 @@ public final class EconomyCreateScreen extends CityPylonPageScreen {
                 innerX + innerW - 90, contractNoteY + 5, COLOR_MUTED, false);
 
         button(graphics, intakeHit,
-                Component.translatable("gui.createcityexpansioncore.freight.choose_receive"), true, mouseX, mouseY);
+                Component.translatable("gui.createcityexpansioncore.freight."+(mode==Mode.CITY_SELL?"choose_send":"choose_receive")), true, mouseX, mouseY);
         if (contractModeHit != null) {
             button(graphics, contractModeHit, contractModeLabel(), true, mouseX, mouseY);
         }
 
         List<com.example.examplemod.economy.FreightPoint> values = intakes();
-        Component coords = mode == Mode.CITY_SELL ? FreightUi.tr("after_buyer") : values.isEmpty()
+        Component coords = values.isEmpty()
                 ? Component.translatable("gui.createcityexpansioncore.freight.no_receive")
                 : Component.translatable("gui.createcityexpansioncore.freight.destination",
                 values.get(Math.floorMod(intakeIndex, values.size())).name);

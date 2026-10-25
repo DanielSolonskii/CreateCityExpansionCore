@@ -24,7 +24,8 @@ public record CcecStatus(Category category, Code code, Action action) {
         // Train management states. Appended so saved snapshots keep their existing ordinals.
         TRAIN_UNREGISTERED, TRAIN_ASSIGNED, TRAIN_IN_USE,
         // Why the train has not left yet. Appended so saved snapshots keep their existing ordinals.
-        CARGO_NOT_COUNTED, TRAIN_NOT_AT_SOURCE
+        CARGO_NOT_COUNTED, TRAIN_NOT_AT_SOURCE,
+        POINT_TERRITORY_CONFLICT
     }
     public static CcecStatus of(Category category, Code code, Action action) { return new CcecStatus(category, code, action); }
     public CompoundTag save() { CompoundTag t=new CompoundTag();t.putString("Category",category.name());t.putString("Code",code.name());t.putString("Action",action.name());return t; }

@@ -10,9 +10,13 @@ pub fn show_main(app:&AppHandle)->tauri::Result<()> {
 pub fn menu_action(app:&AppHandle,id:&str) {
     match id {
         "open-launcher"=>{if show_main(app).is_err(){eprintln!("Launcher window could not be shown");}},
-        "exit-launcher"=>app.exit(0),
+        "exit-launcher"=>{let state=crate::game::game_status(app.state::<crate::game::GameRuntime>());if state.state==crate::game::Phase::STARTING{let _=show_main(app);}else{app.exit(0);}},
         _=>{},
     }
+}
+pub fn job_notice(app:&AppHandle,status:&crate::game::GameStatus){
+    if let Some(w)=app.get_webview_window("main"){if w.is_focused().unwrap_or(false){return;}}
+    crate::windows_notice::show(app,&status.state);
 }
 pub fn setup(app:&mut tauri::App)->Result<(),Box<dyn std::error::Error>> {
     let open=MenuItem::with_id(app,"open-launcher","Открыть Launcher",true,None::<&str>)?;

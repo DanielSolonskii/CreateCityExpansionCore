@@ -1,8 +1,9 @@
 //! Standalone launch with signed reconciliation and native Game Session IPC.
 use md5::{Digest as _, Md5};
+#[cfg(test)]use std::path::Component;
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
-use std::{fs::{self, File, OpenOptions}, io::{Read, Write}, path::{Component, Path, PathBuf},
+#[cfg(test)]use sha2::Sha256;
+use std::{fs::{self, File, OpenOptions}, io::{Read, Write}, path::{Path, PathBuf},
     process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Serialize, Debug, PartialEq)]
@@ -16,6 +17,7 @@ impl Default for GameStatus {
 #[derive(Default)]
 pub struct GameRuntime {
     pub account: Mutex<Option<String>>,
+    telemetry: Mutex<Option<crate::telemetry::Attempt>>,
     status: Arc<Mutex<GameStatus>>,
     update: crate::update::SharedProgress,
 }
@@ -33,6 +35,7 @@ struct Artifact { path: String, sha256: String }
 pub(crate) fn root() -> Result<PathBuf, String> {
     Ok(PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA отсутствует")?).join("Recreated"))
 }
+#[cfg(test)]
 fn checked_file(root: &Path, relative: &str) -> Result<PathBuf, String> {
     if relative.contains('\\') || !Path::new(relative).components().all(|c| matches!(c, Component::Normal(_))) {
         return Err("Небезопасный путь в локальном manifest".into());
@@ -43,6 +46,7 @@ fn checked_file(root: &Path, relative: &str) -> Result<PathBuf, String> {
     }
     Ok(file)
 }
+#[cfg(test)]
 fn verify(root: &Path, artifact: &Artifact) -> Result<PathBuf, String> {
     let file = checked_file(root, &artifact.path)?;
     let mut input = File::open(&file).map_err(|_| "Не удалось открыть файл сборки")?;
@@ -107,6 +111,7 @@ impl GameRuntime {
     }
     #[cfg(test)]
     fn start(&self, username:String)->Result<GameStatus,String>{self.start_authenticated(username,None)}
+    #[cfg(test)]
     fn start_authenticated(&self, username: String, authentication:Option<crate::game_session::Context>) -> Result<GameStatus, String> {
         {
             let mut status = self.status.lock().unwrap();
@@ -126,21 +131,22 @@ impl GameRuntime {
         result
     }
     fn spawn(&self, username: String, authentication:Option<crate::game_session::Context>) -> Result<GameStatus, String> {
+        let expected_account=self.account.lock().unwrap().clone();
         let root = root()?;
         fs::create_dir_all(&root).map_err(|_| "Не удалось создать Recreated installation")?;
         let lock = instance_lock(&root).map_err(|error| if busy(&error) { "Minecraft уже запущен" } else { "Не удалось заблокировать instance" })?;
-        crate::update::reconcile(&root, &crate::update::production_settings()?, &self.update)?;
-        let manifest_file = checked_file(&root, "launch.json")?;
+        let verified=crate::update::prepare(&root,&crate::update::production_settings()?,&self.update,false)?;
+        let manifest_file = verified.file(&root,"launch.json",None)?;
         let manifest: Manifest = serde_json::from_slice(&fs::read(manifest_file).map_err(|_| "Не удалось прочитать manifest")?).map_err(|_| "Некорректный manifest")?;
         if manifest.schema_version != 1 || manifest.minecraft_version != "1.21.1" || manifest.neo_forge_version != "21.1.251" || manifest.main_class != "cpw.mods.bootstraplauncher.BootstrapLauncher" { return Err("Несовместимый local manifest".into()); }
-        let java = checked_file(&root, "runtime/java-21/bin/java.exe")?;
+        let java = verified.file(&root,"runtime/java-21/bin/java.exe",None)?;
         let mut check = Command::new(&java);
         #[cfg(windows)] { use std::os::windows::process::CommandExt; check.creation_flags(0x08000000); }
         let version = check.arg("-version").output().map_err(|_| "Не удалось запустить Java 21")?;
         if !version.status.success() || !String::from_utf8_lossy(&version.stderr).contains("version \"21.") { return Err("Требуется Java 21".into()); }
-        let classpath = manifest.libraries.iter().map(|a| verify(&root, a).map(|p| p.to_string_lossy().into_owned())).collect::<Result<Vec<_>, _>>()?.join(";");
-        for artifact in &manifest.mods { verify(&root, artifact)?; }
-        for artifact in &manifest.runtime_artifacts { verify(&root, artifact)?; }
+        let classpath = manifest.libraries.iter().map(|a| verified.file(&root,&a.path,Some(&a.sha256)).map(|p| p.to_string_lossy().into_owned())).collect::<Result<Vec<_>, _>>()?.join(";");
+        for artifact in &manifest.mods { verified.file(&root,&artifact.path,Some(&artifact.sha256))?; }
+        for artifact in &manifest.runtime_artifacts { verified.file(&root,&artifact.path,Some(&artifact.sha256))?; }
         let game = root.join("instances/alpha");
         let natives = root.join("natives/neoforge-21.1.251");
         fs::create_dir_all(&natives).map_err(|_| "Не удалось подготовить natives")?;
@@ -159,7 +165,11 @@ impl GameRuntime {
             ("auth_access_token", "0".into()), ("clientid", "0".into()), ("auth_xuid", "0".into()), ("user_type", "legacy".into()),
         ];
         let settings=crate::settings::load()?;
+        let attempt=self.telemetry.lock().unwrap().clone();
+        if let Some(a)=&attempt{a.event("UPDATE_READY","OK",0);}
         let mut arguments = vec!["-Xms1G".to_string(), format!("-Xmx{}G",settings.memory_gb)];
+        if let Some(a)=&attempt{arguments.push(format!("-Dccec.launchAttempt={}",a.id));}
+        if !settings.diagnostics_enabled{arguments.push("-Dccec.telemetry.disabled=true".into());}
         if let Some(context)=&authentication {
             arguments.push(format!("-Drecreated.game.tlsHost={}",context.host));
             arguments.push(format!("-Drecreated.game.tlsPort={}",context.port));
@@ -183,6 +193,7 @@ impl GameRuntime {
         // Never inherit launcher credentials or JVM injection options.
         for key in ["JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "CLASSPATH"] { command.env_remove(key); }
         #[cfg(windows)] { use std::os::windows::process::CommandExt; command.creation_flags(0x08000000); }
+        if authentication.is_some()&&(*self.account.lock().unwrap()!=expected_account||expected_account.is_none()){return Err("Аккаунт отключён; запуск отменён".into());}
         let mut child = command.spawn().map_err(|_| "Не удалось запустить Minecraft; проверьте Java и logs")?;
         drop(command);
         if let Err(error)=crate::game_lock::retain(&lock,child.id()){let _=child.kill();let _=child.wait();return Err(error);}
@@ -215,12 +226,14 @@ impl GameRuntime {
             }
         });
         let running = GameStatus { state: Phase::RUNNING, pid: Some(child.id()), message: "Minecraft запущен".into(), log_path: Some(log_path.to_string_lossy().into_owned()) };
+        if let Some(a)=&attempt{a.event("PROCESS_START","OK",0);}
         *self.status.lock().unwrap() = running.clone();
         let status = self.status.clone();
         thread::spawn(move || {
             // Ownership of both child and exclusive handle is retained until exit.
             let _lock = lock;
             let exit = child.wait();
+            if let Some(a)=&attempt{a.ended(exit.as_ref().ok().and_then(|code|code.code()));}
             let mut state = status.lock().unwrap();
             state.pid = None;
             match exit {
@@ -264,20 +277,37 @@ pub async fn game_prepare(runtime: tauri::State<'_, GameRuntime>) -> Result<crat
     }).await.map_err(|_| "Updater task failed".to_string())?
 }
 #[tauri::command]
-pub async fn game_start(app:tauri::AppHandle,runtime: tauri::State<'_, GameRuntime>) -> Result<GameStatus, String> {
-    use tauri::Manager;
-    let hide_after_launch=crate::settings::load()?.hide_after_launch;
-    let account_username=runtime.account.lock().unwrap().clone().ok_or("Сначала войдите в аккаунт Launcher")?;
-    let shared = runtime.status.clone();
-    let progress = runtime.update.clone();
-    let result=tauri::async_runtime::spawn_blocking(move || {
-        let authentication=crate::game_session::Context::authorize(&account_username)?;
-        let username=authentication.join_name().to_owned();
-        GameRuntime { account: Mutex::new(None), status: shared, update: progress }.start_authenticated(username,Some(authentication))
-    })
-        .await.map_err(|_| "Не удалось начать запуск".to_string())?;
-    if hide_after_launch && result.is_ok(){if let Some(window)=app.get_webview_window("main"){let _=window.hide();}}
-    result
+pub fn game_start(app:tauri::AppHandle,runtime:tauri::State<'_,GameRuntime>)->Result<GameStatus,String>{
+    use tauri::{Manager,Emitter};
+    let username=runtime.account.lock().unwrap().clone().ok_or("Сначала войдите в аккаунт Launcher")?;
+    let options=crate::settings::load()?;
+    let prepare_only=!options.auto_start&&runtime.update.lock().unwrap().phase!="READY";
+    {let mut state=runtime.status.lock().unwrap();if matches!(state.state,Phase::STARTING|Phase::RUNNING){return Err("Игра или обновление уже запущены".into());}
+        *state=GameStatus{state:Phase::STARTING,message:"Подготовка Minecraft".into(),..GameStatus::default()};}
+    *runtime.telemetry.lock().unwrap()=crate::telemetry::Attempt::begin(options.diagnostics_enabled);
+    let initial=runtime.status.lock().unwrap().clone();
+    tauri::async_runtime::spawn_blocking(move||{
+        let runtime=app.state::<GameRuntime>();
+        let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||->Result<(),String>{
+            if prepare_only{
+                let root=root()?;fs::create_dir_all(&root).map_err(|_|"Не удалось создать папку игры")?;
+                let _lock=instance_lock(&root).map_err(|_|"Minecraft уже работает")?;
+                crate::update::prepare(&root,&crate::update::production_settings()?,&runtime.update,false)?;
+                *runtime.status.lock().unwrap()=GameStatus::default();
+            }else{
+                let authentication=crate::game_session::Context::authorize(&username)?;
+                if let Some(a)=runtime.telemetry.lock().unwrap().as_ref(){a.event("AUTH_READY","OK",0);}
+                if runtime.account.lock().unwrap().as_ref()!=Some(&username){return Err("Аккаунт изменился; запуск отменён".into());}
+                if !username_valid(authentication.join_name()){return Err("Некорректное имя игрового профиля".into());}
+                runtime.spawn(authentication.join_name().to_owned(),Some(authentication))?;
+            }Ok(())
+        })).unwrap_or_else(|_|Err("Не удалось завершить фоновую задачу".into()));
+        if let Err(error)=result{if let Some(a)=runtime.telemetry.lock().unwrap().as_ref(){a.event("LAUNCH_FAILED","FAILED",0);}*runtime.status.lock().unwrap()=GameStatus{state:Phase::FAILED,message:error,..GameStatus::default()};}
+        let status=runtime.status.lock().unwrap().clone();let _=app.emit("game-job",&status);
+        crate::windows::job_notice(&app,&status);
+        if options.hide_after_launch&&status.state==Phase::RUNNING{if let Some(w)=app.get_webview_window("main"){let _=w.hide();}}
+    });
+    Ok(initial)
 }
 
 #[cfg(test)]

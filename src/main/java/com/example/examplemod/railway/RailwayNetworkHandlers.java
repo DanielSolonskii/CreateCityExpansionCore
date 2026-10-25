@@ -35,7 +35,10 @@ public final class RailwayNetworkHandlers {
 
     public static void handle(ServerPlayer player, RailwayCommandPayload payload) {
         Context context = context(player, payload.pylonPos());
-        if (context == null) return;
+        if (context == null) {
+            if(payload.action()==RailwayCommandPayload.Action.REQUEST_STATE||payload.action()==RailwayCommandPayload.Action.REQUEST_MAP)sendMemberView(player);
+            return;
+        }
         if (payload.action() == RailwayCommandPayload.Action.REQUEST_STATE) { sendState(player, context); return; }
         if (payload.action() == RailwayCommandPayload.Action.REQUEST_MAP) { sendMap(player, context); return; }
         if (payload.action() == RailwayCommandPayload.Action.REQUEST_ROUTES) { sendRouteOptions(player,context,payload.primaryId()); return; }
@@ -113,7 +116,7 @@ public final class RailwayNetworkHandlers {
     private static boolean registerTrain(Context c, UUID createId) {
         if (createId == null) return false;
         Train actual = CreateRailwayAdapter.train(createId);
-        if (actual == null) return false;
+        if (actual == null || !canRegister(c,actual)) return false;
         if (c.railway.trainByCreateId(createId) != null) return false;
         CityFleetTrain created = c.railway.registerTrain(createId, c.player.getUUID(), actual.name.getString());
         return c.railway.attachTrainToCity(created.fleetTrainId(), c.player.getUUID(), c.city.getId());
@@ -156,6 +159,7 @@ public final class RailwayNetworkHandlers {
         Set<UUID> visibleNetworkIds=ownership.stream().map(RailwayOwnershipSnapshot::networkId).collect(java.util.stream.Collectors.toSet());List<RailwaySectionSnapshot> ownedSections=c.railway.ownedSections().stream().filter(s->visibleNetworkIds.contains(s.networkId())).map(s->new RailwaySectionSnapshot(s.id(),s.networkId(),s.length(),s.status())).toList();
         PacketDistributor.sendToPlayer(player,new RailwayStatePayload(c.city.getPylonPos(),stations,trains,lines,ownership,ownedSections,candidates));
     }
+    private static boolean canRegister(Context c,Train actual){return c.city.canBuild(c.player.getUUID())&&(c.player.hasPermissions(2)||actual.owner!=null&&(actual.owner.equals(c.player.getUUID())||c.city.hasMember(actual.owner)));}
     /** Create trains that exist but have no CCEC registration: the "register me" discovery list. */
     private static List<RailwayTrainCandidate> trainCandidates(Context c){
         List<RailwayTrainCandidate> result=new ArrayList<>();
@@ -168,7 +172,7 @@ public final class RailwayNetworkHandlers {
             if(pos.dimension()==null)continue;
             var station=actual.getCurrentStation();
             result.add(new RailwayTrainCandidate(entry.getKey(),actual.name.getString(),pos.dimension(),
-                    pos.x,pos.z,station==null?"":station.name,canBuild));
+                    pos.x,pos.z,station==null?"":station.name,canBuild&&canRegister(c,actual)));
         }
         return List.copyOf(result);
     }

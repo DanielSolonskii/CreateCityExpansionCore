@@ -285,17 +285,22 @@ public final class PolishedWorldMapScreen extends Screen {
     }
 
     private Screen communityReturn;
+    private boolean planningSession;
+    private boolean tradeView;private net.minecraft.core.BlockPos tradeFocus;
+    public PolishedWorldMapScreen freightFocus(Screen parent,net.minecraft.resources.ResourceLocation dimension,net.minecraft.core.BlockPos pos){tradeView=true;communityReturn=parent;requestedDimension=dimension;tradeFocus=pos;return this;}
     public void returnToCommunity(Screen screen){communityReturn=screen;}
+    public void planningDimension(ResourceLocation dimension){requestedDimension=dimension;mode=Mode.CITIES;planningSession=true;}
 
     @Override
     public void onClose() {
+        com.example.examplemod.client.screen.ProjectWorkspaceClient.clear();
         if (this.map != null) {
             this.map.setDrawInternalControls(true);
             // The terrain textures are derived from the cached samples and the panel is shared with the
             // pylon screen, so they are released here instead of lingering on the GPU between openings.
             this.map.releaseTerrainTextures();
         }
-        if (this.readOnly) {
+        if (this.readOnly&&!tradeView) {
             // Данные принадлежат сессии, а не этому экрану: держать их открытыми
             // после закрытия незачем, иначе к городу можно было бы вернуться без
             // нового запроса и увидеть устаревшую карту.
@@ -319,6 +324,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private java.util.UUID framedAlliance;
     @Override
     public void tick() {
+        if(map!=null&&tradeFocus!=null){applyMode(Mode.LOGISTICS);map.centerOn(tradeFocus);tradeFocus=null;}
         com.example.examplemod.client.AllianceClient.ensure();
         if(this.map!=null&&com.example.examplemod.client.AllianceClient.focusedAlliance!=null&&!com.example.examplemod.client.AllianceClient.focusedAlliance.equals(framedAlliance)&&this.map.focusAlliance(com.example.examplemod.client.AllianceClient.focusedCities))framedAlliance=com.example.examplemod.client.AllianceClient.focusedAlliance;
         if (!this.readOnly && this.parent != null) this.parent.refreshMapClaimAccess();
@@ -522,6 +528,7 @@ public final class PolishedWorldMapScreen extends Screen {
         this.map.setProjectFocus(projectWorkspace.open() && this.mode==Mode.CITIES,projectWorkspace.territoryPicking() && this.mode==Mode.CITIES);
         this.map.setVisualOverlay(this.mode==Mode.CITIES && projectWorkspace.mapLayerVisible() && !modal ? projectWorkspace::renderMapLayer : null);
         this.map.render(graphics, mapLeft, mapTop, mapWidth, Math.max(1, mapBottom - mapTop), mouseX, mouseY);
+        com.example.examplemod.client.screen.ProjectWorkspaceClient.render(graphics,this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
         // 3-4: markers are inside the panel render above; 5-6: chrome and the context column.
         renderTitle(graphics);
         renderModeToolbar(graphics, mouseX, mouseY);
@@ -1122,6 +1129,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&com.example.examplemod.client.screen.ProjectWorkspaceClient.click(mouseX,mouseY,button))return true;
         if (this.map != null && this.mode == Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation == null && this.tutorialTicks == 0 && !this.layersOpen && !this.searchOpen && !this.map.hasPendingClaim()
                 && projectWorkspace.click(mouseX,mouseY,button,true)) return true;
         var titleBounds = WorldMapUiLayout.title(this.width);
@@ -1192,7 +1200,7 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.layersOpen && handleLayerClick(mouseX, mouseY)) return true;
         if (this.searchOpen && handleSearchClick(mouseX, mouseY)) return true;
         if(WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)){
-            var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=legendRows();for(int i=0;i<rows.size();i++)if(rows.get(i).key().equals("alliance")&&WorldMapUiLayout.legendRow(panel,i,this.legendScroll).contains(mouseX,mouseY))com.example.examplemod.client.AllianceClient.clearFocus();return true;
+            var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null,null));rows.add(new Legend("social_project",0xFFE4B65B,null,null));for(int i=0;i<rows.size();i++)if(rows.get(i).key().equals("alliance")&&WorldMapUiLayout.legendRow(panel,i,this.legendScroll).contains(mouseX,mouseY))com.example.examplemod.client.AllianceClient.clearFocus();return true;
         }
         CityMapPanel.Selection selected = this.map.getSelection();
         if (selected != null && this.cardActionY >= 0 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) {
@@ -1491,7 +1499,7 @@ public final class PolishedWorldMapScreen extends Screen {
         switch (mode) {
             case CITIES -> setOverlays(true, true, false, false, false, false);
             case RAILWAY -> setOverlays(false, false, true, true, true, false);
-            case LOGISTICS -> setOverlays(false, false, false, true, true, true);
+            case LOGISTICS -> setOverlays(false, false, true, true, true, true);
             case ENERGY -> setOverlays(false, false, false, false, false, false);
         }
         this.map.setOverlay(CityMapPanel.Overlay.RELATIONS, mode == Mode.CITIES);
@@ -1537,7 +1545,7 @@ public final class PolishedWorldMapScreen extends Screen {
         this.preferenceWorld = server + ":" + (this.minecraft.player == null ? "" : this.minecraft.player.getUUID()) + ":" + this.data.getDimensionId();
         AtlasPreferences loaded = AtlasPreferences.loadWorld(preferencePath(), this.preferenceWorld);
         this.preferences = null;
-        applyMode(Mode.values()[loaded.mode]);
+        applyMode(planningSession?Mode.CITIES:Mode.values()[loaded.mode]);
         this.preferences = loaded;
         if (this.preferences.positioned) this.map.restoreView(this.preferences.centerX, this.preferences.centerZ, this.preferences.zoom);
         this.map.setPresentation(this.preferences.grid, this.preferences.minimap);
@@ -1562,9 +1570,10 @@ public final class PolishedWorldMapScreen extends Screen {
         catch (java.io.IOException error) { org.slf4j.LoggerFactory.getLogger(PolishedWorldMapScreen.class).warn("Cannot save local atlas view", error); }
     }
     @Override public void removed() {
+        ProjectWorkspaceClient.clear();
         savePreferences(); this.followingTrain = null; this.pendingMutation = null;
         if (this.map != null) { this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
-        if (this.readOnly && !openingIdentityEditor) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
+        if (this.readOnly && !openingIdentityEditor&&!tradeView) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
         com.example.examplemod.client.ProjectClientState.clear();
         super.removed();
     }
@@ -1728,6 +1737,7 @@ public final class PolishedWorldMapScreen extends Screen {
         }
         if(this.mode==Mode.LOGISTICS)return List.of(
             new Legend("freight_point",MapPalette.OWN,null,AtlasGlyph.FREIGHT),
+            new Legend("freight_hub",MapPalette.OWN,null,AtlasGlyph.HUB),
             new Legend("freight_link",0xB36ACFCE,null,null),
             new Legend("train",MapPalette.OWN,null,AtlasGlyph.TRAIN),
             new Legend("attention",MapPalette.ALERT,null,AtlasGlyph.FREIGHT));
@@ -1742,6 +1752,7 @@ public final class PolishedWorldMapScreen extends Screen {
             new Legend("pending",0x906F7596,null,null));
     }
     private boolean legendEnabled(Legend entry) {
+        if(entry.key().startsWith("social_"))return true;
         var layer=entry.rail()!=null||entry.key().endsWith("_route")?CityMapPanel.Overlay.TRACKS:switch(entry.key()) {
             case "own_city","other_city","alliance" -> CityMapPanel.Overlay.CITIES;
             case "territory" -> CityMapPanel.Overlay.TERRITORIES;
@@ -1755,7 +1766,7 @@ public final class PolishedWorldMapScreen extends Screen {
         return this.mode.available()&&this.map.isOverlayEnabled(layer);
     }
     private void renderModeLegend(GuiGraphics g) {
-        var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=legendRows();
+        var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null,null));rows.add(new Legend("social_project",0xFFE4B65B,null,null));
         int full=WorldMapUiLayout.legendHeader(panel)+rows.size()*WorldMapUiLayout.LEGEND_ROW;
         this.legendScroll=Math.min(this.legendScroll,Math.max(0,full-panel.height()));
         plate(g,panel.x(),panel.y(),panel.width(),panel.height());
@@ -1780,6 +1791,7 @@ public final class PolishedWorldMapScreen extends Screen {
                 g.fill(r.x(),r.y()+5,r.x()+17,r.y()+10,0xE0121B20);
                 g.fill(r.x(),r.y()+6,r.x()+17,r.y()+9,entry.color());
             }
+            else if(entry.key().equals("freight_link")){for(int dx=0;dx<17;dx+=8)g.fill(r.x()+dx,r.y()+8,r.x()+Math.min(17,dx+4),r.y()+9,entry.color());}
             else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
             Component label=Component.translatable("gui.createcityexpansioncore.world_map.legend."+entry.key());
             g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-24),r.x()+24,r.y()+5,enabled?TEXT:MapPalette.TEXT_FAINT,false);

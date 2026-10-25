@@ -19,7 +19,7 @@ public final class AllianceScreen extends Screen {
     private final Screen parent;private UUID initialCity,selected,candidate;private AllianceLayout layout;
     private CompoundTag state=new CompoundTag();private AllianceRequestPayload pending,lastRequest;
     private long requested,received,opened,searchAt;private String result="loading",form="";private int tab,scroll,sideScroll,contentHeight,sideHeight,page,chatPage,color=0xD3A363,emblem;
-    private final Map<UUID,Double> voteProgress=new HashMap<>();private UUID seenMessage;
+    private final Map<UUID,Double> voteProgress=new HashMap<>();private UUID seenMessage,readRequest,readCursor;private long readAt;
     private EditBox name,description,search,message;private boolean searchDirty,stickBottom;
     private Runnable confirm;private Component confirmation;private final List<Hit> hits=new ArrayList<>();
     private record Hit(AllianceLayout.Rect rect,Runnable run,boolean enabled,int clip){}
@@ -36,6 +36,7 @@ public final class AllianceScreen extends Screen {
         s.state=payload.data();s.chatPage=s.state.getInt("ChatPage");s.page=s.state.getInt("DirectoryPage");s.initialCity=null;if(s.state.contains("Alliance",10))s.selected=s.alliance().getUUID("Id");else s.selected=null;
         if(action!=Action.VIEW){boolean ok=Set.of("ok","created","proposed","voted","sent","left","duplicate").contains(s.result);CommunityFx.sound(ok?"success":"error");if(ok){if(action==Action.CHAT){if(s.lastRequest.command().text().equals(s.message.getValue()))s.message.setValue("");s.chatPage=0;s.stickBottom=true;}else{s.form="";s.scroll=0;s.candidate=null;}}}if(!s.member()&&s.tab>0)s.tab=0;s.updateFields();
     }
+    public static void acceptRead(CommunityStatePayload payload){var page=SocialHubScreen.find(AllianceScreen.class,v->v.readRequest!=null&&payload.data().hasUUID("Request")&&v.readRequest.equals(payload.data().getUUID("Request")));if(page!=null){if(payload.data().getString("Result").equals("ok"))page.seenMessage=page.readCursor;page.readRequest=null;}}
     private CompoundTag alliance(){return state.getCompound("Alliance");}
     private boolean member(){return state.getBoolean("Member");}private boolean council(){return state.getBoolean("Council");}private boolean owner(){return state.getBoolean("Owner");}
     private String draft(EditBox field){return field==null?"":field.getValue();}
@@ -61,7 +62,7 @@ public final class AllianceScreen extends Screen {
         if(form.equals("create")||form.equals("rename"))creation(g,(int)mx,(int)my,pt);else if(!form.isEmpty())candidates(g,(int)mx,(int)my,pt);else if(selected==null)empty(g,mx,my);else if(tab==0)overview(g,mx,my);else if(tab==1)council(g,mx,my);else chat(g);
         unclip(g);if(form.isEmpty()&&tab==2&&member()){drawField(g,message,layout.compose(),(int)mx,(int)my,pt);button(g,layout.send(),tr("send"),()->request(Action.CHAT,null,message.getValue()),pending==null&&!message.getValue().isBlank(),true,0,mx,my);}
         if(tab==2&&member()&&chatPage==0&&SocialHubScreen.unobstructed(this)&&scroll>=Math.max(0,contentHeight-layout.chat().height())-8&&!state.getList("Chat",10).isEmpty()){
-            var last=(CompoundTag)state.getList("Chat",10).getLast();if(!last.getUUID("Id").equals(seenMessage)){seenMessage=last.getUUID("Id");PacketDistributor.sendToServer(new CommunityRequestPayload(UUID.randomUUID(),CommunityRequestPayload.Action.READ_ALLIANCE,null,selected,null,0,0,""));}
+            var last=(CompoundTag)state.getList("Chat",10).getLast();if(readRequest!=null&&net.minecraft.Util.getMillis()-readAt>5000)readRequest=null;if(readRequest==null&&!last.getUUID("Id").equals(seenMessage)&&net.minecraft.Util.getMillis()-readAt>1000){readRequest=UUID.randomUUID();readCursor=last.getUUID("Id");readAt=net.minecraft.Util.getMillis();PacketDistributor.sendToServer(new CommunityRequestPayload(readRequest,CommunityRequestPayload.Action.READ_ALLIANCE,null,selected,readCursor,0,0,""));}
         }
         int visible=form.isEmpty()&&tab==2?layout.chat().height():body.height();if(stickBottom){scroll=Math.max(0,contentHeight-visible);stickBottom=false;}scroll=Math.clamp(scroll,0,Math.max(0,contentHeight-visible));
         if(sideHeight>layout.sidebar().height())scrollbar(g,true,false,sideScroll,sideHeight);

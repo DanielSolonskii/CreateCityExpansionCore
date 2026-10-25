@@ -18,8 +18,9 @@ public final class FreightDispatchCheck {
         require(FreightDispatchPolicy.readiness(false,false,100,10,64,64)==FreightDispatchPolicy.Readiness.TRAIN_NOT_ASSIGNED,"train selection gate");
         require(FreightDispatchPolicy.readiness(true,false,100,10,64,64)==FreightDispatchPolicy.Readiness.ROUTE_NOT_SELECTED,"route selection / invalidation gate");
         require(FreightDispatchPolicy.readiness(true,true,9,10,64,64)==FreightDispatchPolicy.Readiness.INSUFFICIENT_FUNDS,"funds gate");
-        require(FreightDispatchPolicy.readiness(true,true,100,10,63,64)==FreightDispatchPolicy.Readiness.WAITING_FOR_CARGO,"full physical load required");
+        require(FreightDispatchPolicy.readiness(true,true,100,10,63,6400)==FreightDispatchPolicy.Readiness.READY,"positive batch avoids capacity deadlock");
         require(FreightDispatchPolicy.readiness(true,true,100,10,64,64)==FreightDispatchPolicy.Readiness.READY,"dispatch ready");
+        require(FreightDispatchPolicy.readiness(true,true,100,10,0,6400)==FreightDispatchPolicy.Readiness.WAITING_FOR_CARGO,"empty train cannot dispatch cargo");
         UUID city=UUID.randomUUID(),subject=UUID.randomUUID(),source=UUID.randomUUID(),train=UUID.randomUUID(),selection=UUID.randomUUID();
         FreightAssignment assignment=new FreightAssignment(subject,source,new FreightPoint(UUID.randomUUID(),city,ResourceLocation.parse("minecraft:overworld"),BlockPos.ZERO,BlockPos.ZERO,"Destination",FreightPoint.Mode.RECEIVE));assignment.train=train;assignment.routeSelection=selection;assignment.running=true;assignment.dispatchError="insufficient_funds";
         CompoundTag saved=assignment.save();FreightAssignment restored=FreightAssignment.load(saved);

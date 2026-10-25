@@ -86,6 +86,7 @@ public final class CityPylonWorkspace extends Screen {
     }
     private void layout() {
         geometry=CityPylonWorkspaceLayout.calculate(width,height,page==root);
+        if(page instanceof LogisticsScreen||page instanceof RailwayRouteSelectionScreen)geometry=CityPylonWorkspaceLayout.readable(width,height);
         if(page!=root)prepare(page,geometry.virtualWidth(),geometry.virtualHeight());
     }
     private void show(Screen next) {
@@ -130,18 +131,18 @@ public final class CityPylonWorkspace extends Screen {
         g.fill(fx+1,fy+30,fx+sidebar,fy+fh-1,METAL);
         g.fill(fx+sidebar,fy+30,fx+sidebar+1,fy+fh-1,LINE);
         int cityY=fy+(fh<240?36:44);
-        g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),sidebar-26),fx+13,cityY,TEXT,false);
+        if(sidebar>=60)g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),sidebar-26),fx+13,cityY,TEXT,false);
         if(fh>=240)g.drawString(font,Component.translatable("gui.createcityexpansioncore.workspace.level",root.getMenu().getCityLevel()),fx+13,cityY+17,MUTED,false);
         for(int i=0;i<5;i++) {
             int y=geometry.navY(i),h=geometry.navHeight();boolean selected=section==i;
             boolean hover=in(mx,my,fx+7,y,sidebar-14,h);
             rounded(g,fx+7,y,sidebar-14,h,4,selected?0xFF383123:hover?PANEL:METAL);
             if(selected)g.fill(fx+7,y+4,fx+9,y+h-4,BRASS);
-            if(h>=20)g.renderItem(new ItemStack(ICONS[i]),fx+14,y+(h-16)/2);
+            if(h>=18||sidebar<60)g.renderItem(new ItemStack(ICONS[i]),fx+14,y+(h-16)/2);
             int tx=fx+(h>=20?36:14);
-            g.drawString(font,fit(font,navLabel(i),sidebar-(tx-fx)-12),tx,y+(h-8)/2,selected?TEXT:MUTED,false);
+            if(sidebar>=60)g.drawString(font,fit(font,navLabel(i),sidebar-(tx-fx)-12),tx,y+(h-8)/2,selected?TEXT:MUTED,false);
         }
-        if(page!=overview)g.drawString(font,Component.translatable("gui.createcityexpansioncore.common.back"),fx+13,fy+fh-20,MUTED,false);
+        if(sidebar>=60&&page!=overview)g.drawString(font,Component.translatable("gui.createcityexpansioncore.common.back"),fx+13,fy+fh-20,MUTED,false);
         g.drawString(font,fit(font,navLabel(section),fw-sidebar-30),fx+sidebar+13,fy+fh-15,MUTED,false);
         g.enableScissor(geometry.x(),geometry.y(),geometry.x()+geometry.width(),geometry.y()+geometry.height());
         g.pose().pushPose();g.pose().translate(geometry.originX(),geometry.originY(),0);g.pose().scale(geometry.scale(),geometry.scale(),1);

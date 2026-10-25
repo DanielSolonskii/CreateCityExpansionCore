@@ -88,6 +88,7 @@ public final class FreightPointRules {
             case "removed" -> CcecStatus.of(CcecStatus.Category.WARNING, CcecStatus.Code.POINT_REMOVED, CcecStatus.Action.NONE);
             case "disabled" -> CcecStatus.of(CcecStatus.Category.WARNING, CcecStatus.Code.POINT_DISABLED, CcecStatus.Action.NONE);
             case "unloaded" -> CcecStatus.of(CcecStatus.Category.WARNING, CcecStatus.Code.POINT_UNLOADED, CcecStatus.Action.NONE);
+            case "territory_conflict" -> CcecStatus.of(CcecStatus.Category.BLOCKED,CcecStatus.Code.POINT_TERRITORY_CONFLICT,CcecStatus.Action.FIX_PROBLEM);
             case "postbox_missing" -> CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED, CcecStatus.Code.POINT_POSTBOX_MISSING, CcecStatus.Action.FIX_PROBLEM);
             case "postbox_incompatible" -> CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED, CcecStatus.Code.POINT_POSTBOX_INCOMPATIBLE, CcecStatus.Action.REBIND_POINT);
             case "packager_missing" -> CcecStatus.of(CcecStatus.Category.ACTION_REQUIRED, CcecStatus.Code.POINT_PACKAGER_MISSING, CcecStatus.Action.FIX_PROBLEM);

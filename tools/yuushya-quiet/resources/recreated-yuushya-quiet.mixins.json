@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "ru.recreated.yuushyaquiet.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["YuushyaJoinNoticeMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

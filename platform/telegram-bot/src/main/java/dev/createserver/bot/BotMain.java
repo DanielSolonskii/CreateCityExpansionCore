@@ -16,13 +16,16 @@ public final class BotMain {
         String launcher = launcherUrl(env);
         requireSafeTransport(backendUri);
         ProxyConfiguration proxy = ProxyConfiguration.fromEnvironment(env);
+        try { MiniAppMenu.configure(env, token, BotHttpClients.telegram(proxy)); }
+        catch (java.io.IOException unavailable) { System.err.println("Mini App menu setup deferred; existing bot remains available."); }
         TelegramClient telegram = new TelegramClient(token, BotHttpClients.telegram(proxy));
-        BotHandler handler = new BotHandler(username, launcher,
-                new BackendClient(backendUri, secret, BotHttpClients.backend()), telegram,ReportAdminPanel.configured(env));
+        BackendClient backend=new BackendClient(backendUri, secret, BotHttpClients.backend());
+        var admins=ReportAdminPanel.configured(env);
+        BotHandler handler = new BotHandler(username, launcher,backend,telegram,admins);
         long offset = 0;
         var broadcasts=java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r->{Thread t=new Thread(r,"broadcast-delivery");t.setDaemon(true);return t;});
         broadcasts.scheduleWithFixedDelay(()->{
-            try{handler.notifyBroadcasts();}catch(InterruptedException stopped){Thread.currentThread().interrupt();}
+            try{handler.notifyBroadcasts();CommunityBot.deliver(backend,telegram);CompanionNotifications.deliver(admins,backend,telegram);CompanionMediaCache.refresh(env.get("COMPANION_MEDIA_DIR"),backend,telegram);}catch(InterruptedException stopped){Thread.currentThread().interrupt();}
             catch(RuntimeException failed){System.err.println("Broadcast worker deferred.");}
         },5,5,java.util.concurrent.TimeUnit.SECONDS);
         Runtime.getRuntime().addShutdownHook(new Thread(broadcasts::shutdownNow));

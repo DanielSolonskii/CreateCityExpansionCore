@@ -16,8 +16,8 @@ import static com.example.examplemod.client.screen.LogisticsStyle.*;
 /** Selection and explicit confirmation share one screen for all three freight trades. */
 public final class FreightConfirmScreen extends CityPylonPageScreen {
     private final Screen parent;
-    private final CityPylonScreen pylon;
-    private final CityPylonMenu menu;
+
+    private final com.example.examplemod.client.WorldMapDataSource menu;
     private final UUID subject;
     private final boolean market;
     private final long quantity;
@@ -27,8 +27,11 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
     private Button choice,confirm;
 
     public FreightConfirmScreen(Screen parent,CityPylonScreen pylon,UUID subject,boolean market,long quantity){
-        super(FreightUi.tr("review"));this.parent=parent;this.pylon=pylon;
-        this.menu=pylon.getMenu();this.subject=subject;this.market=market;this.quantity=quantity;
+        this(parent,pylon.getMenu(),subject,market,quantity);
+    }
+    public FreightConfirmScreen(Screen parent,com.example.examplemod.client.WorldMapDataSource source,UUID subject,boolean market,long quantity){
+        super(FreightUi.tr("review"));this.parent=parent;
+        this.menu=source;this.subject=subject;this.market=market;this.quantity=quantity;
     }
     private EconomyStatePayload.OfferView offer(){
         var s=menu.getEconomyState();
@@ -52,7 +55,7 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
         int bw=(width-48)/3;
         addRenderableWidget(new Action(20,height-28,bw,FreightUi.tr("cancel"),false,this::onClose));
         addRenderableWidget(new Action(24+bw,height-28,bw,FreightUi.tr("setup"),false,
-                ()->minecraft.setScreen(new LogisticsScreen(pylon))));
+                ()->minecraft.setScreen(new LogisticsScreen(parent,menu,subject))));
         confirm=addRenderableWidget(new Action(28+2*bw,height-28,bw,FreightUi.tr("confirm"),true,()->{
             submitted=true;submittedAt=ticks;
             PacketDistributor.sendToServer(new EconomyCommandPayload(menu.getPylonPos(),
@@ -66,7 +69,7 @@ public final class FreightConfirmScreen extends CityPylonPageScreen {
     @Override public void tick(){
         if(++ticks%20==0)PacketDistributor.sendToServer(EconomyCommandPayload.simple(menu.getPylonPos(),EconomyCommandPayload.Action.REQUEST_STATE,null));
         if(submitted&&((market&&offer()!=null&&offer().mine())||(!market&&contract()!=null&&contract().mine())))
-            minecraft.setScreen(new LogisticsScreen(pylon));
+            minecraft.setScreen(new LogisticsScreen(parent,menu,subject));
         if(submitted&&ticks-submittedAt>=100)submitted=false;
     }
     @Override public boolean isPauseScreen(){return false;}

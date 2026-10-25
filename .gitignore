@@ -47,6 +47,7 @@ repo/
 /logs/
 /log_*.txt
 /log_arr.txt
+/.codex-*.log
 /latest.log
 /imagegen.rar
 **/__pycache__/

@@ -26,8 +26,8 @@ public final class MarketScreen extends CityPylonPageScreen {
     private static final int BG=0xFF141A1D,PANEL=0xFF1D2529,PANEL_ALT=0xFF222C30,FRAME=CityPylonTheme.LINE;
     private static final int ACCENT=0xFF996215,TEXT=CityPylonTheme.TEXT,MUTED=CityPylonTheme.MUTED,GOOD=0xFF77B992,WARN=0xFFE2BD75,BAD=0xFFD07872;
     private static final int ROW_H=42,TAB_H=28;
-    private final CityPylonScreen parent;
-    private final CityPylonMenu menu;
+    private final Screen parent;
+    private final com.example.examplemod.client.WorldMapDataSource menu;
     private Tab tab=Tab.PLAYER;
     private int listingFilter;
     private static final Tab[] MAIN_TABS={Tab.PLAYER,Tab.CONTRACTS,Tab.MINE};
@@ -35,15 +35,19 @@ public final class MarketScreen extends CityPylonPageScreen {
     private String category="all";
     private EditBox search,quantity;
     private UUID selected;
-    private int scroll,refreshTicks;
+    private int scroll,refreshTicks,detailScroll,detailMaximum;
     private Pending pending;
     private Component tooltip;
 
     public MarketScreen(CityPylonScreen parent){
+        this(parent,parent.getMenu());
+    }
+    public MarketScreen(Screen parent,com.example.examplemod.client.WorldMapDataSource source){
         super(Component.translatable("gui.createcityexpansioncore.market.title"));
-        this.parent=parent;this.menu=parent.getMenu();
+        this.parent=parent;this.menu=source;
     }
 
+    public MarketScreen focusContract(UUID id){tab=Tab.CONTRACTS;selected=id;return this;}
     @Override protected void init(){
         clearWidgets();
         search=new EditBox(font,0,0,100,18,Component.translatable("gui.createcityexpansioncore.market.search"));
@@ -68,7 +72,7 @@ public final class MarketScreen extends CityPylonPageScreen {
     private void layoutFields(){
         if(search==null||quantity==null)return;Layout l=layout();
         search.setX(l.leftX+9);search.setY(l.y+32);search.setWidth(Math.max(64,l.leftW-18));
-        search.setVisible(tab==Tab.EXTERNAL||tab==Tab.PLAYER||tab==Tab.MINE);
+        search.setVisible(tab==Tab.EXTERNAL||tab==Tab.PLAYER);
         if(tab==Tab.PLAYER||tab==Tab.MINE){search.setX(16);search.setY(97);search.setWidth(146);}
         quantity.setX(l.detailX+31);quantity.setY(height-78);quantity.setWidth(Math.max(38,l.detailW-62));
         quantity.setVisible(tab==Tab.EXTERNAL&&selectedOffer()!=null&&pending==null);
@@ -80,7 +84,7 @@ public final class MarketScreen extends CityPylonPageScreen {
         if(pending!=null){confirmation(g,mx,my);return;}
         tabs(g,mx,my);
         if(s==null)g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.economy.loading"),width/2,height/2,MUTED);
-        else switch(tab){case OVERVIEW->overview(g,s);case EXTERNAL->external(g,s,mx,my);case PLAYER,MINE->player(g,s,mx,my);case CONTRACTS->contracts(g,s,mx,my);case ACTIVITY->activity(g,s,mx,my);}
+        else switch(tab){case OVERVIEW->overview(g,s);case EXTERNAL->external(g,s,mx,my);case PLAYER->player(g,s,mx,my);case MINE->activity(g,s,mx,my);case CONTRACTS->contracts(g,s,mx,my);case ACTIVITY->activity(g,s,mx,my);}
         super.render(g,mx,my,pt);
         if(pending!=null)confirmation(g,mx,my);
         else if(tooltip!=null)g.renderTooltip(font,font.split(tooltip,Math.min(240,width-24)),net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPositioner.INSTANCE,mx,my);
@@ -191,14 +195,32 @@ public final class MarketScreen extends CityPylonPageScreen {
         if(values.isEmpty())empty(g,l.listX+12,top+16,tr("empty.contracts"),l.listW-24);
         for(int i=start;i<Math.min(values.size(),start+visible);i++){var c=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,c.id().equals(selected),mx,my);g.renderItem(icon(c.itemId()),l.listX+11,y+5);g.drawString(font,ellipsize(contractTitle(c),l.listW-150),l.listX+33,y+5,TEXT,false);g.drawString(font,tr("contract.line",c.delivered(),c.amount(),c.reward()),l.listX+33,y+18,MUTED,false);g.drawString(font,status(c.state()),l.listX+l.listW-88,y+5,statusColor(c.state()),false);progress(g,l.listX+33,y+31,l.listW-45,c.delivered(),c.amount());}
         contractDetail(g,selectedContract(values),s,l,mx,my);
-        button(g,l.listX+l.listW-190,l.y+3,90,20,FreightUi.tr("create_buy"),true,mx,my,false);
+        button(g,l.listX+l.listW-190,l.y+3,90,20,FreightUi.tr("create_buy"),s.logistics().getBoolean("CanCreateOrder"),mx,my,false);
         button(g,l.listX+l.listW-95,l.y+3,90,20,FreightUi.tr("city_sales"),true,mx,my,false);
     }
 
     private void contractDetail(GuiGraphics g,EconomyStatePayload.ContractView c,EconomyStatePayload s,Layout l,int mx,int my){
         title(g,tr("details"),l.detailX+10,l.y+10);if(c==null){empty(g,l.detailX+10,l.y+42,tr("empty.selection"),l.detailW-20);return;}
         g.renderItem(icon(c.itemId()),l.detailX+10,l.y+31);g.drawString(font,ellipsize(contractTitle(c),l.detailW-42),l.detailX+32,l.y+35,TEXT,false);
-        int y=l.y+61;detail(g,l,y,tr("contract.requester",c.issuerName()));detail(g,l,y+=16,tr("contract.cargo",icon(c.itemId()).getHoverName(),c.amount()));detail(g,l,y+=16,tr("contract.progress",c.delivered(),c.amount()));detail(g,l,y+=16,tr("contract.reward",c.reward()));detail(g,l,y+=16,tr("contract.deadline",remainingTime(c.deadlineAt())));detail(g,l,y+=16,tr("contract.location",destination(s,c.destinationId())));detail(g,l,y+=16,tr("contract.status",status(c.state())));
+        var facts=s.logistics().getCompound("ContractFacts").getCompound(c.id().toString());
+        int start=l.y+58,bottom=height-91,y=start-detailScroll;
+        CityPylonWorkspace.clip(g,l.detailX+6,start,l.detailX+l.detailW-6,Math.max(start+1,bottom));
+        var lines=new ArrayList<Component>();
+        lines.add(tr("contract.requester",c.issuerName()));
+        lines.add(Component.translatable("gui.createcityexpansioncore.trade.by",facts.getString("Author")));
+        lines.add(tr("contract.cargo",icon(c.itemId()).getHoverName(),c.amount()));
+        lines.add(tr("contract.progress",c.delivered(),c.amount()));
+        lines.add(tr("contract.reward",c.reward()));
+        lines.add(Component.translatable("gui.createcityexpansioncore.trade.reserved",facts.getLong("Reserved")));
+        lines.add(Component.translatable("gui.createcityexpansioncore.trade.payment_rule"));
+        if(facts.getLong("ClosurePaid")>0)lines.add(Component.translatable("gui.createcityexpansioncore.trade.closed_paid",facts.getLong("ClosurePaid")));
+        lines.add(tr("contract.deadline",remainingTime(c.deadlineAt())));
+        lines.add(tr("contract.location",destination(s,c.destinationId())));
+        if(!c.description().isBlank())lines.add(Component.literal(c.description()));
+        if(facts.hasUUID("Project"))lines.add(Component.translatable("gui.createcityexpansioncore.trade.linked_project"));
+        for(var line:lines){for(var part:font.split(line,l.detailW-24)){g.drawString(font,part,l.detailX+10,y,MUTED,false);y+=12;}y+=7;}
+        detailMaximum=Math.max(0,y+detailScroll-bottom);detailScroll=Math.min(detailScroll,detailMaximum);g.disableScissor();
+        button(g,l.detailX+8,height-64,l.detailW-16,20,Component.translatable("gui.createcityexpansioncore.trade.on_map"),FreightUi.point(s,c.destinationId())!=null,mx,my,false);
         ActionSpec a=contractAction(c);if(a!=null)button(g,l.detailX+8,height-36,l.detailW-16,22,a.label,true,mx,my,a.danger);
     }
 
@@ -206,13 +228,13 @@ public final class MarketScreen extends CityPylonPageScreen {
         Layout l=wideLayout();twoPanels(g,l);List<Activity> values=activities(s);title(g,tr("activity.count",values.size()),l.listX+9,l.y+10);int top=l.y+27,visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,values.size()-visible));
         if(values.isEmpty())empty(g,l.listX+12,top+16,tr("empty.activity"),l.listW-24);
         for(int i=start;i<Math.min(values.size(),start+visible);i++){Activity a=values.get(i);int y=top+(i-start)*ROW_H;row(g,l,y,a.id.equals(selected),mx,my);g.renderItem(icon(a.item),l.listX+11,y+5);g.drawString(font,ellipsize(a.title,l.listW-128),l.listX+33,y+5,TEXT,false);g.drawString(font,a.total>0?tr("activity.progress",a.current,a.total):a.kind,l.listX+33,y+18,MUTED,false);g.drawString(font,a.state,l.listX+l.listW-88,y+5,a.color,false);if(a.total>0)progress(g,l.listX+33,y+31,l.listW-45,a.current,a.total);}
-        title(g,tr("details"),l.detailX+10,l.y+10);Activity a=values.stream().filter(v->v.id.equals(selected)).findFirst().orElse(null);if(a==null)empty(g,l.detailX+10,l.y+42,tr("empty.selection"),l.detailW-20);else{g.renderItem(icon(a.item),l.detailX+10,l.y+31);g.drawString(font,ellipsize(a.title,l.detailW-42),l.detailX+32,l.y+35,TEXT,false);detail(g,l,l.y+63,a.kind);detail(g,l,l.y+81,tr("activity.state",a.state));if(a.total>0)detail(g,l,l.y+99,tr("activity.progress",a.current,a.total));if(a.deadline>0)detail(g,l,l.y+117,tr("contract.deadline",remainingTime(a.deadline)));if(a.bond>0)detail(g,l,l.y+135,tr("bond",a.bond));}
+        title(g,tr("details"),l.detailX+10,l.y+10);Activity a=values.stream().filter(v->v.id.equals(selected)).findFirst().orElse(null);if(a==null)empty(g,l.detailX+10,l.y+42,tr("empty.selection"),l.detailW-20);else{g.renderItem(icon(a.item),l.detailX+10,l.y+31);g.drawString(font,ellipsize(a.title,l.detailW-42),l.detailX+32,l.y+35,TEXT,false);detail(g,l,l.y+63,a.kind);detail(g,l,l.y+81,tr("activity.state",a.state));if(a.total>0)detail(g,l,l.y+99,tr("activity.progress",a.current,a.total));if(a.deadline>0)detail(g,l,l.y+117,tr("contract.deadline",remainingTime(a.deadline)));if(a.bond>0)detail(g,l,l.y+135,tr("bond",a.bond));button(g,l.detailX+8,height-36,l.detailW-16,22,Component.translatable("gui.createcityexpansioncore.trade.open_order"),s.contracts().stream().anyMatch(c->c.id().equals(selected))||s.offers().stream().anyMatch(o->o.id().equals(selected))||s.listings().stream().anyMatch(v->v.id().equals(selected)&&!v.state().terminal()),mx,my,false);}
     }
 
     @Override public boolean mouseClicked(double mx,double my,int button){
         if(button!=0)return super.mouseClicked(mx,my,button);if(pending!=null)return confirmClick(mx,my);if(tabClick(mx,my))return true;
         EconomyStatePayload s=menu.getEconomyState();if(s==null)return super.mouseClicked(mx,my,button);
-        boolean handled=switch(tab){case OVERVIEW->false;case EXTERNAL->externalClick(mx,my,s);case PLAYER,MINE->playerClick(mx,my,s);case CONTRACTS->contractClick(mx,my,s);case ACTIVITY->activityClick(mx,my,s);};
+        boolean handled=switch(tab){case OVERVIEW->false;case EXTERNAL->externalClick(mx,my,s);case PLAYER->playerClick(mx,my,s);case MINE->activityClick(mx,my,s);case CONTRACTS->contractClick(mx,my,s);case ACTIVITY->activityClick(mx,my,s);};
         return handled||super.mouseClicked(mx,my,button);
     }
 
@@ -229,7 +251,7 @@ public final class MarketScreen extends CityPylonPageScreen {
         if(in(mx,my,l.leftX+8,ty,l.leftW-16,20)){direction=EconomyTypes.MarketDirection.SELL_TO_MASTER;selected=null;return true;}if(in(mx,my,l.leftX+8,ty+23,l.leftW-16,20)){direction=EconomyTypes.MarketDirection.BUY_FROM_MASTER;selected=null;return true;}
         List<EconomyStatePayload.OfferView> values=visibleOffers(s);UUID id=clickedRow(mx,my,l,values.stream().map(EconomyStatePayload.OfferView::id).toList());if(id!=null){selected=id;quantity.setValue("1");layoutFields();return true;}
         var o=selectedOffer(values);if(o==null)return false;long max=maxAcceptable(o);int qy=height-103,qw=Math.max(22,(l.detailW-29)/4);long[] quick={1,64,256,max};for(int i=0;i<4;i++)if(in(mx,my,l.detailX+7+i*(qw+3),qy,qw,18)){quantity.setValue(Long.toString(Math.max(1,Math.min(max,quick[i]))));return true;}if(in(mx,my,l.detailX+8,height-79,18,18)){quantity.setValue(Long.toString(Math.max(1,selectedQuantity(max)-1)));return true;}if(in(mx,my,l.detailX+l.detailW-26,height-79,18,18)){quantity.setValue(Long.toString(Math.min(max,Math.max(1,selectedQuantity(max)+1))));return true;}
-        if(in(mx,my,l.detailX+8,height-36,l.detailW-16,22)){long amount=selectedQuantity(max);if(o.status()==EconomyTypes.MarketOfferStatus.OPEN&&amount>0)minecraft.setScreen(new FreightConfirmScreen(this,parent,o.id(),true,amount));return true;}return false;
+        if(in(mx,my,l.detailX+8,height-36,l.detailW-16,22)){long amount=selectedQuantity(max);if(o.status()==EconomyTypes.MarketOfferStatus.OPEN&&amount>0)minecraft.setScreen(new FreightConfirmScreen(this,menu,o.id(),true,amount));return true;}return false;
     }
 
     private boolean playerClick(double mx,double my,EconomyStatePayload s){
@@ -255,10 +277,18 @@ public final class MarketScreen extends CityPylonPageScreen {
     }
 
     private boolean contractClick(double mx,double my,EconomyStatePayload s){
-        Layout l=wideLayout();if(in(mx,my,l.listX+l.listW-190,l.y+3,90,20)){minecraft.setScreen(new EconomyCreateScreen(this,EconomyCreateScreen.Mode.CITY_CONTRACT,menu.getPylonPos(),s));return true;}if(in(mx,my,l.listX+l.listW-95,l.y+3,90,20)){minecraft.setScreen(new FreightSellScreen(parent));return true;}List<EconomyStatePayload.ContractView> values=sortedContracts(s);UUID id=clickedRow(mx,my,l,values.stream().map(EconomyStatePayload.ContractView::id).toList());if(id!=null){selected=id;return true;}var c=selectedContract(values);ActionSpec a=contractAction(c);if(a!=null&&in(mx,my,l.detailX+8,height-36,l.detailW-16,22)){if(a.action==null){if(minecraft!=null)minecraft.setScreen(new LogisticsScreen(parent));}else if(a.action==EconomyCommandPayload.Action.ACCEPT_CONTRACT)minecraft.setScreen(new FreightConfirmScreen(this,parent,c.id(),false,0));else pending=new Pending(tr("confirm.contract",a.label,contractTitle(c)),a.action,c.id(),0);return true;}return false;
+        Layout l=wideLayout();if(in(mx,my,l.listX+l.listW-190,l.y+3,90,20)){if(!s.logistics().getBoolean("CanCreateOrder"))return true;minecraft.setScreen(new EconomyCreateScreen(this,EconomyCreateScreen.Mode.CITY_CONTRACT,menu.getPylonPos(),s));return true;}if(in(mx,my,l.listX+l.listW-95,l.y+3,90,20)){minecraft.setScreen(new FreightSellScreen(this,menu));return true;}List<EconomyStatePayload.ContractView> values=sortedContracts(s);UUID id=clickedRow(mx,my,l,values.stream().map(EconomyStatePayload.ContractView::id).toList());if(id!=null){selected=id;detailScroll=0;return true;}var c=selectedContract(values);
+        if(c!=null&&in(mx,my,l.detailX+8,height-64,l.detailW-16,20)){var p=FreightUi.point(s,c.destinationId());if(p!=null)minecraft.setScreen(new PolishedWorldMapScreen(menu).freightFocus(this,p.dimension,p.postbox));return true;}
+        ActionSpec a=contractAction(c);if(a!=null&&in(mx,my,l.detailX+8,height-36,l.detailW-16,22)){if(a.action==null){if(minecraft!=null)minecraft.setScreen(new LogisticsScreen(this,menu,c.id()));}else if(a.action==EconomyCommandPayload.Action.ACCEPT_CONTRACT)minecraft.setScreen(new FreightConfirmScreen(this,menu,c.id(),false,0));else pending=new Pending(tr("confirm.contract",a.label,contractTitle(c)),a.action,c.id(),0);return true;}return false;
     }
 
-    private boolean activityClick(double mx,double my,EconomyStatePayload s){Layout l=wideLayout();List<Activity> values=activities(s);UUID id=clickedRow(mx,my,l,values.stream().map(Activity::id).toList());if(id!=null){selected=id;return true;}return false;}
+    private boolean activityClick(double mx,double my,EconomyStatePayload s){Layout l=wideLayout();
+        if(in(mx,my,l.detailX+8,height-36,l.detailW-16,22)&&selected!=null){
+            if(s.contracts().stream().anyMatch(c->c.id().equals(selected)))tab=Tab.CONTRACTS;
+            else if(s.listings().stream().anyMatch(v->v.id().equals(selected)&&!v.state().terminal()))tab=Tab.PLAYER;
+            else if(s.offers().stream().anyMatch(o->o.id().equals(selected))){tab=Tab.EXTERNAL;direction=s.offers().stream().filter(o->o.id().equals(selected)).findFirst().orElseThrow().direction();}
+            scroll=0;layoutFields();return true;
+        }List<Activity> values=activities(s);UUID id=clickedRow(mx,my,l,values.stream().map(Activity::id).toList());if(id!=null){selected=id;return true;}return false;}
 
     private void confirmation(GuiGraphics g,int mx,int my){
         g.fill(8,56,width-8,height-8,PANEL);
@@ -283,7 +313,7 @@ public final class MarketScreen extends CityPylonPageScreen {
         return true;
     }
 
-    @Override public boolean mouseScrolled(double mx,double my,double sx,double sy){if(pending==null)scroll=Math.max(0,scroll+(sy<0?1:-1));return true;}
+    @Override public boolean mouseScrolled(double mx,double my,double sx,double sy){if(pending==null&&tab==Tab.CONTRACTS&&mx>=wideLayout().detailX){detailScroll=Math.clamp(detailScroll+(sy<0?20:-20),0,detailMaximum);return true;}if(pending==null)scroll=Math.max(0,scroll+(sy<0?1:-1));return true;}
 
     private List<EconomyStatePayload.OfferView> visibleOffers(EconomyStatePayload s){String q=query();return s.offers().stream().filter(o->o.direction()==direction).filter(o->!o.status().terminal()||o.mine()).filter(o->category.equals("all")||category.equals(o.category())).filter(o->q.isBlank()||searchable(o.itemId()).contains(q)).sorted(Comparator.comparing((EconomyStatePayload.OfferView o)->o.status()!=EconomyTypes.MarketOfferStatus.OPEN).thenComparing(o->icon(o.itemId()).getHoverName().getString())).toList();}
     private List<EconomyStatePayload.ListingView> visibleListings(EconomyStatePayload s){
@@ -305,7 +335,7 @@ public final class MarketScreen extends CityPylonPageScreen {
     private EconomyStatePayload.ContractView selectedContract(List<EconomyStatePayload.ContractView> v){return v.stream().filter(o->o.id().equals(selected)).findFirst().orElse(null);}
 
     private ActionSpec listingAction(EconomyStatePayload.ListingView v){if(v==null)return null;UUID me=minecraft==null||minecraft.player==null?null:minecraft.player.getUUID();if(v.state()==EconomyTypes.ListingState.OPEN)return v.creator().equals(me)?new ActionSpec(EconomyCommandPayload.Action.CANCEL_LISTING,Component.translatable("gui.createcityexpansioncore.economy.cancel"),true):new ActionSpec(EconomyCommandPayload.Action.ACCEPT_LISTING,Component.translatable("gui.createcityexpansioncore.economy.accept"),false);UUID supplier=v.type()==EconomyTypes.ListingType.SELL?v.creator():v.counterparty(),buyer=v.type()==EconomyTypes.ListingType.BUY?v.creator():v.counterparty();if(v.state()==EconomyTypes.ListingState.RESERVED&&Objects.equals(supplier,me))return new ActionSpec(EconomyCommandPayload.Action.MARK_HANDED,Component.translatable("gui.createcityexpansioncore.economy.handed"),false);if(v.state()==EconomyTypes.ListingState.HANDED_OVER&&Objects.equals(buyer,me))return new ActionSpec(EconomyCommandPayload.Action.CONFIRM_LISTING,Component.translatable("gui.createcityexpansioncore.economy.confirm"),false);return null;}
-    private ActionSpec contractAction(EconomyStatePayload.ContractView c){if(c==null)return null;if(c.state()==EconomyTypes.ContractState.OPEN&&!c.issuerMine())return new ActionSpec(EconomyCommandPayload.Action.ACCEPT_CONTRACT,Component.translatable("gui.createcityexpansioncore.economy.accept"),false);if(c.state()==EconomyTypes.ContractState.OPEN&&c.issuerMine())return new ActionSpec(EconomyCommandPayload.Action.CANCEL_CONTRACT,Component.translatable("gui.createcityexpansioncore.economy.cancel"),true);if((c.state()==EconomyTypes.ContractState.ACCEPTED||c.state()==EconomyTypes.ContractState.IN_DELIVERY)&&c.mine())return new ActionSpec(null,Component.translatable("gui.createcityexpansioncore.economy.shipment"),false);if(c.state()==EconomyTypes.ContractState.DELIVERED&&c.issuerMine())return new ActionSpec(EconomyCommandPayload.Action.CONFIRM_CONTRACT,Component.translatable("gui.createcityexpansioncore.economy.confirm"),false);return null;}
+    private ActionSpec contractAction(EconomyStatePayload.ContractView c){if(c==null)return null;var s=menu.getEconomyState();boolean admin=s!=null&&s.logistics().getBoolean("CanCreateOrder"),builder=s!=null&&s.logistics().getBoolean("CanFulfillOrder");if(c.state()==EconomyTypes.ContractState.OPEN&&!c.issuerMine()&&builder)return new ActionSpec(EconomyCommandPayload.Action.ACCEPT_CONTRACT,Component.translatable("gui.createcityexpansioncore.economy.accept"),false);if(c.state()==EconomyTypes.ContractState.OPEN&&c.issuerMine()&&admin)return new ActionSpec(EconomyCommandPayload.Action.CANCEL_CONTRACT,Component.translatable("gui.createcityexpansioncore.economy.cancel"),true);if((c.state()==EconomyTypes.ContractState.ACCEPTED||c.state()==EconomyTypes.ContractState.IN_DELIVERY)&&(c.mine()||c.issuerMine()))return new ActionSpec(null,Component.translatable("gui.createcityexpansioncore.trade.delivery"),false);if(c.state()==EconomyTypes.ContractState.DELIVERED&&c.issuerMine()&&admin)return new ActionSpec(EconomyCommandPayload.Action.CONFIRM_CONTRACT,Component.translatable("gui.createcityexpansioncore.economy.confirm"),false);return null;}
 
     private UUID clickedRow(double mx,double my,Layout l,List<UUID> ids){int visible=Math.max(1,(l.h-32)/ROW_H),start=Math.min(scroll,Math.max(0,ids.size()-visible)),top=l.y+27;for(int i=start;i<Math.min(ids.size(),start+visible);i++){int y=top+(i-start)*ROW_H;if(in(mx,my,l.listX+5,y,l.listW-10,ROW_H-3))return ids.get(i);}return null;}
     private Layout layout(){int y=92,h=Math.max(90,height-y-8),leftW=width>=700?154:112,detailW=width>=820?248:Math.max(156,width/4),leftX=8,listX=leftX+leftW+7,detailX=width-detailW-8,listW=Math.max(112,detailX-listX-7);return new Layout(leftX,leftW,listX,listW,detailX,detailW,y,h);}

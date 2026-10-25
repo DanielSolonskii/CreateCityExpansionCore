@@ -68,6 +68,7 @@ public interface WorldMapDataSource {
     /** Снимок рельсовой сети; {@code null}, если ещё не приходил. */
     RailwayMapPayload drainRailwayMap();
 
+    default com.example.examplemod.network.RailwayRouteOptionsPayload drainRouteOptions(){return null;}
     EconomyStatePayload getEconomyState();
 
     CityRelationsStatePayload getRelationsState();

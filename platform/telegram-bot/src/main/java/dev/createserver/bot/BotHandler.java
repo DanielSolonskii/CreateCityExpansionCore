@@ -38,6 +38,7 @@ public final class BotHandler {
         long userId = sender.path("id").asLong(), chatId = message.path("chat").path("id").asLong();
         if (!message.path("chat").path("type").asText().equals("private") || sender.path("is_bot").asBoolean() ||
                 userId <= 0 || chatId != userId || message.has("forward_origin")) return;
+        if(CommunityBot.handle(update,userId,backend,telegram))return;
         if (callback) {
             String data = event.path("data").asText();
             long messageId = message.path("message_id").asLong();

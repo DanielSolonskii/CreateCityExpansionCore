@@ -19,7 +19,12 @@ public record CityPylonWorkspaceLayout(int x, int y, int width, int height,
         int pitch = Math.min(29, Math.max(16,(fh-26-navTop+4)/5));
         return new CityPylonWorkspaceLayout(x,y,width,height,vw,vh,scale,ox,oy,pitch,fx,fy,fw,fh,sidebar);
     }
-    public int navY(int index) { return frameY+(frameHeight<240?54:frameHeight<300?82:96)+index*navPitch; }
+    public static CityPylonWorkspaceLayout readable(int sw,int sh){
+        var base=calculate(sw,sh,false);int side=base.frameWidth<500?44:102;
+        int x=base.frameX+side+8,y=base.frameY+34,w=Math.max(1,base.frameWidth-side-16),h=Math.max(1,base.frameHeight-42);
+        return new CityPylonWorkspaceLayout(x,y,w,h,w,h,1,x,y,22,base.frameX,base.frameY,base.frameWidth,base.frameHeight,side);
+    }
+    public int navY(int index) { return frameY+(sidebarWidth<60?40:frameHeight<240?54:frameHeight<300?82:96)+index*navPitch; }
     public int navHeight() { return navPitch-4; }
     public boolean contains(double px,double py) { return px>=x&&px<x+width&&py>=y&&py<y+height; }
     public double localX(double px) { return (px-originX)/scale; }

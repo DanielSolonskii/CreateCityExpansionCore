@@ -1,0 +1,25 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="recreated_yuushya_quiet"
+version="1.0.0"
+displayName="RE:CREATED Yuushya Quiet Join"
+description="Suppresses the Yuushya 2.3.0 server join disclaimer only."
+[[mixins]]
+config="recreated-yuushya-quiet.mixins.json"
+[[dependencies.recreated_yuushya_quiet]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+side="BOTH"
+[[dependencies.recreated_yuushya_quiet]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.21.2)"
+side="BOTH"
+[[dependencies.recreated_yuushya_quiet]]
+modId="yuushya"
+type="required"
+versionRange="[2.3.0]"
+side="BOTH"

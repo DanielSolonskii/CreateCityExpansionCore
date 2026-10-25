@@ -12,8 +12,8 @@ import net.minecraft.world.item.ItemStack;
 
 /** Client-only industrial palette and ordinary Minecraft widgets; no external textures. */
 final class LogisticsStyle {
-    static final int BG=0xFF101A21, PANEL=0xFF1B2B34, BORDER=0xFF344D59;
-    static final int TEXT=0xFFE6EDF0, MUTED=0xFFA0B8C4, GOLD=0xFFE9BD76;
+    static final int BG=0xFF141A1D, PANEL=0xFF1D2529, BORDER=0xFF435157;
+    static final int TEXT=0xFFE8E9E1, MUTED=0xFFAAB7B8, GOLD=0xFFD3A363;
     static final int GREEN=0xFF83D5B3, RED=0xFFEE9A86, BLUE=0xFF85CBE7;
     static Component tr(String key, Object... args) { return FreightUi.tr("console."+key,args); }
     static String fit(Font font, Component text, int width) {
@@ -58,15 +58,19 @@ final class LogisticsStyle {
     }
     static final class Action extends Button {
         private final boolean primary;
+        private float hoverFade;private long lastRender;
         Action(int x,int y,int w,Component label,boolean primary,Runnable action) {
             super(x,y,w,22,label,b->action.run(),DEFAULT_NARRATION);
             this.primary=primary;setTooltip(Tooltip.create(label));
         }
         @Override protected void renderWidget(GuiGraphics g,int mx,int my,float pt) {
-            int edge=!active?BORDER:primary?GOLD:isHoveredOrFocused()?BLUE:BORDER;
-            g.fill(getX(),getY(),getX()+width,getY()+height,edge);
-            g.fill(getX()+1,getY()+1,getX()+width-1,getY()+height-1,
-                    isHoveredOrFocused()&&active?0xFF304753:primary?0xFF3E3529:PANEL);
+            long now=net.minecraft.Util.getMillis();float dt=Math.min(50,Math.max(0,now-lastRender));lastRender=now;
+            hoverFade+=(float)(1-Math.exp(-dt/90))*(active&&isHoveredOrFocused()?1-hoverFade:-hoverFade);
+            int edge=!active?BORDER:primary||isHoveredOrFocused()?GOLD:BORDER;
+            WorldMapChrome.rounded(g,getX(),getY(),width,height,3,edge);
+            int base=primary?0xFF3E3529:PANEL,target=primary?0xFF665032:0xFF303B40;
+            int color=0xff000000;for(int shift:new int[]{0,8,16})color|=(int)(((base>>shift)&255)*(1-hoverFade)+((target>>shift)&255)*hoverFade)<<shift;
+            WorldMapChrome.rounded(g,getX()+1,getY()+1,width-2,height-2,2,color);
             Font f=Minecraft.getInstance().font;
             String s=fit(f,getMessage(),width-12);
             g.drawString(f,s,getX()+(width-f.width(s))/2,getY()+7,

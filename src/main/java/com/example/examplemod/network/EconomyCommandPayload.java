@@ -16,7 +16,7 @@ public record EconomyCommandPayload(BlockPos pylonPos,Action action,UUID targetI
         implements CustomPacketPayload {
     public enum Action {REQUEST_STATE,ACCEPT_MARKET_OFFER,CREATE_CITY_CONTRACT,CREATE_MASTER_SPECIAL,ACCEPT_CONTRACT,CREATE_SHIPMENT,CANCEL_SHIPMENT,CONFIRM_CONTRACT,CANCEL_CONTRACT,DISPUTE_CONTRACT,CREATE_LISTING,ACCEPT_LISTING,MARK_HANDED,CONFIRM_LISTING,CANCEL_LISTING,DISPUTE_LISTING,BIND_INFRASTRUCTURE,BIND_INTAKE_STATION,REGISTER_FREIGHT,MANAGE_FREIGHT,CONTROL_DISPATCH,SETUP_FREIGHT,CREATE_FREIGHT_SELL,ACCEPT_FREIGHT_SELL,REQUEST_FREIGHT_ROUTES,SELECT_FREIGHT_ROUTE,
         /** Cancel/revoke an open freight dispatch; appended so existing ordinals stay stable. */
-        REVOKE_FREIGHT}
+        REVOKE_FREIGHT,FREIGHT_BUDGET,PUBLISH_FREIGHT_TRAIN}
     public static final Type<EconomyCommandPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(CreateCityExpansionCore.MODID,"economy_command"));
     public static final StreamCodec<RegistryFriendlyByteBuf,EconomyCommandPayload> STREAM_CODEC=StreamCodec.of(EconomyCommandPayload::encode,EconomyCommandPayload::decode);
     public EconomyCommandPayload{title=trim(title,96);description=trim(description,512);note=trim(note,160);}

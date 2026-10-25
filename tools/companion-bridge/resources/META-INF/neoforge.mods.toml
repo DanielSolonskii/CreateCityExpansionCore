@@ -1,0 +1,18 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="recreated_companion_bridge"
+version="1.0.0"
+displayName="RE:CREATED Companion Bridge"
+description="Read-only asynchronous city and public profile projection. No private messages."
+[[dependencies.recreated_companion_bridge]]
+modId="createcityexpansioncore"
+type="required"
+versionRange="[1.0.1,1.0.3)"
+side="BOTH"
+[[dependencies.recreated_companion_bridge]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+side="BOTH"

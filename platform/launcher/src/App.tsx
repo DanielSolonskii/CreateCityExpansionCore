@@ -1,9 +1,14 @@
+import { TelemetrySurvey } from "./components/TelemetrySurvey";
+import {listen} from "@tauri-apps/api/event";
+import {loadProfile,roleLabel,playtime,type ProfileResult} from "./services/profileGateway";
+import {PlayerAvatar} from "./components/PlayerAvatar";
 import { ChevronDown, Cog, Download, LogIn, Play, ShieldCheck } from "lucide-react";
 import { WindowControls } from "./components/WindowControls";
 import { LauncherUpdate } from "./LauncherUpdate";
 import { useEffect, useMemo, useState } from "react";
 import cityArt from "./assets/industrial-city.png";
 import "./game.css";
+import "./profile-update.css";
 import { AboutPage } from "./components/AboutPage";
 import { BrandMark } from "./components/BrandMark";
 import { EditProfileModal } from "./components/EditProfileModal";
@@ -30,6 +35,8 @@ type Page = "home" | "news" | "about";
 export default function App() {
   const [opening, setOpening] = useState(true);
   useEffect(() => { const timer = setTimeout(() => setOpening(false), 1250); return () => clearTimeout(timer); }, []);
+  const [official,setOfficial]=useState<ProfileResult|null>(null);
+  const [profileError,setProfileError]=useState(false);
   const [data, setData] = useState<LauncherSnapshot | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -104,27 +111,37 @@ export default function App() {
     return () => { active = false; clearTimeout(timer); };
   }, []);
 
+  useEffect(()=>{
+    if(!accountName){setOfficial(null);return;}let active=true;let timer:ReturnType<typeof setTimeout>;
+    async function refresh(){try{const result=await loadProfile();if(active){setOfficial(result);setProfileError(false);}}catch{if(active)setProfileError(true);}if(active)timer=setTimeout(refresh,60000);}
+    setOfficial(null);void refresh();return()=>{active=false;clearTimeout(timer);};
+  },[accountName]);
+  useEffect(()=>{if(!("__TAURI_INTERNALS__" in window))return;let alive=true;let stop:(()=>void)|undefined;
+    void listen<GameStatus>("game-job",e=>{if(alive){setGame(e.payload);void gameGateway.updateStatus().then(p=>{if(alive)setUpdate(p);});}}).then(s=>{if(alive)stop=s;else s();}).catch(()=>{/* Native polling remains a fallback. */});
+    const restore=()=>{void Promise.all([gameGateway.status(),gameGateway.updateStatus()]).then(([g,p])=>{if(alive){setGame(g);setUpdate(p);}});};
+    window.addEventListener("focus",restore);return()=>{alive=false;stop?.();window.removeEventListener("focus",restore);};
+  },[]);
+
   const actionLabel = useMemo(() => {
     if (launchState === "STARTING") return update.phase === "READY" ? "Запускаем Minecraft" : updateLabel(update);
     if (launchState === "RUNNING") return "Minecraft запущен";
-    if (launchState === "FAILED") return "Повторить проверку";
-    return update.phase === "READY" ? "Играть" : "Проверить сборку";
-  }, [launchState, update]);
+    if (launchState === "FAILED") return "Повторить запуск";
+    return launcherUpdateRequired&&update.phase!=="READY"?"Проверить сборку":"Играть";
+  }, [launchState, update,launcherUpdateRequired]);
 
   async function handlePlay() {
-    if (launcherUpdateRequired && update.phase === "READY" && launchState !== "FAILED") return;
+    if (launcherUpdateRequired&&update.phase==="READY") return;
     if (!authenticated) {
       setLoginOpen(true);
       return;
     }
     if (launchState === "STARTING" || launchState === "RUNNING") return;
     setUpdateOpen(true);
-    const ready = update.phase === "READY" && launchState !== "FAILED";
+    const ready = false;
     setGame({ ...stopped, state: "STARTING", message: "Проверка обновлений" });
     if (!ready) setUpdate({ ...idleUpdate, phase: "CHECKING", message: "Проверка обновлений" });
     try {
-      if (ready) setGame(await gameGateway.start());
-      else { setUpdate(await gameGateway.prepare()); setGame(stopped); }
+      if(launcherUpdateRequired){setUpdate(await gameGateway.prepare());setGame(stopped);}else setGame(await gameGateway.start());
     }
     catch (error) { setGame({ ...stopped, state: "FAILED", message: String(error instanceof Error ? error.message : error) }); }
   }
@@ -149,14 +166,16 @@ export default function App() {
   const activeProfile = {
     ...data.profile,
     verified: authenticated,
-    subtitle: authenticated ? "Create Server Account" : data.profile.subtitle,
-    role: authenticated ? "Нет данных API" : data.profile.role,
-    joinedAt: authenticated ? "Нет данных API" : data.profile.joinedAt,
-    playtime: authenticated ? "—" : data.profile.playtime,
-    displayName: authenticated ? profileSettings.displayName : data.profile.displayName,
+    subtitle: authenticated ? `Игровой ник: ${official?.profile.username??accountName}` : data.profile.subtitle,
+    role: authenticated ? official ? official.profile.cityState==="UNKNOWN"?"Ожидает синхронизации":official.profile.role?roleLabel(official.profile.role):"Без городской роли" : "Загрузка…" : data.profile.role,
+    joinedAt: authenticated ? official ? new Date(official.profile.registeredAt).toLocaleDateString("ru-RU") : "Загрузка…" : data.profile.joinedAt,
+    playtime: authenticated ? official ? playtime(official.profile.playTicks) : "Загрузка…" : data.profile.playtime,
+    displayName: authenticated ? profileSettings.displayName || official?.profile.username || accountName || "Игрок" : data.profile.displayName,
     initials: authenticated ? profileSettings.displayName.slice(0, 2).toUpperCase() : data.profile.initials,
     accountId: authenticated ? authGateway.getPlatformUserId() ?? "" : data.profile.accountId,
-    city: authenticated ? profileSettings.city : data.profile.city,
+    city: authenticated ? official ? official.profile.cityState==="UNKNOWN"?"Ожидает синхронизации":official.profile.city||"Без города" : profileError?"Нет соединения":"Загрузка…" : data.profile.city,
+    skinData:official?.skinData,
+    syncLabel:profileError?"Не удалось обновить данные · показаны последние полученные":official?`Синхронизация ${official.profile.cityState==="CURRENT"?"актуальна":"ожидается"}${official.profile.cityObservedAt?" · "+new Date(official.profile.cityObservedAt).toLocaleTimeString("ru-RU"):""}`:"Получаем данные игрового сервера…",
   };
 
   return (
@@ -198,7 +217,7 @@ export default function App() {
 
       <footer className="launchbar">
         <button className={`profile-button ${profileOpen ? "is-open" : ""}`} onClick={() => authenticated ? setProfileOpen((value) => !value) : setLoginOpen(true)} aria-expanded={profileOpen}>
-          <span className={`avatar ${authenticated ? "" : "avatar--guest"}`}>{authenticated ? activeProfile.initials : "?"}</span>
+          <span className={`avatar ${authenticated ? "" : "avatar--guest"}`}>{authenticated ? <PlayerAvatar skin={activeProfile.skinData} initials={activeProfile.initials}/> : "?"}</span>
           <span><strong>{authenticated ? activeProfile.displayName : "Гостевой режим"}</strong><small>{authenticated ? activeProfile.subtitle : "Требуется вход"}</small></span>
           <ChevronDown size={15} className="profile-chevron" />
         </button>
@@ -212,7 +231,7 @@ export default function App() {
           {launchState === "STARTING" && <div className="launch-progress" style={{ width: `${updatePercent(update)}%` }} />}
           {update.phase === "READY" && launchState !== "RUNNING" && <div className="update-ready">Готово · {update.version}</div>}
           {game.state === "FAILED" && <div role="alert" className="game-launch-error">{game.message}{game.logPath && <small>Лог: {game.logPath}</small>}</div>}
-          <button className={`play-button play-button--${authenticated ? launchState.toLowerCase() : "login"}`} onClick={handlePlay} disabled={(launcherUpdateRequired && update.phase === "READY") || launchState === "STARTING" || launchState === "RUNNING"} title={launcherUpdateRequired && update.phase === "READY" ? "Требуется обновление Launcher" : game.logPath ?? game.message}>
+          <button className={`play-button play-button--${authenticated ? launchState.toLowerCase() : "login"}`} onClick={handlePlay} disabled={(launcherUpdateRequired&&update.phase==="READY") || launchState === "STARTING" || launchState === "RUNNING"} title={launcherUpdateRequired && update.phase === "READY" ? "Требуется обновление Launcher" : game.logPath ?? game.message}>
             <i className="play-button__sweep" />
             <span className="play-button__icon">{!authenticated ? <LogIn size={22} /> : launchState === "STARTING" ? <Download size={21} className="spin-slow" /> : <Play size={22} fill="currentColor" />}</span>
             <span className="play-button__label">{authenticated ? actionLabel : "Войдите"}</span>
@@ -251,7 +270,11 @@ export default function App() {
         onClose={() => setEditProfileOpen(false)}
         onSaved={(settings) => { setProfileSettings(settings); setEditProfileOpen(false); }}
       />
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <TelemetrySurvey enabled={authenticated && game.state!=="RUNNING" && game.state!=="STARTING"}/>
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} busy={launchState==="STARTING"||launchState==="RUNNING"} onRepair={()=>{
+        setSettingsOpen(false);setUpdateOpen(true);setGame({...stopped,state:"STARTING",message:"Полная проверка сборки"});
+        void gameGateway.prepare().then(p=>{setUpdate(p);setGame(stopped);}).catch(e=>setGame({...stopped,state:"FAILED",message:String(e)}));
+      }}/>
     </div>
   );
 }

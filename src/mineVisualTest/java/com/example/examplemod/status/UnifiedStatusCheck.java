@@ -179,7 +179,7 @@ public final class UnifiedStatusCheck {
                 collectLiteralKeys(direct.matcher(text),"",en,ru,missing);
                 if(file.endsWith("LogisticsScreen.java")){
                     collectLiteralKeys(freight.matcher(text),"gui.createcityexpansioncore.freight.",en,ru,missing);
-                    collectLiteralKeys(console.matcher(text),"gui.createcityexpansioncore.freight.console.",en,ru,missing);
+                    collectLiteralKeys(console.matcher(text),"gui.createcityexpansioncore.logistics2.",en,ru,missing);
                 }
             }catch(Exception ex){throw new AssertionError("cannot scan "+source+": "+ex);}
         }
