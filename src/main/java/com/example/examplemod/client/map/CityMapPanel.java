@@ -358,7 +358,8 @@ public final class CityMapPanel {
     private final ItemStack trainIcon = item("create:controls");
     private final ItemStack contractIcon = item("createcityexpansioncore:contract_intake");
     private final ItemStack warehouseIcon = item("createcityexpansioncore:warehouse_gateway");
-    private final ItemStack freightIcon = item("create:postbox");
+    private final ItemStack freightIcon = item("create:white_postbox");
+    private final ItemStack hubIcon = item("minecraft:barrel");
     private final ItemStack networkIcon = item("create:track");
     private final ItemStack playerIcon = item("minecraft:compass");
 
@@ -757,7 +758,16 @@ public final class CityMapPanel {
     public void setFreightData(CompoundTag logistics) {
         if (logistics == null) { this.freightPoints=List.of();this.freightLinks=List.of();this.freightCandidates=List.of();this.routeStrategies=Map.of();return; }
         List<FreightPoint> points=new ArrayList<>();for(Tag raw:logistics.getList("Points",Tag.TAG_COMPOUND))try{FreightPoint point=FreightPoint.load((CompoundTag)raw);if(!point.removed)points.add(point);}catch(RuntimeException ignored){}
-        List<FreightLink> links=new ArrayList<>();Map<UUID,String> strategies=new HashMap<>();for(Tag raw:logistics.getList("Assignments",Tag.TAG_COMPOUND)){CompoundTag value=(CompoundTag)raw;if(value.hasUUID("Subject")&&value.hasUUID("Source")&&value.hasUUID("Destination"))links.add(new FreightLink(value.getUUID("Subject"),value.getUUID("Source"),value.getUUID("Destination"),value.getString("State")));if(value.hasUUID("RouteSelection")&&!value.getString("RouteStrategy").isBlank())strategies.put(value.getUUID("RouteSelection"),value.getString("RouteStrategy"));}
+        List<FreightLink> links=new ArrayList<>();Map<UUID,String> strategies=new HashMap<>();
+        for(Tag raw:logistics.getList("Assignments",Tag.TAG_COMPOUND)){
+            CompoundTag value=(CompoundTag)raw;
+            if(value.hasUUID("Subject")&&value.hasUUID("Source")&&value.hasUUID("Destination")&&!Set.of("complete","expired").contains(value.getString("State"))){
+                UUID from=value.getUUID("Source");
+                for(Tag stop:value.getList("Via",10)){var hop=(CompoundTag)stop;if(!hop.hasUUID("Id"))continue;UUID to=hop.getUUID("Id");links.add(new FreightLink(value.getUUID("Subject"),from,to,value.getString("State")));from=to;}
+                links.add(new FreightLink(value.getUUID("Subject"),from,value.getUUID("Destination"),value.getString("State")));
+            }
+            if(value.hasUUID("RouteSelection")&&!value.getString("RouteStrategy").isBlank())strategies.put(value.getUUID("RouteSelection"),value.getString("RouteStrategy"));
+        }
         List<FreightCandidate> candidates=new ArrayList<>();for(Tag raw:logistics.getList("Candidates",Tag.TAG_COMPOUND)){CompoundTag value=(CompoundTag)raw;candidates.add(new FreightCandidate(BlockPos.of(value.getLong("Postbox")),BlockPos.of(value.getLong("Packager")),value.getString("Station")));}
         this.freightPoints=List.copyOf(points);this.freightLinks=List.copyOf(links);this.freightCandidates=List.copyOf(candidates);this.routeStrategies=Map.copyOf(strategies);
     }
@@ -900,6 +910,9 @@ public final class CityMapPanel {
                 renderMarkers(guiGraphics, mouseX, mouseY);
                 // Placement previews and project markers must stay visible over city/player icons.
                 if (this.visualOverlay != null) this.visualOverlay.accept(guiGraphics);
+                if(!hud&&Minecraft.getInstance().level!=null&&dimensionId.equals(Minecraft.getInstance().level.dimension().location())&&!projectPicking)
+                    com.example.examplemod.client.screen.MapSocialLayer.render(guiGraphics,this,viewportX,viewportY,viewportWidth,viewportHeight,mouseX,mouseY);
+                else com.example.examplemod.client.screen.MapSocialLayer.clear(this);
                 renderPersonalTools(guiGraphics,mouseX,mouseY);
                 if (placingPin && insideViewport(mouseX,mouseY)) {
                     guiGraphics.renderOutline(mouseX-4,mouseY-4,9,9,MapPalette.SELECTED);
@@ -1011,6 +1024,7 @@ public final class CityMapPanel {
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if(button==1 && insideViewport(mouseX,mouseY) && !MapBorderLayer.available(dimensionId,screenToWorldX(mouseX),screenToWorldZ(mouseY))) return true;
+        if(button==0&&!projectPicking&&pendingClaim==null&&insideViewport(mouseX,mouseY)&&com.example.examplemod.client.screen.MapSocialLayer.click(this,mouseX,mouseY))return true;
         if (insideViewport(mouseX,mouseY)) { stopMotion(); dragAt=0; }
         /*
          * Подтверждение claim владеет кликами, пока открыто: карта под ним
@@ -2238,7 +2252,7 @@ public final class CityMapPanel {
                     Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",
                             value.pos().getX(), value.pos().getZ()));
         }
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.renderMap(guiGraphics, this.zoom,point.x(),point.y(),this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.literal(freight.address),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
+        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.renderMap(guiGraphics, this.zoom,point.x(),point.y(),freight.kind==FreightPoint.Kind.HUB?this.hubIcon:this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.translatable("gui.createcityexpansioncore.freight_network.kind."+freight.kind.name().toLowerCase(Locale.ROOT)),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
         if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=reducedMotion?32:(int)(32+10*Math.sin(System.nanoTime()/650_000_000.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
     }
 
@@ -2286,7 +2300,7 @@ public final class CityMapPanel {
             }
         }
         // Freight links belong to the logistics overlay, independently of railway visibility.
-        if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawLine(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
+        if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawFreightSchematic(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
         if (this.showStations && this.zoom >= MIN_ZOOM) {
             for (RailwayStationSnapshot station : this.railwayStations) {
                 if (!station.dimension().equals(this.dimensionId)) continue;
@@ -2841,7 +2855,12 @@ public final class CityMapPanel {
                         ? this.contractIcon : this.warehouseIcon, !value.available());
     }
 
-    private Selection freightSelection(FreightPoint point){String city=cityName(point.cityId);List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.city",city));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.station",point.stationName.isBlank()?"—":point.stationName));details.add(Component.literal(point.address));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight."+(point.online()?"online":"offline")));return new Selection(SelectionKind.FREIGHT_POINT,point.id,Component.literal(point.name),point.postbox,point.cityId.equals(ownCityId()),details,this.freightIcon,!point.online());}
+    private Selection freightSelection(FreightPoint point){String city=cityName(point.cityId);List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.freight_network.kind."+point.kind.name().toLowerCase(Locale.ROOT)));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.city",city));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.station",point.stationName.isBlank()?"—":point.stationName));if(point.kind==FreightPoint.Kind.HUB)details.add(Component.translatable("gui.createcityexpansioncore.freight_network."+(point.publicTransit?"public":"private")));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight."+(point.online()?"online":"offline")));return new Selection(SelectionKind.FREIGHT_POINT,point.id,Component.literal(point.name),point.postbox,point.cityId.equals(ownCityId()),details,point.kind==FreightPoint.Kind.HUB?this.hubIcon:this.freightIcon,!point.online());}
+    private void drawFreightSchematic(GuiGraphics g,int x0,int y0,int x1,int y1,int color){
+        var line=MapLineClip.clip(x0,y0,x1,y1,viewportX,viewportY,viewportX+viewportWidth,viewportY+viewportHeight);if(line==null)return;
+        double dx=(double)line.x2()-line.x1(),dy=(double)line.y2()-line.y1();int steps=(int)Math.ceil(Math.max(Math.abs(dx),Math.abs(dy)));
+        for(int i=0;i<=steps;i++)if((i/4)%2==0){double f=steps==0?0:i/(double)steps;int x=(int)Math.round(line.x1()+dx*f),y=(int)Math.round(line.y1()+dy*f);g.fill(x,y,x+1,y+1,color);}
+    }
     private Selection findSectionSelection(double mouseX, double mouseY) {
         for (var section : this.railwaySections)
             if (hitSegments(section.segments(), mouseX, mouseY, 5)) return sectionSelection(section);

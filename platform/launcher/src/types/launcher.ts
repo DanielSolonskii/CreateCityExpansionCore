@@ -11,6 +11,9 @@ export interface LauncherProfile {
   playtime: string;
   joinedAt: string;
   verified: boolean;
+  skinData?:string|null;
+  syncLabel?:string;
+  online?:boolean;
 }
 
 export interface ServerStatus {

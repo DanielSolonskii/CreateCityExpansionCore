@@ -10,7 +10,7 @@ public final class SocialHubIcons {
     private static final ResourceLocation[] IDLE=new ResourceLocation[ACTIVE.length];
     static {
         for(var section:SocialHubScreen.Section.values()){
-            String name=switch(section){case HOME->"home";case MESSAGES->"messages";case FRIENDS->"friends";case CITY->"city";case ALLIANCE->"alliance";case INBOX->"notifications";case PROFILE->"profile";};
+            String name=switch(section){case FINANCES->"bank";case HOME->"home";case MESSAGES->"messages";case FRIENDS->"friends";case CITY->"city";case ALLIANCE->"alliance";case INBOX->"notifications";case PROFILE->"profile";};
             ACTIVE[section.ordinal()]=texture("active",name);IDLE[section.ordinal()]=texture("idle",name);
         }
     }

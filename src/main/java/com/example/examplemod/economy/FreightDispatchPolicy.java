@@ -12,6 +12,6 @@ public final class FreightDispatchPolicy {
     public static Readiness readiness(boolean trainAssigned,boolean routeCurrent,long availableFunds,long routeCost,long loaded,long remaining){
         if(!trainAssigned)return Readiness.TRAIN_NOT_ASSIGNED;if(!routeCurrent)return Readiness.ROUTE_NOT_SELECTED;
         if(availableFunds<routeCost)return Readiness.INSUFFICIENT_FUNDS;
-        if(remaining<=0||loaded<remaining)return Readiness.WAITING_FOR_CARGO;return Readiness.READY;
+        if(remaining<=0||loaded<=0)return Readiness.WAITING_FOR_CARGO;return Readiness.READY;
     }
 }

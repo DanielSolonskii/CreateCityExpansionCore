@@ -231,7 +231,7 @@ public final class FreightReconciliationCheck {
         require(partial.m.freight().revocable(partial.c.id(),partial.buyerCity).equals("ok"),"an in-flight shipment is still revocable");
         require(partial.m.revokeDispatch(partial.c.id(),partial.buyerCity).equals("freight_revoked"),"revoke with a partial shipment succeeds");
         require(partial.c.deliveredAmount()==64L,"accepted cargo is never rolled back");
-        require(partial.m.treasury(partial.buyerCity)==18000L,"escrow refunded once despite partial delivery");
+        require(partial.m.treasury(partial.buyerCity)==9000L&&partial.m.treasury(partial.sellerCity)==9000L,"accepted half paid, unused half refunded once");
         require(partial.m.shipmentToken(inFlight).state()==EconomyTypes.ShipmentTokenState.INVALID,"unused token invalidated");
         require(partial.m.shipmentToken(landed).state()==EconomyTypes.ShipmentTokenState.CONSUMED,"consumed token is left alone");
         require(partial.receive(inFlight,64)==EconomyTypes.IntakeAttributionError.INVALID_SHIPMENT,

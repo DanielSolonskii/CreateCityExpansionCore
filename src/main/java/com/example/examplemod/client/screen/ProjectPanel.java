@@ -193,6 +193,7 @@ final class ProjectPanel {
         button("list",()->{selected=null;scroll=0;fields.clear();reason=null;},false);
         text(tr("category."+p.category().name().toLowerCase(Locale.ROOT)),WorldMapChrome.MUTED);
         heading(Component.literal(p.title()));
+        button(CommunityDashboard.tr("workspace"),()->ProjectWorkspaceScreen.open(Minecraft.getInstance().screen,p.id()),false,true);
         text(tr("scope."+p.scope().name().toLowerCase(Locale.ROOT)),ProjectMapStyle.color(p.scope(),p.status()));
         if(p.scope()==Scope.SERVER) {
             var overlaps=ProjectClientState.conflicts.getList(p.id().toString(),net.minecraft.nbt.Tag.TAG_STRING);

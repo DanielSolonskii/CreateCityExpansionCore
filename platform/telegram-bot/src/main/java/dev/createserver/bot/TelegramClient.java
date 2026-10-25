@@ -20,6 +20,18 @@ public final class TelegramClient {
     public JsonNode updates(long offset) throws IOException, InterruptedException {
         return post("getUpdates", Map.of("offset", offset, "timeout", 30, "allowed_updates", List.of("message", "callback_query")));
     }
+    /** Fixed Telegram host only. Never expose or log token-bearing file URLs. */
+    byte[] photo(String fileId)throws IOException,InterruptedException{
+        if(!fileId.matches("[A-Za-z0-9_-]{1,512}"))throw new IOException("Invalid photo");
+        var file=post("getFile",Map.of("file_id",fileId));String path=file.path("file_path").asText();
+        if(!path.matches("photos/[A-Za-z0-9_./-]{1,250}")||path.contains("..")||file.path("file_size").asLong()>8*1024*1024)throw new IOException("Invalid photo metadata");
+        String tokenPath=apiRoot.getPath().substring(1);URI url=apiRoot.resolve("/file/"+tokenPath+path);
+        try(var response=http.newCall(new Request.Builder().url(url.toString()).get().build()).execute()){
+            if(!response.isSuccessful()||response.body()==null)throw new IOException("Photo unavailable");
+            try(var stream=response.body().byteStream()){byte[] bytes=stream.readNBytes(8*1024*1024+1);if(bytes.length>8*1024*1024||!validPhoto(bytes))throw new IOException("Invalid image");return bytes;}
+        }
+    }
+    static boolean validPhoto(byte[] b){return b.length>=3&&(b[0]&255)==255&&(b[1]&255)==216&&(b[2]&255)==255||b.length>=8&&b[0]==(byte)137&&b[1]==80&&b[2]==78&&b[3]==71&&b[4]==13&&b[5]==10&&b[6]==26&&b[7]==10;}
     public void send(long chatId, String message, String launcherUrl) throws IOException, InterruptedException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("chat_id", chatId); body.put("text", message);

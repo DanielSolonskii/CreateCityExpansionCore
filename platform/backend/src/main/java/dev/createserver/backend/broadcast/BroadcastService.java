@@ -41,7 +41,8 @@ public class BroadcastService {
         lock(admin);Post p=read(id);
         if(p.status().equals("QUEUED")||p.status().equals("COMPLETED"))return p;
         if(!p.status().equals("DRAFT"))throw fail(409,"POST_NOT_DRAFT");
-        db.update("INSERT INTO broadcast_delivery(post_id,telegram_user_id,state,next_attempt_at) SELECT ?,t.telegram_user_id,'PENDING',? FROM telegram_identity t JOIN platform_user u ON u.id=t.platform_user_id WHERE u.status='ACTIVE'",id,now());
+        boolean maintenance=p.text().strip().toLowerCase(Locale.ROOT).startsWith("#maintenance")||p.text().strip().toLowerCase(Locale.ROOT).startsWith("технические работы");
+        db.update("INSERT INTO broadcast_delivery(post_id,telegram_user_id,state,next_attempt_at) SELECT ?,t.telegram_user_id,'PENDING',? FROM telegram_identity t JOIN platform_user u ON u.id=t.platform_user_id LEFT JOIN companion_preferences pref ON pref.platform_user_id=u.id WHERE u.status='ACTIVE' AND COALESCE("+(maintenance?"pref.maintenance":"pref.news")+",TRUE)=TRUE",id,now());
         db.update("UPDATE broadcast_post SET status='QUEUED',confirmed_at=? WHERE id=?",now(),id);complete();return read(id);
     }
     public Post cancel(long admin,UUID id){lock(admin);Post p=read(id);if(!Set.of("DRAFT","CANCELLED").contains(p.status()))throw fail(409,"POST_NOT_DRAFT");db.update("UPDATE broadcast_post SET status='CANCELLED' WHERE id=?",id);return read(id);}

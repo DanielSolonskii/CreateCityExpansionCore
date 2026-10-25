@@ -24,11 +24,26 @@ public final class EconomyNetworkHandlers {
     private EconomyNetworkHandlers() {}
 
     public static void handle(ServerPlayer player, EconomyCommandPayload payload) {
-        Context context=context(player,payload.pylonPos());if(context==null)return;
+        if(player instanceof net.neoforged.neoforge.common.util.FakePlayer)return;
+        long window=net.minecraft.Util.getMillis()/1000;var budget=player.getPersistentData();
+        if(budget.getLong("CCECMarketWindow")!=window){budget.putLong("CCECMarketWindow",window);budget.putInt("CCECMarketViews",0);budget.putInt("CCECMarketWrites",0);}
+        String key=payload.action()==EconomyCommandPayload.Action.REQUEST_STATE?"CCECMarketViews":"CCECMarketWrites";
+        int count=budget.getInt(key);if(count>=8)return;budget.putInt(key,count+1);
+        Context context=context(player,payload.pylonPos());
+        if(context==null&&remoteAllowed(payload.action()))context=memberContext(player,payload.pylonPos(),payload.action()==EconomyCommandPayload.Action.REQUEST_STATE);
+        if(context==null)return;
         if(payload.action()== EconomyCommandPayload.Action.REQUEST_STATE){sendState(context);return;}
         if(!context.unlocked&&payload.action()!=EconomyCommandPayload.Action.REGISTER_FREIGHT&&payload.action()!=EconomyCommandPayload.Action.MANAGE_FREIGHT){feedback(player,"locked");return;}
         if(payload.action()==EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES){
             if(context.city.canBuild(player.getUUID())&&payload.targetId()!=null&&payload.secondaryId()!=null){var plan=context.manager.freight().routeOptions(player.serverLevel(),context.city,payload.targetId(),payload.secondaryId());PacketDistributor.sendToPlayer(player,new RailwayRouteOptionsPayload(payload.pylonPos(),payload.secondaryId(),plan.source(),plan.destination(),plan.options(),plan.error()));}sendState(context);return;
+        }
+        if(payload.action()==EconomyCommandPayload.Action.FREIGHT_BUDGET||payload.action()==EconomyCommandPayload.Action.SELECT_FREIGHT_ROUTE){
+            String result="permission";
+            if((payload.action()==EconomyCommandPayload.Action.FREIGHT_BUDGET?context.city.isAdmin(player.getUUID()):context.city.canBuild(player.getUUID()))&&payload.targetId()!=null){
+                if(payload.action()==EconomyCommandPayload.Action.FREIGHT_BUDGET)result=context.manager.freight().carriers.budget(payload.targetId(),context.city.getId(),payload.amount());
+                else result=payload.secondaryId()!=null&&parseUuid(payload.note())!=null&&context.manager.freight().selectDispatch(player.serverLevel(),context.city,payload.targetId(),payload.secondaryId(),parseUuid(payload.note()))?"ok":"route_expired";
+            }
+            FreightNetworkService.result(player,payload.targetId(),result);player.displayClientMessage(Component.translatable("gui.createcityexpansioncore.freight_network.result."+result),false);sendState(context);return;
         }
         if(payload.action()==EconomyCommandPayload.Action.REVOKE_FREIGHT){
             String reason=!context.city.canBuild(player.getUUID())?"freight_revoke_denied"
@@ -43,7 +58,8 @@ public final class EconomyNetworkHandlers {
             if(failure!=null){feedback(player,failure);sendState(context);return;}
         }
         boolean success=switch(payload.action()){
-            case CREATE_FREIGHT_SELL -> context.city.isAdmin(player.getUUID())&&validItem(payload.itemId())&&context.manager.createFreightSale(context.city.getId(),player.getUUID(),payload.itemId(),payload.amount(),payload.value(),payload.deadlineTicks(),payload.title(),payload.description());
+            case PUBLISH_FREIGHT_TRAIN -> context.city.isAdmin(player.getUUID())&&"ok".equals(context.manager.freight().carriers.publish(RailwayManager.get(player.serverLevel()),context.city.getId(),payload.targetId(),payload.typeOrdinal()==1));
+            case CREATE_FREIGHT_SELL -> context.city.isAdmin(player.getUUID())&&validItem(payload.itemId())&&context.manager.createFreightSale(context.city.getId(),player.getUUID(),payload.itemId(),payload.amount(),payload.value(),payload.deadlineTicks(),payload.title(),payload.description(),payload.targetId());
             case ACCEPT_FREIGHT_SELL -> context.city.isAdmin(player.getUUID())&&context.manager.acceptFreightSale(payload.targetId(),context.city.getId(),player.getUUID(),payload.secondaryId(),player.serverLevel().getGameTime());
             case REGISTER_FREIGHT -> {
                 String result=context.manager.freight().register(player.serverLevel(),context.city,player.getUUID(),net.minecraft.core.BlockPos.of(payload.amount()),net.minecraft.core.BlockPos.of(payload.value()),payload.title(),payload.typeOrdinal());
@@ -63,12 +79,15 @@ public final class EconomyNetworkHandlers {
                 yield changed;
             }
             case CONTROL_DISPATCH -> context.city.canBuild(player.getUUID())&&context.manager.freight().control(context.city.getId(),payload.targetId(),payload.secondaryId(),payload.typeOrdinal()==1,player.getServer());
-            case SELECT_FREIGHT_ROUTE -> context.city.canBuild(player.getUUID())&&payload.targetId()!=null&&payload.secondaryId()!=null&&parseUuid(payload.note())!=null&&context.manager.freight().selectDispatch(player.serverLevel(),context.city,payload.targetId(),payload.secondaryId(),parseUuid(payload.note()));
             case SETUP_FREIGHT -> context.city.isAdmin(player.getUUID())&&context.manager.setupFreight(payload.targetId(),context.city.getId(),payload.secondaryId());
 
             case ACCEPT_MARKET_OFFER -> context.city.isAdmin(player.getUUID())&&payload.targetId()!=null
                     &&context.manager.acceptFreightMarketOffer(payload.targetId(),context.city.getId(),player.getUUID(),payload.amount(),context.city.getTradeReputation(),player.serverLevel().getGameTime(),payload.secondaryId());
-            case CREATE_CITY_CONTRACT -> validItem(payload.itemId())&&context.city.isAdmin(player.getUUID())&&context.manager.createCityContract(context.city.getId(),player.getUUID(),payload.title(),payload.description(),payload.itemId(),payload.amount(),payload.value(),payload.targetId(),payload.secondaryId(),payload.deadlineTicks(),player.serverLevel().getGameTime())!=null;
+            case CREATE_CITY_CONTRACT -> {
+                var created=context.manager.createCityContract(context.city.getId(),player.getUUID(),payload.title(),payload.description(),payload.itemId(),payload.amount(),payload.value(),payload.targetId(),payload.secondaryId(),payload.deadlineTicks(),player.serverLevel().getGameTime());
+                if(created!=null&&payload.note().startsWith("project:"))context.manager.linkProject(created.id(),parseUuid(payload.note().substring(8)));
+                yield created!=null;
+            }
             case CREATE_MASTER_SPECIAL -> validItem(payload.itemId())&&context.master&&context.city.isAdmin(player.getUUID())&&context.manager.createMasterSpecial(player.getUUID(),payload.title(),payload.description(),payload.itemId(),payload.amount(),payload.value(),payload.targetId(),payload.secondaryId(),payload.deadlineTicks(),enumAt(EconomyTypes.ContractMode.values(),payload.typeOrdinal(),EconomyTypes.ContractMode.EXCLUSIVE),player.serverLevel().getGameTime())!=null;
             case ACCEPT_CONTRACT -> context.city.canBuild(player.getUUID())&&payload.targetId()!=null&&context.manager.acceptFreightContract(payload.targetId(),context.city.getId(),player.getUUID(),player.serverLevel().getGameTime(),payload.secondaryId());
             case CREATE_SHIPMENT -> context.city.canBuild(player.getUUID())&&payload.targetId()!=null&&payload.secondaryId()!=null&&context.manager.createShipment(payload.targetId(),context.city.getId(),player.getUUID(),payload.secondaryId(),payload.amount(),player.serverLevel().getGameTime(),RailwayManager.get(player.serverLevel()))!=null;
@@ -119,9 +138,26 @@ public final class EconomyNetworkHandlers {
         if(context.unlocked){for(IndustrialContract c:manager.contracts()){City issuer=cities.getCity(c.issuerCityId());City contractor=c.contractorCityId()==null?null:cities.getCity(c.contractorCityId());String acceptedBy=c.acceptedByPlayerId()==null?"":com.example.examplemod.auth.PlayerNames.name(context.player.getServer(), c.acceptedByPlayerId());contracts.add(new EconomyStatePayload.ContractView(c.id(),c.kind(),c.mode(),c.issuerCityId(),issuer==null?"?":issuer.getName(),acceptedBy,contractor==null?"":contractor.getName(),c.title(),c.description(),c.itemId(),c.amount(),c.deliveredAmount(),c.reward(),c.state(),c.contractorCityId(),c.deadlineAt(),manager.freight().destination(c.id())==null?c.destinationRegistrationId():manager.freight().destination(c.id()),context.city.getId().equals(c.contractorCityId())||c.participants().contains(context.city.getId()),context.city.getId().equals(c.issuerCityId())));}contracts.sort(Comparator.comparingLong(EconomyStatePayload.ContractView::deadlineAt).thenComparing(EconomyStatePayload.ContractView::id));for(PrivateListing l:manager.listings()){String name=com.example.examplemod.auth.PlayerNames.name(context.player.getServer(), l.creator());listings.add(new EconomyStatePayload.ListingView(l.id(),l.type(),l.creator(),name,l.counterparty(),l.itemId(),l.amount(),l.price(),l.meetingText(),l.state(),l.creator().equals(context.player.getUUID())||context.player.getUUID().equals(l.counterparty()),l.requestedItemId()));}for(IndustrialShipment value:manager.shipments()){var train=railway.train(value.fleetTrainId());shipments.add(new EconomyStatePayload.ShipmentView(value.shipmentId(),value.contractId(),value.fleetTrainId(),train==null?"?":train.lastKnownName(),value.declaredAmount(),value.verifiedDeliveredAmount(),value.status()));}for(var value:manager.infrastructure()){boolean cityOwned=context.city.getId().equals(value.cityId());boolean personal=value.cityId()==null&&value.registeredBy().equals(context.player.getUUID());if(cityOwned||personal)infrastructure.add(new EconomyStatePayload.InfrastructureView(value.registrationId(),value.type(),value.dimension(),value.pos(),value.available(),cityOwned,value.stationRegistrationId(),value.lastAttributionError()));}if(context.master)manager.warehouseStocks().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry->warehouse.add(new EconomyStatePayload.StockView(entry.getKey(),entry.getValue())));}
         for(MarketOffer offer:manager.marketOffers()){var view=manager.marketReadView(offer,context.city.getTradeReputation());offers.add(new EconomyStatePayload.OfferView(offer.id(),offer.itemId(),offer.direction(),offer.quantity(),offer.remaining(),offer.unitPrice(),offer.bond(),offer.expiresAt(),offer.status(),context.city.getId().equals(offer.acceptedCity()),view.category(),view.referenceValue(),view.available(),view.target(),view.acceptLimit(),view.bondBps()));}
         int obligations=(int)offers.stream().filter(v->v.mine()&&!v.status().terminal()).count();
-        PacketDistributor.sendToPlayer(context.player,new EconomyStatePayload(context.city.getPylonPos(),context.city.getId(),context.unlocked,context.master,manager.wallet(context.player.getUUID()),manager.treasury(context.city.getId()),manager.treasuryEscrow(context.city.getId()),manager.procurementAvailable(),manager.procurementReserved(),Config.ECONOMY_PROCUREMENT_CAP.get(),Config.ECONOMY_PRIVATE_FEE_BPS.get(),Config.ECONOMY_CITY_FEE_BPS.get(),context.city.getTradeReputation(),obligations,offers,contracts,listings,shipments,infrastructure,warehouse,manager.freight().snapshot(context.player.serverLevel(),context.city)));
+        var logistics=manager.freight().snapshot(context.player.serverLevel(),context.city);
+        logistics.putBoolean("CanManageNodes",context.city.isAdmin(context.player.getUUID())&&context.player.containerMenu instanceof CityPylonMenu local&&local.getPylonPos().equals(context.city.getPylonPos())&&context.player.distanceToSqr(context.city.getPylonPos().getCenter())<=64);
+        FreightNetworkService.appendResult(context.player,logistics);
+        logistics.putBoolean("CanDispatch",context.city.canBuild(context.player.getUUID()));
+        logistics.putBoolean("CanCreateOrder",context.city.isAdmin(context.player.getUUID()));logistics.putBoolean("CanFulfillOrder",context.city.canBuild(context.player.getUUID()));
+        var facts=new net.minecraft.nbt.CompoundTag();for(var c:manager.contracts()){var f=new net.minecraft.nbt.CompoundTag();f.putLong("Reserved",c.escrow());f.putLong("ClosurePaid",manager.closedContractPayout(c.id()));f.putString("Author",com.example.examplemod.auth.PlayerNames.name(context.player.getServer(),c.createdBy()));f.putUUID("AuthorId",c.createdBy());if(manager.contractProjects().containsKey(c.id()))f.putUUID("Project",manager.contractProjects().get(c.id()));facts.put(c.id().toString(),f);}logistics.put("ContractFacts",facts);
+        var links=new net.minecraft.nbt.ListTag();manager.contractProjects().forEach((contract,project)->{var t=new net.minecraft.nbt.CompoundTag();t.putUUID("Contract",contract);t.putUUID("Project",project);links.add(t);});logistics.put("ProjectOrders",links);
+        PacketDistributor.sendToPlayer(context.player,new EconomyStatePayload(context.city.getPylonPos(),context.city.getId(),context.unlocked,context.master,manager.wallet(context.player.getUUID()),manager.treasury(context.city.getId()),manager.treasuryEscrow(context.city.getId()),manager.procurementAvailable(),manager.procurementReserved(),Config.ECONOMY_PROCUREMENT_CAP.get(),Config.ECONOMY_PRIVATE_FEE_BPS.get(),Config.ECONOMY_CITY_FEE_BPS.get(),context.city.getTradeReputation(),obligations,offers,contracts,listings,shipments,infrastructure,warehouse,logistics));
     }
 
+    public static boolean remoteAllowed(EconomyCommandPayload.Action action){
+        return switch(action){case BIND_INFRASTRUCTURE,BIND_INTAKE_STATION,REGISTER_FREIGHT,MANAGE_FREIGHT,CREATE_SHIPMENT,CREATE_MASTER_SPECIAL->false;default->true;};
+    }
+    public static Context memberContext(ServerPlayer player,net.minecraft.core.BlockPos anchor,boolean discovery){
+        if(player instanceof net.neoforged.neoforge.common.util.FakePlayer)return null;
+        var cities=CityManager.get(player.getServer().overworld());var city=cities.getMemberCity(player.getUUID());
+        if(city==null||!discovery&&!city.getPylonPos().equals(anchor))return null;
+        var manager=EconomyManager.get(player.getServer().overworld());boolean master=city.getId().equals(manager.masterCityId());
+        return new Context(player,city,cities,manager,city.getLevel()>=2||master,master);
+    }
     private static Context context(ServerPlayer player,net.minecraft.core.BlockPos pos){return context(player,pos,true);}
     /** {@code strict} additionally enforces reach and block checks; a push only needs the open menu. */
     private static Context context(ServerPlayer player,net.minecraft.core.BlockPos pos,boolean strict){
@@ -143,7 +179,7 @@ public final class EconomyNetworkHandlers {
      * snapshots against.
      *
      * <p>Only {@link EconomyNetworkHandlers#sendState} is reachable from here, so
-     * this path cannot authorise a transaction — contract, listing or shipment
+     * this path cannot authorise a transaction â€” contract, listing or shipment
      * actions stay behind the container check in {@link #context}.
      */
     public static boolean sendMemberView(ServerPlayer player) {
@@ -162,6 +198,10 @@ public final class EconomyNetworkHandlers {
 
     private static void feedback(ServerPlayer player,String key){player.displayClientMessage(Component.translatable("message.createcityexpansioncore.economy."+key),true);}
     private static String contractCreationFailure(Context context,EconomyCommandPayload payload,ServerPlayer player,boolean masterContract){
+        if(payload.note().startsWith("project:")){
+            UUID id=parseUuid(payload.note().substring(8));var project=context.manager.projects().all().stream().filter(p->p.id().equals(id)).findFirst().orElse(null);
+            if(project==null||!java.util.Objects.equals(project.city(),context.city.getId())||project.status().terminal()||project.status()==com.example.examplemod.projects.Project.Status.DRAFT)return "contract_permission_denied";
+        }
         if(!validItem(payload.itemId()))return "contract_invalid_item";
         if(!context.city.isAdmin(player.getUUID()))return "contract_permission_denied";
         if(masterContract&&!context.master)return "contract_master_only";

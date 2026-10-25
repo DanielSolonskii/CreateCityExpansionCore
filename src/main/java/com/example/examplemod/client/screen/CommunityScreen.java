@@ -17,7 +17,7 @@ public final class CommunityScreen extends Screen {
     private Runnable membershipAction;private Component membershipQuestion;
     private CommunityRequestPayload.Action lastAction=CommunityRequestPayload.Action.VIEW;
     private CommunityScreen(Screen parent){super(tr("title"));this.parent=parent;}
-    public static void open(Screen parent){SocialHubScreen.show(parent,new CommunityScreen(parent),SocialHubScreen.Section.HOME);}
+    public static void open(Screen parent){CommunityDashboard.open(parent);}
     public static void openOwnCity(Screen parent){var v=new CommunityScreen(parent);v.section=3;v.ownCityOnReply=true;v.ownCityMode=true;SocialHubScreen.show(parent,v,SocialHubScreen.Section.CITY);}
     public static void openRelations(Screen parent){var v=new CommunityScreen(parent);v.section=3;v.ownCityOnReply=true;v.ownCityMode=true;v.relationsMode=true;SocialHubScreen.show(parent,v,SocialHubScreen.Section.CITY);}
     public static void openCity(Screen parent,UUID id){var v=new CommunityScreen(parent);v.section=3;v.city=id;SocialHubScreen.show(parent,v,SocialHubScreen.Section.CITY);}

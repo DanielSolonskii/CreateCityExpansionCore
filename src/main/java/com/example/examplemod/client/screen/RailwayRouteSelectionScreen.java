@@ -1,6 +1,5 @@
 package com.example.examplemod.client.screen;
-import com.example.examplemod.network.RailwayCommandPayload;
-import com.example.examplemod.network.RailwayRouteOptionsPayload;
+import com.example.examplemod.network.*;
 import com.example.examplemod.railway.RailwayRouteOption;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -8,15 +7,33 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
 import java.util.function.Consumer;
+import static com.example.examplemod.client.screen.WorldMapChrome.*;
 public final class RailwayRouteSelectionScreen extends CityPylonPageScreen{
  private final Screen parent;private final RailwayRouteOptionsPayload payload;private final Consumer<RailwayRouteOption> selector;
+ private FreightRouteLayout layout;private int selected=-1,scroll;private LogisticsStyle.Action confirm;
  public RailwayRouteSelectionScreen(Screen parent,RailwayRouteOptionsPayload payload){this(parent,payload,null);}
  public RailwayRouteSelectionScreen(Screen parent,RailwayRouteOptionsPayload payload,Consumer<RailwayRouteOption> selector){super(Component.translatable("gui.createcityexpansioncore.railway.routes.title"));this.parent=parent;this.payload=payload;this.selector=selector;}
+ @Override protected void init(){layout=FreightRouteLayout.of(width,height);var a=layout.back();addRenderableWidget(new LogisticsStyle.Action(a.x(),a.y(),a.width(),LogisticsScreen.tr("back"),false,this::onClose));a=layout.confirm();confirm=addRenderableWidget(new LogisticsStyle.Action(a.x(),a.y(),a.width(),LogisticsScreen.tr("confirm_train_route"),true,this::choose));confirm.active=selected>=0;}
+ private void choose(){if(selected<0||selected>=payload.options().size())return;var o=payload.options().get(selected);if(selector==null)PacketDistributor.sendToServer(RailwayCommandPayload.simple(payload.pylonPos(),RailwayCommandPayload.Action.SELECT_ROUTE,payload.fleetTrainId(),o.id()));else selector.accept(o);onClose();}
  @Override public void onClose(){if(minecraft!=null)minecraft.setScreen(parent);}
- @Override public void render(GuiGraphics g,int mx,int my,float partial){renderBackground(g,mx,my,partial);int w=Math.min(390,width-16),h=Math.min(250,height-16),left=(width-w)/2,top=(height-h)/2;g.fill(left,top,left+w,top+h,0xF0181D20);g.renderOutline(left,top,w,h,0xFFB47A32);g.drawString(font,title,left+14,top+12,0xFFFFD28A,false);g.drawString(font,payload.source()+"  →  "+payload.destination(),left+14,top+29,0xFFC8D0D3,false);String error=!payload.errorKey().isEmpty()?payload.errorKey():payload.options().isEmpty()?"no_route_options":"";if(!error.isEmpty()){Component message=Component.translatable("gui.createcityexpansioncore.railway.routes."+error);g.drawWordWrap(font,message,left+24,top+92,w-48,0xFFE07870);g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.railway.routes.return_hint"),left+w/2,top+h-30,0xFFB9C2C5);}else for(int i=0;i<payload.options().size();i++)renderCard(g,payload.options().get(i),left+14+i*124,top+50,116,mx,my);super.render(g,mx,my,partial);}
- private void renderCard(GuiGraphics g,RailwayRouteOption o,int x,int y,int w,int mx,int my){boolean hover=mx>=x&&mx<x+w&&my>=y&&my<y+180;g.fill(x,y,x+w,y+180,hover?0xFF303A3E:0xFF252C2F);g.renderOutline(x,y,w,180,hover?0xFFFFB957:0xFF566267);g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.railway.routes."+o.strategy().name().toLowerCase()),x+w/2,y+9,0xFFFFD28A);drawMap(g,o,x+8,y+28,w-16,62);g.drawString(font,Component.translatable("gui.createcityexpansioncore.railway.routes.distance",String.format(Locale.ROOT,"%.0f",o.distance())),x+8,y+99,0xFFD1D8DA,false);g.drawString(font,Component.translatable("gui.createcityexpansioncore.railway.routes.price",o.tariffCost()),x+8,y+115,0xFF77B992,false);g.drawString(font,Component.translatable("gui.createcityexpansioncore.railway.routes.eta",formatTicks(o.estimatedTicks())),x+8,y+131,0xFF9EC7DF,false);g.fill(x+8,y+151,x+w-8,y+172,hover?0xFF8C5A20:0xFF3D474B);g.drawCenteredString(font,Component.translatable("gui.createcityexpansioncore.railway.routes.select"),x+w/2,y+157,0xFFFFFFFF);}
+ @Override public void render(GuiGraphics g,int mx,int my,float pt){
+  rounded(g,layout.x(),layout.y(),layout.width(),layout.height(),4,LogisticsStyle.PANEL);g.drawString(font,fit(font,title,layout.width()-20),layout.x()+10,layout.y()+6,ACCENT,false);
+  g.drawString(font,fit(font,Component.literal(payload.source()+" → "+payload.destination()),layout.width()-20),layout.x()+10,layout.y()+21,MUTED,false);
+  var v=layout.viewport();CityPylonWorkspace.clip(g,v.x(),v.y(),v.x()+v.width(),v.y()+v.height());
+  String error=!payload.errorKey().isEmpty()?payload.errorKey():payload.options().isEmpty()?"no_route_options":"";
+  if(!error.isEmpty())g.drawWordWrap(font,Component.translatable("gui.createcityexpansioncore.railway.routes."+error),v.x()+5,v.y()+4,v.width()-10,0xffee9a86);
+  else for(int i=0;i<payload.options().size();i++){
+   var r=layout.row(i,scroll);var o=payload.options().get(i);boolean hover=r.contains(mx,my)&&v.contains(mx,my);rounded(g,r.x(),r.y(),r.width(),r.height(),3,selected==i?0xff383123:hover?0xff2a363b:INSET);
+   g.fill(r.x()+1,r.y()+5,r.x()+3,r.y()+r.height()-5,selected==i?ACCENT:EDGE);
+   var name=Component.translatable("gui.createcityexpansioncore.railway.routes."+o.strategy().name().toLowerCase(Locale.ROOT));g.drawString(font,fit(font,name,r.width()-14),r.x()+8,r.y()+6,ACCENT,false);
+   var price=Component.translatable("gui.createcityexpansioncore.railway.routes.price",o.tariffCost());var eta=Component.translatable("gui.createcityexpansioncore.railway.routes.eta",formatTicks(o.estimatedTicks()));
+   g.drawString(font,fit(font,price,r.width()-14),r.x()+8,r.y()+21,TEXT,false);g.drawString(font,fit(font,eta,r.width()-14),r.x()+8,r.y()+36,MUTED,false);
+   if(r.width()>350)drawMap(g,o,r.x()+r.width()-135,r.y()+8,124,36);
+  }g.disableScissor();super.render(g,mx,my,pt);
+ }
+ @Override public boolean mouseClicked(double x,double y,int b){if(super.mouseClicked(x,y,b))return true;if(b==0&&layout.viewport().contains(x,y))for(int i=0;i<payload.options().size();i++)if(layout.row(i,scroll).contains(x,y)){selected=i;confirm.active=true;return true;}return false;}
+ @Override public boolean mouseScrolled(double x,double y,double dx,double dy){if(!layout.viewport().contains(x,y))return false;scroll=layout.clamp(scroll+(dy<0?24:-24),payload.options().size());return true;}
  private void drawMap(GuiGraphics g,RailwayRouteOption o,int x,int y,int w,int h){if(o.edges().isEmpty())return;double minX=Double.MAX_VALUE,maxX=-Double.MAX_VALUE,minZ=Double.MAX_VALUE,maxZ=-Double.MAX_VALUE;for(var e:o.edges())for(var n:List.of(e.first(),e.second())){minX=Math.min(minX,n.x());maxX=Math.max(maxX,n.x());minZ=Math.min(minZ,n.z());maxZ=Math.max(maxZ,n.z());}double dx=Math.max(1,maxX-minX),dz=Math.max(1,maxZ-minZ);for(var e:o.edges()){int x1=x+(int)((e.first().x()-minX)/dx*w),z1=y+(int)((e.first().z()-minZ)/dz*h),x2=x+(int)((e.second().x()-minX)/dx*w),z2=y+(int)((e.second().z()-minZ)/dz*h);line(g,x1,z1,x2,z2,0xFF65B9C8);}}
  private static void line(GuiGraphics g,int x1,int y1,int x2,int y2,int color){int dx=Math.abs(x2-x1),sx=x1<x2?1:-1,dy=-Math.abs(y2-y1),sy=y1<y2?1:-1,err=dx+dy;while(true){g.fill(x1,y1,x1+1,y1+1,color);if(x1==x2&&y1==y2)break;int e=2*err;if(e>=dy){err+=dy;x1+=sx;}if(e<=dx){err+=dx;y1+=sy;}}}
  private static String formatTicks(long ticks){long seconds=ticks/20;return seconds<60?seconds+"s":(seconds/60)+"m "+(seconds%60)+"s";}
- @Override public boolean mouseClicked(double mx,double my,int button){int left=(width-390)/2,top=(height-250)/2;for(int i=0;i<payload.options().size();i++){int x=left+14+i*124,y=top+50;if(mx>=x&&mx<x+116&&my>=y&&my<y+180){RailwayRouteOption option=payload.options().get(i);if(selector==null)PacketDistributor.sendToServer(RailwayCommandPayload.simple(payload.pylonPos(),RailwayCommandPayload.Action.SELECT_ROUTE,payload.fleetTrainId(),option.id()));else selector.accept(option);onClose();return true;}}return super.mouseClicked(mx,my,button);}
 }

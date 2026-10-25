@@ -35,6 +35,22 @@ api.recreated.ru {
 		path_regexp deviceAction ^/api/auth/devices/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/(authenticate|revoke)$
 	}
 	# Local 4B template: public capabilities only. Never expose /api/internal/game/*.
+	# Owner-only profile: LauncherProfileController calls DeviceService.authenticate
+	# (credential hash + TRUSTED + expiry + ACTIVE linked owner). No Mini App proof.
+	@launcherTelemetry {
+		method POST
+		path_regexp launcherTelemetry ^/api/auth/devices/[0-9a-fA-F-]{36}/telemetry$
+	}
+	handle @launcherTelemetry {
+		reverse_proxy 127.0.0.1:8080
+	}
+	@launcherProfile {
+		method GET
+		path_regexp launcherProfile ^/api/auth/devices/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/profile$
+	}
+	handle @launcherProfile {
+		reverse_proxy 127.0.0.1:8080
+	}
 	@gameCapability {
 		method POST
 		path_regexp gameCapability ^/api/auth/devices/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/game-session-capability$
@@ -67,7 +83,7 @@ api.recreated.ru {
 	}
 	@read {
 		method GET
-		path /api/health /api/version
+		path /api/health /api/version /api/launcher/server-status
 	}
 	@credentials {
 		method POST

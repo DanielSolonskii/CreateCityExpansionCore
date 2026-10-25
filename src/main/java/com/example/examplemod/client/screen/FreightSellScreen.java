@@ -12,13 +12,15 @@ import static com.example.examplemod.client.screen.LogisticsStyle.*;
 
 /** City sales retain explicit selection and confirmation; only presentation is client-owned. */
 public final class FreightSellScreen extends CityPylonPageScreen {
-    private final CityPylonScreen pylon;
+    private final Screen parent;
+    private final com.example.examplemod.client.WorldMapDataSource source;
     private UUID selected,destination;
     private int scroll,ticks,submittedAt;
     private boolean submitted;
     private Button confirm,point,create;
-    public FreightSellScreen(CityPylonScreen pylon){super(FreightUi.tr("city_sales"));this.pylon=pylon;}
-    private EconomyStatePayload state(){return pylon.getMenu().getEconomyState();}
+    public FreightSellScreen(CityPylonScreen pylon){this(pylon,pylon.getMenu());}
+    public FreightSellScreen(Screen parent,com.example.examplemod.client.WorldMapDataSource source){super(FreightUi.tr("city_sales"));this.parent=parent;this.source=source;}
+    private EconomyStatePayload state(){return source.getEconomyState();}
     private ListTag sales(){return state()==null?new ListTag():state().logistics().getList("Sales",Tag.TAG_COMPOUND);}
     private CompoundTag selection(){
         for(Tag raw:sales())if(((CompoundTag)raw).getUUID("Id").equals(selected))return (CompoundTag)raw;
@@ -29,7 +31,7 @@ public final class FreightSellScreen extends CityPylonPageScreen {
         clearWidgets();int bw=(width-48)/2;
         addRenderableWidget(new Action(20,height-28,bw,FreightUi.tr("back"),false,this::onClose));
         create=addRenderableWidget(new Action(28+bw,height-28,bw,FreightUi.tr("create_sale"),false,
-                ()->minecraft.setScreen(new EconomyCreateScreen(this,EconomyCreateScreen.Mode.CITY_SELL,pylon.getMenu().getPylonPos(),state()))));
+                ()->minecraft.setScreen(new EconomyCreateScreen(this,EconomyCreateScreen.Mode.CITY_SELL,source.getPylonPos(),state()))));
         point=addRenderableWidget(new Action(20,height-84,width-40,FreightUi.tr("choose_receive"),false,()->{
             var choices=FreightUi.choices(state(),true);
             if(choices.isEmpty())return;
@@ -39,20 +41,20 @@ public final class FreightSellScreen extends CityPylonPageScreen {
         confirm=addRenderableWidget(new Action(20,height-56,width-40,FreightUi.tr("confirm"),true,()->{
             if(selected==null||destination==null)return;
             submitted=true;submittedAt=ticks;
-            PacketDistributor.sendToServer(new EconomyCommandPayload(pylon.getMenu().getPylonPos(),
+            PacketDistributor.sendToServer(new EconomyCommandPayload(source.getPylonPos(),
                     EconomyCommandPayload.Action.ACCEPT_FREIGHT_SELL,selected,destination,null,null,0,0,0,0,"","",""));
         }));
         confirm.active=false;create.active=state()!=null;
     }
     @Override public void tick(){
-        if(++ticks%20==0)PacketDistributor.sendToServer(EconomyCommandPayload.simple(pylon.getMenu().getPylonPos(),EconomyCommandPayload.Action.REQUEST_STATE,null));
+        if(++ticks%20==0)PacketDistributor.sendToServer(EconomyCommandPayload.simple(source.getPylonPos(),EconomyCommandPayload.Action.REQUEST_STATE,null));
         if(submitted&&selected!=null&&state()!=null&&selection()==null){
-            minecraft.setScreen(new LogisticsScreen(pylon));return;
+            for(Tag raw:state().logistics().getList("SaleDeliveries",10)){var t=(CompoundTag)raw;if(t.getUUID("Sale").equals(selected)){minecraft.setScreen(new LogisticsScreen(parent,source,t.getUUID("Subject")));return;}}
         }
         if(submitted&&ticks-submittedAt>=100)submitted=false;
     }
     @Override public boolean isPauseScreen(){return false;}
-    @Override public void onClose(){minecraft.setScreen(new MarketScreen(pylon));}
+    @Override public void onClose(){minecraft.setScreen(parent);}
     @Override public void render(GuiGraphics g,int mx,int my,float pt){
         g.fill(0,0,width,height,BG);g.fill(0,0,width,34,0xFF192A32);
         g.drawCenteredString(font,title,width/2,12,GOLD);
@@ -69,7 +71,7 @@ public final class FreightSellScreen extends CityPylonPageScreen {
             if(g!=null)g.renderItem(item(s.getString("Item")),28,y+8);
             text(g,font,FreightUi.tr("cargo",s.getLong("Amount"),item(s.getString("Item")).getHoverName()),52,y+9,width-80,TEXT);
             text(g,font,Component.literal(s.getString("CityName")).append(" · "+s.getLong("Reward")+" CR"),28,y+27,width-56,GOLD);
-            text(g,font,FreightUi.tr("deadline",s.getLong("Deadline")==0?"∞":Long.toString(s.getLong("Deadline")/1200)),28,y+43,width-56,MUTED);
+            text(g,font,LogisticsScreen.tr("goods_fee",com.example.examplemod.economy.EconomyMath.applyBasisPoints(s.getLong("Reward"),state().cityFeeBasisPoints())),28,y+43,width-56,MUTED);
         }
         g.disableScissor();
         var choices=FreightUi.choices(state(),true);
@@ -80,7 +82,7 @@ public final class FreightSellScreen extends CityPylonPageScreen {
         CompoundTag s=selection();
         confirm.active=!submitted&&s!=null&&state()!=null&&!s.getUUID("City").equals(state().cityId())&&receiver!=null;
         confirm.setMessage(submitted?FreightUi.tr("loading"):s==null?tr("select_sale"):
-                FreightUi.tr("confirm").copy().append(" · "+s.getLong("Reward")+" CR"));
+                LogisticsScreen.tr("goods_total",Math.addExact(s.getLong("Reward"),com.example.examplemod.economy.EconomyMath.applyBasisPoints(s.getLong("Reward"),state().cityFeeBasisPoints()))));
         if(list.size()>rows())text(g,font,tr("list_count",scroll+1,Math.min(list.size(),scroll+rows()),list.size()),20,height-99,width-40,MUTED);
         super.render(g,mx,my,pt);
     }

@@ -43,6 +43,9 @@ public final class CityWorldMapSession implements WorldMapDataSource {
     /** Единственный источник: экран и обработчики пакетов должны видеть одни данные. */
     public static final CityWorldMapSession INSTANCE = new CityWorldMapSession();
 
+    private com.example.examplemod.network.RailwayRouteOptionsPayload tradeRoutes;
+    public void acceptRouteOptions(com.example.examplemod.network.RailwayRouteOptionsPayload p){if(p.pylonPos().equals(getPylonPos()))tradeRoutes=p;}
+    @Override public com.example.examplemod.network.RailwayRouteOptionsPayload drainRouteOptions(){var p=tradeRoutes;tradeRoutes=null;return p;}
     private BlockPos pylonPos;
     private ResourceLocation dimensionId;
     /** Сессия ждёт первый пакет, чтобы узнать пилон города. */
@@ -83,7 +86,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
         this.trainCandidates.clear();
         this.ownership.clear();
         this.railwayMap = null;
-        this.economyState = null;
+        this.economyState = null;this.tradeRoutes=null;
         this.relationsState = null;
     }
 
@@ -103,7 +106,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
         this.trainCandidates.clear();
         this.ownership.clear();
         this.railwayMap = null;
-        this.economyState = null;
+        this.economyState = null;this.tradeRoutes=null;
         this.relationsState = null;
     }
 

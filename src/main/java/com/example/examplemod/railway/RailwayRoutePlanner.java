@@ -28,6 +28,21 @@ public final class RailwayRoutePlanner {
         if(train.graph==null||destination==null)return List.of();Set<TrackMaterial.TrackType> valid=validTypes(train);if(valid.isEmpty())return List.of();
         List<Candidate> candidates=new ArrayList<>();if(train.hasForwardConductor()||train.runtime.paused)enumerate(train,destination,manager,payerType,payerId,cities,false,valid,candidates);
         if((train.doubleEnded&&train.hasBackwardConductor())||train.runtime.paused)enumerate(train,destination,manager,payerType,payerId,cities,true,valid,candidates);
+        return options(train,destination,manager,payerType,payerId,candidates);
+    }
+    /** Preview from a station without moving a real train or altering its schedule. */
+    public static List<RailwayRouteOption> planFromStation(Train train,GlobalStation source,GlobalStation destination,RailwayManager manager,RailwayOwnershipTypes.OwnerType type,UUID payer,CityManager cities){
+        if(train.graph==null||source==null||destination==null)return List.of();
+        var valid=validTypes(train);var candidates=new ArrayList<Candidate>();
+        for(boolean reverse:new boolean[]{false,true}){
+            TrackNode first=train.graph.locateNode(source.edgeLocation.get(reverse?false:true)),second=train.graph.locateNode(source.edgeLocation.get(reverse?true:false));
+            if(first==null||second==null)continue;var edge=train.graph.getConnectionsFrom(first).get(second);if(edge==null||blocked(edge,manager,type,payer,cities))continue;
+            var nodes=new ArrayList<Couple<TrackNode>>();nodes.add(Couple.create(first,second));var edges=new ArrayList<RailwayEdgeReference>();edges.add(ref(first,second));
+            walk(train,destination,manager,type,payer,cities,valid,first,second,edge,edge.getLength()-source.getLocationOn(edge),nodes,edges,new HashSet<>(edges),candidates,new int[]{0},reverse);
+        }
+        return options(train,destination,manager,type,payer,candidates);
+    }
+    private static List<RailwayRouteOption> options(Train train,GlobalStation destination,RailwayManager manager,RailwayOwnershipTypes.OwnerType payerType,UUID payerId,List<Candidate> candidates){
         Map<String,RailwayRouteOption> unique=new LinkedHashMap<>();double speed=Math.max(1d/16d,train.maxSpeed());
         for(Candidate c:candidates){List<RailwayTariffLeg> legs=RailwayTripAccountingService.snapshotLegs(manager.ownedSections(),manager.ownedNetworks(),c.edges,c.distance,payerType,payerId);long tariff=legs.stream().map(RailwayTariffLeg::reservedAmount).reduce(0L,Math::addExact);long eta=Math.max(1,Math.round(c.distance/speed));long fingerprint=fingerprint(c.edges,train.graph);
             RailwayRouteOption raw=new RailwayRouteOption(UUID.randomUUID(),RailwayRouteStrategy.FASTEST,train.graph.id,destination.id,c.backwards,c.edges,c.distance,tariff,eta,legs,fingerprint);unique.putIfAbsent(raw.pathKey(),raw);}

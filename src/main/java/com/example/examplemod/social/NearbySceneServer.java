@@ -29,6 +29,7 @@ public final class NearbySceneServer {
         var server=event.getServer();long now=net.minecraft.Util.getMillis();if(now<NEXT.getOrDefault(server,0L))return;NEXT.put(server,now+1000);
         var polls=POLLS.computeIfAbsent(server,s->new HashMap<>());polls.keySet().removeIf(id->server.getPlayerList().getPlayer(id)==null);
         var social=SocialSavedData.get(server);var cities=CityManager.get(server.overworld());var projects=EconomyManager.get(server.overworld()).projects();
+        for(var p:server.getPlayerList().getPlayers())social.migrateNearby(p.getUUID(),p.getPersistentData().getLong("CCECNearbyPreference")>0);
         for(var viewer:server.getPlayerList().getPlayers()){
             if(viewer instanceof FakePlayer)continue;var dim=viewer.serverLevel().dimension().location();
             var friends=new ArrayList<NearbyScenePayload.Friend>();
@@ -45,11 +46,17 @@ public final class NearbySceneServer {
                 ||Math.hypot(viewer.getX()-cache.x,viewer.getZ()-cache.z)>16;
             List<NearbyScenePayload.Site> sites=List.of();
             if(refresh){polls.put(viewer.getUUID(),new ProjectPoll(viewer,identity,viewer.getX(),viewer.getZ(),now+5000));
-            sites=projects.visible(actor,0).stream().filter(p->p.zone().dimension().equals(dim)&&NearbyScenePolicy.project(p.zone(),viewer.getX(),viewer.getZ()))
-                .sorted(Comparator.comparingDouble((Project p)->p.zone().distance(viewer.getX(),viewer.getZ())).thenComparing(Project::id)).limit(NearbyScenePayload.MAX_PROJECTS)
-                .map(p->new NearbyScenePayload.Site(p.id(),p.title(),p.scope(),p.status(),p.zone())).toList();}
+            var allowed=new HashSet<UUID>();for(var p:projects.visible(actor,0))allowed.add(p.id());
+            sites=projects.all().stream().filter(p->p.zone().dimension().equals(dim)&&p.status()!=Project.Status.CANCELLED&&p.status()!=Project.Status.DRAFT
+                &&(allowed.contains(p.id())&&NearbyScenePolicy.project(p.zone(),viewer.getX(),viewer.getZ())||friendProject(social,viewer.getUUID(),p)))
+                .sorted(Comparator.comparing((Project p)->p.status().terminal()).thenComparingDouble(p->p.zone().distance(viewer.getX(),viewer.getZ())).thenComparing(Project::id)).limit(NearbyScenePayload.MAX_PROJECTS)
+                .map(p->new NearbyScenePayload.Site(p.id(),p.title(),p.scope(),p.status(),p.zone(),p.author(),com.example.examplemod.auth.PlayerNames.name(server,p.author()),p.executor()==null?null:p.executor().representative(),p.executor()==null?"":com.example.examplemod.auth.PlayerNames.name(server,p.executor().representative()),(int)p.stages().stream().filter(Project.Stage::done).count(),p.stages().size(),friendProject(social,viewer.getUUID(),p))).toList();}
             PacketDistributor.sendToPlayer(viewer,new NearbyScenePayload(dim,social.sharesNearby(viewer.getUUID()),friends,refresh,sites));
         }
+    }
+    public static boolean friendProject(SocialSavedData social,UUID viewer,Project project){
+        return project.status()!=Project.Status.DRAFT&&project.status()!=Project.Status.PENDING_FUNDING&&project.status()!=Project.Status.CANCELLED&&(social.book.relation(viewer,project.author())==SocialBook.Relation.FRIEND
+            ||project.executor()!=null&&social.book.relation(viewer,project.executor().representative())==SocialBook.Relation.FRIEND);
     }
     @SubscribeEvent public static void stopped(ServerStoppedEvent event){NEXT.remove(event.getServer());POLLS.remove(event.getServer());}
 }

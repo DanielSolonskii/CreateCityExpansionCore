@@ -1,10 +1,44 @@
+import { invoke } from "@tauri-apps/api/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountApi, AccountError, createTransport, validateEndpoint, validateDeepLink, type Registration } from "./accountApi";
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 const id = "12345678-1234-1234-1234-123456789abc";
 const alphaKey = "k".repeat(43);
 const registration: Registration = { registrationId: id, pollingToken: "p".repeat(43), telegramDeepLink: `https://t.me/recreating_bot?start=${"v".repeat(43)}`, expiresAt: "2099-01-01T00:00:00Z", verificationCode: "ABCDE-FGHJK" };
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); Reflect.deleteProperty(window, "__TAURI_INTERNALS__"); });
 describe("account contract", () => {
+  it("registers and polls in Windows with no frontend endpoint configured", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    const native = vi.mocked(invoke);
+    native.mockResolvedValueOnce({ status: 201, body: registration })
+      .mockResolvedValueOnce({ status: 200, body: { state: "PENDING", expiresAt: registration.expiresAt } });
+    const api = new AccountApi(createTransport(""));
+    const created = await api.register("Second_Player", "test-password-123", alphaKey);
+    expect(created).toEqual(registration);
+    await expect(api.status(created)).resolves.toMatchObject({ state: "PENDING" });
+    expect(native).toHaveBeenNthCalledWith(1, "account_request", { request: {
+      operation: "register", body: { username: "Second_Player", password: "test-password-123", alphaKey }
+    } });
+    expect(native).toHaveBeenNthCalledWith(2, "account_request", { request: {
+      operation: "status", registrationId: id, pollingToken: registration.pollingToken
+    } });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("keeps native transport failures sanitized and never falls back to browser fetch", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(invoke).mockRejectedValueOnce(new Error("password=private"));
+    await expect(createTransport("")({ operation: "status", registrationId: id, pollingToken: registration.pollingToken }))
+      .rejects.toMatchObject({ code: "NETWORK_ERROR" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("still rejects an unconfigured browser endpoint before sending credentials", async () => {
+    const fetchMock = vi.fn(); vi.stubGlobal("fetch", fetchMock);
+    await expect(createTransport("")({ operation: "login", body: { username: "name", password: "private" } }))
+      .rejects.toMatchObject({ code: "NOT_CONFIGURED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("restarts with polling credential, validates rotated response and never sends password/alpha key", async () => {
     const next = { ...registration, pollingToken: "q".repeat(43), verificationCode: "23456-789AB" };
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(next), { status: 200 }));

@@ -11,7 +11,7 @@ it("loads native settings, saves real launch options and opens the actual folder
   fireEvent.change(screen.getByLabelText("Память для игры"),{target:{value:"8"}});
   fireEvent.change(screen.getByLabelText("Разрешение"),{target:{value:"1920x1080"}});
   fireEvent.click(screen.getByText("Сохранить настройки"));
-  await waitFor(()=>expect(api.save).toHaveBeenCalledWith({memoryGb:8,width:1920,height:1080,hideAfterLaunch:true}));
+  await waitFor(()=>expect(api.save).toHaveBeenCalledWith({memoryGb:8,width:1920,height:1080,hideAfterLaunch:true,autoStart:true,diagnosticsEnabled:true}));
   fireEvent.click(screen.getByText("Папка игры"));expect(api.openFolder).toHaveBeenCalledOnce();
 });
 it("does not claim saved settings when native storage fails",async()=>{
