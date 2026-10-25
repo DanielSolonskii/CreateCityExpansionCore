@@ -105,7 +105,6 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(BuildGuideKeyMappings::register);
         modEventBus.addListener(CityWorldMapKey::register);
         modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
-        modEventBus.addListener(com.example.examplemod.client.KnowledgeBaseKey::register);
         modEventBus.addListener(ModFluidClientExtensions::register);
 
 
@@ -122,7 +121,6 @@ public class CreateCityExpansionCoreClient {
         );
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.PlayerProfileKey.class);
-        NeoForge.EVENT_BUS.register(com.example.examplemod.client.KnowledgeBaseKey.class);
         NeoForge.EVENT_BUS.register(CokeBatteryGuideRenderer.class);
         NeoForge.EVENT_BUS.register(BlastFurnaceGuideRenderer.class);
         NeoForge.EVENT_BUS.register(SteelConverterGuideRenderer.class);
