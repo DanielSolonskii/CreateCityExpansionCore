@@ -39,9 +39,33 @@ public final class UiEditEvents {
         if (!UiEditKey.consumeToggle()) {
             return;
         }
+        toggleEditor(Minecraft.getInstance().screen);
+    }
+
+    /**
+     * Общий путь переключения F7.
+     *
+     * <p><b>Почему он вызывается из двух мест.</b> Ваниль записывает нажатия
+     * биндов ({@code KeyMapping.click}) только когда экрана нет — так устроен
+     * {@code KeyboardHandler}: {@code if (screen == null) KeyMapping.click(...)}.
+     * То есть с открытым экраном F7 через KeyMapping молчит в принципе.
+     * Поэтому, пока экран открыт, F7 перехватывается из {@code ScreenEvent.KeyPressed},
+     * а из мира — из тика (там KeyMapping работает, и подсказка «откройте экран»
+     * остаётся на месте). Одновременно два пути сработать не могут: ваниль не
+     * создаёт клик KeyMapping при открытом экране.
+     */
+    private static void toggleEditor(Screen screen) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.screen == null) {
-            toast(minecraft, "ui_edit.no_screen");
+        if (screen == null) {
+            UiEditSession session = UiEditSession.get();
+            if (session.active()) {
+                // Редактор остался включённым после закрытия последнего экрана —
+                // F7 в мире выключает его, а не ругается на «откройте экран».
+                session.setActive(false);
+                toast(minecraft, "ui_edit.off");
+            } else {
+                toast(minecraft, "ui_edit.no_screen");
+            }
             return;
         }
         if (!UiEditAccess.isAllowed()) {
@@ -177,6 +201,13 @@ public final class UiEditEvents {
 
     @SubscribeEvent
     public static void onKey(ScreenEvent.KeyPressed.Pre event) {
+        // F7 внутри экранов: KeyMapping-клики ваниль не создаёт при открытом
+        // экране (см. toggleEditor), поэтому переключение ловим здесь.
+        if (event.getKeyCode() == GLFW.GLFW_KEY_F7) {
+            toggleEditor(event.getScreen());
+            event.setCanceled(true);
+            return;
+        }
         UiEditSession session = UiEditSession.get();
         if (!session.active() || !session.matches(event.getScreen())) {
             return;
