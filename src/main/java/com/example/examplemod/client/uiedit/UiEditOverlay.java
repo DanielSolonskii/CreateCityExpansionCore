@@ -108,10 +108,21 @@ public final class UiEditOverlay {
         if (session.textMode()) {
             drawTextBox(session, screen, graphics, font);
         }
-        drawBadge(session, screen, graphics, font);
+        drawBadge(session, screen, graphics, font, countWidgets(screen));
         if (session.helpVisible()) {
             drawHelp(screen, graphics, font);
         }
+    }
+
+    /** Сколько на экране реально редактируемых виджетов (AbstractWidget в children). */
+    private static int countWidgets(Screen screen) {
+        int count = 0;
+        for (GuiEventListener listener : screen.children()) {
+            if (listener instanceof AbstractWidget widget && widget.visible) {
+                count++;
+            }
+        }
+        return count;
     }
 
     // ------------------------------------------------------------------
@@ -285,13 +296,24 @@ public final class UiEditOverlay {
                 x + boxWidth + 8, y + 4, COLOR_TEXT_DIM, false);
     }
 
-    private static void drawBadge(UiEditSession session, Screen screen, GuiGraphics graphics, Font font) {
+    private static void drawBadge(
+            UiEditSession session, Screen screen, GuiGraphics graphics, Font font, int widgetCount) {
         String badge = lang("ui_edit.badge")
                 + (session.dirty() ? "*" : "")
                 + " \u00b7 F7 \u00b7 H";
         int width = font.width(badge) + 10;
-        graphics.fill(4, 4, 4 + width, 16, COLOR_PANEL_BG);
+        int height = 12;
+        // Экран без AbstractWidget рисуется вручную: подсказываем сразу, а не молчим.
+        String manual = widgetCount == 0 ? lang("ui_edit.badge.manual") : null;
+        if (manual != null) {
+            width = Math.max(width, font.width(manual) + 10);
+            height = 24;
+        }
+        graphics.fill(4, 4, 4 + width, 4 + height, COLOR_PANEL_BG);
         graphics.drawString(font, badge, 9, 6, session.dirty() ? COLOR_DIRTY : COLOR_BRASS, false);
+        if (manual != null) {
+            graphics.drawString(font, manual, 9, 16, COLOR_TEXT_DIM, false);
+        }
     }
 
     private static void drawHelp(Screen screen, GuiGraphics graphics, Font font) {
