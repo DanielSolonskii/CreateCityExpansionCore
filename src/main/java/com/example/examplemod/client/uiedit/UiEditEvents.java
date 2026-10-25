@@ -82,6 +82,14 @@ public final class UiEditEvents {
     // ------------------------------------------------------------------
 
     @SubscribeEvent
+    public static void onInitPre(ScreenEvent.Init.Pre event) {
+        // Реестр layout-элементов живёт в статике: без очистки на новом экране
+        // остались бы имена и координаты предыдущего. Сам экран наполнит реестр
+        // заново, пока идёт init() между Pre и Post.
+        UiEditLayout.clearRegistry();
+    }
+
+    @SubscribeEvent
     public static void onInit(ScreenEvent.Init.Post event) {
         if (!UiEditAccess.isAllowed()) {
             return;
@@ -154,7 +162,8 @@ public final class UiEditEvents {
             return;
         }
 
-        // 3. Остальное: выбор и перетаскивание. Чужие клики блокируются полностью.
+        // 3. Остальное: выбор и перетаскивание — сначала виджеты, затем элементы
+        //    layout ручных экранов. Чужие клики блокируются полностью.
         event.setCanceled(true);
         if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return;
@@ -166,8 +175,15 @@ public final class UiEditEvents {
             if (!textOpened) {
                 session.beginDrag(event.getScreen(), widget, mouseX, mouseY, Screen.hasShiftDown());
             }
+            return;
+        }
+        String element = session.elementAt(event.getScreen(), mouseX, mouseY);
+        if (element != null) {
+            session.selectElement(element);
+            session.beginElementDrag(event.getScreen(), element, mouseX, mouseY, Screen.hasShiftDown());
         } else {
             session.select(null);
+            session.selectElement(null);
         }
     }
 
@@ -177,8 +193,12 @@ public final class UiEditEvents {
         if (!session.active() || !session.matches(event.getScreen())) {
             return;
         }
-        if (session.dragging() && event.getMouseButton() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            session.drag(event.getScreen(), event.getMouseX(), event.getMouseY());
+        if (event.getMouseButton() == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            if (session.draggingElement()) {
+                session.dragElement(event.getScreen(), event.getMouseX(), event.getMouseY());
+            } else if (session.dragging()) {
+                session.drag(event.getScreen(), event.getMouseX(), event.getMouseY());
+            }
         }
         event.setCanceled(true);
     }
@@ -189,7 +209,9 @@ public final class UiEditEvents {
         if (!session.active() || !session.matches(event.getScreen())) {
             return;
         }
-        if (session.dragging()) {
+        if (session.draggingElement()) {
+            session.endElementDrag(event.getScreen());
+        } else if (session.dragging()) {
             session.endDrag();
         }
         event.setCanceled(true);

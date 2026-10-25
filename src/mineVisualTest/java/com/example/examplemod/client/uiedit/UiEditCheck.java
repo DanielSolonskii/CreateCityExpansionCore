@@ -27,10 +27,12 @@ public final class UiEditCheck {
     public static void main(String[] args) throws Exception {
         keysAndDeltas();
         jsonRoundTrip();
+        elementsJson();
         brokenJson();
         storeFiles();
         exportText();
         allowlist();
+        layoutHooks();
 
         System.out.println("ok: ui edit " + checks + " checks");
     }
@@ -116,6 +118,52 @@ public final class UiEditCheck {
         overrides.put(UiEditModel.widgetKey(7, "EditBox"),
                 new UiEditModel.WidgetOverride(0, 0, 0, 0, null));
         require(overrides.size() == 2, "clearing text removes override");
+    }
+
+    // ------------------------------------------------------------------
+    // Элементы layout (фаза 2: ручные экраны)
+    // ------------------------------------------------------------------
+
+    private static void elementsJson() {
+        UiEditModel.ScreenOverrides overrides = new UiEditModel.ScreenOverrides("PlayerProfile");
+        overrides.putElement("close", new UiEditModel.WidgetOverride(4, 6, 0, 0, null));
+        overrides.putElement("tab[0]", new UiEditModel.WidgetOverride(0, 0, 10, 2, null));
+        require(overrides.elements().size() == 2, "elements stored");
+        require(!overrides.isEmpty(), "element-only set is not empty");
+
+        String json = overrides.toJson();
+        require(json.contains("\"elements\""), "elements node in json");
+        require(json.contains("tab[0]"), "element name survives json");
+
+        UiEditModel.ScreenOverrides back =
+                UiEditModel.ScreenOverrides.fromJson("PlayerProfile", json);
+        require(!back.broken(), "elements json parses");
+        require(back.size() == 0, "widgets stay empty");
+        require(back.getElement("close") != null && back.getElement("close").dx() == 4,
+                "element round trip");
+        require(back.getElement("tab[0]").dw() == 10, "indexed element round trip");
+
+        // Пустое имя игнорируется, пустая правка удаляется — файл не засоряется.
+        overrides.putElement("   ", new UiEditModel.WidgetOverride(1, 0, 0, 0, null));
+        require(overrides.elements().size() == 2, "blank element name ignored");
+        overrides.putElement("close", new UiEditModel.WidgetOverride(0, 0, 0, 0, null));
+        require(overrides.elements().size() == 1, "identity edit removes element");
+        require(overrides.getElement("missing") == null, "unknown element is null");
+
+        // Битый узел elements — битый файл, как и с widgets.
+        UiEditModel.ScreenOverrides broken =
+                UiEditModel.ScreenOverrides.fromJson("X", "{\"elements\": [1]}");
+        require(broken.broken() && broken.isEmpty(), "array elements is broken");
+
+        // Узел widgets отсутствует, elements есть — разбирается.
+        UiEditModel.ScreenOverrides only =
+                UiEditModel.ScreenOverrides.fromJson("X", "{\"elements\":{\"body\":{\"dx\":3}}}");
+        require(!only.broken() && only.getElement("body").dx() == 3,
+                "elements without widgets parse");
+
+        // Чистый набор: clear убирает обе половины.
+        only.clear();
+        require(only.isEmpty() && only.elements().isEmpty(), "clear removes elements too");
     }
 
     private static void brokenJson() {
@@ -246,6 +294,80 @@ public final class UiEditCheck {
         require(defaults.contains("goddzerzh"), "default file contains owner nick");
         require(defaults.contains("drannch1k"), "default file contains lead developer nick");
         require(defaults.contains("#"), "default file has instructions");
+    }
+
+    // ------------------------------------------------------------------
+    // Хуки layout-классов (фаза 2)
+    // ------------------------------------------------------------------
+
+    private static void layoutHooks() throws Exception {
+        Path root = Files.createTempDirectory("ui-edit-layout");
+        UiEditLayout.installForTests(new UiEditStore(root), () -> true);
+
+        // 1. Без правок хук отдаёт ровно те же координаты и регистрирует элемент.
+        int[] raw = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+                2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
+        require(raw[0] == 10 && raw[1] == 20 && raw[2] == 30 && raw[3] == 40,
+                "hook is pass-through without edits");
+        require(UiEditLayout.registeredFor("TestScreen").containsKey("close"),
+                "hook registers element");
+
+        // 2. Экранные координаты: screen = origin + local * scale.
+        UiEditModel.Bounds screen =
+                UiEditLayout.toScreen("TestScreen", new UiEditModel.Bounds(10, 20, 30, 40));
+        require(screen.x() == 120 && screen.y() == 90 && screen.w() == 60 && screen.h() == 80,
+                "local to screen transform");
+
+        // 3. Правка применяется в логических единицах (переживает GUI scale).
+        UiEditLayout.overridesFor("TestScreen")
+                .putElement("close", new UiEditModel.WidgetOverride(5, -3, 0, 0, null));
+        int[] moved = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+                2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
+        require(moved[0] == 15 && moved[1] == 17, "delta applied in layout units");
+
+        // 4. Обратное преобразование — для коммита перетаскивания.
+        UiEditModel.Bounds back = UiEditLayout.toLayout("TestScreen",
+                new UiEditModel.Bounds(130, 84, 60, 80));
+        require(back.x() == 15 && back.y() == 17 && back.w() == 30 && back.h() == 40,
+                "screen to layout transform");
+        require(UiEditLayout.toLayoutDelta("TestScreen", 4) == 2, "screen delta to layout");
+        require(UiEditLayout.toScreenDelta("TestScreen", 2) == 4, "layout delta to screen");
+        require(UiEditLayout.hasTransform("TestScreen"), "transform registered");
+
+        // 5. Файл — общий источник: что сохранили, то видит хук после reload.
+        UiEditModel.ScreenOverrides working = UiEditLayout.overridesFor("PlayerProfile");
+        working.putElement("body", new UiEditModel.WidgetOverride(-8, 0, 0, 0, null));
+        new UiEditStore(root).save(working);
+        UiEditModel.ScreenOverrides reloaded = UiEditLayout.reload("PlayerProfile");
+        require(reloaded.getElement("body").dx() == -8, "file round trip via hook");
+        UiEditLayout.reload("TestScreen");
+        int[] afterReload = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+                2f, 100f, 50f, (x, y, w, h) -> new int[]{x, y, w, h});
+        require(afterReload[0] == 10, "reload discards unsaved in-memory edit");
+
+        // 6. Экран без pose-масштаба — координаты не конвертируются.
+        UiEditLayout.apply("Plain", "body", 1, 2, 3, 4, (x, y, w, h) -> new int[]{x, y, w, h});
+        UiEditModel.Bounds plain =
+                UiEditLayout.toScreen("Plain", new UiEditModel.Bounds(1, 2, 3, 4));
+        require(plain.x() == 1 && plain.w() == 3, "identity transform");
+        require(!UiEditLayout.hasTransform("Plain"), "no transform for plain screen");
+
+        // 7. Реестр чистится перед новым экраном.
+        require(!UiEditLayout.registeredNames("TestScreen").isEmpty(), "registry has names");
+        UiEditLayout.clearRegistry();
+        require(UiEditLayout.registeredNames("TestScreen").isEmpty(), "clearRegistry empties");
+
+        // 8. Доступ закрыт — правка в памяти есть, но не применяется.
+        UiEditLayout.installForTests(new UiEditStore(root), () -> false);
+        UiEditLayout.overridesFor("TestScreen")
+                .putElement("close", new UiEditModel.WidgetOverride(5, 0, 0, 0, null));
+        int[] gated = UiEditLayout.apply("TestScreen", "close", 10, 20, 30, 40,
+                1f, 0f, 0f, (x, y, w, h) -> new int[]{x, y, w, h});
+        require(gated[0] == 10, "closed gate: override not applied");
+
+        UiEditLayout.installForTests(new UiEditStore(root), () -> true);
+        Files.deleteIfExists(root.resolve("PlayerProfile.json"));
+        Files.deleteIfExists(root);
     }
 
     private UiEditCheck() {

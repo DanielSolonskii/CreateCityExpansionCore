@@ -7,7 +7,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -59,6 +58,19 @@ public final class UiEditSession {
     private double grabX;
     private double grabY;
 
+    /** Выбранный/подсвечиваемый элемент layout (ручные экраны, взаимоисключимо с selected). */
+    private String selectedElement;
+    private String hoveredElement;
+    private String draggingElement;
+    /** Экранные границы, куда элемент встанет после коммита (пока тянется). */
+    private UiEditModel.Bounds elementGhost;
+    private double elementGrabX;
+    private double elementGrabY;
+    private int elementAnchorX;
+    private int elementAnchorY;
+    private boolean elementResize;
+    private boolean elementMoved;
+
     private long lastClickMillis;
     private GuiEventListener lastClickTarget;
 
@@ -108,6 +120,27 @@ public final class UiEditSession {
         return hovered;
     }
 
+    public String selectedElement() {
+        return selectedElement;
+    }
+
+    public String hoveredElement() {
+        return hoveredElement;
+    }
+
+    public void setHoveredElement(String name) {
+        hoveredElement = name;
+    }
+
+    public boolean draggingElement() {
+        return draggingElement != null;
+    }
+
+    /** Экранные границы перетаскиваемого элемента (призрак до коммита). */
+    public UiEditModel.Bounds elementGhost() {
+        return elementGhost;
+    }
+
     public EditBox textBox() {
         return textBox;
     }
@@ -116,6 +149,10 @@ public final class UiEditSession {
         active = value;
         if (!value) {
             dragging = null;
+            draggingElement = null;
+            elementGhost = null;
+            selectedElement = null;
+            hoveredElement = null;
             stopTextMode();
         }
     }
@@ -145,7 +182,9 @@ public final class UiEditSession {
         boolean changed = target != screen;
         if (changed || working == null) {
             screen = target;
-            working = store.load(className(target));
+            // Тот же объект, что у хука UiEditLayout: элементы и виджети одного
+            // файла правок, автосохранение и «Откатить» видят обе половины.
+            working = UiEditLayout.overridesFor(className(target));
             dirty = false;
         }
         if (freshInit || changed) {
@@ -153,7 +192,15 @@ public final class UiEditSession {
             selected = null;
             hovered = null;
             dragging = null;
+            hoveredElement = null;
+            draggingElement = null;
+            elementGhost = null;
             stopTextMode();
+            if (changed) {
+                // Выбор элемента — имя, а не экземпляр: он переживает пересборку
+                // экрана (resize → Init), поэтому стрелками можно жать серию.
+                selectedElement = null;
+            }
         }
         int index = 0;
         for (GuiEventListener listener : listeners) {
@@ -189,13 +236,30 @@ public final class UiEditSession {
 
     /** Виджет под курсором; последний в списке children — верхний. */
     GuiEventListener widgetAt(Screen target, double mouseX, double mouseY) {
+        String screenName = className(target);
         List<? extends GuiEventListener> children = target.children();
         for (int i = children.size() - 1; i >= 0; i--) {
             GuiEventListener listener = children.get(i);
             if (listener instanceof AbstractWidget widget
                     && widget.visible
-                    && boundsOf(widget).contains(mouseX, mouseY)) {
+                    && UiEditLayout.toScreen(screenName, boundsOf(widget)).contains(mouseX, mouseY)) {
                 return listener;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Элемент layout под курсором или null. Виджеты приоритетнее: если курсор на
+     * виджете, лежащем внутри layout-прямоугольника, выбирается виджет.
+     */
+    String elementAt(Screen target, double mouseX, double mouseY) {
+        List<String> names = UiEditLayout.registeredNames(className(target));
+        for (int i = names.size() - 1; i >= 0; i--) {
+            String name = names.get(i);
+            UiEditModel.Bounds b = appliedElement(target, name);
+            if (b != null && b.contains(mouseX, mouseY)) {
+                return name;
             }
         }
         return null;
@@ -203,6 +267,46 @@ public final class UiEditSession {
 
     public void select(GuiEventListener listener) {
         selected = listener;
+        if (listener != null) {
+            selectedElement = null;
+        }
+    }
+
+    /** Выбор элемента layout; взаимоисключимо с выбором виджета. */
+    public void selectElement(String name) {
+        if (name == null) {
+            selectedElement = null;
+            return;
+        }
+        selectedElement = name;
+        selected = null;
+    }
+
+    /** Экранные границы элемента (с учётом сохранённой правки) или null. */
+    UiEditModel.Bounds appliedElement(Screen target, String name) {
+        UiEditModel.Bounds raw = UiEditLayout.registeredFor(className(target)).get(name);
+        if (raw == null) {
+            return null;
+        }
+        UiEditModel.WidgetOverride override = working == null ? null : working.getElement(name);
+        UiEditModel.Bounds local = override == null ? raw : override.applyTo(raw);
+        return UiEditLayout.toScreen(className(target), local);
+    }
+
+    /** Границы выбранного элемента для строки состояния: призрак, если тянется. */
+    UiEditModel.Bounds selectedElementBounds() {
+        if (selectedElement == null) {
+            return null;
+        }
+        if (elementGhost != null) {
+            return elementGhost;
+        }
+        return screen == null ? null : appliedElement(screen, selectedElement);
+    }
+
+    /** Правка элемента в рабочем наборе или null. */
+    UiEditModel.WidgetOverride overrideOfElement(String name) {
+        return working == null ? null : working.getElement(name);
     }
 
     /**
@@ -233,20 +337,29 @@ public final class UiEditSession {
         rememberOriginal(listener, widget);
         dragging = listener;
         resizeDrag = resize;
-        grabX = mouseX - widget.getX();
-        grabY = mouseY - widget.getY();
+        UiEditModel.Bounds ws = UiEditLayout.toScreen(className(target), boundsOf(widget));
+        grabX = mouseX - ws.x();
+        grabY = mouseY - ws.y();
     }
 
     public void drag(Screen target, double mouseX, double mouseY) {
         if (!(dragging instanceof AbstractWidget widget)) {
             return;
         }
+        String screenName = className(target);
+        UiEditModel.Bounds ws = UiEditLayout.toScreen(screenName, boundsOf(widget));
         if (resizeDrag) {
-            widget.setWidth(clamp((int) Math.round(mouseX - widget.getX()), UiEditModel.MIN_SIZE, 4000));
-            widget.setHeight(clamp((int) Math.round(mouseY - widget.getY()), UiEditModel.MIN_SIZE, 4000));
+            int w = clamp((int) Math.round(mouseX - ws.x()), UiEditModel.MIN_SIZE, 4000);
+            int h = clamp((int) Math.round(mouseY - ws.y()), UiEditModel.MIN_SIZE, 4000);
+            widget.setWidth(clamp(widget.getWidth()
+                    + UiEditLayout.toLayoutDelta(screenName, w - ws.w()), UiEditModel.MIN_SIZE, 4000));
+            widget.setHeight(clamp(widget.getHeight()
+                    + UiEditLayout.toLayoutDelta(screenName, h - ws.h()), UiEditModel.MIN_SIZE, 4000));
         } else {
-            widget.setX(clamp((int) Math.round(mouseX - grabX), 16 - widget.getWidth(), target.width - 16));
-            widget.setY(clamp((int) Math.round(mouseY - grabY), 16 - widget.getHeight(), target.height - 16));
+            int x = clamp((int) Math.round(mouseX - grabX), 16 - ws.w(), target.width - 16);
+            int y = clamp((int) Math.round(mouseY - grabY), 16 - ws.h(), target.height - 16);
+            widget.setX(widget.getX() + UiEditLayout.toLayoutDelta(screenName, x - ws.x()));
+            widget.setY(widget.getY() + UiEditLayout.toLayoutDelta(screenName, y - ws.y()));
         }
         updateOverride(target, widget);
     }
@@ -255,15 +368,130 @@ public final class UiEditSession {
         dragging = null;
     }
 
-    /** Сдвиг выбранного виджета стрелками: 1 px, с Shift — 10 px. */
+    /** Сдвиг выбранного виджета или элемента стрелками: 1 px, с Shift — 10 px. */
     public void nudgeSelected(Screen target, int dx, int dy) {
+        if (selectedElement != null) {
+            nudgeElement(target, dx, dy);
+            return;
+        }
         if (!(selected instanceof AbstractWidget widget)) {
             return;
         }
         rememberOriginal(selected, widget);
-        widget.setX(clamp(widget.getX() + dx, 16 - widget.getWidth(), target.width - 16));
-        widget.setY(clamp(widget.getY() + dy, 16 - widget.getHeight(), target.height - 16));
+        String screenName = className(target);
+        UiEditModel.Bounds ws = UiEditLayout.toScreen(screenName, boundsOf(widget));
+        int x = clamp(ws.x() + dx, 16 - ws.w(), target.width - 16);
+        int y = clamp(ws.y() + dy, 16 - ws.h(), target.height - 16);
+        widget.setX(widget.getX() + UiEditLayout.toLayoutDelta(screenName, x - ws.x()));
+        widget.setY(widget.getY() + UiEditLayout.toLayoutDelta(screenName, y - ws.y()));
         updateOverride(target, widget);
+    }
+
+    // ------------------------------------------------------------------
+    // Перетаскивание элементов layout (ручные экраны)
+    // ------------------------------------------------------------------
+
+    public void beginElementDrag(Screen target, String name, double mouseX, double mouseY, boolean resize) {
+        UiEditModel.Bounds current = appliedElement(target, name);
+        if (current == null) {
+            return;
+        }
+        draggingElement = name;
+        elementResize = resize;
+        elementMoved = false;
+        elementAnchorX = current.x();
+        elementAnchorY = current.y();
+        elementGrabX = mouseX - current.x();
+        elementGrabY = mouseY - current.y();
+        elementGhost = current;
+    }
+
+    public void dragElement(Screen target, double mouseX, double mouseY) {
+        if (draggingElement == null || elementGhost == null) {
+            return;
+        }
+        UiEditModel.Bounds cur = elementGhost;
+        UiEditModel.Bounds next;
+        if (elementResize) {
+            int w = clamp((int) Math.round(mouseX - elementAnchorX), UiEditModel.MIN_SIZE, 4000);
+            int h = clamp((int) Math.round(mouseY - elementAnchorY), UiEditModel.MIN_SIZE, 4000);
+            next = new UiEditModel.Bounds(elementAnchorX, elementAnchorY, w, h);
+        } else {
+            int x = clamp((int) Math.round(mouseX - elementGrabX), 16 - cur.w(), target.width - 16);
+            int y = clamp((int) Math.round(mouseY - elementGrabY), 16 - cur.h(), target.height - 16);
+            next = new UiEditModel.Bounds(x, y, cur.w(), cur.h());
+        }
+        if (!next.equals(cur)) {
+            elementGhost = next;
+            elementMoved = true;
+        }
+    }
+
+    /**
+     * Отпустили мышь: правка фиксируется, экран пересобирается — layout-класс
+     * пересчитает геометрию уже с новой дельтой (Init.Pre/Post от resize идут
+     * ровно один раз, выбор элемента сохраняется).
+     */
+    public void endElementDrag(Screen target) {
+        if (draggingElement == null) {
+            return;
+        }
+        String name = draggingElement;
+        UiEditModel.Bounds ghost = elementGhost;
+        boolean moved = elementMoved;
+        draggingElement = null;
+        elementGhost = null;
+        elementMoved = false;
+        if (moved && ghost != null) {
+            commitElement(target, name, ghost);
+            rebuild(target);
+        }
+    }
+
+    private void nudgeElement(Screen target, int dx, int dy) {
+        UiEditModel.Bounds current = appliedElement(target, selectedElement);
+        if (current == null) {
+            return;
+        }
+        int x = clamp(current.x() + dx, 16 - current.w(), target.width - 16);
+        int y = clamp(current.y() + dy, 16 - current.h(), target.height - 16);
+        if (x == current.x() && y == current.y()) {
+            return;
+        }
+        commitElement(target, selectedElement, new UiEditModel.Bounds(x, y, current.w(), current.h()));
+        rebuild(target);
+    }
+
+    /** Записать правку элемента: экранный призрак → логические дельты. */
+    private void commitElement(Screen target, String name, UiEditModel.Bounds screenBounds) {
+        if (working == null) {
+            return;
+        }
+        String screenName = className(target);
+        UiEditModel.Bounds raw = UiEditLayout.registeredFor(screenName).get(name);
+        if (raw == null) {
+            return;
+        }
+        UiEditModel.Bounds local = UiEditLayout.toLayout(screenName, screenBounds);
+        working.putElement(name, UiEditModel.delta(raw, local, null, null));
+        dirty = true;
+    }
+
+    /** Пересборка экрана: resize → rebuildWidgets → Init.Pre/Post → attach. */
+    private void rebuild(Screen target) {
+        if (target == null) {
+            return;
+        }
+        target.resize(Minecraft.getInstance(), target.width, target.height);
+    }
+
+    /** Есть ли на экране элементы layout — пересборка нужна только им. */
+    private boolean hasLayoutElements() {
+        if (screen == null) {
+            return false;
+        }
+        return !UiEditLayout.registeredFor(className(screen)).isEmpty()
+                || (working != null && !working.elements().isEmpty());
     }
 
     // ------------------------------------------------------------------
@@ -314,8 +542,17 @@ public final class UiEditSession {
     // Правки: сброс, сохранение, экспорт
     // ------------------------------------------------------------------
 
-    /** Сброс одного выбранного виджета к ванильному состоянию. */
+    /** Сброс одного выбранного виджета или элемента layout к ванильному состоянию. */
     public void resetSelected(Screen target) {
+        if (selectedElement != null) {
+            if (working != null && working.getElement(selectedElement) != null) {
+                working.removeElement(selectedElement);
+                dirty = true;
+                stopTextMode();
+                rebuild(target);
+            }
+            return;
+        }
         if (!(selected instanceof AbstractWidget widget)) {
             return;
         }
@@ -350,11 +587,17 @@ public final class UiEditSession {
         if (screen == null) {
             return;
         }
-        working = store.load(className(screen));
+        boolean rebuildNeeded = hasLayoutElements();
+        // reload меняет общий объект: хук UiEditLayout видит откат сразу же.
+        working = UiEditLayout.reload(className(screen));
         dirty = false;
         selected = null;
+        selectedElement = null;
         stopTextMode();
         restoreAll();
+        if (rebuildNeeded) {
+            rebuild(screen);
+        }
     }
 
     /** Очистить все правки экрана (в памяти; запись — кнопкой «Сохранить»). */
@@ -362,10 +605,14 @@ public final class UiEditSession {
         if (working == null) {
             return;
         }
+        boolean rebuildNeeded = hasLayoutElements();
         working.clear();
         dirty = true;
         stopTextMode();
         restoreAll();
+        if (rebuildNeeded) {
+            rebuild(screen);
+        }
     }
 
     /** Автосохранение при закрытии экрана: не теряем наработанное. */
@@ -397,7 +644,21 @@ public final class UiEditSession {
                 currentBounds.add(null);
             }
         }
-        List<UiEditStore.ExportRow> rows = UiEditStore.rowsFor(working, originalBounds, currentBounds, classNames);
+        List<UiEditStore.ExportRow> rows =
+                new ArrayList<>(UiEditStore.rowsFor(working, originalBounds, currentBounds, classNames));
+        // Строки для элементов layout: имя, исходный логический прямоугольник, дельта.
+        String screenName = className(target);
+        for (var entry : working.elements().entrySet()) {
+            UiEditModel.Bounds raw = UiEditLayout.registeredFor(screenName).get(entry.getKey());
+            if (raw == null) {
+                continue;
+            }
+            rows.add(UiEditStore.ExportRow.of(
+                    entry.getKey(),
+                    new UiEditModel.Original(raw, ""),
+                    entry.getValue().applyTo(raw),
+                    entry.getValue()));
+        }
         String content = UiEditStore.exportText(
                 className(target),
                 guiWidth + "\u00d7" + guiHeight,
@@ -413,9 +674,8 @@ public final class UiEditSession {
 
     private void ensureStore() {
         if (store == null) {
-            store = new UiEditStore(FMLPaths.CONFIGDIR.get()
-                    .resolve("createcityexpansioncore")
-                    .resolve("ui-edit"));
+            // Тот же путь, что у UiEditLayout: одна правка — один файл.
+            store = new UiEditStore(UiEditStore.defaultRoot());
         }
     }
 

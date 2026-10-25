@@ -1,5 +1,7 @@
 package com.example.examplemod.client.uiedit;
 
+import net.neoforged.fml.loading.FMLPaths;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,6 +30,23 @@ public final class UiEditStore {
 
     public Path root() {
         return root;
+    }
+
+    /**
+     * Корень хранилища в игре. Один и тот же путь у сессии и у хука
+     * {@link UiEditLayout}: вне игры (headless-проверки) FML недоступен —
+     * тогда берётся запасной путь относительно рабочего каталога.
+     */
+    public static Path defaultRoot() {
+        try {
+            return FMLPaths.CONFIGDIR.get()
+                    .resolve("createcityexpansioncore")
+                    .resolve("ui-edit");
+        } catch (Throwable t) {
+            return Path.of("config")
+                    .resolve("createcityexpansioncore")
+                    .resolve("ui-edit");
+        }
     }
 
     /** Имя файла экрана. Имя класса может содержать только безопасные символы. */

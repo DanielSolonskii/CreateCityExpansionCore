@@ -1910,6 +1910,7 @@
   "key.createcityexpansioncore.uiedit.toggle": "Редактор UI — вкл/выкл",
   "ui_edit.badge": "UI-РЕДАКТОР",
   "ui_edit.badge.manual": "Экран без виджетов — их правка в фазе 2",
+  "ui_edit.badge.layout": "Ручная отрисовка — правится по элементам: %s",
   "ui_edit.on": "Редактор UI включён · H — справка",
   "ui_edit.off": "Редактор UI выключен",
   "ui_edit.no_screen": "Откройте экран интерфейса и нажмите F7",

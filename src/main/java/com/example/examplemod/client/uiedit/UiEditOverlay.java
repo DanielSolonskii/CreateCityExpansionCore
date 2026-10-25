@@ -94,14 +94,20 @@ public final class UiEditOverlay {
             int mouseX,
             int mouseY,
             float partialTick) {
-        GuiEventListener hovered = session.textMode() || inBar(screen, mouseX, mouseY)
-                ? null
-                : session.widgetAt(screen, mouseX, mouseY);
+        boolean interactive = !session.textMode() && !inBar(screen, mouseX, mouseY);
+        GuiEventListener hovered = interactive ? session.widgetAt(screen, mouseX, mouseY) : null;
+        // Призрак перетаскиваемого элемента и так под курсором — карточка не мешает.
+        String hoveredElement = interactive && hovered == null && !session.draggingElement()
+                ? session.elementAt(screen, mouseX, mouseY)
+                : null;
         session.setHovered(hovered);
+        session.setHoveredElement(hoveredElement);
 
         drawOutlines(session, screen, graphics);
         if (hovered != null) {
             drawTooltip(session, screen, graphics, font, hovered, mouseX, mouseY);
+        } else if (hoveredElement != null) {
+            drawElementTooltip(session, screen, graphics, font, hoveredElement, mouseX, mouseY);
         }
 
         drawBar(session, screen, graphics, font, mouseX, mouseY);
@@ -130,26 +136,64 @@ public final class UiEditOverlay {
     // ------------------------------------------------------------------
 
     private static void drawOutlines(UiEditSession session, Screen screen, GuiGraphics graphics) {
+        String screenName = UiEditSession.className(screen);
+        List<UiEditModel.Bounds> widgetRects = new ArrayList<>();
         for (GuiEventListener listener : screen.children()) {
             if (listener instanceof AbstractWidget widget && widget.visible) {
-                UiEditModel.Bounds b = new UiEditModel.Bounds(
-                        widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight());
-                int color;
-                int fill = 0;
-                if (listener == session.selected()) {
-                    color = COLOR_LINE_SELECTED;
-                    fill = COLOR_FILL_SELECTED;
-                } else if (listener == session.hovered()) {
-                    color = COLOR_LINE_HOVER;
-                } else {
-                    color = COLOR_LINE;
-                }
-                if (fill != 0) {
-                    graphics.fill(b.x(), b.y(), b.right(), b.bottom(), fill);
-                }
-                outline(graphics, b, color);
+                UiEditModel.Bounds b = UiEditLayout.toScreen(screenName, new UiEditModel.Bounds(
+                        widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+                widgetRects.add(b);
+                paint(graphics, b,
+                        listener == session.selected(),
+                        listener == session.hovered());
             }
         }
+        // Элементы layout ручных экранов (Пилон, Профиль, Соцсети...): живут
+        // отдельно от children(), поэтому обводятся по своему реестру.
+        for (String name : UiEditLayout.registeredNames(screenName)) {
+            UiEditModel.Bounds b;
+            if (name.equals(session.selectedElement()) && session.elementGhost() != null) {
+                b = session.elementGhost();
+            } else {
+                b = session.appliedElement(screen, name);
+            }
+            // Layout-прямоугольник под своим же виджетом не дублируем.
+            if (b == null || duplicatesWidget(b, widgetRects)) {
+                continue;
+            }
+            paint(graphics, b,
+                    name.equals(session.selectedElement()),
+                    name.equals(session.hoveredElement()));
+        }
+    }
+
+    private static void paint(
+            GuiGraphics graphics, UiEditModel.Bounds b,
+            boolean selected, boolean hovered) {
+        int color;
+        int fill = 0;
+        if (selected) {
+            color = COLOR_LINE_SELECTED;
+            fill = COLOR_FILL_SELECTED;
+        } else if (hovered) {
+            color = COLOR_LINE_HOVER;
+        } else {
+            color = COLOR_LINE;
+        }
+        if (fill != 0) {
+            graphics.fill(b.x(), b.y(), b.right(), b.bottom(), fill);
+        }
+        outline(graphics, b, color);
+    }
+
+    private static boolean duplicatesWidget(UiEditModel.Bounds b, List<UiEditModel.Bounds> widgetRects) {
+        for (UiEditModel.Bounds w : widgetRects) {
+            if (Math.abs(w.x() - b.x()) <= 2 && Math.abs(w.y() - b.y()) <= 2
+                    && Math.abs(w.w() - b.w()) <= 2 && Math.abs(w.h() - b.h()) <= 2) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void outline(GuiGraphics graphics, UiEditModel.Bounds b, int color) {
@@ -176,18 +220,54 @@ public final class UiEditOverlay {
         }
         List<String> lines = new ArrayList<>();
         lines.add(UiEditSession.className(hovered));
-        lines.add(widget.getX() + "," + widget.getY() + "  "
-                + widget.getWidth() + "\u00d7" + widget.getHeight());
+        String screenName = UiEditSession.className(screen);
+        UiEditModel.Bounds bounds = UiEditLayout.toScreen(screenName, new UiEditModel.Bounds(
+                widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+        lines.add(bounds.x() + "," + bounds.y() + "  "
+                + bounds.w() + "\u00d7" + bounds.h());
         UiEditModel.WidgetOverride override = session.overrideOf(screen, hovered);
         if (override != null) {
-            lines.add("сдвиг " + fmt(override.dx()) + "," + fmt(override.dy())
-                    + "  размер " + fmt(override.dw()) + "," + fmt(override.dh()));
+            lines.add("сдвиг " + fmt(UiEditLayout.toScreenDelta(screenName, override.dx()))
+                    + "," + fmt(UiEditLayout.toScreenDelta(screenName, override.dy()))
+                    + "  размер " + fmt(UiEditLayout.toScreenDelta(screenName, override.dw()))
+                    + "," + fmt(UiEditLayout.toScreenDelta(screenName, override.dh())));
         }
         String text = widget.getMessage().getString();
         if (!text.isEmpty()) {
             lines.add(truncate(text, 48));
         }
+        drawCard(graphics, font, lines, screen, mouseX, mouseY);
+    }
 
+    /** Карточка элемента layout: имя, экранные границы, дельта. */
+    private static void drawElementTooltip(
+            UiEditSession session,
+            Screen screen,
+            GuiGraphics graphics,
+            Font font,
+            String name,
+            int mouseX,
+            int mouseY) {
+        UiEditModel.Bounds b = session.appliedElement(screen, name);
+        if (b == null) {
+            return;
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add(name);
+        lines.add(b.x() + "," + b.y() + "  " + b.w() + "\u00d7" + b.h());
+        UiEditModel.WidgetOverride override = session.overrideOfElement(name);
+        if (override != null) {
+            String screenName = UiEditSession.className(screen);
+            lines.add("сдвиг " + fmt(UiEditLayout.toScreenDelta(screenName, override.dx()))
+                    + "," + fmt(UiEditLayout.toScreenDelta(screenName, override.dy()))
+                    + "  размер " + fmt(UiEditLayout.toScreenDelta(screenName, override.dw()))
+                    + "," + fmt(UiEditLayout.toScreenDelta(screenName, override.dh())));
+        }
+        drawCard(graphics, font, lines, screen, mouseX, mouseY);
+    }
+
+    private static void drawCard(
+            GuiGraphics graphics, Font font, List<String> lines, Screen screen, int mouseX, int mouseY) {
         int width = 0;
         for (String line : lines) {
             width = Math.max(width, font.width(line));
@@ -245,26 +325,46 @@ public final class UiEditOverlay {
 
     private static String infoLine(UiEditSession session, Screen screen, Font font) {
         GuiEventListener selected = session.selected();
-        if (selected == null) {
+        String element = session.selectedElement();
+        if (selected == null && element == null) {
             return lang("ui_edit.info.none");
         }
-        String name = UiEditSession.className(selected);
-        if (selected instanceof AbstractWidget widget) {
-            UiEditModel.WidgetOverride override = session.overrideOf(screen, selected);
-            int dx = override == null ? 0 : override.dx();
-            int dy = override == null ? 0 : override.dy();
-            String full = Component.translatable(
-                    "ui_edit.info.selected",
-                    name,
-                    widget.getX(), widget.getY(),
-                    widget.getWidth(), widget.getHeight(),
-                    dx, dy).getString();
-            return font.width(full) > screen.width - barWidth(screen, font) - BAR_MARGIN * 2
-                    ? Component.translatable("ui_edit.info.selected.short",
-                    name, dx, dy).getString()
-                    : full;
+        String screenName = UiEditSession.className(screen);
+        if (element != null) {
+            UiEditModel.Bounds bounds = session.selectedElementBounds();
+            if (bounds == null) {
+                return element;
+            }
+            UiEditModel.WidgetOverride override = session.overrideOfElement(element);
+            return infoFor(element, bounds,
+                    override == null ? 0 : UiEditLayout.toScreenDelta(screenName, override.dx()),
+                    override == null ? 0 : UiEditLayout.toScreenDelta(screenName, override.dy()),
+                    screen, font);
         }
-        return name;
+        if (selected instanceof AbstractWidget widget) {
+            UiEditModel.Bounds bounds = UiEditLayout.toScreen(screenName, new UiEditModel.Bounds(
+                    widget.getX(), widget.getY(), widget.getWidth(), widget.getHeight()));
+            UiEditModel.WidgetOverride override = session.overrideOf(screen, selected);
+            return infoFor(UiEditSession.className(selected), bounds,
+                    override == null ? 0 : UiEditLayout.toScreenDelta(screenName, override.dx()),
+                    override == null ? 0 : UiEditLayout.toScreenDelta(screenName, override.dy()),
+                    screen, font);
+        }
+        return UiEditSession.className(selected);
+    }
+
+    /** Одна строка состояния для виджета и элемента layout: имя, границы, сдвиг. */
+    private static String infoFor(
+            String name, UiEditModel.Bounds bounds, int dx, int dy, Screen screen, Font font) {
+        String full = Component.translatable(
+                "ui_edit.info.selected",
+                name,
+                bounds.x(), bounds.y(),
+                bounds.w(), bounds.h(),
+                dx, dy).getString();
+        return font.width(full) > screen.width - barWidth(screen, font) - BAR_MARGIN * 2
+                ? Component.translatable("ui_edit.info.selected.short", name, dx, dy).getString()
+                : full;
     }
 
     private static int barWidth(Screen screen, Font font) {
@@ -303,8 +403,8 @@ public final class UiEditOverlay {
                 + " \u00b7 F7 \u00b7 H";
         int width = font.width(badge) + 10;
         int height = 12;
-        // Экран без AbstractWidget рисуется вручную: подсказываем сразу, а не молчим.
-        String manual = widgetCount == 0 ? lang("ui_edit.badge.manual") : null;
+        // Ручная отрисовка: говорим прямо, сколько элементов доступно для правки.
+        String manual = widgetCount == 0 ? manualHint(screen) : null;
         if (manual != null) {
             width = Math.max(width, font.width(manual) + 10);
             height = 24;
@@ -314,6 +414,14 @@ public final class UiEditOverlay {
         if (manual != null) {
             graphics.drawString(font, manual, 9, 16, COLOR_TEXT_DIM, false);
         }
+    }
+
+    /** Нет виджетов: сколько элементов layout подключено или что правки пока нет. */
+    private static String manualHint(Screen screen) {
+        int elements = UiEditLayout.registeredNames(UiEditSession.className(screen)).size();
+        return elements == 0
+                ? lang("ui_edit.badge.manual")
+                : lang("ui_edit.badge.layout", elements);
     }
 
     private static void drawHelp(Screen screen, GuiGraphics graphics, Font font) {
@@ -340,6 +448,10 @@ public final class UiEditOverlay {
 
     private static String lang(String key) {
         return Component.translatable(key).getString();
+    }
+
+    private static String lang(String key, Object... args) {
+        return Component.translatable(key, args).getString();
     }
 
     private static String fmt(int value) {

@@ -1910,6 +1910,7 @@
   "key.createcityexpansioncore.uiedit.toggle": "UI editor — toggle",
   "ui_edit.badge": "UI EDITOR",
   "ui_edit.badge.manual": "No widgets on this screen — editing arrives in phase 2",
+  "ui_edit.badge.layout": "Manual drawing — edit its elements: %s",
   "ui_edit.on": "UI editor on · H for help",
   "ui_edit.off": "UI editor off",
   "ui_edit.no_screen": "Open a UI screen and press F7",

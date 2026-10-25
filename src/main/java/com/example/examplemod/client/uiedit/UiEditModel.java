@@ -136,6 +136,8 @@ public final class UiEditModel {
 
         private final String screen;
         private final LinkedHashMap<String, WidgetOverride> widgets = new LinkedHashMap<>();
+        /** Именованные элементы layout-классов (ручные экраны): имя → дельта. */
+        private final LinkedHashMap<String, WidgetOverride> elements = new LinkedHashMap<>();
         private boolean broken;
 
         public ScreenOverrides(String screen) {
@@ -180,12 +182,40 @@ public final class UiEditModel {
             widgets.remove(key);
         }
 
+        /** Именованные элементы layout (фаза 2): видят оверлей и хуки layout-классов. */
+        public Map<String, WidgetOverride> elements() {
+            return Collections.unmodifiableMap(elements);
+        }
+
+        public WidgetOverride getElement(String name) {
+            return name == null ? null : elements.get(name);
+        }
+
+        /** Пустая правка удаляется; пустое имя игнорируется. */
+        public void putElement(String name, WidgetOverride override) {
+            if (name == null || name.isBlank()) {
+                return;
+            }
+            if (override == null || override.isIdentity()) {
+                elements.remove(name);
+            } else {
+                elements.put(name, override);
+            }
+        }
+
+        public void removeElement(String name) {
+            if (name != null) {
+                elements.remove(name);
+            }
+        }
+
         public void clear() {
             widgets.clear();
+            elements.clear();
         }
 
         public boolean isEmpty() {
-            return widgets.isEmpty();
+            return widgets.isEmpty() && elements.isEmpty();
         }
 
         public int size() {
@@ -196,8 +226,16 @@ public final class UiEditModel {
             JsonObject root = new JsonObject();
             root.addProperty("version", VERSION);
             root.addProperty("screen", screen);
+            root.add("widgets", overridesToJson(widgets));
+            if (!elements.isEmpty()) {
+                root.add("elements", overridesToJson(elements));
+            }
+            return GSON.toJson(root);
+        }
+
+        private static JsonObject overridesToJson(Map<String, WidgetOverride> source) {
             JsonObject body = new JsonObject();
-            for (Map.Entry<String, WidgetOverride> entry : widgets.entrySet()) {
+            for (Map.Entry<String, WidgetOverride> entry : source.entrySet()) {
                 WidgetOverride override = entry.getValue();
                 JsonObject one = new JsonObject();
                 one.addProperty("dx", override.dx());
@@ -209,8 +247,7 @@ public final class UiEditModel {
                 }
                 body.add(entry.getKey(), one);
             }
-            root.add("widgets", body);
-            return GSON.toJson(root);
+            return body;
         }
 
         /**
@@ -229,33 +266,59 @@ public final class UiEditModel {
                     result.broken = true;
                     return result;
                 }
-                JsonElement body = parsed.getAsJsonObject().get("widgets");
-                if (body == null) {
-                    return result;
-                }
-                if (!body.isJsonObject()) {
-                    result.broken = true;
-                    return result;
-                }
-                for (Map.Entry<String, JsonElement> entry : body.getAsJsonObject().entrySet()) {
-                    if (keyIndex(entry.getKey()) < 0 || !entry.getValue().isJsonObject()) {
-                        continue;
+                JsonObject rootObject = parsed.getAsJsonObject();
+                JsonElement body = rootObject.get("widgets");
+                if (body != null) {
+                    if (!body.isJsonObject()) {
+                        result.broken = true;
+                        return result;
                     }
-                    JsonObject one = entry.getValue().getAsJsonObject();
-                    WidgetOverride override = new WidgetOverride(
-                            intField(one, "dx"),
-                            intField(one, "dy"),
-                            intField(one, "dw"),
-                            intField(one, "dh"),
-                            stringField(one, "text"));
-                    if (!override.isIdentity()) {
-                        result.widgets.put(entry.getKey(), override);
+                    parseOverrides(result, body.getAsJsonObject(), false);
+                }
+                JsonElement elementsNode = rootObject.get("elements");
+                if (elementsNode != null) {
+                    if (!elementsNode.isJsonObject()) {
+                        result.broken = true;
+                        return result;
                     }
+                    parseOverrides(result, elementsNode.getAsJsonObject(), true);
                 }
             } catch (RuntimeException e) {
                 result.broken = true;
             }
             return result;
+        }
+
+        /**
+         * Разбор одной карты правок. Виджеты ключуются {@code индекс:Класс}
+         * ({@link #keyIndex}, битые ключи пропускаются), элементы layout —
+         * простым непустым именем.
+         */
+        private static void parseOverrides(ScreenOverrides result, JsonObject body, boolean elementKeys) {
+            for (Map.Entry<String, JsonElement> entry : body.entrySet()) {
+                String key = entry.getKey();
+                if (key.isBlank() || !entry.getValue().isJsonObject()) {
+                    continue;
+                }
+                if (!elementKeys && keyIndex(key) < 0) {
+                    continue;
+                }
+                JsonObject one = entry.getValue().getAsJsonObject();
+                WidgetOverride override = new WidgetOverride(
+                        intField(one, "dx"),
+                        intField(one, "dy"),
+                        intField(one, "dw"),
+                        intField(one, "dh"),
+                        stringField(one, "text"));
+                if (override.isIdentity()) {
+                    continue;
+                }
+                if (elementKeys) {
+                    result.elements.put(key, override);
+                } else {
+                    result.widgets.put(key, override);
+                }
+            }
         }
 
         private static int intField(JsonObject one, String name) {
