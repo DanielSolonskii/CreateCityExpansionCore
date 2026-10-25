@@ -67,6 +67,9 @@ public final class KnowledgeBaseScreen extends Screen {
     private String status;
     private long statusAt;
     private long opened, transition;
+    private Scrollbar listBar, contentBar;
+    private int drag;
+    private double dragGrab;
 
     private static Component tr(String key, Object... args) {
         return Component.translatable("gui.createcityexpansioncore.knowledge." + key, args);
@@ -82,6 +85,9 @@ public final class KnowledgeBaseScreen extends Screen {
         boolean contains(double x, double y) {
             return x >= x0 && x < x1 && y >= yTop && y < yBottom;
         }
+    }
+
+    private record Scrollbar(KnowledgeBaseLayout.Rect track, KnowledgeBaseLayout.Rect thumb, int maxScroll) {
     }
 
     private KnowledgeBaseScreen(Screen parent, String initialPath) {
@@ -177,6 +183,8 @@ public final class KnowledgeBaseScreen extends Screen {
             g.disableScissor();
         }
         listScroll = Math.clamp(listScroll, 0, Math.max(0, listContentHeight - list.height()));
+        listBar = scrollbar(list, listContentHeight, listScroll);
+        drawScrollbar(g, mx, my, listBar, 1);
 
         // Правый просмотр
         var viewer = layout.viewer();
@@ -192,7 +200,10 @@ public final class KnowledgeBaseScreen extends Screen {
             g.disableScissor();
         }
         contentScroll = Math.clamp(contentScroll, 0, Math.max(0, contentHeight - viewer.height()));
+        contentBar = scrollbar(viewer, contentHeight, contentScroll);
+        drawScrollbar(g, mx, my, contentBar, 2);
 
+        drawDivider(g);
         renderFooter(g);
         g.flush();
         g.pose().popPose();
@@ -461,6 +472,18 @@ public final class KnowledgeBaseScreen extends Screen {
         if (button != 0) return super.mouseClicked(screenX, screenY, button);
         double mx = layout.localX(screenX);
         double my = layout.localY(screenY);
+        if (listBar != null) {
+            if (listBar.track().contains(mx, my)) {
+                startDrag(1, listBar, listBar.thumb().contains(mx, my) ? my : my - listBar.thumb().height() / 2.0);
+                return true;
+            }
+        }
+        if (contentBar != null) {
+            if (contentBar.track().contains(mx, my)) {
+                startDrag(2, contentBar, contentBar.thumb().contains(mx, my) ? my : my - contentBar.thumb().height() / 2.0);
+                return true;
+            }
+        }
         for (int i = contentHits.size() - 1; i >= 0; i--) {
             if (contentHits.get(i).contains(mx, my)) {
                 openLink(contentHits.get(i).link());
@@ -493,6 +516,24 @@ public final class KnowledgeBaseScreen extends Screen {
             return true;
         }
         return super.mouseScrolled(screenX, screenY, dx, dy);
+    }
+
+    @Override
+    public boolean mouseDragged(double screenX, double screenY, int button, double dragX, double dragY) {
+        if (drag != 0) {
+            var bar = drag == 1 ? scrollbar(layout.list(), listContentHeight, listScroll)
+                    : scrollbar(layout.viewer(), contentHeight, contentScroll);
+            if (bar == null) drag = 0;
+            else dragTo(bar, layout.localY(screenY) - dragGrab);
+            return true;
+        }
+        return super.mouseDragged(screenX, screenY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double screenX, double screenY, int button) {
+        drag = 0;
+        return super.mouseReleased(screenX, screenY, button);
     }
 
     /** Открытие ссылки: файл — внутри базы, ponder — закрывает базу и открывает сцену. */
@@ -547,6 +588,49 @@ public final class KnowledgeBaseScreen extends Screen {
             if (KnowledgeAccess.matches(candidate.path(), cleaned)) return candidate;
         }
         return null;
+    }
+
+    // ======= Ползунки и разделитель =======
+
+    /** Геометрия ползунка; null, когда содержимое влезает в область. */
+    private Scrollbar scrollbar(KnowledgeBaseLayout.Rect area, int content, int scroll) {
+        if (content <= area.height()) return null;
+        int maxScroll = content - area.height();
+        int trackY = area.y() + 3;
+        int trackH = area.height() - 6;
+        int thumbH = Math.max(18, trackH * area.height() / content);
+        int thumbY = trackY + (trackH - thumbH) * Math.clamp(scroll, 0, maxScroll) / maxScroll;
+        return new Scrollbar(
+                new KnowledgeBaseLayout.Rect(area.right() - 5, trackY, 2, trackH),
+                new KnowledgeBaseLayout.Rect(area.right() - 6, thumbY, 4, thumbH), maxScroll);
+    }
+
+    private void drawScrollbar(GuiGraphics g, double mx, double my, Scrollbar bar, int areaId) {
+        if (bar == null) return;
+        var track = bar.track();
+        g.fill(track.x(), track.y(), track.right(), track.bottom(), INSET);
+        var thumb = bar.thumb();
+        boolean active = drag == areaId || thumb.contains(mx, my);
+        g.fill(thumb.x(), thumb.y(), thumb.right(), thumb.bottom(), active ? ACCENT : RAISED);
+    }
+
+    /** Тянутый ползунок: areaId 1 — список, 2 — просмотр. */
+    private void startDrag(int areaId, Scrollbar bar, double my) {
+        drag = areaId;
+        dragGrab = Math.clamp(my - bar.thumb().y(), 0, bar.thumb().height());
+        dragTo(bar, my - dragGrab);
+    }
+
+    private void dragTo(Scrollbar bar, double thumbTop) {
+        int span = Math.max(1, bar.track().height() - bar.thumb().height());
+        int target = Math.clamp((int) Math.round(thumbTop - bar.track().y()) * bar.maxScroll() / span, 0, bar.maxScroll());
+        if (drag == 1) listScroll = target;
+        else if (drag == 2) contentScroll = target;
+    }
+
+    private void drawDivider(GuiGraphics g) {
+        var divider = layout.divider();
+        g.fill(divider.x(), divider.y(), divider.right(), divider.bottom(), WorldMapChrome.EDGE);
     }
 
     private void renderFooter(GuiGraphics g) {

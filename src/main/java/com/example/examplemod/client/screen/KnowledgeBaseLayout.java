@@ -51,6 +51,12 @@ public record KnowledgeBaseLayout(int width, int height, float scale, float x, f
         return new Rect(l.right() + 10, l.y(), width - l.width - 44, l.height());
     }
 
+    /** Разделительная полоса между списком и просмотрщиком. */
+    public Rect divider() {
+        Rect l = list();
+        return new Rect(l.right() + 4, l.y(), 2, l.height());
+    }
+
     public Rect footer() {
         return new Rect(14, height - 40, width - 28, 24);
     }
