@@ -734,6 +734,18 @@ public class CreateCityExpansionCore {
     public static final DeferredItem<com.example.examplemod.railway.block.RailwayTrackMarkerItem> RAILWAY_TRACK_MARKER_ITEM=
             ITEMS.register("railway_track_marker",()->new com.example.examplemod.railway.block.RailwayTrackMarkerItem(
                     RAILWAY_TRACK_MARKER.get(),new Item.Properties()));
+    public static final DeferredBlock<com.example.examplemod.block.TransportRegistrationTerminalBlock> TRANSPORT_REGISTRATION_TERMINAL =
+            BLOCKS.register("transport_registration_terminal", () -> new com.example.examplemod.block.TransportRegistrationTerminalBlock(
+                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL)));
+    public static final DeferredItem<BlockItem> TRANSPORT_REGISTRATION_TERMINAL_ITEM = ITEMS.registerSimpleBlockItem(
+            "transport_registration_terminal", TRANSPORT_REGISTRATION_TERMINAL);
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.block.TransportRegistrationTerminalBlockEntity>>
+            TRANSPORT_REGISTRATION_TERMINAL_BLOCK_ENTITY = BLOCK_ENTITY_TYPES.register(
+            "transport_registration_terminal",
+            () -> BlockEntityType.Builder.of(
+                    com.example.examplemod.block.TransportRegistrationTerminalBlockEntity::new,
+                    TRANSPORT_REGISTRATION_TERMINAL.get()
+            ).build(null));
 
     /*
      * =========================================
@@ -858,6 +870,7 @@ public class CreateCityExpansionCore {
 
         );
         NeoForge.EVENT_BUS.register(CityMapSavedData.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.event.TransportProtectionEvents.class);
 
         modEventBus.addListener(
                 this::addCreative

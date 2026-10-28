@@ -128,7 +128,9 @@ public final class IndustrialCreativeTab {
             CreateCityExpansionCore.RAILWAY_TRACK_MARKER_ITEM.get(),
             // Загрузчик чанка держит удалённый завод живым, поэтому идёт сразу за разметкой пути:
             // это инфраструктура, которой в первую очередь пользуется железнодорожная сеть.
-            CreateCityExpansionCore.CHUNK_LOADER_ITEM.get()
+            CreateCityExpansionCore.CHUNK_LOADER_ITEM.get(),
+            // Терминал регистрации транспорта — точка учёта техники города (старый моноблочный компьютер).
+            CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL_ITEM.get()
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(

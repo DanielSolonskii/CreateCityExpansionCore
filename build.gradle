@@ -152,6 +152,14 @@ dependencies {
     // Create: Electro Energetics
     implementation files("libs/electroenergetics-1.21.1-1.1.2.jar")
 
+    // Create Simulated / Aeronautics (optional compat): compile-only,
+    // в рантайме эти моды предоставляет сборка игрока. Mixin'ы в их
+    // классы охраняет TransportMixinPlugin (см. mixins.json).
+    compileOnly files("libs/sable-neoforge-1.21.1-2.0.6.jar")
+    compileOnly files("libs/sable-companion-common-1.21.1-1.6.0.jar")
+    compileOnly files("libs/veil-neoforge-1.21.1-4.3.2.jar")
+    compileOnly files("libs/simulated-neoforge-1.21.1-1.3.2.jar")
+
     // NOTE: Create's own runtime companions (Ponder, Flywheel) must be present in the
     // run directory's mods folder for `runClient` / `runServer` to boot.
     // Full mod artifacts use a separate Gradle configuration, NOT runtimeClasspath:
