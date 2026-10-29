@@ -2,6 +2,7 @@ package com.example.examplemod.event;
 
 import com.example.examplemod.block.SimulatedCompat;
 import com.example.examplemod.block.TransportProtection;
+import com.simibubi.create.content.equipment.wrench.WrenchItem;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
@@ -69,13 +70,21 @@ public class TransportProtectionEvents {
         }
 
         // Взаимодействие с блоками sublevel'а (сундуки, клапаны,
-        // гайковёрт по блокам конструкции).
-        if (event.getLevel() instanceof ServerLevel level
-                && !SimulatedCompat.canModifySubLevelBlock(player, level, event.getPos())) {
-            TransportProtection.deny(player);
-            event.setCanceled(true);
-            event.setCancellationResult(InteractionResult.FAIL);
-            return;
+        // панели). Грант пульта управления доступом открывает только
+        // взаимодействие; гайковёрт — это разборка конструкции, он
+        // идёт по строгой проверке прав изменения.
+        if (event.getLevel() instanceof ServerLevel level) {
+            boolean wrench = !event.getItemStack().isEmpty()
+                    && event.getItemStack().getItem() instanceof WrenchItem;
+            boolean allowed = wrench
+                    ? SimulatedCompat.canModifySubLevelBlock(player, level, event.getPos())
+                    : SimulatedCompat.canInteractWithSubLevelBlock(player, level, event.getPos());
+            if (!allowed) {
+                TransportProtection.deny(player);
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.FAIL);
+                return;
+            }
         }
 
         // Разборка contraption'а гайковёртом по якорю.

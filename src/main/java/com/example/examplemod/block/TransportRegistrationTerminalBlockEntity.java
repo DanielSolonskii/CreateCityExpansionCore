@@ -14,8 +14,10 @@ import java.util.UUID;
  * BlockEntity терминала регистрации транспорта.
  *
  * <p>Хранит город, участником которого был игрок в момент
- * постановки блока. Блок без привязки к городу юридически
- * установлен, но функционала не имеет — это фиксируется
+ * постановки блока, и стабильный токен грантов пульта
+ * ({@code GrantToken}) — ключ всех точечных разрешений для
+ * конструкции, содержащей этот терминал. Блок без привязки к городу
+ * юридически установлен, но функционала не имеет — это фиксируется
  * сообщением игроку при установке.
  *
  * <p>Города хранятся в CityManager поверх overworld SavedData,
@@ -27,9 +29,16 @@ public final class TransportRegistrationTerminalBlockEntity extends BlockEntity 
     /** NBT-ключ города. Используется и при чтении из NBT contraption'ов (см. TransportProtection). */
     public static final String CITY_TAG = "City";
 
+    /** NBT-ключ токена грантов пульта. Создаётся при постановке блока, переживает сборку конструкции. */
+    public static final String GRANT_TOKEN_TAG = "GrantToken";
+
     /** Город, участником которого был ставящий игрок (null — терминал вне города). */
     @Nullable
     private UUID cityId;
+
+    /** Стабильный ключ грантов пульта для всей конструкции, где стоит этот терминал. */
+    @Nullable
+    private UUID grantToken;
 
     public TransportRegistrationTerminalBlockEntity(
             BlockPos pos,
@@ -52,11 +61,38 @@ public final class TransportRegistrationTerminalBlockEntity extends BlockEntity 
         setChanged();
     }
 
+    /** Токен грантов пульта этой конструкции или {@code null} у терминалов старых миров. */
+    @Nullable
+    public UUID grantToken() {
+        return grantToken;
+    }
+
+    /**
+     * Возвращает токен грантов, генерируя его при первом обращении.
+     *
+     * <p>Генерация сразу пишется в NBT: Create переносит NBT блока
+     * при сборке, а Sable переносит BlockEntity как есть — поэтому
+     * токен единообразно переживает и полёт, и пересборку конструкции.
+     * Вызывается из постановки блока и из ветки переключения пульта
+     * (только там, где игрок уже доказал права); сканы защиты токен
+     * только читают и мутацию BE не производят.
+     */
+    public UUID ensureGrantToken() {
+        if (grantToken == null) {
+            grantToken = UUID.randomUUID();
+            setChanged();
+        }
+        return grantToken;
+    }
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         if (cityId != null) {
             tag.putUUID(CITY_TAG, cityId);
+        }
+        if (grantToken != null) {
+            tag.putUUID(GRANT_TOKEN_TAG, grantToken);
         }
     }
 
@@ -64,5 +100,6 @@ public final class TransportRegistrationTerminalBlockEntity extends BlockEntity 
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         cityId = tag.hasUUID(CITY_TAG) ? tag.getUUID(CITY_TAG) : null;
+        grantToken = tag.hasUUID(GRANT_TOKEN_TAG) ? tag.getUUID(GRANT_TOKEN_TAG) : null;
     }
 }

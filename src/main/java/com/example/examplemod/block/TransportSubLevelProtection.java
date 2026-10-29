@@ -2,6 +2,7 @@ package com.example.examplemod.block;
 
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
+import com.example.examplemod.city.TransportGrantStatus;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
@@ -9,6 +10,8 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.plot.EmbeddedPlotLevelAccessor;
 import dev.ryanhcode.sable.sublevel.plot.LevelPlot;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
@@ -40,7 +43,11 @@ import java.util.WeakHashMap;
  * из общего всегда-загружаемого кода на sable-типы ссылаться нельзя.
  *
  * <p>Права — те же, что и везде: {@link CityManager#allowsTerritoryAction}
- * (участники города, союзы и доверенные города).
+ * (участники города, союзы и доверенные города). Поверх базовых прав
+ * канонических грантов работает пульт управления доступом: точечное
+ * разрешение по дельте блока относительно терминала регистрации
+ * ({@code CityManager#allowsTransportAccess}) открывает взаимодействие
+ * без права менять блоки конструкции.
  */
 public final class TransportSubLevelProtection {
 
@@ -60,10 +67,29 @@ public final class TransportSubLevelProtection {
      * после сборки BlockEntity могут быть ещё не зарегистрированы в
      * plot-чанках, и закэшированный «пусто» навсегда отключил бы
      * защиту (баг первой версии).
+     *
+     * <p>Положительный результат кэшируется целиком только вместе с
+     * токеном грантов: терминал без токена (старые миры) резканится
+     * заново на каждом обращении, пока участник не сгенерирует его
+     * пультом, — после этого кэш снова становится постоянным.
      */
-    private static final Map<ServerSubLevel, CachedCity> CITY_CACHE = new WeakHashMap<>();
+    private static final Map<ServerSubLevel, CachedTerminal> CITY_CACHE = new WeakHashMap<>();
 
-    private record CachedCity(@Nullable UUID cityId, long cachedAt) {
+    private record CachedTerminal(
+            @Nullable UUID cityId,
+            @Nullable UUID token,
+            @Nullable BlockPos terminalPos,
+            long cachedAt
+    ) {
+    }
+
+    /** Найденный сканом терминал: город, токен пульта, позиция в координатах plot'а. */
+    private record RegisteredTerminal(
+            UUID cityId,
+            @Nullable UUID token,
+            BlockPos terminalPos,
+            @Nullable TransportRegistrationTerminalBlockEntity blockEntity
+    ) {
     }
 
     private TransportSubLevelProtection() {
@@ -147,25 +173,130 @@ public final class TransportSubLevelProtection {
      */
     @Nullable
     public static City registeredCity(ServerSubLevel sublevel, ServerLevel level) {
+        RegisteredTerminal terminal = registeredTerminal(sublevel, level);
+        if (terminal == null) {
+            return null;
+        }
+        return CityManager.get(level.getServer().overworld()).getCity(terminal.cityId());
+    }
+
+    /**
+     * Полный регистрационный контекст sublevel'а: терминал с городом,
+     * токен грантов пульта и позиция терминала в координатах plot'а.
+     *
+     * <p>Дельты блоков считаются именно от этой позиции, поэтому в
+     * кэш уходит она же, — иначе проверка грантов не переживёт
+     * вылетов скана. Ссылка на BlockEntity в кэш не записывается:
+     * она нужна только живому скану, чтобы старый терминал мог
+     * сгенерировать токен прямо при переключении пульта.
+     */
+    @Nullable
+    private static RegisteredTerminal registeredTerminal(ServerSubLevel sublevel, ServerLevel level) {
         CityManager cityManager = CityManager.get(level.getServer().overworld());
-        CachedCity cached = CITY_CACHE.get(sublevel);
+        CachedTerminal cached = CITY_CACHE.get(sublevel);
         long now = level.getGameTime();
-        if (cached != null) {
-            if (cached.cityId() != null) {
-                return cityManager.getCity(cached.cityId());
-            }
-            if (now - cached.cachedAt() < NEGATIVE_TTL_TICKS) {
-                return null;
-            }
+        if (cached != null && cached.cityId() != null && cached.token() != null) {
+            return new RegisteredTerminal(cached.cityId(), cached.token(), cached.terminalPos(), null);
+        }
+        if (cached != null && cached.cityId() == null
+                && now - cached.cachedAt() < NEGATIVE_TTL_TICKS) {
+            return null;
         }
 
-        UUID found = scanForCity(sublevel, cityManager);
-        CITY_CACHE.put(sublevel, new CachedCity(found, now));
-        return found == null ? null : cityManager.getCity(found);
+        RegisteredTerminal found = scanForTerminal(sublevel, cityManager);
+        CITY_CACHE.put(sublevel, new CachedTerminal(
+                found == null ? null : found.cityId(),
+                found == null ? null : found.token(),
+                found == null ? null : found.terminalPos(),
+                now
+        ));
+        return found;
+    }
+
+    /**
+     * Может ли игрок взаимодействовать (ПКМ) с блоком по мировым
+     * координатам, если этот блок принадлежит sublevel'у.
+     *
+     * <p>Отличие от {@link #canModifyBlockAt}: ломать и ставить
+     * участник-проверка требует права строительства, а взаимодействие
+     * пропускается и по точечному гранту пульта. Гайковёрт в этот
+     * путь не должен попадать — вызывающий (TransportProtectionEvents)
+     * направляет его на строгую проверку.
+     */
+    public static boolean canInteractWithBlockAt(
+            ServerPlayer player,
+            ServerLevel level,
+            BlockPos pos
+    ) {
+        ServerSubLevel sublevel = containingSubLevel(level, pos);
+        if (sublevel == null) {
+            return true;
+        }
+        CityManager cityManager = CityManager.get(level.getServer().overworld());
+        RegisteredTerminal terminal = registeredTerminal(sublevel, level);
+        if (terminal == null) {
+            return true;
+        }
+        City city = cityManager.getCity(terminal.cityId());
+        if (city == null) {
+            return true;
+        }
+        if (cityManager.allowsTerritoryAction(city, player.getUUID(), false)) {
+            return true;
+        }
+        UUID token = terminal.token();
+        if (token == null) {
+            return false;
+        }
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
+                level.getBlockState(pos).getBlock());
+        return cityManager.allowsTransportAccess(
+                city, token, pos.subtract(terminal.terminalPos()), blockId);
+    }
+
+    /**
+     * Переключает грант пульта у блока sublevel'а (пульт-тумблер).
+     *
+     * <p>Игрок должен быть участником города конструкции. Для
+     * терминалов старых миров токен генерируется здесь и пишется в
+     * NBT живого BlockEntity — следующий скан кэширует конструкцию
+     * уже с токеном. Блок вне sublevel'а даёт NOT_PHYSICAL: caller
+     * уходит на статический путь участков, чужая конструкция без
+     * терминала — UNREGISTERED.
+     */
+    public static TransportGrantStatus toggleBlockGrantAt(
+            ServerPlayer player,
+            ServerLevel level,
+            BlockPos pos
+    ) {
+        ServerSubLevel sublevel = containingSubLevel(level, pos);
+        if (sublevel == null) {
+            return TransportGrantStatus.NOT_PHYSICAL;
+        }
+        CityManager cityManager = CityManager.get(level.getServer().overworld());
+        RegisteredTerminal terminal = registeredTerminal(sublevel, level);
+        if (terminal == null) {
+            return TransportGrantStatus.UNREGISTERED;
+        }
+        City city = cityManager.getCity(terminal.cityId());
+        if (city == null) {
+            return TransportGrantStatus.UNREGISTERED;
+        }
+        if (!city.hasMember(player.getUUID())) {
+            return TransportGrantStatus.NOT_MEMBER;
+        }
+        UUID token = terminal.token() != null
+                ? terminal.token()
+                : terminal.blockEntity().ensureGrantToken();
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
+                level.getBlockState(pos).getBlock());
+        boolean granted = cityManager.toggleTransportAccess(
+                city, token, pos.subtract(terminal.terminalPos()), blockId);
+        return granted ? TransportGrantStatus.GRANTED : TransportGrantStatus.REVOKED;
     }
 
     @Nullable
-    private static UUID scanForCity(ServerSubLevel sublevel, CityManager cityManager) {
+    private static RegisteredTerminal scanForTerminal(ServerSubLevel sublevel, CityManager cityManager) {
         LevelPlot plot = sublevel.getPlot();
         if (plot == null) {
             return null;
@@ -185,13 +316,9 @@ public final class TransportSubLevelProtection {
                     continue;
                 }
                 for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-                    if (blockEntity.getBlockState().getBlock() != terminal
-                            || !(blockEntity instanceof TransportRegistrationTerminalBlockEntity terminalBe)) {
-                        continue;
-                    }
-                    UUID cityId = terminalBe.cityId();
-                    if (cityId != null && cityManager.getCity(cityId) != null) {
-                        return cityId;
+                    RegisteredTerminal found = terminalOf(blockEntity, terminal, cityManager);
+                    if (found != null) {
+                        return found;
                     }
                 }
             }
@@ -207,15 +334,10 @@ public final class TransportSubLevelProtection {
                 for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
                     for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
                         cursor.set(x, y, z);
-                        BlockEntity blockEntity = accessor.getBlockEntity(cursor);
-                        if (blockEntity == null
-                                || blockEntity.getBlockState().getBlock() != terminal
-                                || !(blockEntity instanceof TransportRegistrationTerminalBlockEntity terminalBe)) {
-                            continue;
-                        }
-                        UUID cityId = terminalBe.cityId();
-                        if (cityId != null && cityManager.getCity(cityId) != null) {
-                            return cityId;
+                        RegisteredTerminal found = terminalOf(
+                                accessor.getBlockEntity(cursor), terminal, cityManager);
+                        if (found != null) {
+                            return found;
                         }
                     }
                 }
@@ -223,4 +345,23 @@ public final class TransportSubLevelProtection {
         }
 
         return null;
-    }}
+    }
+
+    @Nullable
+    private static RegisteredTerminal terminalOf(
+            BlockEntity blockEntity,
+            Block terminal,
+            CityManager cityManager
+    ) {
+        if (blockEntity == null
+                || blockEntity.getBlockState().getBlock() != terminal
+                || !(blockEntity instanceof TransportRegistrationTerminalBlockEntity terminalBe)) {
+            return null;
+        }
+        UUID cityId = terminalBe.cityId();
+        if (cityId == null || cityManager.getCity(cityId) == null) {
+            return null;
+        }
+        return new RegisteredTerminal(cityId, terminalBe.grantToken(), blockEntity.getBlockPos(), terminalBe);
+    }
+}

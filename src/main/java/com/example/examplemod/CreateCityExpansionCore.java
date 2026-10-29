@@ -38,6 +38,7 @@ import com.example.examplemod.item.MagneticAnalyzerItem;
 import com.example.examplemod.item.CityPylonItem;
 import com.example.examplemod.item.MineControllerItem;
 import com.example.examplemod.item.DispatcherKeyItem;
+import com.example.examplemod.item.AccessControlRemoteItem;
 import com.example.examplemod.network.RailwayCommandPayload;
 import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.RailwayStatePayload;
@@ -441,6 +442,16 @@ public class CreateCityExpansionCore {
             ITEMS.registerItem(
                     "dispatcher_key",
                     DispatcherKeyItem::new,
+                    new Item.Properties().stacksTo(1)
+            );
+    /*
+     * Пульт управления доступом: открывает один блок города для ПКМ
+     * любого игрока. Выключатель — повторное использование закрывает блок.
+     */
+    public static final DeferredItem<Item> ACCESS_CONTROL_REMOTE =
+            ITEMS.registerItem(
+                    "access_control_remote",
+                    AccessControlRemoteItem::new,
                     new Item.Properties().stacksTo(1)
             );
     public static final DeferredItem<Item> MINE_POWER_PORT_ITEM =

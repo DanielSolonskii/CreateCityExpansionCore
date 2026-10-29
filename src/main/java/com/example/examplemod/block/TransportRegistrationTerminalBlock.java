@@ -133,6 +133,12 @@ public final class TransportRegistrationTerminalBlock extends Block implements E
                 || !(level.getBlockEntity(pos) instanceof TransportRegistrationTerminalBlockEntity terminal)) {
             return;
         }
+        /*
+         * Токен грантов появляется в момент постановки: первая сборка
+         * конструкции сразу забирает его в NBT, и пер-блочные гранты
+         * пульта доступны с первого полёта.
+         */
+        terminal.ensureGrantToken();
         City city = CityManager.get(
                 serverPlayer.serverLevel().getServer().overworld()
         ).getMemberCity(serverPlayer.getUUID());

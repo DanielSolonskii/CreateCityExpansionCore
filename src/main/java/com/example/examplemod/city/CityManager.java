@@ -51,6 +51,27 @@ public class CityManager extends SavedData {
     private final Map<UUID, Set<UUID>> trustedCities = new HashMap<>();
 
     /**
+     * Точечные разрешения на взаимодействие (ПКМ) с конкретными блоками
+     * в открытом другими игроками порядке: город → позиция блока.
+     *
+     * <p>Выдаются пультом управления доступом любым участником города.
+     * Работают через {@link #allowsInteraction} — тот же вызов, на который
+     * смотрит {@code CityProtectionManager.canInteract} перед общими
+     * правами. Разрешение не заменяет право строительства: ломать
+     * и ставить блоки по-прежнему может только тот, кто может в городе.
+     */
+    private final Map<UUID, Map<BlockPos, InteractionGrant>> interactionGrants = new HashMap<>();
+
+    /**
+     * Гранты пульта по блокам физической конструкции: город ->
+     * токен терминала регистрации -> дельта блока относительно
+     * терминала -> тип блока, на котором грант выдан. Ключ —
+     * токен, а не координаты мира: он переживает полёт и пересборку,
+     * а дельты привязаны к компоновке конструкции.
+     */
+    private final Map<UUID, Map<UUID, Map<BlockPos, ResourceLocation>>> transportGrants = new HashMap<>();
+
+    /**
      * Spatial lookup for the block protection path: {@code dimension + plotX + plotZ → cityId}.
      *
      * <p><b>Derived, never persisted.</b> The canonical truth is {@link City#getClaimedPlots()};
@@ -332,6 +353,52 @@ public class CityManager extends SavedData {
             if (!from.equals(to) && manager.cities.containsKey(from) && manager.cities.containsKey(to))
                 manager.territoryAccess.computeIfAbsent(from, ignored -> new HashSet<>()).add(to);
         }
+
+        /*
+         * Точечные разрешения на взаимодействие. Устаревшие записи
+         * (город удалён, блок не парсится) пропускаются: одна
+         * повреждённая запись не задерживает загрузку мира, а при
+         * первой проверке защите всё равно нужен живой блок сверху.
+         */
+        for (Tag raw : tag.getList("InteractionGrants", Tag.TAG_COMPOUND)) {
+            CompoundTag grant = (CompoundTag) raw;
+            if (!grant.hasUUID("City")) continue;
+            ResourceLocation dimension = ResourceLocation.tryParse(grant.getString("Dimension"));
+            ResourceLocation blockId = ResourceLocation.tryParse(grant.getString("Block"));
+            if (dimension == null || blockId == null) continue;
+            BlockPos pos = new BlockPos(
+                    grant.getInt("X"),
+                    grant.getInt("Y"),
+                    grant.getInt("Z")
+            );
+            manager.interactionGrants
+                    .computeIfAbsent(grant.getUUID("City"), ignored -> new java.util.HashMap<>())
+                    .put(pos, new InteractionGrant(dimension, pos, blockId));
+        }
+        /* Города, которых уже нет, грантов не держат. */
+        manager.interactionGrants.keySet().retainAll(manager.cities.keySet());
+
+        /*
+         * Транспортные гранты: дельты блоков относительно терминала
+         * регистрации. Устаревшие записи (город удалён) пропускаются;
+         * протухание по типу блока снимается первой проверкой защиты.
+         */
+        for (Tag raw : tag.getList("TransportGrants", Tag.TAG_COMPOUND)) {
+            CompoundTag grant = (CompoundTag) raw;
+            if (!grant.hasUUID("City") || !grant.hasUUID("Token")) continue;
+            ResourceLocation blockId = ResourceLocation.tryParse(grant.getString("Block"));
+            if (blockId == null) continue;
+            BlockPos delta = new BlockPos(
+                    grant.getInt("X"),
+                    grant.getInt("Y"),
+                    grant.getInt("Z")
+            );
+            manager.transportGrants
+                    .computeIfAbsent(grant.getUUID("City"), ignored -> new java.util.HashMap<>())
+                    .computeIfAbsent(grant.getUUID("Token"), ignored -> new java.util.HashMap<>())
+                    .put(delta, blockId);
+        }
+        manager.transportGrants.keySet().retainAll(manager.cities.keySet());
         /*
          * Индекс владения участками строится один раз после того, как
          * все города прочитаны и мигрированы: до этого момента
@@ -629,6 +696,50 @@ public class CityManager extends SavedData {
         }));
         tag.put("TerritoryAccess",access);
 
+        /*
+         * Точечные разрешения на взаимодействие: пульт доступа открывает
+         * конкретный блок для ПКМ каждому. Пишутся только для живых
+         * городов — удалённый город не оставляет грантов в сохранении.
+         */
+        ListTag interactionTag = new ListTag();
+        interactionGrants.forEach((cityId, grants) -> {
+            if (!cities.containsKey(cityId)) return;
+            grants.forEach((pos, grant) -> {
+                CompoundTag grantTag = new CompoundTag();
+                grantTag.putUUID("City", cityId);
+                grantTag.putString("Dimension", grant.dimension().toString());
+                grantTag.putInt("X", pos.getX());
+                grantTag.putInt("Y", pos.getY());
+                grantTag.putInt("Z", pos.getZ());
+                grantTag.putString("Block", grant.blockId().toString());
+                interactionTag.add(grantTag);
+            });
+        });
+        tag.put("InteractionGrants", interactionTag);
+
+        /*
+         * Транспортные гранты: пульт открывает отдельные блоки физической
+         * конструкции по дельтам относительно терминала регистрации.
+         * Хранятся в SavedData, а не в NBT терминала: данные не должны
+         * синхронизироваться клиенту вместе с contraption'ом и должны
+         * переживать удаление города единым механизмом dropCity.
+         */
+        ListTag transportTag = new ListTag();
+        transportGrants.forEach((cityId, tokens) -> {
+            if (!cities.containsKey(cityId)) return;
+            tokens.forEach((token, deltas) -> deltas.forEach((delta, blockId) -> {
+                CompoundTag grantTag = new CompoundTag();
+                grantTag.putUUID("City", cityId);
+                grantTag.putUUID("Token", token);
+                grantTag.putInt("X", delta.getX());
+                grantTag.putInt("Y", delta.getY());
+                grantTag.putInt("Z", delta.getZ());
+                grantTag.putString("Block", blockId.toString());
+                transportTag.add(grantTag);
+            }));
+        });
+        tag.put("TransportGrants", transportTag);
+
         return tag;
     }
 
@@ -777,6 +888,131 @@ public class CityManager extends SavedData {
         City guest=getMemberCity(actor);
         return guest!=null && grantsTerritoryAccess(owner.getId(),guest.getId());
     }
+
+    // =========================================================
+    // ТОЧЕЧНЫЕ РАЗРЕШЕНИЯ НА ВЗАИМОДЕЙСТВИЕ (ПУЛЬТ ДОСТУПА)
+    // =========================================================
+
+    /**
+     * Выдаёт разрешение взаимодействия с блоком Города в указанном измерении.
+     *
+     * <p>Новая выдача заменяет старое разрешение той же позиции: пульту
+     * не нужно сначала снимать блок с охраны, чтобы переопределить его.
+     * Выдающим может быть любой участник города — проверку членства
+     * выполняет вызывающий (обработчик предмета), как это делает и
+     * {@link CityTerritoryHandlers} со своими территориальными пакетами.
+     */
+    public void addInteractionGrant(City city, ResourceLocation dimension, BlockPos pos, ResourceLocation blockId) {
+        if (city == null || dimension == null || pos == null || blockId == null) return;
+        City stored = cities.get(city.getId());
+        if (stored != city) return;
+        interactionGrants.computeIfAbsent(city.getId(), ignored -> new java.util.HashMap<>())
+                .put(pos.immutable(), new InteractionGrant(dimension, pos.immutable(), blockId));
+        setDirty();
+    }
+
+    /** Текущее разрешение блока или {@code null} — блок охраняется общими правилами. */
+    public InteractionGrant interactionGrant(City city, BlockPos pos) {
+        if (city == null || pos == null || cities.get(city.getId()) != city) return null;
+        return interactionGrants.getOrDefault(city.getId(), java.util.Map.of()).get(pos);
+    }
+
+    /** Снимает разрешение. {@code true} — блок действительно был открытым. */
+    public boolean removeInteractionGrant(City city, BlockPos pos) {
+        if (city == null || pos == null || cities.get(city.getId()) != city) return false;
+        boolean removed = interactionGrants
+                .getOrDefault(city.getId(), java.util.Map.of())
+                .remove(pos)
+                != null;
+        if (removed) setDirty();
+        return removed;
+    }
+
+    /**
+     * Единый проверяемый предикат защиты: стоит ли блок «под открытым пультом».
+     *
+     * <p>Стёршийся грант блок помечен другим блоком сверху, а не записью в
+     * гранте — так разрешение не может пережить замену блока: первая же
+     * проверка после замены снимает устаревшую запись.
+     */
+    public boolean allowsInteraction(City city, ResourceLocation dimension, BlockPos pos, ResourceLocation blockId) {
+        if (city == null || dimension == null || pos == null || blockId == null) return false;
+        InteractionGrant grant = interactionGrant(city, pos);
+        if (grant == null || !grant.dimension().equals(dimension)) {
+            return false;
+        }
+        if (!grant.blockId().equals(blockId)) {
+            removeInteractionGrant(city, pos);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Переключает точечное разрешение взаимодействия с блоком
+     * физической конструкции (пульт-тумблер).
+     *
+     * <p>Гранты адресуются по дельте блока относительно терминала
+     * регистрации: летящая конструкция меняет мировые координаты,
+     * а относительные у неё постоянны. Выдающим может быть любой
+     * участник города — проверку членства выполняет вызывающий
+     * (обработчик предмета), как и для статических грантов.
+     *
+     * @return {@code true} — грант выдан, {@code false} — снят.
+     */
+    public boolean toggleTransportAccess(City city, UUID token, BlockPos delta, ResourceLocation blockId) {
+        if (city == null || token == null || delta == null || blockId == null) return false;
+        if (cities.get(city.getId()) != city) return false;
+        Map<UUID, Map<BlockPos, ResourceLocation>> byToken =
+                transportGrants.computeIfAbsent(city.getId(), ignored -> new java.util.HashMap<>());
+        Map<BlockPos, ResourceLocation> grants =
+                byToken.computeIfAbsent(token, ignored -> new java.util.HashMap<>());
+        boolean removed = grants.remove(delta) != null;
+        if (removed) {
+            setDirty();
+            if (grants.isEmpty()) byToken.remove(token);
+            return false;
+        }
+        grants.put(delta, blockId);
+        setDirty();
+        return true;
+    }
+
+    /**
+     * Единый проверяемый предикат защиты: открыт ли конкретный блок
+     * конструкции с указанным терминалом.
+     *
+     * <p>Стёршийся грант (блок на дельте заменён) снимается первой же
+     * проверкой — по стату {@link #allowsInteraction}: разрешение не
+     * может пережить замену блока.
+     */
+    public boolean allowsTransportAccess(City city, UUID token, BlockPos delta, ResourceLocation blockId) {
+        if (city == null || token == null || delta == null || blockId == null) return false;
+        Map<BlockPos, ResourceLocation> grants = transportGrants
+                .getOrDefault(city.getId(), java.util.Map.of())
+                .getOrDefault(token, java.util.Map.of());
+        ResourceLocation granted = grants.get(delta);
+        if (granted == null) return false;
+        if (!granted.equals(blockId)) {
+            purgeTransportAccess(city, token, delta);
+            return false;
+        }
+        return true;
+    }
+
+    private void purgeTransportAccess(City city, UUID token, BlockPos delta) {
+        if (city == null || token == null || delta == null) return;
+        if (cities.get(city.getId()) != city) return;
+        Map<UUID, Map<BlockPos, ResourceLocation>> byToken = transportGrants.get(city.getId());
+        if (byToken == null) return;
+        Map<BlockPos, ResourceLocation> grants = byToken.get(token);
+        if (grants == null) return;
+        if (grants.remove(delta) != null) {
+            setDirty();
+            if (grants.isEmpty()) byToken.remove(token);
+        }
+    }
+
     private void removeRelations(UUID cityId) {
         territoryAccess.remove(cityId);
         territoryAccess.values().forEach(targets->targets.remove(cityId));
@@ -1053,6 +1289,8 @@ public class CityManager extends SavedData {
     private void dropCity(UUID cityId) {
         cities.remove(cityId);
         removeRelations(cityId);
+        interactionGrants.remove(cityId);
+        transportGrants.remove(cityId);
         claimOwners.values().removeIf(cityId::equals);
     }
     // =========================================================

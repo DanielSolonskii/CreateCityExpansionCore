@@ -36,7 +36,10 @@ public final class IndustrialCreativeTab {
 
     private static final List<ItemLike> TIER1_DERIVED = List.of(
             CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
-            CreateCityExpansionCore.DISPATCHER_KEY.get()
+            CreateCityExpansionCore.DISPATCHER_KEY.get(),
+            // Пульт управления доступом — городской инструмент охраны,
+            // рядом с ключом диспетчера: оба работают не через крафт машин.
+            CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );
 
     /*
