@@ -153,12 +153,22 @@ public final class CityPylonWorkspace extends Screen {
             else page.render(g,px,py,pt);
             g.flush();
         }finally{rendering=false;g.pose().popPose();g.disableScissor();}
+        if(canCollect())button(g,font,fx+7,fy+fh-52,sidebar-14,20,
+                Component.translatable("gui.createcityexpansioncore.pylon.collect"),false,
+                in(mx,my,fx+7,fy+fh-52,sidebar-14,20));
     }
+    private boolean canCollect(){return section==3&&minecraft.player!=null
+            &&minecraft.player.getUUID().equals(root.getMenu().getOwner());}
     private Component navLabel(int index) {return Component.translatable(index==2?"gui.createcityexpansioncore.freight.title":"gui.createcityexpansioncore.city.tab."+SECTIONS[index]);}
     private static boolean in(double x,double y,int left,int top,int w,int h) {return x>=left&&x<left+w&&y>=top&&y<top+h;}
     @Override public boolean mouseClicked(double x,double y,int button) {
         int fx=geometry.frameX(),fy=geometry.frameY();
         if(button==0) {
+            if(canCollect() && in(x,y,fx+7,fy+geometry.frameHeight()-52,geometry.sidebarWidth()-14,20)) {
+                minecraft.gameMode.handleInventoryButtonClick(root.getMenu().containerId,
+                        com.example.examplemod.menu.CityPylonMenu.RETRIEVE_PYLON);
+                return true;
+            }
             if(in(x,y,fx+geometry.frameWidth()-29,fy+3,26,24)){root.onClose();return true;}
             if(PlayerProfileLayout.workspaceEntry(fx,fy,geometry.frameWidth()).contains(x,y)) {
                 PlayerProfileScreen.open(this,minecraft.player.getUUID());return true;

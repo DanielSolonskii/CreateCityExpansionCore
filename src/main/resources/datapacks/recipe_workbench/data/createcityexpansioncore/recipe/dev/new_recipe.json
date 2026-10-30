@@ -1,0 +1,35 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " B ",
+    "DEF",
+    "GHI"
+  ],
+  "key": {
+    "B": {
+      "item": "minecraft:redstone_lamp"
+    },
+    "D": {
+      "item": "minecraft:redstone_lamp"
+    },
+    "E": {
+      "item": "create:brass_casing"
+    },
+    "F": {
+      "item": "minecraft:redstone_lamp"
+    },
+    "G": {
+      "item": "minecraft:chest"
+    },
+    "H": {
+      "item": "minecraft:oak_button"
+    },
+    "I": {
+      "item": "minecraft:chest"
+    }
+  },
+  "result": {
+    "id": "createcityexpansioncore:transport_registration_terminal",
+    "count": 1
+  }
+}

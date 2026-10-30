@@ -11,6 +11,7 @@
     "StationBlockEntityMixin",
     "simulated.AssemblePacketMixin",
     "simulated.PhysicsAssemblerBlockMixin",
+    "simulated.SingleTransportTerminalMixin",
     "ServerLoginAdmissionMixin",
     "ConfigurationAdmissionAssertionMixin",
     "PrivateMinecraftTcpMixin",

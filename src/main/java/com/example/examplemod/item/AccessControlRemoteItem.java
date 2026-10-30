@@ -69,12 +69,12 @@ public final class AccessControlRemoteItem extends Item {
         switch (SimulatedCompat.toggleTransportBlockGrant(player, level, context.getClickedPos())) {
             case GRANTED -> {
                 player.sendSystemMessage(Component.translatable(
-                        "message.createcityexpansioncore.access_control_remote.transport_granted"));
+                        "message.createcityexpansioncore.access_control_remote.transport_granted").withStyle(net.minecraft.ChatFormatting.GREEN));
                 return InteractionResult.CONSUME;
             }
             case REVOKED -> {
                 player.sendSystemMessage(Component.translatable(
-                        "message.createcityexpansioncore.access_control_remote.transport_revoked"));
+                        "message.createcityexpansioncore.access_control_remote.transport_revoked").withStyle(net.minecraft.ChatFormatting.RED));
                 return InteractionResult.CONSUME;
             }
             case NOT_MEMBER -> {
@@ -110,7 +110,7 @@ public final class AccessControlRemoteItem extends Item {
         if (existing != null && existing.dimension().equals(dimension)) {
             cities.removeInteractionGrant(city, pos);
             player.sendSystemMessage(Component.translatable(
-                    "message.createcityexpansioncore.access_control_remote.revoked"));
+                    "message.createcityexpansioncore.access_control_remote.revoked").withStyle(net.minecraft.ChatFormatting.RED));
             return InteractionResult.CONSUME;
         }
 
@@ -118,7 +118,7 @@ public final class AccessControlRemoteItem extends Item {
                 level.getBlockState(pos).getBlock());
         cities.addInteractionGrant(city, dimension, pos, blockId);
         player.sendSystemMessage(Component.translatable(
-                "message.createcityexpansioncore.access_control_remote.granted"));
+                "message.createcityexpansioncore.access_control_remote.granted").withStyle(net.minecraft.ChatFormatting.GREEN));
         return InteractionResult.CONSUME;
     }
 

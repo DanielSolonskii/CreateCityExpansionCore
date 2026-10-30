@@ -92,6 +92,19 @@ public final class TransportSubLevelProtection {
     ) {
     }
 
+    public record OutlineTerminal(UUID cityId, UUID token, BlockPos pos) {}
+
+    public static OutlineTerminal outlineTerminal(ServerSubLevel sublevel, ServerLevel level) {
+        var terminal = registeredTerminal(sublevel, level);
+        return terminal == null || terminal.token() == null ? null
+                : new OutlineTerminal(terminal.cityId(), terminal.token(), terminal.terminalPos());
+    }
+
+    public static void invalidateTerminalCache(ServerLevel level, BlockPos pos) {
+        var sublevel = Sable.HELPER.getContaining(level, new ChunkPos(pos));
+        if (sublevel instanceof ServerSubLevel server) CITY_CACHE.remove(server);
+    }
+
     private TransportSubLevelProtection() {
     }
 

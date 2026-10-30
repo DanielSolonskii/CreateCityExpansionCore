@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
+    "createcityexpansioncore:transport_registration_terminal",
     "createcityexpansioncore:contract_intake",
     "createcityexpansioncore:warehouse_gateway",
     "createcityexpansioncore:reinforced_concrete",

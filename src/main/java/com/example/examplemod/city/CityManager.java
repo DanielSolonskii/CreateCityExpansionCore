@@ -911,6 +911,12 @@ public class CityManager extends SavedData {
         setDirty();
     }
 
+    /** Immutable snapshot for the access remote's read-only client preview. */
+    public java.util.List<InteractionGrant> interactionGrants(City city) {
+        if (city == null || cities.get(city.getId()) != city) return java.util.List.of();
+        return java.util.List.copyOf(interactionGrants.getOrDefault(city.getId(), java.util.Map.of()).values());
+    }
+
     /** Текущее разрешение блока или {@code null} — блок охраняется общими правилами. */
     public InteractionGrant interactionGrant(City city, BlockPos pos) {
         if (city == null || pos == null || cities.get(city.getId()) != city) return null;
@@ -960,6 +966,12 @@ public class CityManager extends SavedData {
      *
      * @return {@code true} — грант выдан, {@code false} — снят.
      */
+    public java.util.Map<BlockPos, ResourceLocation> transportAccessSnapshot(City city, UUID token) {
+        if (city == null || token == null || cities.get(city.getId()) != city) return java.util.Map.of();
+        return java.util.Map.copyOf(transportGrants.getOrDefault(city.getId(), java.util.Map.of())
+                .getOrDefault(token, java.util.Map.of()));
+    }
+
     public boolean toggleTransportAccess(City city, UUID token, BlockPos delta, ResourceLocation blockId) {
         if (city == null || token == null || delta == null || blockId == null) return false;
         if (cities.get(city.getId()) != city) return false;

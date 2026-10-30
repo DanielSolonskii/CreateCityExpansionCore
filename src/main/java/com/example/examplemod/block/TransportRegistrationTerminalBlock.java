@@ -45,7 +45,8 @@ import java.util.Map;
  * Игрок вне города получает сообщение, что функционала у терминала
  * пока нет, — блок при этом всё равно ставится.
  */
-public final class TransportRegistrationTerminalBlock extends Block implements EntityBlock {
+public final class TransportRegistrationTerminalBlock extends Block implements EntityBlock,
+        com.simibubi.create.content.equipment.wrench.IWrenchable {
 
     public static final MapCodec<TransportRegistrationTerminalBlock> CODEC =
             simpleCodec(TransportRegistrationTerminalBlock::new);
@@ -61,7 +62,8 @@ public final class TransportRegistrationTerminalBlock extends Block implements E
     public TransportRegistrationTerminalBlock(
             BlockBehaviour.Properties properties
     ) {
-        super(properties);
+        // Create brass casing uses andesite strength; keep explicit values independent of registry order.
+        super(properties.strength(1.5F, 6.0F).requiresCorrectToolForDrops());
         this.registerDefaultState(
                 this.stateDefinition.any()
                         .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH)
@@ -143,16 +145,16 @@ public final class TransportRegistrationTerminalBlock extends Block implements E
                 serverPlayer.serverLevel().getServer().overworld()
         ).getMemberCity(serverPlayer.getUUID());
         if (city == null) {
-            serverPlayer.sendSystemMessage(
-                    Component.translatable("message.createcityexpansioncore.transport_terminal.no_city")
+            com.example.examplemod.event.TerminalPlacementNotifications.enqueue(serverPlayer, terminal,
+                    Component.translatable("message.createcityexpansioncore.transport_terminal.no_city").withStyle(net.minecraft.ChatFormatting.RED)
             );
             return;
         }
         terminal.setCityId(city.getId());
-        serverPlayer.sendSystemMessage(Component.translatable(
+        com.example.examplemod.event.TerminalPlacementNotifications.enqueue(serverPlayer, terminal, Component.translatable(
                 "message.createcityexpansioncore.transport_terminal.linked",
                 city.getName()
-        ));
+        ).withStyle(net.minecraft.ChatFormatting.GREEN));
     }
 
     /**

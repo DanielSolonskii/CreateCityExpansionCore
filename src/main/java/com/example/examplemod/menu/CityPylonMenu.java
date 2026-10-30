@@ -417,6 +417,33 @@ public class CityPylonMenu extends AbstractContainerMenu implements com.example.
         return true;
     }
 
+    public static final int RETRIEVE_PYLON = 73;
+
+    @Override
+    public boolean clickMenuButton(Player player, int id) {
+        if (id != RETRIEVE_PYLON || !(player instanceof net.minecraft.server.level.ServerPlayer server)) return false;
+        var level = server.serverLevel();
+        if (server.containerMenu != this || !level.dimension().location().equals(dimensionId)
+                || server.distanceToSqr(pylonPos.getCenter()) > 64 || !level.hasChunkAt(pylonPos)
+                || !level.getBlockState(pylonPos).is(CreateCityExpansionCore.CITY_PYLON.get())) return false;
+        var manager = com.example.examplemod.city.CityManager.get(server.getServer().overworld());
+        var city = manager.getCityByPylon(dimensionId, pylonPos);
+        if (city == null || !city.getOwner().equals(server.getUUID())) return false;
+        if (server.getInventory().getFreeSlot() < 0) {
+            server.sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.createcityexpansioncore.pylon.inventory_full")
+                    .withStyle(net.minecraft.ChatFormatting.RED));
+            return false;
+        }
+        var stack = com.example.examplemod.block.CityPylonBlock.transferableStack(city);
+        if (!level.removeBlock(pylonPos, false)) return false;
+        manager.markPylonRelocating(city);
+        server.getInventory().add(stack);
+        server.closeContainer();
+        server.sendSystemMessage(net.minecraft.network.chat.Component.translatable("message.createcityexpansioncore.pylon.collected")
+                .withStyle(net.minecraft.ChatFormatting.GREEN));
+        return true;
+    }
+
     @Override
     public ItemStack quickMoveStack(
             Player player,

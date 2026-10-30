@@ -83,7 +83,8 @@ public class CityPylonBlock extends BaseEntityBlock {
     public CityPylonBlock(
             BlockBehaviour.Properties properties
     ) {
-        super(properties);
+        super(properties.strength(-1.0F, 3600000.0F)
+                .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK));
         /*
          * NORTH — значение по умолчанию. Оно же сохраняет текущий
          * внешний вид для всех пилонов, установленных до этого изменения.
@@ -589,7 +590,7 @@ public class CityPylonBlock extends BaseEntityBlock {
         }
     }
 
-    private static ItemStack transferableStack(City city) {
+    public static ItemStack transferableStack(City city) {
         ItemStack result = new ItemStack(CreateCityExpansionCore.CITY_PYLON_ITEM.get());
         if (city != null) {
             com.example.examplemod.city.CityPylonItemData.write(result, city.getId());

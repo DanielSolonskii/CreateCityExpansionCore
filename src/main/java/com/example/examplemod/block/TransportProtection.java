@@ -204,7 +204,7 @@ public final class TransportProtection {
     /** Единое сообщение об отказе — не расплескивать по mixin'ам. */
     public static void deny(ServerPlayer player) {
         player.sendSystemMessage(
-                Component.translatable("message.createcityexpansioncore.transport_terminal.protected")
+                Component.translatable("message.createcityexpansioncore.transport_terminal.protected").withStyle(net.minecraft.ChatFormatting.RED)
         );
     }
 }
