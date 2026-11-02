@@ -1,4 +1,5 @@
 {
+  "item.createcityexpansioncore.incomplete_access_control_remote": "Incomplete Access Control Remote",
   "gui.createcityexpansioncore.pylon.collect": "Collect pylon",
   "message.createcityexpansioncore.pylon.inventory_full": "Free an inventory slot to collect the pylon.",
   "message.createcityexpansioncore.pylon.collected": "Pylon returned to your inventory. Place it again to restore the city.",

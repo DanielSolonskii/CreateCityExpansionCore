@@ -1,4 +1,5 @@
 {
+  "item.createcityexpansioncore.incomplete_access_control_remote": "Незаконченный пульт управления доступом",
   "gui.createcityexpansioncore.pylon.collect": "Забрать пилон",
   "message.createcityexpansioncore.pylon.inventory_full": "Освободите место в инвентаре, чтобы забрать пилон.",
   "message.createcityexpansioncore.pylon.collected": "Пилон возвращён в инвентарь. Для восстановления города установите его снова.",

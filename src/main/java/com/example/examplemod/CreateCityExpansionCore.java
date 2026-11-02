@@ -454,6 +454,12 @@ public class CreateCityExpansionCore {
                     AccessControlRemoteItem::new,
                     new Item.Properties().stacksTo(1)
             );
+    public static final DeferredItem<Item> INCOMPLETE_ACCESS_CONTROL_REMOTE =
+            ITEMS.registerItem(
+                    "incomplete_access_control_remote",
+                    com.simibubi.create.content.processing.sequenced.SequencedAssemblyItem::new,
+                    new Item.Properties().stacksTo(1)
+            );
     public static final DeferredItem<Item> MINE_POWER_PORT_ITEM =
             ITEMS.registerItem(
                     "mine_power_port",

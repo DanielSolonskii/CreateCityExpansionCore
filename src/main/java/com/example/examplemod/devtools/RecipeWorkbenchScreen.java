@@ -110,7 +110,12 @@ public final class RecipeWorkbenchScreen extends Screen {
             rows.add(next.toString());}
         document.add("pattern",rows);document.add("key",keys);
     }
-    private void refreshSlots(){slots.clear();collect(document);activeSlot=Math.min(activeSlot,Math.max(0,slots.size()-1));}
+    private void refreshSlots(){slots.clear();if(sequence()){
+        if(document.has("ingredient"))collect(document.get("ingredient"));
+        if(document.has("transitional_item"))collect(document.get("transitional_item"));
+        if(document.has("results"))collect(document.get("results"));
+    }else collect(document);activeSlot=Math.min(activeSlot,Math.max(0,slots.size()-1));}
+    private boolean sequence(){return document.has("type")&&document.get("type").getAsString().equals("create:sequenced_assembly");}
     private boolean outputSlot(JsonObject slot){
         if(document.get("result")==slot)return true;
         if(document.has("results")&&document.get("results").isJsonArray())
@@ -154,6 +159,9 @@ public final class RecipeWorkbenchScreen extends Screen {
             button("Слоты из JSON",12,150,125,()->{if(parse())status="Слоты обновлены из JSON";});
         }
         int editorY=210, editorH=Math.max(50,height-355);
+        if(sequence())button("Настроить этапы сборки",width/2+8,160,210,()->{
+            retain();if(parse())minecraft.setScreen(new SequenceRecipeScreen(this,document,json->{load(json);status="Этапы обновлены в черновике. Сохраните рецепт для применения.";}));
+        });
         editor=addRenderableWidget(new MultiLineEditBox(font,12,editorY,width-24,editorH,Component.empty(),Component.literal("JSON рецепта")));
         editor.setCharacterLimit(131072);editor.setValue(draft);
         int actionsY=editorY+editorH+4;

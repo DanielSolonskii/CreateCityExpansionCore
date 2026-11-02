@@ -39,6 +39,7 @@ public final class IndustrialCreativeTab {
             CreateCityExpansionCore.DISPATCHER_KEY.get(),
             // Пульт управления доступом — городской инструмент охраны,
             // рядом с ключом диспетчера: оба работают не через крафт машин.
+            CreateCityExpansionCore.INCOMPLETE_ACCESS_CONTROL_REMOTE.get(),
             CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );
 
