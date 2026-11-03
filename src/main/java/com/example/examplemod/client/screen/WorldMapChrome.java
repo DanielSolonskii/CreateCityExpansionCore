@@ -10,6 +10,22 @@ final class WorldMapChrome {
     static final int TEXT=0xFFE8E9E1, MUTED=0xFFAAB7B8, ACCENT=0xFFD3A363;
     static final int PRIMARY=0xFF996215, INSET=0xFF172025, RADIUS=6;
     private WorldMapChrome() {}
+
+    /** Full-screen dispatcher surfaces; other workspaces keep their established chrome. */
+    static void dispatchPanel(GuiGraphics g,int x,int y,int w,int h) {
+        if(w<=0||h<=0)return;
+        rounded(g,x,y+3,w,h,5,0x50000000);
+        rounded(g,x,y,w,h,5,com.example.examplemod.client.map.DispatchPalette.EDGE);
+        rounded(g,x+1,y+1,w-2,h-2,4,com.example.examplemod.client.map.DispatchPalette.SURFACE);
+        g.hLine(x+6,x+Math.min(w-7,38),y+1,com.example.examplemod.client.map.DispatchPalette.ACCENT);
+    }
+
+    static void dispatchControl(GuiGraphics g,WorldMapUiLayout.Rect r,boolean active,boolean hover,boolean enabled,boolean primary) {
+        int edge=!enabled?EDGE:active||primary?com.example.examplemod.client.map.DispatchPalette.ACCENT:hover?0xFF7497A5:com.example.examplemod.client.map.DispatchPalette.EDGE;
+        rounded(g,r.x(),r.y(),r.width(),r.height(),4,edge);
+        rounded(g,r.x()+1,r.y()+1,r.width()-2,r.height()-2,3,!enabled?INSET:
+                active||primary?0xFF244B54:hover?com.example.examplemod.client.map.DispatchPalette.RAISED:com.example.examplemod.client.map.DispatchPalette.INSET);
+    }
     static void rounded(GuiGraphics g,int x,int y,int w,int h,int r,int color) {
         if(w<=0||h<=0)return;
         r=Math.min(r,Math.min(w,h)/2);

@@ -48,6 +48,8 @@ public final class CityTerritoryCheck {
         outline();
         interactionGrants();
         transportGrants();
+        grantReplacementLifecycle();
+        grantLifecycleApiContract();
 
         System.out.println("PASS: " + checks + " city territory claim checks");
     }
@@ -853,6 +855,105 @@ public final class CityTerritoryCheck {
         CityManager reopened = CityManager.load(afterRemoval, null);
         require(!reopened.allowsTransportAccess(null, token, delta, CHEST),
                 "a deleted city grants no transport blocks");
+    }
+
+    /** Real ledger transitions; native event/mixin execution remains a runtime acceptance test. */
+    private static void grantReplacementLifecycle() {
+        CityManager manager = new CityManager();
+        UUID owner = UUID.randomUUID(), token = UUID.randomUUID(), otherToken = UUID.randomUUID();
+        City city = manager.createCity("Lifecycle", owner, OVERWORLD, new BlockPos(0, 64, 0));
+        BlockPos target = new BlockPos(10, 64, 20), neighbour = target.east(), delta = new BlockPos(3, 1, -2);
+        ResourceLocation air = ResourceLocation.parse("minecraft:air");
+        require(!manager.hasBlockAccessGrants(), "world-change hook returns cheaply when no grants exist");
+        manager.addInteractionGrant(city, OVERWORLD, target, CHEST);
+        manager.addInteractionGrant(city, OVERWORLD, neighbour, CHEST);
+        manager.toggleTransportAccess(city, token, delta, CHEST);
+        manager.toggleTransportAccess(city, otherToken, delta, CHEST);
+        require(manager.hasBlockAccessGrants() && manager.hasTransportAccessGrants(), "stored grants enable lifecycle lookup");
+
+        // Effective final type is unchanged for facing/open updates or a cancelled replacement.
+        manager.onBlockChanged(OVERWORLD, target, CHEST, CHEST);
+        manager.onTransportBlockChanged(city, token, delta, CHEST, CHEST);
+        require(manager.allowsInteraction(city, OVERWORLD, target, CHEST)
+                        && manager.allowsTransportAccess(city, token, delta, CHEST),
+                "unchanged final type retains ordinary and transport grants");
+        manager.onBlockChanged(NETHER, target, CHEST, air);
+        require(manager.allowsInteraction(city, OVERWORLD, target, CHEST), "another dimension cannot revoke this grant");
+
+        manager.onBlockChanged(OVERWORLD, target, CHEST, air);
+        manager.onBlockChanged(OVERWORLD, target, air, CHEST);
+        manager.onTransportBlockChanged(city, token, delta, CHEST, air);
+        manager.onTransportBlockChanged(city, token, delta, air, CHEST);
+        boolean ordinaryRevoked = !manager.allowsInteraction(city, OVERWORLD, target, CHEST);
+        boolean transportRevoked = !manager.allowsTransportAccess(city, token, delta, CHEST);
+        require(ordinaryRevoked && transportRevoked,
+                "same-ID break/replacement must revoke both grants: ordinary=" + ordinaryRevoked + ", transport=" + transportRevoked);
+        require(manager.allowsInteraction(city, OVERWORLD, neighbour, CHEST), "adjacent static grant survives cleanup");
+        require(manager.allowsTransportAccess(city, otherToken, delta, CHEST), "another terminal token survives cleanup");
+        var restored = CityManager.load(manager.save(new CompoundTag(), null), null);
+        var restoredCity = restored.getCityByName("Lifecycle");
+        require(!restored.allowsInteraction(restoredCity, OVERWORLD, target, CHEST)
+                        && !restored.allowsTransportAccess(restoredCity, token, delta, CHEST),
+                "restart never restores a revoked same-ID grant");
+        require(restored.allowsTransportAccess(restoredCity, otherToken, delta, CHEST),
+                "relocation without a block replacement preserves saved token/delta identity");
+        manager.removeInteractionGrant(city, neighbour);
+        manager.toggleTransportAccess(city, otherToken, delta, CHEST);
+        require(!manager.hasBlockAccessGrants(), "last revocation removes empty containers from the cheap hook gate");
+    }
+
+    /** Exact bytecode/API wiring, not an execution of a Minecraft placement or Sable assembly. */
+    private static void grantLifecycleApiContract() {
+        String notify = "(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/chunk/LevelChunk;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;II)V";
+        var level = bytecode("net/minecraft/world/level/Level.class");
+        require(level.methods.stream().anyMatch(m -> m.name.equals("markAndNotifyBlock") && m.desc.equals(notify)),
+                "NeoForge exposes the exact committed block notification descriptor");
+        require(level.fields.stream().anyMatch(f -> f.name.equals("restoringBlockSnapshots") && f.desc.equals("Z")),
+                "NeoForge exposes its placement rollback flag");
+        var mixin = bytecode("com/example/examplemod/mixin/LevelBlockGrantMixin.class");
+        var handler = mixin.methods.stream().filter(m -> m.name.equals("ccec$clearBlockGrants")).findFirst().orElseThrow();
+        require(calls(handler, "com/example/examplemod/event/CityProtectionEvents", "onBlockChanged"),
+                "committed notification reaches the production lifecycle callback");
+        require(java.util.stream.StreamSupport.stream(handler.instructions.spliterator(), false)
+                        .anyMatch(i -> i instanceof org.objectweb.asm.tree.FieldInsnNode f && f.name.equals("restoringBlockSnapshots")),
+                "mixin explicitly guards canceled-placement restoration");
+        try (var stream = CityTerritoryCheck.class.getClassLoader().getResourceAsStream("createcityexpansioncore.mixins.json")) {
+            require(stream != null && new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("\"LevelBlockGrantMixin\""), "lifecycle mixin is registered in the shipped config");
+            java.nio.file.Path root = java.nio.file.Path.of("").toAbsolutePath();
+            while (root != null && !java.nio.file.Files.isRegularFile(root.resolve("build.gradle"))) root = root.getParent();
+            if (root == null) throw new AssertionError("repository root not found for optional API contract");
+            try (var jar = new java.util.jar.JarFile(root.resolve("libs/sable-neoforge-1.21.1-2.0.6.jar").toFile())) {
+                var assembly = bytecode(jar.getInputStream(jar.getJarEntry("dev/ryanhcode/sable/api/SubLevelAssemblyHelper.class")));
+                var move = assembly.methods.stream().filter(m -> m.name.equals("moveBlocks")).findFirst().orElseThrow();
+                require(!calls(move, "net/minecraft/world/level/Level", "markAndNotifyBlock")
+                                && calls(move, "dev/ryanhcode/sable/api/SubLevelAssemblyHelper", "markAndNotifyBlock"),
+                        "assembly moves use their own notification and preserve transport grants");
+                var accessor = bytecode(jar.getInputStream(jar.getJarEntry("dev/ryanhcode/sable/sublevel/plot/EmbeddedPlotLevelAccessor.class")));
+                var set = accessor.methods.stream().filter(m -> m.name.equals("setBlock")).findFirst().orElseThrow();
+                require(calls(set, "net/minecraft/world/level/Level", "setBlock"),
+                        "ordinary sublevel edits use the hooked world setBlock lifecycle");
+            }
+        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
+    }
+
+    private static boolean calls(org.objectweb.asm.tree.MethodNode method, String owner, String name) {
+        for (var instruction : method.instructions)
+            if (instruction instanceof org.objectweb.asm.tree.MethodInsnNode call && call.owner.equals(owner) && call.name.equals(name)) return true;
+        return false;
+    }
+
+    private static org.objectweb.asm.tree.ClassNode bytecode(String resource) {
+        return bytecode(CityTerritoryCheck.class.getClassLoader().getResourceAsStream(resource));
+    }
+
+    private static org.objectweb.asm.tree.ClassNode bytecode(java.io.InputStream stream) {
+        if (stream == null) throw new AssertionError("missing class for bytecode contract");
+        try (stream) {
+            var node = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(stream).accept(node, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+            return node;
+        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
     }
 
     // ------------------------------------------------------------------- перенос пилона

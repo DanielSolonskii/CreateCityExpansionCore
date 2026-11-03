@@ -1,55 +1,73 @@
-# CreateServerPlatform
+# Create Server Platform — snapshot внутри CCEC
 
-> Этот README содержит исторические milestone-описания. Актуальное состояние 14.10.2026 и onboarding команды: [State команды](../docs/audit-2026-10-14/STATE_RU.md).
-> Game Session 4B уже реализован; production auth REQUIRED и Telegram service active подтверждены SSH-аудитом. Текущая копия платформы для команды — `platform/` в CCEC GitHub.
+Актуализировано 02.11.2026 по исходникам этого репозитория. `platform/` содержит
+backend, Telegram bot, Windows launcher и инфраструктурные шаблоны. Это
+самостоятельные сборки внутри CreateCityExpansionCore, а не Gradle subprojects
+мода. Соседний checkout CreateServerPlatform в этот аудит не входит.
 
-Внешняя платформа Create Server рядом с CreateCityExpansionCore:
-backend API, Telegram bot, launcher, infra и docs.
+Текущий [STATE](STATE.md) и [аудит](../docs/audit-2026-11-02/PLATFORM_AUDIT_RU.md)
+отделяют исходники, локальные проверки и runtime. Документы с датами в
+[docs/](docs/) сохраняют историю; прошлый deployment/SSH/GUI receipt не
+подтверждает состояние сервисов сегодня.
 
-## Реализовано
+## Состав
 
-- Backend Java 21 / Spring Boot / Gradle, PostgreSQL, JPA и Flyway V1–V3.
-- Infrastructure health/version и Identity Foundation read API.
-- Create Server Account: BCrypt password, pending registration, обязательная
-  Telegram verification, login для ACTIVE verified accounts.
-- Telegram bot Java 21 / Gradle: long polling, /start, launcher download button,
-  verification deep link; без прямого доступа к PostgreSQL.
-- Backend H2/PostgreSQL tests и bot fake-HTTP tests.
+| Компонент | Назначение | Контракт сборки |
+| --- | --- | --- |
+| [backend](backend/README.md) | Accounts/verification/devices, game sessions, reports, bridge/telemetry, broadcasts/news, companion/community | Java 21, Gradle 9.2.1, Spring Boot 4.0.8, PostgreSQL/Flyway V1–V14 |
+| [telegram-bot](telegram-bot/README.md) | Long polling, verification, меню/admin, уведомления | Java 21, Gradle 9.2.1, OkHttp 4.12.0; без прямой БД |
+| [launcher](launcher/README.md) | React/TypeScript/Vite + Tauri/Rust, Windows NSIS | npm/Cargo; package version 0.1.13; есть native compile blocker |
+| [infra](infra/README.md) | Dev PostgreSQL/Redis, systemd/Caddy/TLS/routing и release helpers | Шаблоны под конкретное окружение, не автоматическая установка |
 
-## Структура и запуск
+Backend владеет platform identity и credentials. CCEC остаётся источником мира,
+экономики, городов и физических операций. Game Session реализован в коде:
+trusted device → capability → ticket → server consume. Password login сам по
+себе не разрешает Minecraft-вход. Microsoft/Mojang authentication не является
+реализованной identity платформы; offline UUID не доказывает владение аккаунтом.
 
-- backend/ — API; запуск и environment: backend/README.md.
-- telegram-bot/ — самостоятельное приложение; telegram-bot/README.md.
-- launcher/ — Windows React/TypeScript/Tauri GUI; на VDS как runtime не переносится.
-- infra/ — примеры инфраструктуры; для установленного локального PostgreSQL
-  Docker не нужен. Redis в runtime приложений отсутствует.
-- docs/ — architecture, integration-contract, ADR-0001/0002/0003 и roadmap.
+## Локальная проверка
 
-Backend health/version работают с PostgreSQL. Для registration нужны
-TELEGRAM_BOT_USERNAME и BOT_BACKEND_SECRET. Bot дополнительно требует настоящий
-TELEGRAM_BOT_TOKEN. Secrets задаются только в environment; .env.example —
-справочник, приложения не загружают его автоматически.
+Из корня CCEC в PowerShell:
 
-## Identity boundary
+```powershell
+Push-Location platform/backend
+.\gradlew.bat test build --console=plain
+Pop-Location
+Push-Location platform/telegram-bot
+.\gradlew.bat test build --console=plain
+Pop-Location
+Push-Location platform/launcher
+npm ci
+npm test
+npm run test:release
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --locked
+Pop-Location
+```
 
-Create Server использует собственный аккаунт, Minecraft работает в offline-mode.
-Microsoft/Mojang authentication не является identity платформы. Offline
-username/UUID не доказывают личность. Будущий CCEC проверит game session через
-backend. Game session и CCEC authentication пока не реализованы.
+Linux/macOS Java wrapper: `./gradlew`. Для свежих caches нужны registry network
+access и toolchains; `--offline` работает только с заполненными caches.
+При ограниченных правах задайте `GRADLE_USER_HOME` на доступный каталог.
+Корневой Gradle build и [CI](../.github/workflows/build.yml) собирают мод, а не
+platform applications. `postgresTest` — отдельная backend task на выделенной БД.
+Команды описывают интерфейс проверки, а не обещание успешной сборки: текущие
+результаты и блокеры приведены в [STATE](STATE.md).
 
-Backend владеет account/identity. CCEC остаётся источником истины для игрового
-мира, экономики, Freight/Railway и физических операций. Account login сейчас
-проверяет credentials, но не выдаёт Minecraft admission token.
+## Конфигурация и эксплуатация
 
-Последняя проверка: docs/milestone-3-verification.md.
+Начните с README компонента. Java приложения не читают `.env` автоматически.
+Корневой [пример](.env.example) содержит устаревшие/неиспользуемые переменные;
+источники истины — `application.yaml`, settings classes, `BotMain`, launcher
+`build.rs` и manifests. `change-me`/`replace-me` не являются рабочими secrets.
 
-## VDS deployment
+Backend по умолчанию слушает `127.0.0.1:8080`. Bot и CCEC используют разные
+service secrets, которые нельзя передавать launcher/VITE. Внешние credentials
+требуют проверенного HTTPS. Private `/api/internal/**` нельзя открывать через
+public proxy. [Caddyfile](infra/caddy/Caddyfile) — snapshot allowlist: часть
+новых news/Mini App/restart routes в нём отсутствует, live rules не проверялись.
 
-Рабочий Minecraft instance `CREATED`, PostgreSQL и backend перенесены на VDS;
-Telegram service подготовлен, но отключён до настройки реальных secrets.
-[Отчёт, проверки и команды обслуживания](docs/vds-deployment.md),
-[выбор исходного instance до переноса](docs/vds-source-selection.md).
-Systemd units и Linux start/stop scripts находятся в `infra/`.
-Milestone 4B не реализован; публичный offline-mode Minecraft пока не имеет
-platform authentication и допускает подмену имени. Проверка входа игроком нужна
-для полного runtime acceptance. Secrets хранятся только на VDS, не в проекте.
+Build/test/commit сами по себе не публикуют release. Server deploy/rollback,
+client channel switch, installer publication и systemd installation — отдельные
+операторские действия: [controlled release](docs/controlled-release-workflow.md).
+В этом аудите сервисы не запускались, deployment и production network checks
+не выполнялись; соседний standalone checkout и live production не проверялись.

@@ -139,6 +139,11 @@ public final class IndustrialContract {
     }
 
     public long takeEscrow() { long value = escrow; escrow = 0L; return value; }
+    /** Releases only a preflighted part; unresolved physical cargo keeps its original escrow. */
+    void releaseEscrow(long amount) {
+        if (amount < 0L || amount > escrow) throw new IllegalArgumentException("Invalid escrow release");
+        escrow -= amount;
+    }
     public long deadlineAt() { return acceptedAt <= 0L || deadlineDurationTicks <= 0L ? 0L : acceptedAt + deadlineDurationTicks; }
     public long remainingAmount() { return amount - deliveredAmount; }
 

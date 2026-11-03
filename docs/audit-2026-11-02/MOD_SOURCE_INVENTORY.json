@@ -1,0 +1,947 @@
+{
+  "audit": "mod-source-inventory",
+  "observedUtc": "2026-11-02T20:03:54.0133273Z",
+  "head": "ff4959ec8267291c36dc245357c27fba28cf8216",
+  "branch": "main",
+  "modVersion": "1.0.2.13",
+  "scope": "CCEC mod source and local logistics diff; no Minecraft runtime",
+  "mainJavaFileCount": 580,
+  "mineVisualJavaFileCount": 70,
+  "domains": [
+    {
+      "name": "alliance",
+      "javaFiles": 5
+    },
+    {
+      "name": "auth",
+      "javaFiles": 13
+    },
+    {
+      "name": "blast",
+      "javaFiles": 8
+    },
+    {
+      "name": "block",
+      "javaFiles": 10
+    },
+    {
+      "name": "chunkloader",
+      "javaFiles": 6
+    },
+    {
+      "name": "city",
+      "javaFiles": 35
+    },
+    {
+      "name": "client",
+      "javaFiles": 166
+    },
+    {
+      "name": "coke",
+      "javaFiles": 8
+    },
+    {
+      "name": "command",
+      "javaFiles": 1
+    },
+    {
+      "name": "community",
+      "javaFiles": 9
+    },
+    {
+      "name": "daily",
+      "javaFiles": 5
+    },
+    {
+      "name": "devtools",
+      "javaFiles": 7
+    },
+    {
+      "name": "economy",
+      "javaFiles": 53
+    },
+    {
+      "name": "electrical",
+      "javaFiles": 9
+    },
+    {
+      "name": "event",
+      "javaFiles": 7
+    },
+    {
+      "name": "fluid",
+      "javaFiles": 1
+    },
+    {
+      "name": "geology",
+      "javaFiles": 15
+    },
+    {
+      "name": "hud",
+      "javaFiles": 3
+    },
+    {
+      "name": "item",
+      "javaFiles": 7
+    },
+    {
+      "name": "menu",
+      "javaFiles": 2
+    },
+    {
+      "name": "mine",
+      "javaFiles": 25
+    },
+    {
+      "name": "mixin",
+      "javaFiles": 14
+    },
+    {
+      "name": "multiblock",
+      "javaFiles": 3
+    },
+    {
+      "name": "network",
+      "javaFiles": 87
+    },
+    {
+      "name": "onboarding",
+      "javaFiles": 3
+    },
+    {
+      "name": "policy",
+      "javaFiles": 6
+    },
+    {
+      "name": "profile",
+      "javaFiles": 5
+    },
+    {
+      "name": "projects",
+      "javaFiles": 6
+    },
+    {
+      "name": "railway",
+      "javaFiles": 36
+    },
+    {
+      "name": "recipe",
+      "javaFiles": 1
+    },
+    {
+      "name": "social",
+      "javaFiles": 6
+    },
+    {
+      "name": "sound",
+      "javaFiles": 2
+    },
+    {
+      "name": "status",
+      "javaFiles": 2
+    },
+    {
+      "name": "steel",
+      "javaFiles": 10
+    }
+  ],
+  "mainGradleCheckTasks": [
+    "checkCityProjects",
+    "checkProjectLayout",
+    "checkMineVisualCoordinates",
+    "checkFreightLogistics",
+    "checkLogisticsLayout",
+    "checkRailwayOwnership",
+    "checkRailwayTripAccounting",
+    "checkCityRelations",
+    "checkCityTerritory",
+    "checkCityTerritoryDelivery",
+    "checkCityMapTextLayout",
+    "checkWorldMapV2",
+    "checkWorldMapUiLayout",
+    "checkUnifiedStatus",
+    "checkFreightDispatch",
+    "checkFreightReconciliation",
+    "checkTrainManagement",
+    "checkFreightHandoff",
+    "checkShipmentPackageIdentity",
+    "checkFreightArrivalSettlement",
+    "checkChunkLoader",
+    "checkDependencyRecipeOverrides",
+    "checkGameplayRestrictions",
+    "checkKelpGrowthPolicy",
+    "checkCityMapReadAccess",
+    "checkCityWorldMapSession",
+    "checkWorldMapPanelLifecycle",
+    "checkCityMapTerrainColor",
+    "checkTerrainPixelPacking",
+    "checkCityInviteSearch",
+    "checkCityInviteUiLayout",
+    "checkCityPylonUiLayout",
+    "checkCityPylonMembersLayout",
+    "checkGeologyProcedural",
+    "checkMagneticAnalyzerContract",
+    "checkMagneticAnalyzerUi",
+    "checkMapPresentation",
+    "checkAtlasExperience",
+    "checkWorldMapVisual",
+    "checkTerrainVisual",
+    "checkCityIdentity",
+    "checkNoCreateSplitPackage",
+    "checkConnectionAdmission",
+    "checkAuthenticationStartupPolicy",
+    "checkReportLimits",
+    "checkTelemetryBuffer",
+    "checkPlayerProfile",
+    "checkServerHud",
+    "checkMapHud",
+    "checkAlliances",
+    "checkCityMembership",
+    "checkSocialHub",
+    "checkNearbyScene",
+    "checkCommunityV2",
+    "checkPersonalBank",
+    "checkFreightGuide",
+    "checkRegionalFreight",
+    "checkTradeSocial",
+    "checkFreightCarriers",
+    "checkShipmentRoutes"
+  ],
+  "sourceTreeResources": {
+    "primaryRecipes": 50,
+    "dependencyRecipeOverrides": 7,
+    "workbenchRecipes": 2
+  },
+  "criticalSourceHashes": [
+    {
+      "path": "src/main/java/com/example/examplemod/economy/EconomyManager.java",
+      "sha256": "15bbf59e2fe12360c4e252bb41bb897d39102e29d5ba9194f30ba3d3c03b334e"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/economy/FreightLogistics.java",
+      "sha256": "c39037601228ab76db8f225d58a643db3337e6403db86072c39bec8f73879281"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/economy/FreightCancellation.java",
+      "sha256": "ecd71b1ca32e7666e6899c302457e1a8e1894d83526296cc398a0e6a3df4d331"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/economy/FreightParcelRecovery.java",
+      "sha256": "ad374335a5fd9c19c8fa793048edf5485b8aa84d467edc13ee5d61c9da0b5082"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/economy/ContractPackageUnpackingHandler.java",
+      "sha256": "fbb6941127a5975a822428cfb9076864b5149d4d32ea72ff64d59e51c7169783"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/economy/FreightCarriers.java",
+      "sha256": "5b2278d883445504da928af16d1678ff0d6a7b90ffd87f1a9e9a710c16316753"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/economy/FreightTransit.java",
+      "sha256": "5c8ae4d424bbe5774ab0e55e2d21a4bf869556f3c8bb2ce67f851d671dda8f30"
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/client/map/ShipmentRouteGeometry.java",
+      "sha256": "e4e3f4605103045d938b63ff2362e1d9c6b45ba99fd0f888847916e4fbf2548c"
+    }
+  ],
+  "graphEvidence": {
+    "economy": {
+      "anchor": {
+        "file": "src/main/java/com/example/examplemod/economy/EconomyManager.java"
+      },
+      "findings": [],
+      "totalFindings": 0,
+      "note": "Intra-procedural (TAINTED, statement hops) AND cross-function (TAINT_PATH, function hops, `interprocedural: true`) flows are modeled. Closure/callback, property/field, and implicit flows are NOT modeled; absence of a finding is not proof of safety. Cross-function findings are context-insensitive and may over-attribute among same-named callees. SANITIZES (kill) edges are queryable via cypher."
+    },
+    "recovery": {
+      "anchor": {
+        "file": "src/main/java/com/example/examplemod/economy/FreightParcelRecovery.java"
+      },
+      "findings": [],
+      "totalFindings": 0,
+      "note": "Intra-procedural (TAINTED, statement hops) AND cross-function (TAINT_PATH, function hops, `interprocedural: true`) flows are modeled. Closure/callback, property/field, and implicit flows are NOT modeled; absence of a finding is not proof of safety. Cross-function findings are context-insensitive and may over-attribute among same-named callees. SANITIZES (kill) edges are queryable via cypher."
+    },
+    "network": {
+      "anchor": {
+        "file": "src/main/java/com/example/examplemod/economy/EconomyNetworkHandlers.java"
+      },
+      "findings": [],
+      "totalFindings": 0,
+      "note": "Intra-procedural (TAINTED, statement hops) AND cross-function (TAINT_PATH, function hops, `interprocedural: true`) flows are modeled. Closure/callback, property/field, and implicit flows are NOT modeled; absence of a finding is not proof of safety. Cross-function findings are context-insensitive and may over-attribute among same-named callees. SANITIZES (kill) edges are queryable via cypher."
+    },
+    "controlsSymbol": {
+      "mode": "controls",
+      "anchor": {
+        "file": "src/main/java/com/example/examplemod/economy/EconomyManager.java",
+        "symbol": "acceptShipmentPackage",
+        "startLine": 784,
+        "endLine": 823
+      },
+      "results": [
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 795
+          },
+          "dependent": {
+            "line": 796,
+            "text": "IndustrialContract contract=contracts.get(token.subjectId());\nlong accepted=contract.recordDelivery(token.senderCityId(),itemId,amount,now);\napplied=accepted==amount;"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 795
+          },
+          "dependent": {
+            "line": 799,
+            "text": "applied&&token.manifestId()!=null"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 795
+          },
+          "dependent": {
+            "line": 800,
+            "text": "applied"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 795
+          },
+          "dependent": {
+            "line": 814,
+            "text": "MarketOffer offer=marketOffers.get(token.subjectId());\napplied=offer!=null&&offer.receiveImport(amount);"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 795
+          },
+          "dependent": {
+            "line": 815,
+            "text": "applied&&offer.status()==EconomyTypes.MarketOfferStatus.COMPLETED&&!cancellationPending(offer.id())"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 799
+          },
+          "dependent": {
+            "line": 799,
+            "text": "ShippingManifest manifest=manifests.get(token.manifestId());"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 799
+          },
+          "dependent": {
+            "line": 799,
+            "text": "manifest!=null"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 799
+          },
+          "dependent": {
+            "line": 799,
+            "text": "manifest.accepted(amount);"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 800
+          },
+          "dependent": {
+            "line": 801,
+            "text": "UUID linkedOfferId=offerByContract.get(contract.id());\nMarketOffer linkedOffer=linkedOfferId==null?null:marketOffers.get(linkedOfferId);"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 800
+          },
+          "dependent": {
+            "line": 803,
+            "text": "linkedOffer!=null"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 800
+          },
+          "dependent": {
+            "line": 811,
+            "text": "contract.state()==EconomyTypes.ContractState.DELIVERED&&!cancellationPending(contract.id())"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 803
+          },
+          "dependent": {
+            "line": 804,
+            "text": "linkedOffer.applyPhysical(amount);"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 803
+          },
+          "dependent": {
+            "line": 808,
+            "text": "linkedOffer.direction()==EconomyTypes.MarketDirection.SELL_TO_MASTER"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 808
+          },
+          "dependent": {
+            "line": 809,
+            "text": "putStock(warehouseStock,itemId,EconomyMath.saturatingAdd(warehouseStock(itemId),amount,Long.MAX_VALUE));"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 811
+          },
+          "dependent": {
+            "line": 811,
+            "text": "completeContract(contract);"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 815
+          },
+          "dependent": {
+            "line": 815,
+            "text": "finishMarketOffer(offer);"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 790
+          },
+          "dependent": {
+            "line": 790,
+            "text": "return error;"
+          },
+          "label": "T",
+          "guard": true
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 790
+          },
+          "dependent": {
+            "line": 791,
+            "text": "!physical.prepare()"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 817,
+            "text": "physical.rollback();"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 817,
+            "text": "return EconomyTypes.IntakeAttributionError.CONTRACT_INVALID;"
+          },
+          "label": "T",
+          "guard": true
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 818,
+            "text": "token.consume(now);"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 819,
+            "text": "token.manifestId()!=null"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 820,
+            "text": "cancellationPending(token.subjectId())"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 821,
+            "text": "intake!=null"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 821,
+            "text": "freight.markChanged();\nsetDirty();"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 817
+          },
+          "dependent": {
+            "line": 822,
+            "text": "return EconomyTypes.IntakeAttributionError.NONE;"
+          },
+          "label": "F",
+          "guard": true
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 819
+          },
+          "dependent": {
+            "line": 819,
+            "text": "ShippingManifest manifest=manifests.get(token.manifestId());"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 819
+          },
+          "dependent": {
+            "line": 819,
+            "text": "manifest!=null&&manifest.acceptedAmount()>=manifest.authorizedAmount()"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 819
+          },
+          "dependent": {
+            "line": 819,
+            "text": "manifest.complete();"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 820
+          },
+          "dependent": {
+            "line": 820,
+            "text": "advanceCancellation(token.subjectId());"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 821
+          },
+          "dependent": {
+            "line": 821,
+            "text": "intake.attributionError(EconomyTypes.IntakeAttributionError.NONE,now);"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 791
+          },
+          "dependent": {
+            "line": 791,
+            "text": "return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;"
+          },
+          "label": "T",
+          "guard": true
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 791
+          },
+          "dependent": {
+            "line": 792,
+            "text": "simulate"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 792
+          },
+          "dependent": {
+            "line": 792,
+            "text": "return EconomyTypes.IntakeAttributionError.NONE;"
+          },
+          "label": "T",
+          "guard": true
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 792
+          },
+          "dependent": {
+            "line": 793,
+            "text": "!physical.commit()"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 793
+          },
+          "dependent": {
+            "line": 793,
+            "text": "physical.rollback();"
+          },
+          "label": "T"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 793
+          },
+          "dependent": {
+            "line": 793,
+            "text": "return EconomyTypes.IntakeAttributionError.EXCESS_CARGO;"
+          },
+          "label": "T",
+          "guard": true
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 793
+          },
+          "dependent": {
+            "line": 794,
+            "text": "boolean applied;"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 793
+          },
+          "dependent": {
+            "line": 795,
+            "text": "token.kind()==EconomyTypes.ShipmentTokenKind.EXPORT_CONTRACT"
+          },
+          "label": "F"
+        },
+        {
+          "functionLine": 784,
+          "controller": {
+            "line": 793
+          },
+          "dependent": {
+            "line": 817,
+            "text": "!applied"
+          },
+          "label": "F"
+        }
+      ],
+      "total": 40
+    }
+  },
+  "limits": [
+    "Subagent did not repeat Gradle; final run belongs to root receipt",
+    "Headless checks do not verify actual Create delivery, OpenGL or Minecraft acceptance",
+    "Full inventory and targeted code review do not imply every source line was verified"
+  ],
+  "finalSnapshot": {
+    "observedUtc": "2026-11-03T19:22:19.482Z",
+    "modVersion": "1.0.2.14",
+    "mainJavaFileCount": 585,
+    "mineVisualJavaFileCount": 71,
+    "sourceHashes": [
+      {
+        "path": "platform/backend/src/test/java/dev/createserver/backend/InfrastructureIntegrationTest.java",
+        "sha256": "30079fdc8718065eb57c3419c2a27016e7bf74ca54dfc2860c724d5a8e8ead2d"
+      },
+      {
+        "path": "platform/backend/src/test/java/dev/createserver/backend/PostgresIntegrationTest.java",
+        "sha256": "8e54fcf6e68e2630067c96c396b98e05db839324caefbd0ae49d68fc19bdde77"
+      },
+      {
+        "path": "platform/backend/src/test/java/dev/createserver/backend/identity/IdentityDatabaseContract.java",
+        "sha256": "7e78c2ebfb5397d81992c8f362914d0fe16e1ae07cf0c1dc799999ebc76d2fdf"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/CreateCityExpansionCore.java",
+        "sha256": "963c24de8ad3b90c4ee800f367abce3e3e493a852e41f9ea578a5aadf01f4658"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/block/SimulatedCompat.java",
+        "sha256": "9ab69cace297e923252be61b98d7839076a4f733729f1c8dbfa133ab2e21bec1"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/block/TransportSubLevelProtection.java",
+        "sha256": "388bd96960828e63a0a906aa8974faf0441df92dde3a752ab63ea32a7b9dfe44"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/city/CityManager.java",
+        "sha256": "4cdbc7116b44f77172baf3c6a7cf51e9302367fff31cb1991a92f14b445d5b96"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/freight/FreightGuideClient.java",
+        "sha256": "8ba8aeba566b9093939e86ee6cbcf9ae5913a2eee3f247dcafac6aa1cdffe370"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/freight/FreightGuideScreen.java",
+        "sha256": "3d809f30a3a60ebac2a19be603e2c424033cb2319bad37f0d92a64b27f790d7d"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/AtlasGlyph.java",
+        "sha256": "bf011e37ec91139aabf76b49f6b55781b7308a33246c806b3e8bf519d271b061"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/CityMapPanel.java",
+        "sha256": "aac154b43844671673471c974641cce23288e3e98f6d34e4e0592c1026f1180c"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/DispatchMotion.java",
+        "sha256": "c9efad9a639a08a115cd567d99a00c367ca12bea487430ac1f1605e7bf63b33c"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/DispatchPalette.java",
+        "sha256": "59f3d72ee1bab5f25a06d686d53b6131b4dcf63b9f6129975ff111816ff4cdb6"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/MapPresentationDraw.java",
+        "sha256": "62a8bafc6fca1c6020ed30df7897f505ea5db94ecaac01d76919ffd08b967aff"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/RouteRevealGeometry.java",
+        "sha256": "9afb66bca14332f4a32e9478558b283f9098b53fa16a7f4869e4049ad8be0636"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/ShipmentRouteGeometry.java",
+        "sha256": "e4e3f4605103045d938b63ff2362e1d9c6b45ba99fd0f888847916e4fbf2548c"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/TerrainAtlas.java",
+        "sha256": "dc818a813e910d08a9b6f961650a57b1c0205c5af629a95f0eb351b42c9da2b8"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/map/TerrainTileTexture.java",
+        "sha256": "5561f4cc6e0b2e58ffccce56750baf103a4dbb2c9fe76f99c5ddbfeed42e7ef0"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/screen/LogisticsScreen.java",
+        "sha256": "d35d12a37921f3d5d00c6241109cebbdd2b414045558dffc05ca7c2fbe04e3bd"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/screen/PolishedWorldMapScreen.java",
+        "sha256": "5e3923125c9d4933025b66d23c66ece5875cb1397ca59845e7d727255b0c6876"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/client/screen/WorldMapChrome.java",
+        "sha256": "fbb5ed83f2eeeceb5c261a3607b1310ede56443af70f44287721f4837f657f20"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/ContractPackageUnpackingHandler.java",
+        "sha256": "fbb6941127a5975a822428cfb9076864b5149d4d32ea72ff64d59e51c7169783"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/EconomyCommands.java",
+        "sha256": "e036287a2683773aef4cb44533078f1ba6d4ac6cce4ff82c916ff256ff6ab4c8"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/EconomyManager.java",
+        "sha256": "15bbf59e2fe12360c4e252bb41bb897d39102e29d5ba9194f30ba3d3c03b334e"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/EconomyNetworkHandlers.java",
+        "sha256": "8fc65fa1ecafc1074689ae25a1a62b3fc53098bb0893ebb3bdf5c1bc1dab07b5"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightCancellation.java",
+        "sha256": "ecd71b1ca32e7666e6899c302457e1a8e1894d83526296cc398a0e6a3df4d331"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightCarriers.java",
+        "sha256": "5b2278d883445504da928af16d1678ff0d6a7b90ffd87f1a9e9a710c16316753"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightCommands.java",
+        "sha256": "6f38b87fae0014433cd454b564f2b4bb487c6a19da589e2af29713304517ac44"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightGuideService.java",
+        "sha256": "bc08dd40ff9797fd689d549a662430978bf503fbf765deb6f3ae3d0278237bde"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightLogistics.java",
+        "sha256": "c39037601228ab76db8f225d58a643db3337e6403db86072c39bec8f73879281"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightParcelRecovery.java",
+        "sha256": "ad374335a5fd9c19c8fa793048edf5485b8aa84d467edc13ee5d61c9da0b5082"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightRoadCharges.java",
+        "sha256": "42dc82e670591bc12be9b0778897234930ea40acb87e3df899a4ffc89492e27d"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/FreightTransit.java",
+        "sha256": "5c8ae4d424bbe5774ab0e55e2d21a4bf869556f3c8bb2ce67f851d671dda8f30"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/economy/IndustrialContract.java",
+        "sha256": "8ab013ff4f8246bb15972efe45b2fbbab69cc5a07ebbf558cc0ce91388f224ed"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/event/CityProtectionEvents.java",
+        "sha256": "34ca9409c3b6c51a4eef1d45b668f59bf586d41c781448cb74684fb94880b75b"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/mixin/LevelBlockGrantMixin.java",
+        "sha256": "370e206287d58bfbcd6f04c8787d48be1073db25a4a361c621554770ad81da1f"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/network/EconomyCommandPayload.java",
+        "sha256": "d2b29e90caa986bc7cd825a6cc34e8bd22e026c4f32e44d5d443bf9fa8f35215"
+      },
+      {
+        "path": "src/main/java/com/example/examplemod/railway/RailwayManager.java",
+        "sha256": "713da92dd4a2bd32595fdf00d0105064f5ea41cd4c544baadd8813c754333434"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/city/CityTerritoryCheck.java",
+        "sha256": "02ceaf03011be1ec4e39f491a1f7b7aaa1318fe8add87d8e7d39eb64e7f2c3ca"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/client/map/DispatchPresentationCheck.java",
+        "sha256": "23b60b78631ce786b690f60fe797e89f130ba1a811dbc110fda386713036d9cd"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/client/map/ShipmentRouteGeometryCheck.java",
+        "sha256": "06905b4803f0a0c6bb9ddee980e7a29b700756fd09e860639f47084cc6820eb8"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightArrivalSettlementCheck.java",
+        "sha256": "da7347cbb6adc057abbf35527003bdf36e0612b66376237be6931945476a9223"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightCancellationCheck.java",
+        "sha256": "b2c99eec980ff6f1b5f97ddba15aeb6e3ff53999ba80a58a8de78c627dce6e03"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightCarrierCheck.java",
+        "sha256": "b42edcebc60fbcd82b20a24d09783ef6f77a5309a45e9eadbb5ec17a4399695b"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightDispatchCheck.java",
+        "sha256": "d36997805597974621e9a5968858a63357ae5e95d312afc3793a5e80b39b7428"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightLogisticsCheck.java",
+        "sha256": "97831b8f6b00827cdbf39cba28184eaed70fa35d3df2c445b0f79ffba8a80860"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightReconciliationCheck.java",
+        "sha256": "17d4bb5a25e88e3713f459b8d04d7c393331054a2f71e33bf99b706cd974224f"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/economy/RegionalFreightCheck.java",
+        "sha256": "ea0e2c985ab3f25103e670ab804053fbd07baf8cac58013e6dfcd01d437e21b1"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/projects/ProjectCheck.java",
+        "sha256": "93cd4747c9fa487374ae6343a0e4a44a42f5c8cb882c0c4586aeae767e83a185"
+      },
+      {
+        "path": "src/mineVisualTest/java/com/example/examplemod/railway/RailwayOwnershipCheck.java",
+        "sha256": "0bd39e3839a325183d771818d4811de46046cc44530efe87cb5ca3944bcad572"
+      }
+    ],
+    "limits": "Original graph evidence and counts above retain their original observedUtc; this block describes the final source tree"
+  }
+}

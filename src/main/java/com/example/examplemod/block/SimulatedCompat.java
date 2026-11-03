@@ -1,7 +1,9 @@
 package com.example.examplemod.block;
 
 import com.example.examplemod.city.TransportGrantStatus;
+import com.example.examplemod.city.CityManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -70,6 +72,13 @@ public final class SimulatedCompat {
             return TransportGrantStatus.NOT_PHYSICAL;
         }
         return TransportSubLevelProtection.toggleBlockGrantAt(player, level, pos);
+    }
+
+    /** Optional bridge; ordinary block updates never resolve a sublevel without saved grants. */
+    public static void onBlockChanged(ServerLevel level, BlockPos pos,
+                                      ResourceLocation previous, ResourceLocation next, CityManager cities) {
+        if (cities.hasTransportAccessGrants() && isPresent())
+            TransportSubLevelProtection.onBlockChanged(level, pos, previous, next, cities);
     }
 
     public static boolean isPresent() {

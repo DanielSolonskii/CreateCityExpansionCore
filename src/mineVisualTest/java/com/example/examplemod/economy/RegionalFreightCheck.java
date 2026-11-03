@@ -87,7 +87,7 @@ public final class RegionalFreightCheck {
         CompoundTag save=f.manager.save(new CompoundTag(),null);
         var load=EconomyManager.class.getDeclaredMethod("load",CompoundTag.class,net.minecraft.core.HolderLookup.Provider.class);load.setAccessible(true);
         var restarted=(EconomyManager)load.invoke(null,save,null);
-        require(save.getInt("FormatVersion")==12,"new routing data has an explicit economy format version");
+        require(save.getInt("FormatVersion")==13,"new cancellation accounting has an explicit economy format version");
         var legacySave=save.copy();legacySave.putInt("FormatVersion",9);legacySave.getCompound("FreightLogistics").remove("Routing");
         for(Tag raw:legacySave.getCompound("FreightLogistics").getList("Points",10)){var p=(CompoundTag)raw;p.remove("Kind");p.remove("PublicTransit");p.remove("Forwarding");p.remove("HubBuffer");}
         var legacyEconomy=(EconomyManager)load.invoke(null,legacySave,null);

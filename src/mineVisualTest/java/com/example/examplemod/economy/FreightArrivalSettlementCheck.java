@@ -141,6 +141,20 @@ public final class FreightArrivalSettlementCheck {
         require(partial.accept(first,64L,new Physical())==EconomyTypes.IntakeAttributionError.SHIPMENT_ALREADY_USED,
                 "the first package stays spent after the contract completed");
 
+        // A matching seal and amount never turn different physical goods into the contracted item.
+        Fixture wrongItem=new Fixture(64L);
+        UUID wrongItemToken=wrongItem.dispatch(64L);
+        Physical wrongGoods=new Physical();
+        require(wrongItem.m.acceptShipmentPackage(wrongItem.dst.id,wrongItemToken,
+                ResourceLocation.parse("minecraft:cobblestone"),64L,3,false,wrongGoods)==EconomyTypes.IntakeAttributionError.WRONG_ITEM,
+                "a same-sized package of another item is refused");
+        require(wrongGoods.prepared==0&&wrongGoods.committed==0&&wrongItem.c.deliveredAmount()==0L,
+                "wrong goods neither leave the package nor settle a delivery");
+        require(wrongItem.m.shipmentToken(wrongItemToken).state()==EconomyTypes.ShipmentTokenState.ACTIVE,
+                "refusing wrong goods does not spend the original seal");
+        require(wrongItem.accept(wrongItemToken,64L,new Physical())==EconomyTypes.IntakeAttributionError.NONE,
+                "the legitimate goods can still arrive after the rejected package");
+
         // =========================== a full receiver must refuse without any partial application
         Fixture blocked=new Fixture(64L);
         UUID blockedToken=blocked.dispatch(64L);

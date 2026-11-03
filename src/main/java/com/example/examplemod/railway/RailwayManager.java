@@ -215,7 +215,9 @@ public final class RailwayManager extends SavedData {
 
     private static RailwayManager load(CompoundTag root, HolderLookup.Provider registries) {
         RailwayManager manager = new RailwayManager();
-        if (root.getInt("FormatVersion") > FORMAT_VERSION) return manager;
+        if (root.getInt("FormatVersion") > FORMAT_VERSION)
+            throw new IllegalStateException("Railway save format " + root.getInt("FormatVersion")
+                    + " is newer than supported " + FORMAT_VERSION);
         for (Tag raw : root.getList("Stations", Tag.TAG_COMPOUND)) {
             try {
                 CompoundTag tag = (CompoundTag) raw;

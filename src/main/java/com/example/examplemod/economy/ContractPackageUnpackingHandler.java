@@ -14,8 +14,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
-import net.neoforged.neoforge.items.wrapper.InvWrapper;
-import net.minecraft.world.Container;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -40,7 +38,7 @@ public enum ContractPackageUnpackingHandler implements UnpackingHandler {
         if(ids.size()!=1)return false;UUID tokenId=ids.iterator().next();
         if(point!=null&&!simulate)manager.freight().validate(server.getServer(),point);
         UUID receiverId=point!=null?point.id:intake.registrationId();if(receiverId==null)return false;
-        IItemHandlerModifiable inventory=intake!=null?intake.buffer():be instanceof Container container?new InvWrapper(container):null;
+        IItemHandlerModifiable inventory=FreightStorage.intake(server,pos);
         if(inventory==null)return false;
         net.minecraft.world.item.Item item=null;long amount=0L;List<ItemStack> clean=new ArrayList<>();
         for(ItemStack stack:stacks){if(stack.isEmpty())continue;if(item==null)item=stack.getItem();else if(item!=stack.getItem())return false;amount=Math.addExact(amount,stack.getCount());clean.add(ShipmentTokenItemData.withoutToken(stack));}

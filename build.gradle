@@ -751,3 +751,36 @@ tasks.register('checkFreightCarriers', JavaExec) {
     doFirst { workingDir.mkdirs() }
 }
 tasks.named('check') { dependsOn tasks.named('checkFreightCarriers') }
+
+tasks.register('checkShipmentRoutes', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.ShipmentRouteGeometryCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkShipmentRoutes') }
+
+tasks.register('checkDispatchPresentation', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.map.DispatchPresentationCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkDispatchPresentation') }
+
+// Keep existing domain checks in the standard build; a test source alone is not CI coverage.
+[
+    checkSocial: 'com.example.examplemod.social.SocialCheck',
+    checkDailyRewards: 'com.example.examplemod.daily.DailyRewardsCheck',
+    checkOnboarding: 'com.example.examplemod.onboarding.OnboardingCheck'
+].each { taskName, checkClass ->
+    tasks.register(taskName, JavaExec) {
+        dependsOn tasks.named('mineVisualTestClasses')
+        classpath = sourceSets.mineVisualTest.runtimeClasspath
+        mainClass = checkClass
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+        workingDir = layout.buildDirectory.dir("checks/${taskName}").get().asFile
+        doFirst { workingDir.mkdirs() }
+    }
+    tasks.named('check') { dependsOn tasks.named(taskName) }
+}

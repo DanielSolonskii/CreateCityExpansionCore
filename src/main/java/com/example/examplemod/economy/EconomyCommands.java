@@ -18,6 +18,7 @@ public final class EconomyCommands {
     private EconomyCommands() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        FreightCommands.register(dispatcher);
         dispatcher.register(Commands.literal("pay")
                 .then(Commands.argument("player", EntityArgument.player())
                         .then(Commands.argument("amount", LongArgumentType.longArg(1L))

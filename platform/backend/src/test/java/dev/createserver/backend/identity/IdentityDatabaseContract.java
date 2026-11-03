@@ -37,10 +37,10 @@ abstract class IdentityDatabaseContract {
 
     @Test
     void migrationV3AndJpaValidationComplete() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("11");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("14");
         assertThat(jdbc.queryForObject(
                 "SELECT schema_version FROM platform_infrastructure WHERE id = 1", Integer.class))
-                .isEqualTo(11);
+                .isEqualTo(14);
     }
 
     @Test

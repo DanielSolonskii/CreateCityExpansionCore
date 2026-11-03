@@ -14,6 +14,7 @@ final class TerrainTileTexture {
     private final String name;
     private TerrainAtlas.Slot slot;
     private boolean uploaded;
+    private long uploadedAt;
     private int builtStride = -1;
 
     TerrainTileTexture(String name) { this.name = name; }
@@ -23,8 +24,12 @@ final class TerrainTileTexture {
     private boolean valid() { return slot!=null&&slot.belongs(this); }
     void pin() { if(valid())slot.pin(); }
     void draw(int left,int top,int right,int bottom,float u,float v,float size) {
-        if(valid())TerrainAtlas.queue(slot,left,top,right,bottom,u,v,size);
+        draw(left,top,right,bottom,u,v,size,1);
     }
+    void draw(int left,int top,int right,int bottom,float u,float v,float size,float alpha) {
+        if(valid())TerrainAtlas.queue(slot,left,top,right,bottom,u,v,size,alpha);
+    }
+    double reveal(long now) { return MapMotion.ease((now-uploadedAt)/140_000_000.0); }
 
     /** True when this texture already represents the tile at the wanted level of detail. */
     boolean matches(int stride) { return valid() && uploaded && this.builtStride == stride; }
@@ -45,7 +50,7 @@ final class TerrainTileTexture {
         if(!valid()){slot=TerrainAtlas.acquire(this);uploaded=false;if(slot==null)return;}
         int[] raster;
         try{raster=pending.get();}catch(Exception failed){pending=null;return;}pending=null;
-        TerrainAtlas.upload(slot,raster);uploaded=true;this.builtStride=pendingStride;
+        TerrainAtlas.upload(slot,raster);uploaded=true;this.builtStride=pendingStride;uploadedAt=System.nanoTime();
     }
 
     /**

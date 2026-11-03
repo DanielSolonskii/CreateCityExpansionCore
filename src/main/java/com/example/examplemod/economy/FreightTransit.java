@@ -113,7 +113,7 @@ public final class FreightTransit {
         return receiver!=null&&freight.tokenTargets(id,receiver)&&eligibleToken(token,receiver,hub.id,cursor(box),token.itemId(),amount,now)?id:null;
     }
     boolean eligibleToken(ShipmentToken token,UUID receiver,UUID hub,int hop,net.minecraft.resources.ResourceLocation item,long amount,long now){
-        if(token==null||token.state()!=EconomyTypes.ShipmentTokenState.ACTIVE||token.expiresAt()>0&&now>token.expiresAt()
+        if(token==null||token.state()!=EconomyTypes.ShipmentTokenState.ACTIVE||!economy.cancellationPending(token.subjectId())&&token.expiresAt()>0&&now>token.expiresAt()
                 ||!token.itemId().equals(item)||amount!=token.amount()||routes.next(token.tokenId(),hub,hop)==null)return false;
         var path=routes.path(token.tokenId());return !path.isEmpty()&&path.getLast().equals(receiver);
     }

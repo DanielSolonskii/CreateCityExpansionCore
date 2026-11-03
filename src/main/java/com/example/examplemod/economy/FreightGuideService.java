@@ -33,6 +33,8 @@ public final class FreightGuideService {
         final net.minecraft.resources.ResourceLocation dimension;
         final long expires=net.minecraft.Util.getMillis()+LIFETIME;
         BlockPos packager,postbox;
+        List<BlockPos> candidates=List.of();
+        boolean autoPaired;
         long lastPick,lastRefresh,lastFinish;int mode=2;boolean rebind;
         Session(City c,ServerPlayer p,FreightPoint existing) {
             city=c.getId();dimension=p.serverLevel().dimension().location();point=existing==null?null:existing.id;
@@ -74,10 +76,16 @@ public final class FreightGuideService {
             City owner=CityManager.get(server.overworld()).getCityAt(s.dimension,pos);
             if(owner!=null&&!owner.getId().equals(s.city)){reply(p,s,"wrong_city");return;}
             var be=p.serverLevel().getBlockEntity(pos);
-            if(be instanceof PackagerBlockEntity&&!(be instanceof RepackagerBlockEntity)){s.packager=pos.immutable();}
-            else if(be instanceof PostboxBlockEntity&&s.packager!=null){
-                if(!FreightGuideGeometry.inRange(s.packager,pos)){reply(p,s,"packager_too_far");return;}
+            s.autoPaired=false;s.candidates=List.of();
+            if(be instanceof PackagerBlockEntity&&!(be instanceof RepackagerBlockEntity)){
+                s.packager=pos.immutable();s.postbox=null;
+                s.candidates=nearby(p,s,true);
+                if(s.candidates.size()==1){s.postbox=s.candidates.getFirst();s.autoPaired=true;}
+            }
+            else if(be instanceof PostboxBlockEntity){
+                if(s.packager!=null&&!FreightGuideGeometry.inRange(s.packager,pos)){reply(p,s,"packager_too_far");return;}
                 s.postbox=pos.immutable();
+                if(s.packager==null){s.candidates=nearby(p,s,false);if(s.candidates.size()==1){s.packager=s.candidates.getFirst();s.autoPaired=true;}}
             }else {reply(p,s,s.packager==null?"pick_packager":"pick_postbox");return;}
         }
         if(request.action()==FreightGuideRequest.Action.FINISH&&(s.point==null||s.rebind)) {
@@ -88,6 +96,36 @@ public final class FreightGuideService {
             reply(p,s,result);return;
         }
         s.mode=request.mode();reply(p,s,"ok",s.mode);
+    }
+    /** Loaded block entities only; ambiguity always requires the player's explicit second pick. */
+    private static List<BlockPos> nearby(ServerPlayer player,Session session,boolean findPostbox){
+        var level=player.serverLevel();var center=findPostbox?session.packager:session.postbox;
+        var freight=EconomyManager.get(player.getServer().overworld()).freight();
+        var cities=CityManager.get(player.getServer().overworld());var found=new ArrayList<BlockPos>();
+        int radius=FreightGuideGeometry.MAX_PAIR_DISTANCE;
+        for(int x=(center.getX()-radius)>>4;x<=(center.getX()+radius)>>4;x++)for(int z=(center.getZ()-radius)>>4;z<=(center.getZ()+radius)>>4;z++){
+            var chunk=level.getChunkSource().getChunkNow(x,z);if(chunk==null)continue;
+            for(var entity:chunk.getBlockEntities().values()){
+                var pos=entity.getBlockPos();if(!FreightGuideGeometry.inRange(center,pos))continue;
+                var owner=cities.getCityAt(session.dimension,pos);if(owner!=null&&!owner.getId().equals(session.city))continue;
+                if(freight.points.values().stream().anyMatch(point->!point.id.equals(session.point)&&point.dimension.equals(session.dimension)&&(point.postbox.equals(pos)||point.packager.equals(pos))))continue;
+                if(findPostbox){
+                    if(!(entity instanceof PostboxBlockEntity box)||!(box.target instanceof PackagePortTarget.TrainStationFrogportTarget target)
+                            ||CreateRailwayAdapter.stationAt(level.dimension(),pos.offset(target.relativePos))==null)continue;
+                }else{
+                    if(!(entity instanceof PackagerBlockEntity packager)||entity instanceof RepackagerBlockEntity||!packager.targetInventory.hasInventory())continue;
+                    if(session.mode!=FreightPoint.Mode.SEND.ordinal()){
+                        var warehouse=FreightGuideGeometry.warehouse(pos,level.getBlockState(pos).getValue(BlockStateProperties.FACING));
+                        if(!FreightStorage.supported(level,warehouse))continue;
+                        var warehouseOwner=cities.getCityAt(session.dimension,warehouse);if(warehouseOwner!=null&&!warehouseOwner.getId().equals(session.city))continue;
+                    }
+                }
+                found.add(pos.immutable());
+                // Two candidates already rule out automatic selection. Keep a bounded visual list.
+                if(found.size()>=32)return List.copyOf(found);
+            }
+        }
+        found.sort(Comparator.comparingLong(BlockPos::asLong));return List.copyOf(found);
     }
     private static CompoundTag observations(ServerPlayer p,Session s,int mode) {
         var out=new CompoundTag();var checks=new ListTag();var level=p.serverLevel();
@@ -129,6 +167,7 @@ public final class FreightGuideService {
         if(point!=null){if(!s.rebind){s.packager=point.packager;s.postbox=point.postbox;}mode=point.mode.ordinal();}
         var out=observations(p,s,mode);out.putUUID("Session",s.id);out.putString("Dimension",s.dimension.toString());
         out.putString("Result",result);out.putBoolean("Existing",s.point!=null);out.putBoolean("Rebind",s.rebind);out.putString("Name",point==null?"":point.name);
+        out.putBoolean("AutoPaired",s.autoPaired);var candidates=new ListTag();for(var pos:s.candidates)candidates.add(LongTag.valueOf(pos.asLong()));out.put("Candidates",candidates);
         out.putInt("Mode",mode);out.putInt("Step",s.packager==null?0:s.postbox==null?1:2);
         if(s.packager!=null)out.putLong("Packager",s.packager.asLong());
         if(s.postbox!=null)out.putLong("Postbox",s.postbox.asLong());

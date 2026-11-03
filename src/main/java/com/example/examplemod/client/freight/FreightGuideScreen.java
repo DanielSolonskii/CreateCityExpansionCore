@@ -42,6 +42,8 @@ public final class FreightGuideScreen extends Screen {
         var state=FreightGuideClient.state();List<Component> lines=new ArrayList<>();
         lines.add(FreightGuideClient.tr(state.getBoolean("Existing")?"diagnostics":"step."+state.getInt("Step")));
         lines.add(FreightGuideClient.tr("explain."+state.getInt("Step")));
+        if(state.getBoolean("AutoPaired"))lines.add(FreightGuideClient.tr("auto_paired"));
+        else if(state.getList("Candidates",4).size()>1)lines.add(FreightGuideClient.tr("ambiguous_pair",state.getList("Candidates",4).size()));
         String result=state.getString("Result");
         if(!result.isBlank()&&!result.equals("ok"))lines.add(Component.translatable("gui.createcityexpansioncore.freight."+result));
         for(Tag raw:state.getList("Checks",10)){var c=(net.minecraft.nbt.CompoundTag)raw;lines.add(Component.literal(c.getBoolean("Ok")?"✓ ":"! ").append(FreightGuideClient.tr("check."+c.getString("Key")+"."+c.getBoolean("Ok"))));}

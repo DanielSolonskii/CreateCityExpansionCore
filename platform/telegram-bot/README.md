@@ -1,104 +1,91 @@
-# Create Server Telegram bot — milestone 3
+# Create Server Telegram bot
 
-Java 21 / Gradle application, Telegram Bot API long polling. PostgreSQL, JPA
-и Redis dependencies отсутствуют; аккаунтные действия выполняются через backend.
-Реализованы /start, inline-меню, /help, /code и phone/deep-link verification.
-Навигация, registration и device confirmation редактируют одно menu-message;
-[текущий UX / admin / server bridge](../docs/telegram-menu-message-ux.md).
+Актуализировано 02.11.2026 по CCEC snapshot. Java 21, Gradle wrapper 9.2.1,
+Telegram Bot API long polling, Jackson, OkHttp 4.12.0. Прямого PostgreSQL/JPA/Redis
+доступа нет: accounts, permissions и delivery outbox принадлежат backend.
+[STATE](../STATE.md) и [аудит](../../docs/audit-2026-11-02/PLATFORM_AUDIT_RU.md)
+не подтверждают live Telegram/VDS или standalone CreateServerPlatform.
 
-## Environment
+## Реализация
 
-- TELEGRAM_BOT_TOKEN: настоящий BotFather token, обязателен, без default.
-- TELEGRAM_BOT_USERNAME: имя без @, одинаковое с backend.
-- BOT_BACKEND_SECRET: одинаковый случайный secret минимум 32 characters в обоих
-  приложениях; без default, не сохранять в Git.
-- BACKEND_URL: http://127.0.0.1:8080; remote URL требует HTTPS.
-- LAUNCHER_DOWNLOAD_URL: постоянный production HTTPS download URL без credentials
-  и fragment. Default отсутствует. Без настройки Bot работает, но экран Launcher
-  честно сообщает об отсутствии ссылки; не подставляет фиктивный адрес.
+- Private `/start`, `/help`, `/code`, inline menu-message navigation.
+- Registration prepare → explicit confirmation button → accept; sender —
+  настоящий numeric Telegram ID, username — nullable metadata.
+- Trusted-device confirmation, account/server/admin views, reports, telemetry
+  analytics, создание/подтверждение broadcasts.
+- Background broadcasts/community/companion delivery и media cache;
+  optional Mini App menu button.
 
-Bot должен быть создан через BotFather. У него не должно быть активного webhook:
-getUpdates и webhook несовместимы. Webhook автоматически не меняется.
-Запускайте один polling worker.
+Источники: [BotMain](src/main/java/dev/createserver/bot/BotMain.java),
+[BotHandler](src/main/java/dev/createserver/bot/BotHandler.java),
+[BackendClient](src/main/java/dev/createserver/bot/BackendClient.java).
+Старое утверждение «рассылки не реализованы» больше не описывает код.
+Живые доставка/меню/права требуют отдельной runtime проверки.
 
-Из telegram-bot после задания environment variables:
+## Сборка и запуск
+
+Из `platform/telegram-bot`:
 
 ```powershell
-.\gradlew.bat test build
+.\gradlew.bat test build --console=plain
+```
+
+Linux/macOS: `./gradlew test build --console=plain`. JUnit использует локальные
+fake Telegram/backend HTTP/TLS servers без настоящего token; проверяет menus,
+callback isolation, verification, reports/broadcasts и Telegram-only proxy.
+`build` создаёт `build/distributions`; `installDist` —
+`build/install/create-server-telegram-bot` со scripts/dependencies.
+Root CCEC build/CI эти tests не запускает.
+
+Проверено 02.11.2026: `test build --offline --console=plain` с доступным local
+Gradle cache завершилось успешно, 67 tests, 0 failures/errors/skips. Это
+подтверждение локальных tests/build, не живой Telegram delivery.
+
+После безопасной передачи environment, только для отдельного development bot:
+
+```powershell
+$env:BACKEND_URL = 'http://127.0.0.1:8080'
+$env:TELEGRAM_BOT_USERNAME = 'your_development_bot'
+# TELEGRAM_BOT_TOKEN и BOT_BACKEND_SECRET передайте защищённым способом.
 .\gradlew.bat run
 ```
 
-Также создаётся application distribution в build/distributions.
-В Linux/macOS используются ./gradlew test build и ./gradlew run.
+`run` обращается к Telegram и может отправлять уведомления; обычная проверка —
+`test`, без production credentials. Java не читает `.env` автоматически.
+Нужен BotFather bot без активного webhook: webhook/getUpdates несовместимы.
+Запускайте один polling worker на token; offset хранится в памяти.
 
-## Verification
+## Конфигурация
 
-Launcher показывает локальный QR https://t.me/BOT_USERNAME?start=OPAQUE_TOKEN
-и short code XXXXX-XXXXX. Телефон сканирует QR или отправляет /code с кодом.
-Prepare показывает username и кнопку «Подтвердить регистрацию», не активируя account.
-Только callback_query вызывает accept с отдельным bound confirmation ticket.
-Bot обрабатывает private message от non-bot author, берёт настоящий numeric
-from.id (64-bit long), username передаёт только как nullable metadata. Service
-secret защищает bot/backend prepare/accept. Welcome не меняет аккаунты.
-Allowed updates: message и callback_query. Group/bot/forwarded сообщения игнорируются.
-Expiry/invalid/rate-limited codes получают safe reply, без бесконечного retry.
-BackendClient использует защищённый lookup по numeric Telegram ID: platform UUID,
-username и status. ACTIVE binding открывает меню аккаунта; другие состояния не
-выдаются за ACTIVE. Ошибка lookup не трактуется как отсутствие binding.
-Server bridge/telemetry v1 читает реальные status/counts и admin players/statistics
-из Backend; [контракт](../docs/server-bridge-telemetry.md). Репорты доставляются
-отдельными admin alerts. Release/restart subscriptions пока не реализованы.
+| Переменная | Назначение |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Обязательный secret, без default |
+| `TELEGRAM_BOT_USERNAME` | Имя без `@`, одинаковое с backend |
+| `BOT_BACKEND_SECRET` | Общий с backend random secret 32+ символа |
+| `BACKEND_URL` | Default `http://127.0.0.1:8080`; remote требует HTTPS |
+| `LAUNCHER_DOWNLOAD_URL` | Optional HTTPS без credentials/fragment; без него меню честно сообщает об отсутствии ссылки |
+| `REPORT_ADMIN_TELEGRAM_IDS` | До 20 numeric IDs через запятую, согласованных с backend; пусто — без admin |
+| `MINI_APP_URL` | Optional HTTPS без credentials/query/fragment; вызывает `setChatMenuButton` |
+| `COMPANION_MEDIA_DIR` | Optional media cache directory |
 
-При communication error bot повторяет polling через 3 секунды, offset
-продвигается после обработки. Offset хранится в памяти; singleton worker.
-Если confirmation завершилось, а ответ потерялся, повтор token даст invalid —
-launcher polling остаётся источником статуса. Не логируются updates, secrets,
-token-bearing Telegram URLs или exception details.
+Не передавайте service secret launcher и не логируйте raw updates, token-bearing
+URLs, proxy passwords, exception messages с endpoint. Backend повторно проверяет
+права независимо от видимых admin buttons.
 
-## Tests
+## Telegram-only proxy / routing
 
-JUnit использует local fake Telegram/backend HTTP servers: linked/unlinked/inactive
-menus, повторный /start, navigation/edit, stale callback, missing/deleted message,
-restart adoption, Backend status/transport failures, registration replay/conflicts,
-numeric sender isolation, download URL validation и service secret header.
-Proxy suite проверяет прямой Backend transport и Telegram-only CONNECT.
-Живой Telegram token для tests не нужен.
+HTTP CONNECT: `TELEGRAM_PROXY_TYPE=HTTP`, `TELEGRAM_PROXY_HOST`,
+`TELEGRAM_PROXY_PORT`, optional пара `TELEGRAM_PROXY_USERNAME` и
+`TELEGRAM_PROXY_PASSWORD`. Host без scheme/path/credentials; port 1–65535.
+Пустой набор — direct Telegram; partial/invalid config блокирует startup без
+fallback. SOCKS5 не поддерживается.
 
-## Telegram-only HTTP CONNECT proxy
+Backend использует отдельный JDK HttpClient с DIRECT selector. Не заменяйте
+это JVM/global proxy. TLS/hostname validation включена. Basic proxy credentials
+требуют доверенного защищённого пути до proxy; не храните их в argv/Git/unit.
+WireGuard/systemd [samples](../infra/README.md) — отдельная конфигурация,
+не доказательство текущего routing или Telegram runtime.
 
-Telegram HTTP transport использует OkHttp 4.12.0. BackendClient сохраняет JDK
-HttpClient с explicit DIRECT selector; общий/system-wide proxy и global
-Authenticator не устанавливаются. Proxy не применяется к backend даже при
-наличии JVM/system proxy defaults. Registration/verification protocol не меняется.
-
-Environment (все параметры только для Telegram):
-
-- `TELEGRAM_PROXY_TYPE=HTTP` — HTTP CONNECT для исходящего Telegram HTTPS.
-- `TELEGRAM_PROXY_HOST` — hostname/IP без scheme, path и credentials.
-- `TELEGRAM_PROXY_PORT` — integer 1–65535.
-- `TELEGRAM_PROXY_USERNAME` и `TELEGRAM_PROXY_PASSWORD` — optional pair;
-  либо оба заданы, либо оба отсутствуют. Password — secret.
-
-Если все пять переменных отсутствуют/пусты, Telegram работает напрямую.
-Частичная/невалидная configuration останавливает startup с redacted error,
-без silent fallback на прямое соединение. SOCKS5 не поддерживается этой версией.
-Не использовать JVM http.proxyHost, HTTPS_PROXY или global network changes.
-
-Для authenticated proxy credentials отправляются только в CONNECT к настроенному
-proxy. Они не отправляются Telegram origin или backend, retries после failed auth
-ограничены. HTTPS certificate/hostname validation остаётся включённой; redirects
-не следуются, bodies/URLs/exception details не логируются.
-
-HTTP proxy transport до proxy не шифрует Basic credentials: используйте доверенный
-proxy и защищённый/приватный путь до него. Telegram token/запросы остаются внутри
-проверенного TLS tunnel; TLS verification не отключайте. Не записывать proxy
-password в Git, README, unit, argv или chat. На VDS использовать root-owned
-0600 `/opt/create-server/secrets/telegram-bot.env` и EnvironmentFile.
-
-Реализация CONNECT/proxyAuthenticator проверена по
-[исходникам OkHttp 4.12.0](https://github.com/square/okhttp/blob/parent-4.12.0/okhttp/src/main/kotlin/okhttp3/Authenticator.kt).
-
-Tests: config validation/redaction, no-proxy default, hostile global proxy bypass,
-реальный локальный HTTPS CONNECT с fake CA (anonymous/authenticated), secret
-isolation, bounded wrong-auth failure. Backend protocol tests сохранены. Команда:
-`gradlew test build`. Реальный proxy/Telegram остаются отдельным runtime acceptance.
+Исторические контракты/runbooks: [menu UX](../docs/telegram-menu-message-ux.md),
+[broadcasts](../docs/telegram-broadcasts.md),
+[bridge](../docs/server-bridge-telemetry.md), [WireGuard](../docs/telegram-wireguard.md).

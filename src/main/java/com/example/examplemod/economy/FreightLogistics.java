@@ -183,6 +183,8 @@ public final class FreightLogistics {
         if(a==null||!(a.buyerTransport?carriers.controls(a,city):city.equals(sender))||terminal(subject))return false;
         if(!running&&source==null){a.running=false;markChanged();return true;}
         UUID selected=source==null?a.source:source;if(!sending(selected,a.buyerTransport?sender:city,subject))return false;
+        // A closing dispatch may finish its sealed cargo, but cannot change its return identity.
+        if(economy.cancellationPending(subject)&&!Objects.equals(a.source,selected))return false;
         if(transit.routes.regional(subject)&&!Objects.equals(a.source,selected)&&transit.activeCargo(subject))return false;
         FreightPoint p=point(selected);validate(server,p);FreightPoint dest=point(a.destination);if(dest!=null)validate(server,dest);
         if(running&&(!p.online()||dest==null||(!transit.routes.regional(subject)&&!dest.online())||!route(p,dest).equals("connected")))return false;
@@ -211,7 +213,7 @@ public final class FreightLogistics {
         CityFleetTrain fleet=railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());GlobalStation target=CreateRailwayAdapter.station(destination.station);
         if(fleet==null||train==null)return routeFailure(a,source.stationName,destination.stationName,"train_missing");
         if(!city.getId().equals(fleet.cityId()))return routeFailure(a,source.stationName,destination.stationName,"train_not_owned");
-        if(fleet.activeLineId()!=null)return routeFailure(a,source.stationName,destination.stationName,"train_has_schedule");
+        if(fleet.activeLineId()!=null||train.runtime.getSchedule()!=null)return routeFailure(a,source.stationName,destination.stationName,"train_has_schedule");
         if(fleet.type()!=RailwayTypes.TrainType.FREIGHT&&fleet.type()!=RailwayTypes.TrainType.MIXED)return routeFailure(a,source.stationName,destination.stationName,"train_wrong_type");
         if(target==null)return routeFailure(a,source.stationName,destination.stationName,"destination_station_missing");
         if(train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id))return routeFailure(a,source.stationName,destination.stationName,"train_not_at_source");
@@ -277,11 +279,28 @@ public final class FreightLogistics {
     }
     private boolean airborne(UUID subject){return economy.shipmentTokens().stream().anyMatch(t->t.subjectId().equals(subject)&&t.state()==EconomyTypes.ShipmentTokenState.ACTIVE);}
     public boolean selectDispatch(ServerLevel level,City city,UUID subject,UUID fleetId,UUID optionId){
+        FreightAssignment current=assignments.get(subject);
+        if(current==null||terminal(subject)||current.running)return false;
+        // Replan a stopped train in place after a route invalidation. A different train would
+        // strand sealed cargo that is already bound to the existing dispatch.
+        if((transit.activeCargo(subject)||economy.cancellationPending(subject))&&!Objects.equals(current.train,fleetId))return false;
         if(assignments.containsKey(subject)&&assignments.get(subject).buyerTransport&&!transit.routes.regional(subject))return carriers.select(level,city,subject,fleetId,optionId);
         if(transit.routes.regional(subject))return false;
         FreightAssignment a=assignments.get(subject);FreightPoint source=a==null?null:point(a.source),destination=a==null?null:point(a.destination);RailwayManager railway=RailwayManager.get(level);CityFleetTrain fleet=railway.train(fleetId);Train train=fleet==null?null:CreateRailwayAdapter.train(fleet.createTrainId());RailwayRouteOption option=railway.proposedRoutes(fleetId).stream().filter(o->o.id().equals(optionId)).findFirst().orElse(null);
-        if(a==null||source==null||destination==null||source.station==null||destination.station==null||fleet==null||train==null||fleet.activeLineId()!=null||!city.getId().equals(source.cityId)||!city.getId().equals(fleet.cityId())||train.getCurrentStation()==null||!source.station.equals(train.getCurrentStation().id)||option==null||!destination.station.equals(option.destinationStationId())||RailwayTripAccountingService.selectedPath(train,CreateRailwayAdapter.station(destination.station),option)==null)return false;
-        if(a.train!=null&&!a.train.equals(fleetId))railway.consumeSelectedRoute(a.train);if(!railway.selectRoute(fleetId,optionId,level.getGameTime()))return false;
+        if(source==null||destination==null||!city.getId().equals(source.cityId)||fleet==null||train==null)return false;
+        validate(level.getServer(),source);validate(level.getServer(),destination);
+        if(!source.online()||!destination.online()||source.station==null||destination.station==null||fleet.activeLineId()!=null||train.runtime.getSchedule()!=null||train.navigation.destination!=null
+                ||!FreightDispatchPolicy.eligibleTrain(fleet.type(),city.getId().equals(fleet.cityId()),train.getCurrentStation()!=null&&source.station.equals(train.getCurrentStation().id),railway.activeTrip(fleet.createTrainId())!=null,trainBusy(fleetId,subject))
+                ||option==null||!destination.station.equals(option.destinationStationId())||RailwayTripAccountingService.selectedPath(train,CreateRailwayAdapter.station(destination.station),option)==null)return false;
+        if(a.train!=null&&!a.train.equals(fleetId)){
+            CityFleetTrain previous=railway.train(a.train);
+            if(previous!=null&&railway.activeTrip(previous.createTrainId())!=null)return false;
+        }
+        if(!railway.selectRoute(fleetId,optionId,level.getGameTime()))return false;
+        if(a.train!=null&&!a.train.equals(fleetId)){
+            SelectedRailwayRoute previous=railway.selectedRoute(a.train);
+            if(previous!=null&&Objects.equals(a.routeSelection,previous.selectionId()))railway.consumeSelectedRoute(a.train);
+        }
         SelectedRailwayRoute selected=railway.selectedRoute(fleetId);a.train=fleetId;a.routeSelection=selected.selectionId();a.running=false;a.dispatchError="";markChanged();return true;
     }
     private boolean trainBusy(UUID train,UUID except){return assignments.values().stream().anyMatch(a->train.equals(a.train)&&!a.subject.equals(except)&&!terminal(a.subject));}
@@ -404,6 +423,7 @@ public final class FreightLogistics {
             boolean issuer=cityId.equals(contract.issuerCityId());
             boolean endpoint=source!=null&&cityId.equals(source.cityId)||destination!=null&&cityId.equals(destination.cityId);
             if(!issuer&&!endpoint)return "freight_revoke_denied";
+            if(economy.cancellationPending(subject))return "freight_cancel_pending";
             if(contract.state()==EconomyTypes.ContractState.DELIVERED||contract.state()==EconomyTypes.ContractState.DISPUTED)return "freight_revoke_state";
             if(contract.state().terminal())return "freight_revoke_already";
             return "ok";
@@ -411,6 +431,7 @@ public final class FreightLogistics {
         MarketOffer offer=economy.marketOffer(subject);
         if(offer!=null){
             if(offer.direction()!=EconomyTypes.MarketDirection.BUY_FROM_MASTER||offer.acceptedCity()==null||!offer.acceptedCity().equals(cityId))return "freight_revoke_denied";
+            if(economy.cancellationPending(subject))return "freight_cancel_pending";
             if(offer.status().terminal())return "freight_revoke_already";
             if(offer.status()==EconomyTypes.MarketOfferStatus.OPEN)return "freight_revoke_state";
             return "ok";
@@ -472,7 +493,14 @@ public final class FreightLogistics {
             // validation that produced it.
             refreshHandoff(server,a);
             clearResolvedDispatchError(a);
+            if(server.getTickCount()%20==0&&economy.cancellationRequested(a.subject))FreightParcelRecovery.neutralizeUnsealed(server,a.subject);
             if(terminal(a.subject)){if(a.running){a.running=false;markChanged();}await(a,"");if(a.train!=null&&a.routeSelection!=null){RailwayManager railway=RailwayManager.get(server.overworld());SelectedRailwayRoute selected=railway.selectedRoute(a.train);if(selected!=null&&a.routeSelection.equals(selected.selectionId()))railway.consumeSelectedRoute(a.train);}continue;}if(!a.running){await(a,"");continue;}
+            // Cancellation closes new packaging immediately. Already sealed packages keep their
+            // route and may still leave on the assigned train; arrival settles the final balance.
+            if(economy.cancellationPending(a.subject)){
+                if(!transit.routes.regional(a.subject))tryStartTrain(a,server);
+                continue;
+            }
             FreightPoint p=point(a.source),dest=point(a.destination);
             // A deleted source is terminal for the dispatch; a merely broken one only pauses it so
             // restoring the point resumes the same assignment instead of losing the player's intent.
@@ -514,7 +542,7 @@ public final class FreightLogistics {
         flushPush(server);
     }
     /** The goods a package carries, with every dispatch seal stripped off. */
-    private record Goods(List<ItemStack> stacks,long amount){}
+    private record Goods(List<ItemStack> stacks,net.minecraft.resources.ResourceLocation itemId,long amount){}
     /**
      * Destination intake. A shipment package that has physically arrived in the destination Postbox
      * is accepted exactly the way a manual unpack is: the seal is dropped, the goods land in the
@@ -547,8 +575,11 @@ public final class FreightLogistics {
             ShipmentToken token=economy.shipmentToken(tokenId);
             if(token==null||token.state()!=EconomyTypes.ShipmentTokenState.ACTIVE)continue;
             Goods goods=strippedGoods(candidate);if(goods==null||goods.amount()!=token.amount())continue;
-            economy.acceptShipmentPackage(dest.id,tokenId,token.itemId(),goods.amount(),level.getGameTime(),false,
+            // Pass the physical item's identity, never the expected item from the seal. Otherwise
+            // a same-sized box of the wrong goods would satisfy the ledger's item check.
+            var accepted=economy.acceptShipmentPackage(dest.id,tokenId,goods.itemId(),goods.amount(),level.getGameTime(),false,
                     new ArrivalTransaction(receiver,box.inventory,slot,goods.stacks()));
+            if(accepted==EconomyTypes.IntakeAttributionError.NONE)box.notifyUpdate();
         }
     }
     /** Every seal a package carries, from its order and its contents, exactly like the unpacking handler. */
@@ -567,7 +598,7 @@ public final class FreightLogistics {
             if(item!=null&&item!=raw.getItem())return null;
             item=raw.getItem();amount+=raw.getCount();cargo.add(ShipmentTokenItemData.withoutToken(raw));
         }
-        return item==null||amount<=0L?null:new Goods(cargo,amount);
+        return item==null||amount<=0L?null:new Goods(cargo,BuiltInRegistries.ITEM.getKey(item),amount);
     }
     /** The physical container behind a point's Packager; null when there is nothing to unload into. */
     private static IItemHandlerModifiable intakeOf(ServerLevel level,FreightPoint dest){
@@ -583,26 +614,33 @@ public final class FreightLogistics {
         private final int slot;
         private final List<ItemStack> cargo;
         private final ItemStack[] snapshot;
+        private final ItemStack packageSnapshot;
+        private boolean prepared,sourceConsumed;
         ArrivalTransaction(IItemHandlerModifiable receiver,IItemHandlerModifiable source,int slot,List<ItemStack> cargo){
             this.receiver=receiver;this.source=source;this.slot=slot;this.cargo=cargo;
             this.snapshot=new ItemStack[receiver.getSlots()];
-            for(int i=0;i<receiver.getSlots();i++)snapshot[i]=receiver.getStackInSlot(i).copy();
+            this.packageSnapshot=source.getStackInSlot(slot).copy();
         }
         public boolean prepare(){
-            if(!fittable(receiver,cargo))return false;
             ItemStack current=source.getStackInSlot(slot);
-            return !current.isEmpty()&&PackageItem.isPackage(current);
+            if(packageSnapshot.isEmpty()||!PackageItem.isPackage(current)||!ItemStack.matches(current,packageSnapshot)||!fittable(receiver,cargo))return false;
+            for(int i=0;i<snapshot.length;i++)snapshot[i]=receiver.getStackInSlot(i).copy();
+            prepared=true;return true;
         }
         public boolean commit(){
             ItemStack current=source.getStackInSlot(slot);
-            if(current.isEmpty()||!PackageItem.isPackage(current)){rollback();return false;}
-            if(!fittable(receiver,cargo)){rollback();return false;}
+            if(!prepared||!ItemStack.matches(current,packageSnapshot)||!fittable(receiver,cargo))return false;
             for(ItemStack stack:cargo)if(!ItemHandlerHelper.insertItemStacked(receiver,stack.copy(),false).isEmpty()){rollback();return false;}
             if(current.getCount()<=1)source.setStackInSlot(slot,ItemStack.EMPTY);
             else{current.shrink(1);source.setStackInSlot(slot,current);}
+            sourceConsumed=true;
             return true;
         }
-        public void rollback(){for(int i=0;i<snapshot.length&&i<receiver.getSlots();i++)receiver.setStackInSlot(i,snapshot[i].copy());}
+        public void rollback(){
+            if(!prepared)return;
+            for(int i=0;i<snapshot.length&&i<receiver.getSlots();i++)receiver.setStackInSlot(i,snapshot[i].copy());
+            if(sourceConsumed){source.setStackInSlot(slot,packageSnapshot.copy());sourceConsumed=false;}
+        }
         private static boolean fittable(IItemHandlerModifiable target,List<ItemStack> cargo){
             ItemStackHandler copy=new ItemStackHandler(target.getSlots());
             for(int i=0;i<copy.getSlots()&&i<target.getSlots();i++)copy.setStackInSlot(i,target.getStackInSlot(i).copy());
@@ -791,6 +829,11 @@ public final class FreightLogistics {
             boolean outgoing=source!=null&&source.cityId.equals(city.getId())||ownedContract!=null&&city.getId().equals(ownedContract.contractorCityId());
             if(!outgoing&&(dest==null||!dest.cityId.equals(city.getId())))continue;
             CompoundTag v=a.save();v.putString("State",state(a));v.putBoolean("Outgoing",outgoing);
+            v.putBoolean("CancellationPending",economy.cancellationPending(a.subject));
+            v.putBoolean("CancellationRequested",economy.cancellationRequested(a.subject));
+            v.putLong("CancellationOutstanding",economy.cancellationOutstanding(a.subject));
+            v.putLong("CancellationPaid",economy.cancellationPaid(a.subject));
+            v.putLong("CancellationRefunded",economy.cancellationRefunded(a.subject));
             v.putBoolean("BuyerTransport",a.buyerTransport);v.putBoolean("OwnsDispatch",carriers.controls(a,city.getId()));v.putString("TransportPhase",carriers.phase(a.subject));var road=carriers.budgetView(a.subject);v.putLong("RoadLimit",road.limit());v.putLong("RoadSpent",road.spent());v.putLong("RoadReserved",road.reserved());
             v.putBoolean("Regional",transit.routes.regional(a.subject));v.putBoolean("RouteLocked",transit.activeCargo(a.subject)||a.running);
             var via=new ListTag();for(UUID id:transit.routes.hubs(a.subject)){var hop=new CompoundTag();hop.putUUID("Id",id);via.add(hop);}v.put("Via",via);

@@ -1054,6 +1054,7 @@ public class CreateCityExpansionCore {
         event.enqueueWork(() -> {
             com.simibubi.create.api.packager.unpacking.UnpackingHandler.REGISTRY.register(net.minecraft.world.level.block.Blocks.CHEST, com.example.examplemod.economy.ContractPackageUnpackingHandler.INSTANCE);
             com.simibubi.create.api.packager.unpacking.UnpackingHandler.REGISTRY.register(net.minecraft.world.level.block.Blocks.BARREL, com.example.examplemod.economy.ContractPackageUnpackingHandler.INSTANCE);
+            com.simibubi.create.api.packager.unpacking.UnpackingHandler.REGISTRY.register(net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("create","item_vault")), com.example.examplemod.economy.ContractPackageUnpackingHandler.INSTANCE);
         });
 
         LOGGER.info(

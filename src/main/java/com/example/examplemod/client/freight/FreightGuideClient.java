@@ -49,10 +49,16 @@ public final class FreightGuideClient {
         if(!next.hasUUID("Session")||(!awaiting&&!next.getUUID("Session").equals(session)))return;
         int old=state.getInt("Step");boolean started=awaiting;
         state=next.copy();session=next.getUUID("Session");awaiting=false;
-        if(started){draft=next.getString("Name");draftMode=next.getInt("Mode");picking=false;mc.setScreen(new FreightGuideScreen());}
+        if(started){
+            draft=next.getString("Name");draftMode=next.getInt("Mode");
+            if(draft.isBlank())draft=tr("default_name").getString();
+            // New/repair sessions enter one continuous selection pass; registration still needs confirmation.
+            picking=!next.getBoolean("Existing")||next.getBoolean("Rebind");
+            mc.setScreen(picking?null:new FreightGuideScreen());
+        }
         else if(next.getInt("Step")>old){
             if(mc.player!=null)mc.player.playSound(SoundEvents.UI_BUTTON_CLICK.value(),.3f,1.2f);
-            if(next.getInt("Step")==2&&mc.screen==null)mc.setScreen(new FreightGuideScreen());
+            if(next.getInt("Step")==2&&mc.screen==null){picking=false;mc.setScreen(new FreightGuideScreen());}
         }
         if(mc.screen instanceof FreightGuideScreen screen)screen.update();
     }
@@ -80,7 +86,7 @@ public final class FreightGuideClient {
         var mc=Minecraft.getInstance();if(!active()||mc.screen!=null||mc.options.hideGui)return;
         int w=Math.min(300,mc.getWindow().getGuiScaledWidth()-16);if(w<80)return;
         var title=tr(state.getBoolean("Existing")?"diagnostics":"step."+state.getInt("Step"));
-        var help=tr(picking?"world_select":"world_build");
+        var help=tr(picking?"quick_pick."+state.getInt("Step"):"world_build");
         var lines=mc.font.split(help,w-20);
         Component problem=null;
         for(var raw:state.getList("Checks",10)){
@@ -104,6 +110,10 @@ public final class FreightGuideClient {
             if(p.distSqr(mc.player.blockPosition())>64*64||!mc.level.hasChunkAt(p))continue;
             var status=mc.level.getBlockState(p).isAir()?BuildGuideRenderHelper.Status.MISSING:BuildGuideRenderHelper.Status.FUNCTIONAL;
             BuildGuideRenderHelper.renderOutline(pose,lines,p,status);
+        }
+        if(picking)for(var raw:state.getList("Candidates",4)){
+            BlockPos p=BlockPos.of(((net.minecraft.nbt.LongTag)raw).getAsLong());
+            if(p.distSqr(mc.player.blockPosition())<=64*64&&mc.level.hasChunkAt(p))BuildGuideRenderHelper.renderOutline(pose,lines,p,BuildGuideRenderHelper.Status.MISSING);
         }
         if(state.contains("Warehouse")&&state.contains("Packager")){
             var from=BlockPos.of(state.getLong("Warehouse")).getCenter().add(0,.65,0);

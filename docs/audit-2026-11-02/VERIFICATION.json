@@ -1,0 +1,225 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-02",
+  "completedDate": "2026-11-03",
+  "baseCommit": "ff4959ec8267291c36dc245357c27fba28cf8216",
+  "branch": "main",
+  "modVersion": "1.0.2.14",
+  "scope": "Current CCEC repository and nested projects; completed parallel WorldMap changes included",
+  "artifact": {
+    "path": "build/libs/createcityexpansioncore-1.0.2.14.jar",
+    "bytes": 5143009,
+    "sha256": "236a61278b6d8b7e9fd6ae0f4fe8cdc04e6b09aab73b86fc17bc081b8e5a4dac"
+  },
+  "checks": [
+    {
+      "id": "mod-build",
+      "command": ".\\gradlew.bat build checkRecipeWorkbench checkSequenceRecipe -I src/main/java/com/example/examplemod/devtools/check.gradle -I src/main/java/com/example/examplemod/devtools/check-sequence.gradle --offline --no-configuration-cache --console=plain",
+      "status": "PASS",
+      "tasks": 72,
+      "executed": 69,
+      "upToDate": 3,
+      "localLog": ".codex-project-audit-final.log",
+      "checkTasks": [
+        "checkAlliances",
+        "checkAtlasExperience",
+        "checkAuthenticationStartupPolicy",
+        "checkChunkLoader",
+        "checkCityIdentity",
+        "checkCityInviteSearch",
+        "checkCityInviteUiLayout",
+        "checkCityMapReadAccess",
+        "checkCityMapTerrainColor",
+        "checkCityMapTextLayout",
+        "checkCityMembership",
+        "checkCityProjects",
+        "checkCityPylonMembersLayout",
+        "checkCityPylonUiLayout",
+        "checkCityRelations",
+        "checkCityTerritory",
+        "checkCityTerritoryDelivery",
+        "checkCityWorldMapSession",
+        "checkCommunityV2",
+        "checkConnectionAdmission",
+        "checkDailyRewards",
+        "checkDependencyRecipeOverrides",
+        "checkDispatchPresentation",
+        "checkFreightArrivalSettlement",
+        "checkFreightCarriers",
+        "checkFreightDispatch",
+        "checkFreightGuide",
+        "checkFreightHandoff",
+        "checkFreightLogistics",
+        "checkFreightReconciliation",
+        "checkGameplayRestrictions",
+        "checkGeologyProcedural",
+        "checkKelpGrowthPolicy",
+        "checkLogisticsLayout",
+        "checkMagneticAnalyzerContract",
+        "checkMagneticAnalyzerUi",
+        "checkMapHud",
+        "checkMapPresentation",
+        "checkMineVisualCoordinates",
+        "checkNearbyScene",
+        "checkNoCreateSplitPackage",
+        "checkOnboarding",
+        "checkPersonalBank",
+        "checkPlayerProfile",
+        "checkProjectLayout",
+        "checkRailwayOwnership",
+        "checkRailwayTripAccounting",
+        "checkRegionalFreight",
+        "checkReportLimits",
+        "checkServerHud",
+        "checkShipmentPackageIdentity",
+        "checkShipmentRoutes",
+        "checkSocial",
+        "checkSocialHub",
+        "checkTelemetryBuffer",
+        "checkTerrainPixelPacking",
+        "checkTerrainVisual",
+        "checkTradeSocial",
+        "checkTrainManagement",
+        "checkUnifiedStatus",
+        "checkWorldMapPanelLifecycle",
+        "checkWorldMapUiLayout",
+        "checkWorldMapV2",
+        "checkWorldMapVisual",
+        "check",
+        "checkRecipeWorkbench",
+        "checkSequenceRecipe"
+      ]
+    },
+    {
+      "id": "city-grant-regression",
+      "command": ".\\gradlew.bat checkCityTerritory --offline --no-configuration-cache --console=plain",
+      "status": "PASS",
+      "assertions": 2165,
+      "red": "Expected assertion failure for retained ordinary and transport same-ID grants with cleanup disabled",
+      "redLog": ".codex-city-lifecycle-red.log",
+      "greenLog": ".codex-city-lifecycle-green.log",
+      "limits": "Pure ledger and exact native API/bytecode contracts; no actual Minecraft placement/mixin execution"
+    },
+    {
+      "id": "backend",
+      "command": "platform/backend/gradlew.bat --offline test build --console=plain",
+      "status": "PASS",
+      "suites": 20,
+      "tests": 153,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "environment": "GRADLE_USER_HOME repository .gradle-user; java.io.tmpdir repository build/test-tmp"
+    },
+    {
+      "id": "telegram-bot",
+      "command": "platform/telegram-bot/gradlew.bat --offline test build --console=plain",
+      "status": "PASS",
+      "suites": 5,
+      "tests": 67,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "id": "launcher-frontend-tests",
+      "command": "npm test (platform/launcher)",
+      "status": "PASS",
+      "testFiles": 14,
+      "tests": 72
+    },
+    {
+      "id": "launcher-frontend-build",
+      "command": "npm run build (platform/launcher)",
+      "status": "PASS",
+      "toolchain": "TypeScript/Vite 6.4.3; npm ci from unchanged lockfile"
+    },
+    {
+      "id": "launcher-node-release",
+      "command": "node --test scripts/release-workflow.checks.mjs (platform/launcher)",
+      "status": "PASS",
+      "tests": 6
+    },
+    {
+      "id": "launcher-python-release",
+      "command": "python -B -m unittest discover -s scripts -p test_release_workflow.py (platform/launcher)",
+      "status": "PASS_WITH_SKIPS",
+      "passed": 11,
+      "skipped": 8,
+      "discovered": 19,
+      "limits": "Windows skips for POSIX deployment tests"
+    },
+    {
+      "id": "launcher-native",
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml --locked --offline (platform/launcher)",
+      "status": "BLOCKED_AT_COMPILE",
+      "cause": "Missing social_links, presence, presence_ipc modules and settings::launcher_memory command",
+      "nativeTestsExecuted": false
+    },
+    {
+      "id": "infra-python",
+      "command": "python -B -m unittest discover -s platform/infra/launcher -p test_publish_launcher.py",
+      "status": "NOT_RUN_IMPORT_ERROR",
+      "cause": "fcntl unavailable on Windows; needs Linux"
+    },
+    {
+      "id": "ftb-campaign",
+      "status": "PASS",
+      "quests": 128,
+      "chapters": 6,
+      "limits": "Verifier requires previously saved ignored manifest-before-redesign.json; see tools/art report"
+    },
+    {
+      "id": "documentation",
+      "command": "node tools/audit-docs.mjs",
+      "status": "PASS",
+      "requestedDocs": 22,
+      "existingAtBase": 20,
+      "newDocs": 2,
+      "missingLocalLinks": 0,
+      "hashPolicy": "CRLF normalized to LF"
+    }
+  ],
+  "graph": {
+    "status": "PASS_WITH_CRITICAL_BLAST_RADIUS",
+    "indexedAt": "2026-11-03T19:26:08.144Z",
+    "indexedHead": "ff4959ec8267291c36dc245357c27fba28cf8216",
+    "indexMode": "full --force --pdg",
+    "nodes": 90918,
+    "edges": 238258,
+    "flows": 803,
+    "changeGate": {
+      "changed_count": 662,
+      "affected_count": 247,
+      "changed_files": 92,
+      "risk_level": "critical",
+      "partial": false,
+      "truncated": false,
+      "listedSymbols": 662,
+      "affectedProcesses": 247
+    },
+    "taint": {
+      "targets": [
+        "CityManager.java",
+        "CityProtectionEvents.java",
+        "LevelBlockGrantMixin.java"
+      ],
+      "findings": 0,
+      "note": "In addition to prior Economy/Freight taint pass; no findings is not proof of safety"
+    },
+    "pdgControls": {
+      "mixinGuardEdges": 2,
+      "transportGuardEdges": 2,
+      "truncated": false
+    },
+    "limits": [
+      "Global process discovery is bounded: 4004 candidates not selected, 10 depth-capped traces, 5629 dropped callees, 45 trace budget cuts",
+      "397 cross-language property sites were not linked",
+      "Dynamic, callback and implicit flows may remain unresolved",
+      "This receipt records the completed graph run; updating JSON metadata does not change executable symbols"
+    ]
+  },
+  "runtimeAcceptance": "not-run",
+  "productionDeployment": "separate user-authorized release follows audit commit; see subsequent release receipt",
+  "localEvidencePolicy": "Logs, JUnit XML, build outputs and caches are ignored local evidence; not committed"
+}

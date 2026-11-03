@@ -17,6 +17,7 @@ import com.example.examplemod.railway.RailwayStationSnapshot;
 import com.example.examplemod.railway.RailwayTrainSnapshot;
 import com.example.examplemod.railway.RailwayTrainCandidate;
 import com.example.examplemod.client.status.CcecStatusUi;
+import com.example.examplemod.status.CcecStatus;
 import com.example.examplemod.status.CcecStatusResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -132,6 +133,13 @@ public final class CityMapPanel {
     private List<EconomyStatePayload.InfrastructureView> economyInfrastructure = List.of();
     private List<FreightPoint> freightPoints = List.of();
     private List<FreightLink> freightLinks = List.of();
+    private Map<UUID, FreightJourney> freightJourneys = Map.of();
+    private UUID focusedFreightShipment;
+    private boolean pendingFreightFit;
+    private UUID freightFramedRailRoute;
+    private List<UUID> freightFramedStops=List.of();
+    private int freightViewportWidth=-1,freightViewportHeight=-1;
+    private CompoundTag freightSnapshot;
     private List<FreightCandidate> freightCandidates = List.of();
     private Map<UUID, String> routeStrategies = Map.of();
     private Map<UUID, CityRelationSnapshot.Status> relations = Map.of();
@@ -286,6 +294,80 @@ public final class CityMapPanel {
     private boolean anchoredZoom;
     private double pointerYaw;
     private boolean pointerInitialized;
+    private final DispatchMotion.Transition[] layerMotion = new DispatchMotion.Transition[Overlay.values().length];
+    private final double[] layerOpacity = new double[Overlay.values().length];
+    private Overlay paintingLayer;
+    private Selection hoverOutline;
+    private DispatchMotion.Transition hoverGlow = new DispatchMotion.Transition(0);
+    private final java.util.LinkedHashMap<UUID,RouteAnimation> routeAnimations = new java.util.LinkedHashMap<>();
+    private static final class RouteAnimation {
+        final List<RailwayMapPayload.TrackSegment> source;
+        final List<RouteRevealGeometry.Segment> chain;
+        long started, seen;
+        RouteAnimation(List<RailwayMapPayload.TrackSegment> source,long now) {
+            this.source=source;this.started=this.seen=now;
+            this.chain=RouteRevealGeometry.order(source.stream().map(s->new RouteRevealGeometry.Segment(
+                    new RouteRevealGeometry.Point(s.x1(),s.z1()),new RouteRevealGeometry.Point(s.x2(),s.z2()))).toList());
+        }
+    }
+
+    private int overlayMask() {
+        int mask=0;for(Overlay layer:Overlay.values())if(isOverlayEnabled(layer))mask|=1<<layer.ordinal();return mask;
+    }
+    private void withOverlayMask(int mask,Runnable draw) {
+        int before=overlayMask();
+        try {for(Overlay layer:Overlay.values())setOverlay(layer,(mask&(1<<layer.ordinal()))!=0);draw.run();}
+        finally {for(Overlay layer:Overlay.values())setOverlay(layer,(before&(1<<layer.ordinal()))!=0);}
+    }
+    private void updateLayerMotion() {
+        long now=System.nanoTime();
+        for(Overlay layer:Overlay.values()) {
+            int i=layer.ordinal();double target=isOverlayEnabled(layer)?1:0;
+            if(layerMotion[i]==null)layerMotion[i]=new DispatchMotion.Transition(target);
+            layerOpacity[i]=layerMotion[i].value(target,now,!motionEnabled||reducedMotion||projectPicking,180);
+        }
+    }
+    private void drawLayer(GuiGraphics g,Overlay layer,Runnable draw) {
+        double alpha=layerOpacity[layer.ordinal()];if(alpha<=0)return;
+        Overlay before=paintingLayer;paintingLayer=layer;
+        try {withOverlayMask(1<<layer.ordinal(),()->MapPresentationDraw.opacity(g,alpha,draw));}
+        finally {paintingLayer=before;}
+    }
+    private void renderDispatchLayers(GuiGraphics g,int mouseX,int mouseY) {
+        int mask=overlayMask();
+        int cityX=(mask&(1<<Overlay.CITIES.ordinal()))!=0?mouseX:-10000;
+        int railX=(mask&(1<<Overlay.TRACKS.ordinal()))!=0?mouseX:-10000;
+        int stationX=(mask&(1<<Overlay.STATIONS.ordinal()))!=0?mouseX:-10000;
+        int trainX=(mask&(1<<Overlay.TRAINS.ordinal()))!=0?mouseX:-10000;
+        int projectX=(mask&(1<<Overlay.PROJECTS.ordinal()))!=0?mouseX:-10000;
+        int tradeX=(mask&(1<<Overlay.TRADE.ordinal()))!=0?mouseX:-10000;
+        drawLayer(g,Overlay.TERRITORIES,()->{
+            if(showPlotGrid&&plotClaimRequest!=null)renderPlotGrid(g);
+            renderPeers(g,-10000,-10000);renderTerritory(g);if(!projectFocus)renderClaimHint(g);
+        });
+        drawLayer(g,Overlay.RELATIONS,()->renderPeers(g,-10000,-10000));
+        drawLayer(g,Overlay.CITIES,()->renderPeers(g,cityX,mouseY));
+        drawLayer(g,Overlay.TRACKS,()->renderRailway(g,railX,mouseY));
+        drawLayer(g,Overlay.TRADE,()->renderFreightJourneys(g));
+        drawLayer(g,Overlay.STATIONS,()->renderRailway(g,stationX,mouseY));
+        drawLayer(g,Overlay.TRAINS,()->renderRailway(g,trainX,mouseY));
+        drawLayer(g,Overlay.CITIES,()->renderMarkers(g,cityX,mouseY));
+        drawLayer(g,Overlay.PROJECTS,()->renderMarkers(g,projectX,mouseY));
+        drawLayer(g,Overlay.TRADE,()->renderMarkers(g,tradeX,mouseY));
+        // The player has no visibility toggle and is drawn exactly once above the other layers.
+        withOverlayMask(0,()->renderMarkers(g,mouseX,mouseY));
+    }
+    private void renderHoverGlow(GuiGraphics g) {
+        Selection candidate=this.hoverCandidate;
+        if(candidate!=null) {
+            if(!sameTarget(candidate,this.hoverOutline))this.hoverGlow=new DispatchMotion.Transition(0);
+            this.hoverOutline=candidate; // A moving train keeps its latest marker position without restarting the glow.
+        }
+        double strength=this.hoverGlow.value(candidate==null?0:1,System.nanoTime(),reducedMotion,100);
+        if(this.hoverOutline==null||strength<=0||this.hoverOutline.kind()==SelectionKind.ROUTE||this.hoverOutline.kind()==SelectionKind.RAILWAY_SECTION)return;
+        ScreenPoint point=markerPoint(this.hoverOutline.kind(),this.hoverOutline.id(),this.hoverOutline.pos());
+        g.renderOutline(point.x()-13,point.y()-13,26,26,MapPalette.argb(DispatchPalette.ACCENT,(int)(180*strength)));
+    }
 
     public void setMotion(boolean enabled, boolean reduced) {
         motionEnabled = enabled; reducedMotion = reduced;
@@ -756,20 +838,56 @@ public final class CityMapPanel {
     }
 
     public void setFreightData(CompoundTag logistics) {
-        if (logistics == null) { this.freightPoints=List.of();this.freightLinks=List.of();this.freightCandidates=List.of();this.routeStrategies=Map.of();return; }
+        // Network snapshots are immutable to the view; do not rebuild every render frame.
+        if (logistics == this.freightSnapshot) return;
+        this.freightSnapshot=logistics;
+        if (logistics == null) { this.freightPoints=List.of();this.freightLinks=List.of();this.freightJourneys=Map.of();this.freightCandidates=List.of();this.routeStrategies=Map.of();return; }
         List<FreightPoint> points=new ArrayList<>();for(Tag raw:logistics.getList("Points",Tag.TAG_COMPOUND))try{FreightPoint point=FreightPoint.load((CompoundTag)raw);if(!point.removed)points.add(point);}catch(RuntimeException ignored){}
         List<FreightLink> links=new ArrayList<>();Map<UUID,String> strategies=new HashMap<>();
+        Map<UUID,FreightJourney> journeys=new LinkedHashMap<>();
         for(Tag raw:logistics.getList("Assignments",Tag.TAG_COMPOUND)){
             CompoundTag value=(CompoundTag)raw;
-            if(value.hasUUID("Subject")&&value.hasUUID("Source")&&value.hasUUID("Destination")&&!Set.of("complete","expired").contains(value.getString("State"))){
-                UUID from=value.getUUID("Source");
-                for(Tag stop:value.getList("Via",10)){var hop=(CompoundTag)stop;if(!hop.hasUUID("Id"))continue;UUID to=hop.getUUID("Id");links.add(new FreightLink(value.getUUID("Subject"),from,to,value.getString("State")));from=to;}
-                links.add(new FreightLink(value.getUUID("Subject"),from,value.getUUID("Destination"),value.getString("State")));
+            if(value.hasUUID("Subject")&&value.hasUUID("Destination")){
+                List<UUID> stops=new ArrayList<>();if(value.hasUUID("Source"))stops.add(value.getUUID("Source"));
+                for(Tag stop:value.getList("Via",10)){var hop=(CompoundTag)stop;if(hop.hasUUID("Id"))stops.add(hop.getUUID("Id"));}
+                stops.add(value.getUUID("Destination"));
+                UUID id=value.getUUID("Subject");String state=value.getBoolean("CancellationPending")?"cancelling":value.getBoolean("CancellationRequested")&&!value.getString("State").equals("complete")?"cancelled":value.getString("State");
+                CcecStatus status=value.contains("UiStatus")?CcecStatus.load(value.getCompound("UiStatus")):CcecStatus.of(CcecStatus.Category.WARNING,CcecStatus.Code.SHIPMENT_INVALIDATED,CcecStatus.Action.FIX_PROBLEM);
+                journeys.put(id,new FreightJourney(id,value.getString("Title"),stops,state,value.getLong("Delivered"),value.getLong("Amount"),value.getLong("InFlight"),value.getBoolean("Running"),value.hasUUID("RouteSelection")?value.getUUID("RouteSelection"):null,value.hasUUID("Source")?value.getUUID("Source"):null,status));
+                if(value.hasUUID("Source"))for(int i=1;i<stops.size();i++)links.add(new FreightLink(id,stops.get(i-1),stops.get(i),state));
             }
             if(value.hasUUID("RouteSelection")&&!value.getString("RouteStrategy").isBlank())strategies.put(value.getUUID("RouteSelection"),value.getString("RouteStrategy"));
         }
         List<FreightCandidate> candidates=new ArrayList<>();for(Tag raw:logistics.getList("Candidates",Tag.TAG_COMPOUND)){CompoundTag value=(CompoundTag)raw;candidates.add(new FreightCandidate(BlockPos.of(value.getLong("Postbox")),BlockPos.of(value.getLong("Packager")),value.getString("Station")));}
-        this.freightPoints=List.copyOf(points);this.freightLinks=List.copyOf(links);this.freightCandidates=List.copyOf(candidates);this.routeStrategies=Map.copyOf(strategies);
+        this.freightPoints=List.copyOf(points);this.freightLinks=List.copyOf(links);this.freightJourneys=Map.copyOf(journeys);this.freightCandidates=List.copyOf(candidates);this.routeStrategies=Map.copyOf(strategies);
+    }
+
+    public record FreightJourney(UUID id,String title,List<UUID> stops,String state,long delivered,long amount,
+                                 long inFlight,boolean running,UUID routeSelection,UUID source,CcecStatus status) {
+        public FreightJourney { stops=List.copyOf(stops); }
+        public boolean closed(){return Set.of("complete","expired","cancelled").contains(state);}
+    }
+    public record FreightStop(String name,BlockPos pos,ResourceLocation dimension,boolean hub,boolean online) {}
+    public FreightJourney focusedFreightJourney(){return this.focusedFreightShipment==null?null:this.freightJourneys.get(this.focusedFreightShipment);}
+    public FreightStop freightStop(UUID id){var point=freight(id);return point==null?null:new FreightStop(point.name,point.postbox,point.dimension,point.kind==FreightPoint.Kind.HUB,point.online());}
+    public boolean freightHasRailGeometry(){var journey=focusedFreightJourney();var selected=journey==null?null:route(journey.routeSelection());return selected!=null&&!selected.segments().isEmpty()&&journey.stops().size()==2;}
+    public void focusFreightShipment(UUID id){this.focusedFreightShipment=id;this.pendingFreightFit=id!=null;this.freightFramedRailRoute=null;this.freightFramedStops=List.of();this.freightViewportWidth=-1;this.freightViewportHeight=-1;this.selection=null;}
+    public void clearFreightShipmentFocus(){this.focusedFreightShipment=null;this.pendingFreightFit=false;this.freightFramedRailRoute=null;this.freightFramedStops=List.of();}
+    private void prepareFreightViewport(){
+        var journey=focusedFreightJourney();if(journey==null)return;
+        if(this.freightViewportWidth!=this.viewportWidth||this.freightViewportHeight!=this.viewportHeight||!this.freightFramedStops.equals(journey.stops()))this.pendingFreightFit=true;
+        if(freightHasRailGeometry()&&!java.util.Objects.equals(this.freightFramedRailRoute,journey.routeSelection())){this.pendingFreightFit=true;this.freightFramedRailRoute=journey.routeSelection();}
+        this.freightViewportWidth=this.viewportWidth;this.freightViewportHeight=this.viewportHeight;this.freightFramedStops=journey.stops();
+        if(this.pendingFreightFit&&fitFreightShipment())this.pendingFreightFit=false;
+    }
+    public boolean fitFreightShipment(){
+        var journey=focusedFreightJourney();if(journey==null)return false;
+        var path=new ArrayList<ShipmentRouteGeometry.Point>();
+        for(UUID id:journey.stops()){var point=freight(id);if(point!=null&&point.dimension.equals(this.dimensionId))path.add(new ShipmentRouteGeometry.Point(point.postbox.getX()+.5,point.postbox.getZ()+.5));}
+        if(freightHasRailGeometry())for(var segment:route(journey.routeSelection()).segments()){path.add(new ShipmentRouteGeometry.Point(segment.x1(),segment.z1()));path.add(new ShipmentRouteGeometry.Point(segment.x2(),segment.z2()));}
+        var view=ShipmentRouteGeometry.fit(path,this.viewportWidth,this.viewportHeight,48,MIN_ZOOM,MAX_ZOOM);
+        if(view==null||this.viewportWidth<1||this.viewportHeight<1)return false;
+        animateTo(view.x(),view.z(),view.zoom());return true;
     }
 
     public void setRailwayData(
@@ -857,8 +975,13 @@ public final class CityMapPanel {
         this.centerButtonY = y + height - 15;
         this.layerButtonsX = x + width - 166;
         this.layerButtonsY = y + 4;
+        prepareFreightViewport();
         updateMotion();
-        layoutMarkers();
+        updateLayerMotion();
+        if(motionEnabled&&!projectPicking) {
+            int visualMask=0;for(Overlay layer:Overlay.values())if(layerOpacity[layer.ordinal()]>0)visualMask|=1<<layer.ordinal();
+            withOverlayMask(visualMask,this::layoutMarkers);
+        } else layoutMarkers();
         updateHover(insideViewport(mouseX, mouseY) ? findSelection(mouseX, mouseY) : null);
         this.hoveredPlot = plotAtScreen(mouseX, mouseY);
         this.hoveredPlotClaimable = canRequestPlot(this.hoveredPlot);
@@ -896,6 +1019,8 @@ public final class CityMapPanel {
                 }
                 if (this.showCoordinateGrid) renderGrid(guiGraphics);
                 renderSnapshotNotice(guiGraphics);
+                if(motionEnabled&&!projectPicking)renderDispatchLayers(guiGraphics,mouseX,mouseY);
+                else {
                 if (this.showTerritory && this.showPlotGrid && this.plotClaimRequest != null) renderPlotGrid(guiGraphics);
                 // Соседи рисуются ДО своей территории: собственный город
                 // остаётся главным акцентом, чужие — фоном.
@@ -905,9 +1030,11 @@ public final class CityMapPanel {
                     renderTerritory(guiGraphics);
                     if (!projectFocus) renderClaimHint(guiGraphics);
                 }
-                renderCityTooltips(guiGraphics, mouseX, mouseY);
                 renderRailway(guiGraphics, mouseX, mouseY);
                 renderMarkers(guiGraphics, mouseX, mouseY);
+                }
+                renderCityTooltips(guiGraphics, mouseX, mouseY);
+                if(motionEnabled)renderHoverGlow(guiGraphics);
                 // Placement previews and project markers must stay visible over city/player icons.
                 if (this.visualOverlay != null) this.visualOverlay.accept(guiGraphics);
                 if(!hud&&Minecraft.getInstance().level!=null&&dimensionId.equals(Minecraft.getInstance().level.dimension().location())&&!projectPicking)
@@ -1388,7 +1515,8 @@ public final class CityMapPanel {
         for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
             TileKey key=new TileKey(dimensionId,x,z,level);
             TerrainTileTexture exact=terrainTextures.get(key);CachedTile raw=tileCache.get(key);
-            if(exact!=null&&exact.id()!=null&&raw!=null&&raw.complete())continue;
+            if(exact!=null&&exact.id()!=null&&raw!=null&&raw.complete()
+                    &&(!motionEnabled||reducedMotion||exact.reveal(System.nanoTime())>=1))continue;
             for(int parent=level+1;parent<=7;parent++) {
                 int factor=1<<(parent-level);
                 var texture=terrainTextures.get(new TileKey(dimensionId,Math.floorDiv(x,factor),Math.floorDiv(z,factor),parent));
@@ -1434,7 +1562,8 @@ public final class CityMapPanel {
         int right=worldToScreenX((double)(key.tileX()+1)*key.span());
         int bottom=worldToScreenY((double)(key.tileZ()+1)*key.span());
         if(right<=viewportX||left>=viewportX+viewportWidth||bottom<=viewportY||top>=viewportY+viewportHeight)return false;
-        texture.draw(left,top,right,bottom,u,v,size);
+        double alpha=size==32&&motionEnabled&&!reducedMotion?texture.reveal(System.nanoTime()):1;
+        texture.draw(left,top,right,bottom,u,v,size,(float)alpha);
         return true;
     }
 
@@ -2173,7 +2302,7 @@ public final class CityMapPanel {
         }
     }
     private void renderMarkers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        if (hasCityAnchor()) {
+        if (hasCityAnchor() && this.showCities) {
         ScreenPoint ownMarker = markerPoint(SelectionKind.CITY, null, this.pylonPos);
         int markerX = ownMarker.x();
         int markerY = ownMarker.y();
@@ -2195,7 +2324,7 @@ public final class CityMapPanel {
         }
 
         BlockPos playerPos = playerPos();
-        if (playerPos != null) {
+        if (playerPos != null && this.paintingLayer==null) {
             UUID playerId = Minecraft.getInstance().player.getUUID();
             ScreenPoint player = markerPoint(SelectionKind.PLAYER, playerId, playerPos);
             int playerX = player.x();
@@ -2254,6 +2383,7 @@ public final class CityMapPanel {
         }
         if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.renderMap(guiGraphics, this.zoom,point.x(),point.y(),freight.kind==FreightPoint.Kind.HUB?this.hubIcon:this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.translatable("gui.createcityexpansioncore.freight_network.kind."+freight.kind.name().toLowerCase(Locale.ROOT)),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
         if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=reducedMotion?32:(int)(32+10*Math.sin(System.nanoTime()/650_000_000.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
+        if(this.showTradeInfrastructure)renderFreightStops(guiGraphics);
     }
 
     private void deferTooltip(int mouseX, int mouseY, Component... lines) {
@@ -2300,7 +2430,7 @@ public final class CityMapPanel {
             }
         }
         // Freight links belong to the logistics overlay, independently of railway visibility.
-        if(this.showTradeInfrastructure)for(FreightLink link:this.freightLinks){FreightPoint source=freight(link.source),destination=freight(link.destination);if(source!=null&&destination!=null&&source.dimension.equals(this.dimensionId)&&destination.dimension.equals(this.dimensionId))drawFreightSchematic(graphics,worldToScreenX(source.postbox.getX()+.5),worldToScreenY(source.postbox.getZ()+.5),worldToScreenX(destination.postbox.getX()+.5),worldToScreenY(destination.postbox.getZ()+.5),0xB36ACFCE);}
+        if(this.showTradeInfrastructure)renderFreightJourneys(graphics);
         if (this.showStations && this.zoom >= MIN_ZOOM) {
             for (RailwayStationSnapshot station : this.railwayStations) {
                 if (!station.dimension().equals(this.dimensionId)) continue;
@@ -2857,9 +2987,75 @@ public final class CityMapPanel {
 
     private Selection freightSelection(FreightPoint point){String city=cityName(point.cityId);List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.freight_network.kind."+point.kind.name().toLowerCase(Locale.ROOT)));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.city",city));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.station",point.stationName.isBlank()?"—":point.stationName));if(point.kind==FreightPoint.Kind.HUB)details.add(Component.translatable("gui.createcityexpansioncore.freight_network."+(point.publicTransit?"public":"private")));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight."+(point.online()?"online":"offline")));return new Selection(SelectionKind.FREIGHT_POINT,point.id,Component.literal(point.name),point.postbox,point.cityId.equals(ownCityId()),details,point.kind==FreightPoint.Kind.HUB?this.hubIcon:this.freightIcon,!point.online());}
     private void drawFreightSchematic(GuiGraphics g,int x0,int y0,int x1,int y1,int color){
+        drawFreightSchematic(g,x0,y0,x1,y1,color,false,false);
+    }
+    private void drawFreightSchematic(GuiGraphics g,int x0,int y0,int x1,int y1,int color,boolean selected,boolean running){
         var line=MapLineClip.clip(x0,y0,x1,y1,viewportX,viewportY,viewportX+viewportWidth,viewportY+viewportHeight);if(line==null)return;
         double dx=(double)line.x2()-line.x1(),dy=(double)line.y2()-line.y1();int steps=(int)Math.ceil(Math.max(Math.abs(dx),Math.abs(dy)));
-        for(int i=0;i<=steps;i++)if((i/4)%2==0){double f=steps==0?0:i/(double)steps;int x=(int)Math.round(line.x1()+dx*f),y=(int)Math.round(line.y1()+dy*f);g.fill(x,y,x+1,y+1,color);}
+        int phase=selected&&running&&motionEnabled&&!reducedMotion?(int)(System.nanoTime()/55_000_000L%12):0;
+        if(selected)for(int i=0;i<=steps;i++){
+            double f=steps==0?0:i/(double)steps;int x=(int)Math.round(line.x1()+dx*f),y=(int)Math.round(line.y1()+dy*f);
+            g.fill(x-2,y-2,x+3,y+3,0xA912191D);
+        }
+        for(int i=0;i<=steps;i++){
+            double f=steps==0?0:i/(double)steps;int x=(int)Math.round(line.x1()+dx*f),y=(int)Math.round(line.y1()+dy*f);
+            if(((i-phase)%12+12)%12<7)g.fill(x,y,x+(selected?2:1),y+(selected?2:1),color);
+        }
+        if(selected&&steps>28){
+            double length=Math.hypot(dx,dy),ux=dx/length,uy=dy/length;
+            for(double distance=26;distance<length;distance+=64){
+                int x=(int)Math.round(line.x1()+ux*distance),y=(int)Math.round(line.y1()+uy*distance);
+                drawLine(g,x,y,(int)Math.round(x-ux*5-uy*3),(int)Math.round(y-uy*5+ux*3),color);
+                drawLine(g,x,y,(int)Math.round(x-ux*5+uy*3),(int)Math.round(y-uy*5-ux*3),color);
+            }
+        }
+    }
+    private void renderFreightJourneys(GuiGraphics g){
+        var focused=focusedFreightJourney();
+        for(var link:this.freightLinks){
+            var journey=this.freightJourneys.get(link.id());boolean selected=link.id().equals(this.focusedFreightShipment);
+            if(journey==null||journey.closed()&&!selected)continue;
+            var from=freight(link.source());var to=freight(link.destination());
+            if(from==null||to==null||!from.dimension.equals(this.dimensionId)||!to.dimension.equals(this.dimensionId))continue;
+            int selectedColor=motionEnabled?DispatchPalette.SELECTED:MapPalette.SELECTED;
+            int color=selected?freightHasRailGeometry()?MapPalette.argb(selectedColor,153):selectedColor:focused==null?0xB37FA9A9:0x387F9494;
+            drawFreightSchematic(g,worldToScreenX(from.postbox.getX()+.5),worldToScreenY(from.postbox.getZ()+.5),worldToScreenX(to.postbox.getX()+.5),worldToScreenY(to.postbox.getZ()+.5),color,selected,journey.running()&&!journey.closed());
+        }
+        if(focused==null)return;
+        if(freightHasRailGeometry()){
+            if(motionEnabled&&!reducedMotion)drawAnimatedRoute(g,route(focused.routeSelection()),MapPalette.SELECTED);
+            else drawSegments(g,route(focused.routeSelection()).segments(),motionEnabled?DispatchPalette.SELECTED:MapPalette.SELECTED,3);
+        }
+        // This moving seal is explicitly labelled as schematic direction in the shipment card.
+        if(reducedMotion||!motionEnabled||!focused.running()||focused.closed()||focused.source()==null||focused.inFlight()<=0||freightHasRailGeometry())return;
+        var path=new ArrayList<ShipmentRouteGeometry.Point>();
+        for(UUID id:focused.stops()){
+            var point=freight(id);if(point==null||!point.dimension.equals(this.dimensionId))return;
+            path.add(new ShipmentRouteGeometry.Point(point.postbox.getX()+.5,point.postbox.getZ()+.5));
+        }
+        var cursor=ShipmentRouteGeometry.sample(path,(System.nanoTime()%8_000_000_000L)/8_000_000_000.0);
+        if(cursor==null)return;int x=worldToScreenX(cursor.point().x()),y=worldToScreenY(cursor.point().z());
+        if(!insideViewport(x,y))return;
+        g.fill(x-7,y-6,x+8,y+7,0xF0141B20);g.renderOutline(x-6,y-5,13,11,DispatchPalette.SELECTED);
+        g.fill(x-1,y-4,x+2,y+5,DispatchPalette.SELECTED);g.hLine(x-5,x+5,y-2,DispatchPalette.SELECTED);
+    }
+    private void renderFreightStops(GuiGraphics g){
+        var journey=focusedFreightJourney();if(journey==null)return;var font=Minecraft.getInstance().font;
+        for(int i=0;i<journey.stops().size();i++){
+            var stop=freight(journey.stops().get(i));if(stop==null||!stop.dimension.equals(this.dimensionId))continue;
+            var p=markerPoint(SelectionKind.FREIGHT_POINT,stop.id,stop.postbox);int x=p.x(),y=p.y();
+            if(x<viewportX-32||x>viewportX+viewportWidth+32||y<viewportY-32||y>viewportY+viewportHeight+32)continue;
+            int color=stop.online()?(motionEnabled?DispatchPalette.SELECTED:MapPalette.SELECTED):MapPalette.ALERT;
+            g.renderOutline(x-13,y-13,26,26,color);
+            String number=Integer.toString(i+1);int badgeWidth=Math.max(11,font.width(number)+5);
+            g.fill(x+6,y-17,x+6+badgeWidth,y-5,0xFF182126);g.renderOutline(x+6,y-17,badgeWidth,12,color);
+            g.drawString(font,number,x+9,y-15,color,false);
+            if(this.zoom>=.12){
+                String name=font.plainSubstrByWidth(stop.name,94);int width=font.width(name);
+                g.fill(x-width/2-4,y+15,x+(width+1)/2+4,y+28,0xE9182025);
+                g.drawString(font,name,x-width/2,y+18,MapPalette.TEXT,false);
+            }
+        }
     }
     private Selection findSectionSelection(double mouseX, double mouseY) {
         for (var section : this.railwaySections)
@@ -2967,10 +3163,24 @@ public final class CityMapPanel {
 
     private void drawAnimatedRoute(GuiGraphics graphics,RailwayMapPayload.RouteView route,int color) {
         if(route.segments().isEmpty())return;
-        int alpha=reducedMotion?36:(int)(36+12*Math.sin(System.nanoTime()/1_100_000_000.0));
+        long now=System.nanoTime();
+        if(motionEnabled)color=DispatchPalette.SELECTED;
+        RouteAnimation animation=routeAnimations.get(route.id());
+        if(animation==null||!animation.source.equals(route.segments())) {
+            animation=new RouteAnimation(route.segments(),now);routeAnimations.put(route.id(),animation);
+            while(routeAnimations.size()>32)routeAnimations.remove(routeAnimations.keySet().iterator().next());
+        } else if(now-animation.seen>500_000_000L)animation.started=now;
+        animation.seen=now;
+        double reveal=!motionEnabled||reducedMotion||animation.chain.isEmpty()?1:MapMotion.ease((now-animation.started)/350_000_000.0);
+        int alpha=!motionEnabled||reducedMotion?36:(int)(36+12*Math.sin(now/1_100_000_000.0));
         drawSegments(graphics,route.segments(),(alpha<<24)|(color&0xFFFFFF),-2,9);
         drawSegments(graphics,route.segments(),0xF011181D,-1,5);
-        drawSegments(graphics,route.segments(),color,3);
+        drawSegments(graphics,route.segments(),reveal<1?DispatchMotion.tint(DispatchPalette.EDGE,color,.3):color,3);
+        if(reveal<1)for(var edge:RouteRevealGeometry.prefix(animation.chain,reveal)) {
+            int x1=worldToScreenX(edge.from().x()),y1=worldToScreenY(edge.from().z());
+            int x2=worldToScreenX(edge.to().x()),y2=worldToScreenY(edge.to().z());
+            for(int offset=-1;offset<=1;offset++)drawLine(graphics,x1,y1+offset,x2,y2+offset,color);
+        }
         var first=route.segments().getFirst();var last=route.segments().getLast();
         for(var point:List.of(new double[]{first.x1(),first.z1()},new double[]{last.x2(),last.z2()})) {
             int x=worldToScreenX(point[0]),y=worldToScreenY(point[1]);

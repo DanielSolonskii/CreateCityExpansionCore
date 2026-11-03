@@ -8,6 +8,9 @@ import com.example.examplemod.client.map.MapMarkerRenderer;
 import com.example.examplemod.client.map.MapPalette;
 import com.example.examplemod.client.map.AtlasGlyph;
 import com.example.examplemod.client.map.AtlasPreferences;
+import com.example.examplemod.client.map.DispatchMotion;
+import com.example.examplemod.client.map.DispatchPalette;
+import com.example.examplemod.client.map.MapPresentationDraw;
 import java.nio.file.Path;
 import java.util.UUID;
 import com.example.examplemod.client.status.CcecProblemCenter;
@@ -40,19 +43,13 @@ import java.util.Locale;
 
 /** Full-screen, map-first industrial atlas. */
 public final class PolishedWorldMapScreen extends Screen {
-    /*
-     * Корпус атласа и его колонки берут тон из общей палитры карты, а не задают свой.
-     *
-     * Экран и панель карты рисуются в одном кадре и должны выглядеть одним прибором. Пока у них
-     * были независимые числа, рамка карты и подложка колонки отличались оттенком при одинаковой
-     * роли, и это читалось как «колонка приклеена к карте», а не «прибор собран из частей».
-     */
-    private static final int PANEL = WorldMapChrome.SURFACE;
-    private static final int PANEL_ALT = WorldMapChrome.RAISED;
-    private static final int FRAME = WorldMapChrome.EDGE;
-    private static final int ACCENT = MapPalette.OWN;
-    private static final int TEXT = MapPalette.TEXT;
-    private static final int MUTED = MapPalette.TEXT_MUTED;
+    /* Dispatcher surfaces share one palette. City ownership and alerts keep their map semantics. */
+    private static final int PANEL = DispatchPalette.SURFACE;
+    private static final int PANEL_ALT = DispatchPalette.RAISED;
+    private static final int FRAME = DispatchPalette.EDGE;
+    private static final int ACCENT = DispatchPalette.ACCENT;
+    private static final int TEXT = DispatchPalette.TEXT;
+    private static final int MUTED = DispatchPalette.MUTED;
     private static final long TOOLTIP_DELAY_MILLIS = 350L;
     private static boolean tutorialSeen;
 
@@ -133,6 +130,14 @@ public final class PolishedWorldMapScreen extends Screen {
     private Component mutationTitle;
     private final List<WorldMapUiLayout.Rect> viewButtons = new ArrayList<>();
     private static final String[] VIEW_KEYS = {"player", "fit", "follow", "pin", "measure", "overview", "grid", "retry", "player_profile", "reduce_motion"};
+    private final DispatchMotion.Transition[] surfaceMotion = {
+            new DispatchMotion.Transition(0), new DispatchMotion.Transition(0), new DispatchMotion.Transition(0),
+            new DispatchMotion.Transition(0), new DispatchMotion.Transition(0)};
+    private final double[] surfaceAlpha = new double[5];
+    private final java.util.Map<String,DispatchMotion.Change> dispatchChanges = new java.util.HashMap<>();
+    private com.example.examplemod.network.EconomyStatePayload observedEconomy;
+    private long logisticsSnapshotAt;
+    private DispatchMotion.Transition deliveredBar = new DispatchMotion.Transition(0), inFlightBar = new DispatchMotion.Transition(0);
 
     /** Атлас из вкладки «Карта»: панель и данные — из открытого пилона. */
     public PolishedWorldMapScreen(CityPylonScreen parent) {
@@ -244,6 +249,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     protected void init() {
+        String searchText=this.searchBox==null?"":this.searchBox.getValue();
         openingIdentityEditor = false;
         com.example.examplemod.client.ProjectClientState.begin();
         ensurePanel();
@@ -261,13 +267,15 @@ public final class PolishedWorldMapScreen extends Screen {
         this.searchBox.setBordered(false);
         this.searchBox.setMaxLength(64);
         this.searchBox.setHint(Component.translatable("gui.createcityexpansioncore.world_map.search.hint"));
-        this.searchBox.setVisible(false);
+        this.searchBox.setVisible(this.searchOpen);
         /*
          * Ответчик вызывается позже, когда панель уже есть, но поле может быть и
          * раньше: без проверки первый же символ до загрузки ронял бы тик.
          */
         this.searchBox.setResponder(query -> { this.searchOffset = 0; updateSearchResults(); });
-        addRenderableWidget(this.searchBox);
+        this.searchBox.setValue(searchText);
+        addWidget(this.searchBox); // Painted with its popover so opacity and content stay together.
+        if(this.searchOpen)setFocused(this.searchBox);
     }
 
     /**
@@ -286,8 +294,9 @@ public final class PolishedWorldMapScreen extends Screen {
 
     private Screen communityReturn;
     private boolean planningSession;
-    private boolean tradeView;private net.minecraft.core.BlockPos tradeFocus;
-    public PolishedWorldMapScreen freightFocus(Screen parent,net.minecraft.resources.ResourceLocation dimension,net.minecraft.core.BlockPos pos){tradeView=true;communityReturn=parent;requestedDimension=dimension;tradeFocus=pos;return this;}
+    private boolean tradeView;private net.minecraft.core.BlockPos tradeFocus;private java.util.UUID freightShipment;private boolean freightFocusApplied;
+    public PolishedWorldMapScreen freightFocus(Screen parent,net.minecraft.resources.ResourceLocation dimension,net.minecraft.core.BlockPos pos){return freightFocus(parent,dimension,pos,null);}
+    public PolishedWorldMapScreen freightFocus(Screen parent,net.minecraft.resources.ResourceLocation dimension,net.minecraft.core.BlockPos pos,java.util.UUID shipmentId){tradeView=true;communityReturn=parent;requestedDimension=dimension;tradeFocus=pos;freightShipment=shipmentId;mode=Mode.LOGISTICS;return this;}
     public void returnToCommunity(Screen screen){communityReturn=screen;}
     public void planningDimension(ResourceLocation dimension){requestedDimension=dimension;mode=Mode.CITIES;planningSession=true;}
 
@@ -324,7 +333,8 @@ public final class PolishedWorldMapScreen extends Screen {
     private java.util.UUID framedAlliance;
     @Override
     public void tick() {
-        if(map!=null&&tradeFocus!=null){applyMode(Mode.LOGISTICS);map.centerOn(tradeFocus);tradeFocus=null;}
+        if(map!=null&&tradeFocus!=null){applyMode(Mode.LOGISTICS);map.setOverlay(CityMapPanel.Overlay.TRADE,true);map.focusFreightShipment(freightShipment);freightFocusApplied=true;if(freightShipment==null)map.centerOn(tradeFocus);tradeFocus=null;}
+        if(map!=null&&freightShipment!=null&&!freightFocusApplied){map.focusFreightShipment(freightShipment);freightFocusApplied=true;}
         com.example.examplemod.client.AllianceClient.ensure();
         if(this.map!=null&&com.example.examplemod.client.AllianceClient.focusedAlliance!=null&&!com.example.examplemod.client.AllianceClient.focusedAlliance.equals(framedAlliance)&&this.map.focusAlliance(com.example.examplemod.client.AllianceClient.focusedCities))framedAlliance=com.example.examplemod.client.AllianceClient.focusedAlliance;
         if (!this.readOnly && this.parent != null) this.parent.refreshMapClaimAccess();
@@ -404,9 +414,12 @@ public final class PolishedWorldMapScreen extends Screen {
         this.map.setRailwayData(this.data.getRailwayStations(), this.data.getRailwayTrains());
         this.map.setUnregisteredTrains(this.data.getRailwayTrainCandidates());
         if (this.data.getEconomyState() != null) {
+            if(this.observedEconomy!=this.data.getEconomyState()) {
+                this.observedEconomy=this.data.getEconomyState();this.logisticsSnapshotAt=System.currentTimeMillis();
+            }
             this.map.setEconomyInfrastructure(this.data.getEconomyState().infrastructure());
             this.map.setFreightData(this.data.getEconomyState().logistics());
-        }
+        } else {this.observedEconomy=null;this.logisticsSnapshotAt=0;}
         if (this.data.getRelationsState() != null) this.map.setRelations(this.data.getRelationsState().cities());
         reconcileTrainSelection();
         updateFollowingTrain();
@@ -508,7 +521,11 @@ public final class PolishedWorldMapScreen extends Screen {
             return;
         }
         this.hoveredTooltip = null;
-        boolean modal = this.guideOpen || this.problemCenterOpen || this.pendingMutation != null || this.tutorialTicks > 0;
+        boolean modalOpen = this.guideOpen || this.problemCenterOpen || this.pendingMutation != null || this.tutorialTicks > 0;
+        long now=System.nanoTime();
+        boolean[] surfaces={this.layersOpen&&!modalOpen,this.searchOpen&&!modalOpen,this.problemCenterOpen,this.guideOpen,this.pendingMutation!=null};
+        for(int i=0;i<surfaces.length;i++)surfaceAlpha[i]=surfaceMotion[i].value(surfaces[i]?1:0,now,this.map.reducedMotion(),140);
+        boolean modal = modalOpen || closingModal();
         /*
          * 1-2: background and terrain/geometry, drawn by the panel itself.
          *
@@ -536,19 +553,17 @@ public final class PolishedWorldMapScreen extends Screen {
         renderViewButtons(graphics, mouseX, mouseY);
         if (!projectWorkspace.open() || this.mode != Mode.CITIES) { renderContextCard(graphics); renderModeLegend(graphics); }
         renderStatus(graphics, mouseX, mouseY);
-        if (!modal) {
-            if (this.layersOpen) renderLayers(graphics, mouseX, mouseY);
-            if (this.searchOpen) renderSearchPanel(graphics, mouseX, mouseY);
-        }
+        if(surfaceAlpha[0]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[0],()->renderLayers(graphics,mouseX,mouseY));
+        if(surfaceAlpha[1]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[1],()->renderSearchPanel(graphics,mouseX,mouseY));
         projectWorkspace.render(graphics,this.font,this.map,this.data.getDimensionId(),this.width,this.height,
                 WorldMapUiLayout.headerBottom(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL,
                 new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,partialTick,this.mode==Mode.CITIES && !modal && !this.layersOpen && !this.searchOpen);
         // 7-10: dim, tutorial target, modal surface and its widgets, then the tooltip last.
         super.render(graphics, mouseX, mouseY, partialTick);
         if (this.tutorialTicks > 0) renderTutorial(graphics);
-        if (this.problemCenterOpen) renderProblemCenter(graphics);
-        if (this.guideOpen) renderGuide(graphics);
-        if (this.pendingMutation != null) renderMutation(graphics);
+        if(surfaceAlpha[2]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[2],()->renderProblemCenter(graphics));
+        if(surfaceAlpha[3]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[3],()->renderGuide(graphics));
+        if(surfaceAlpha[4]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[4],()->renderMutation(graphics));
         if (!modal && this.hoveredTooltip != null) renderTooltip(graphics, this.hoveredTooltip, mouseX, mouseY);
     }
 
@@ -556,14 +571,21 @@ public final class PolishedWorldMapScreen extends Screen {
         WorldMapUiLayout.Rect plate = WorldMapUiLayout.title(this.width);
         plate(graphics, plate.x(), plate.y(), plate.width(), plate.height());
         MapMarkerRenderer.drawGlyph(graphics, AtlasGlyph.CITY, plate.x() + MICRO, plate.y() + MICRO, ACCENT);
-        if (plate.width() <= 32) return;
+        Component dimension=Component.literal(this.data.getDimensionId().toString());
+        offerTooltip(dispatchText("dimension",dimension),plate.contains(this.mouseXNow,this.mouseYNow));
+        if (plate.width() <= 32) {
+            if(this.readOnly&&com.example.examplemod.client.CityPublicDirectory.dimensions.size()>1)
+                graphics.drawCenteredString(this.font,"↔",plate.x()+plate.width()/2,plate.bottom()-10,ACCENT);
+            return;
+        }
         graphics.drawString(this.font,
-                Component.translatable("gui.createcityexpansioncore.world_map.identity"),
-                plate.x() + 28, plate.y() + 4, 0xFFFFD59A, false);
-        graphics.drawString(this.font, Component.literal(this.data.getDimensionId().getPath()),
-                plate.x() + 28, plate.y() + 15, MUTED, false);
+                WorldMapChrome.fit(this.font,dispatchText("title"),plate.width()-34),
+                plate.x() + 28, plate.y() + 4, ACCENT, false);
+        WorldMapChrome.rounded(graphics,plate.x()+25,plate.y()+14,plate.width()-29,14,3,DispatchPalette.RAISED);
+        graphics.drawString(this.font,WorldMapChrome.fit(this.font,Component.literal(this.data.getDimensionId().getPath()),plate.width()-45),
+                plate.x() + 29, plate.y() + 17, TEXT, false);
         if (this.readOnly && com.example.examplemod.client.CityPublicDirectory.dimensions.size() > 1)
-            graphics.drawString(this.font, "↔", plate.right() - 12, plate.y() + 15, ACCENT, false);
+            graphics.drawString(this.font, "↔", plate.right() - 12, plate.y() + 17, ACCENT, false);
     }
 
     /**
@@ -588,11 +610,11 @@ public final class PolishedWorldMapScreen extends Screen {
             boolean selected = value == this.mode;
             boolean enabled = value.available();
             boolean hover = enabled && bounds.contains(mouseX, mouseY);
-            WorldMapChrome.control(graphics,bounds,selected,hover,enabled,false);
+            WorldMapChrome.dispatchControl(graphics,bounds,selected,hover,enabled,false);
 
             MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY; case RAILWAY -> AtlasGlyph.TRAIN; case LOGISTICS -> AtlasGlyph.FREIGHT; case ENERGY -> AtlasGlyph.ENERGY; }, bounds.x() + MICRO, bounds.y() + (bounds.height()-16)/2, !enabled ? 0xFF667377 : selected ? ACCENT : TEXT);
             if (WorldMapUiLayout.modeTabsLabelled(this.width)) {
-                int labelColour = !enabled ? 0xFF6E787C : selected ? 0xFFFFD59A : TEXT;
+                int labelColour = !enabled ? 0xFF6E787C : selected ? ACCENT : TEXT;
                 graphics.drawString(this.font, value.label(), bounds.x() + MICRO + 16 + MICRO, bounds.y() + (bounds.height()-8)/2,
                         labelColour, false);
             }
@@ -621,7 +643,7 @@ public final class PolishedWorldMapScreen extends Screen {
             boolean hover = bounds.contains(mouseX, mouseY);
             boolean enabled = (index != WorldMapUiLayout.GLOBAL_BACK || canGoBack())
                     && (index != WorldMapUiLayout.GLOBAL_FORWARD || canGoForward());
-            WorldMapChrome.control(graphics,bounds,active,hover,enabled,false);
+            WorldMapChrome.dispatchControl(graphics,bounds,active,hover,enabled,false);
             if(index==2||index==5||index==7)graphics.vLine(bounds.x()-MICRO-1,bounds.y()+6,bounds.bottom()-6,FRAME);
             if (enabled && (active || hover)) {
                 graphics.hLine(bounds.x() + 3, bounds.right() - 4, bounds.bottom() - 2, active ? ACCENT : 0xFF94704B);
@@ -685,7 +707,7 @@ public final class PolishedWorldMapScreen extends Screen {
         WorldMapUiLayout.Rect panel = layersPopoverBounds();
         plate(graphics, panel.x(), panel.y(), panel.width(), panel.height());
         graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.layers"),
-                panel.x() + WorldMapUiLayout.SECTION, panel.y() + WorldMapUiLayout.NORMAL - 2, 0xFFFFD59A, false);
+                panel.x() + WorldMapUiLayout.SECTION, panel.y() + WorldMapUiLayout.NORMAL - 2, ACCENT, false);
         graphics.enableScissor(panel.x(), panel.y() + WorldMapUiLayout.POPOVER_HEADER, panel.right(), panel.bottom());
         try {
         int row = 0;
@@ -695,7 +717,7 @@ public final class PolishedWorldMapScreen extends Screen {
             boolean hover = bounds.contains(mouseX, mouseY);
             if (hover) graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), 0xFF303A3D);
             graphics.drawString(this.font, enabled ? "◆" : "◇", bounds.x() + WorldMapUiLayout.MICRO, bounds.y() + 5,
-                    enabled ? 0xFFFFD59A : 0xFF788589, false);
+                    enabled ? ACCENT : MUTED, false);
             String count = Integer.toString(this.map.overlayCount(overlay));
             Component label = Component.translatable("gui.createcityexpansioncore.world_map.overlay." + overlay.name().toLowerCase(Locale.ROOT));
             graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), bounds.width() - this.font.width(count) - 24), bounds.x() + 14, bounds.y() + 5, enabled ? TEXT : MUTED, false);
@@ -721,9 +743,9 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.mode != Mode.RAILWAY) return;
         // In railway mode the legend is the whole point: a line must be identifiable without hovering it.
         WorldMapUiLayout.Rect header = layerRow(row++);
-        graphics.hLine(header.x(), header.right(), header.y() + WorldMapUiLayout.POPOVER_ROW / 2, 0xFF6F542C);
+            graphics.hLine(header.x(), header.right(), header.y() + WorldMapUiLayout.POPOVER_ROW / 2, FRAME);
         graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.legend.title"),
-                header.x() + WorldMapUiLayout.MICRO, header.y() + 5, 0xFFFFD59A, false);
+                header.x() + WorldMapUiLayout.MICRO, header.y() + 5, ACCENT, false);
         for (CityMapPanel.RailClass kind : legendClasses()) {
             WorldMapUiLayout.Rect bounds = layerRow(row++);
             int inner = CityMapPanel.railInnerWidth(kind);
@@ -767,6 +789,8 @@ public final class PolishedWorldMapScreen extends Screen {
             offerTooltip(result.title(), row.contains(mouseX, mouseY));
         }
         graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.search.page", visible.isEmpty() ? 0 : this.searchOffset + 1, this.searchOffset + visible.size(), this.searchResults.size()), panel.x() + 8, panel.bottom() - 14, MUTED, false);
+        boolean visibleBefore=this.searchBox.isVisible();this.searchBox.setVisible(true);
+        try{this.searchBox.render(graphics,mouseX,mouseY,0);}finally{this.searchBox.setVisible(visibleBefore);}
     }
 
     /**
@@ -785,6 +809,7 @@ public final class PolishedWorldMapScreen extends Screen {
             this.cardActionCount = 0;
             this.cardActionY = -1;
             motionCardKey="";
+            if(this.mode==Mode.LOGISTICS&&this.map.focusedFreightJourney()!=null){renderFreightJourneyCard(graphics,this.map.focusedFreightJourney());return;}
             renderOverview(graphics);
             return;
         }
@@ -796,12 +821,102 @@ public final class PolishedWorldMapScreen extends Screen {
             ((int)(120*(1-reveal))<<24)|(MapPalette.PAPER&0xFFFFFF));
     }
 
+    private static Component shipmentMapText(String key,Object... args){return Component.translatable("gui.createcityexpansioncore.world_map.shipment."+key,args);}
+    private static Component dispatchText(String key,Object... args){return Component.translatable("gui.createcityexpansioncore.world_map.dispatch."+key,args);}
+    private Component logisticsFreshness(){return this.logisticsSnapshotAt==0?dispatchText("waiting"):
+            dispatchText("snapshot_age",Math.max(0,(System.currentTimeMillis()-this.logisticsSnapshotAt)/1000));}
+    private double changed(String key,Object value,long duration){return this.dispatchChanges.computeIfAbsent(key,ignored->new DispatchMotion.Change())
+            .observe(value,System.nanoTime(),this.map.reducedMotion(),duration);}
+    private boolean closingModal(){
+        long now=System.nanoTime();return !this.problemCenterOpen&&surfaceMotion[2].sample(now)>0
+                ||!this.guideOpen&&surfaceMotion[3].sample(now)>0||this.pendingMutation==null&&surfaceMotion[4].sample(now)>0;
+    }
+    private boolean closingPopover(double x,double y){
+        long now=System.nanoTime();return !this.layersOpen&&surfaceMotion[0].sample(now)>0&&layersPopoverBounds().contains(x,y)
+                ||!this.searchOpen&&surfaceMotion[1].sample(now)>0&&WorldMapUiLayout.searchPopover(this.width,this.modeLabelWidths,this.globalLabelWidths,visibleSearchResults().size(),228).contains(x,y);
+    }
+    private void renderFreightJourneyCard(GuiGraphics g,CityMapPanel.FreightJourney journey){
+        var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
+        this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
+        double delivered=Math.clamp(journey.delivered()/(double)Math.max(1,journey.amount()),0,1);
+        double moving=Math.clamp((journey.delivered()+(double)journey.inFlight())/Math.max(1,journey.amount()),delivered,1);
+        String key="shipment:"+journey.id();if(!key.equals(this.cardKey)){
+            this.cardKey=key;this.cardScroll=0;this.dispatchChanges.clear();
+            this.deliveredBar=new DispatchMotion.Transition(delivered);this.inFlightBar=new DispatchMotion.Transition(moving);
+        }
+        int pad=WorldMapUiLayout.CARD_PADDING,x=panel.x()+pad,w=panel.width()-2*pad;
+        int shipmentHeader=com.example.examplemod.client.map.ShipmentRouteGeometry.cardHeaderHeight(panel.height());
+        plate(g,panel.x(),panel.y(),panel.width(),panel.height());
+        g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
+        try{
+            Component title=journey.title().isBlank()?shipmentMapText("title"):Component.literal(journey.title());
+            if(shipmentHeader>0){
+                MapMarkerRenderer.drawGlyph(g,AtlasGlyph.FREIGHT,x,panel.y()+pad,ACCENT);
+                g.drawString(this.font,WorldMapChrome.fit(this.font,title,w-24),x+24,panel.y()+pad,TEXT,false);
+                offerTooltip(title,inside(this.mouseXNow,this.mouseYNow,x,panel.y()+pad,w,16));
+                g.drawString(this.font,WorldMapChrome.fit(this.font,dispatchText("itinerary",journey.stops().size()),w),x,panel.y()+pad+17,ACCENT,false);
+                g.drawString(this.font,WorldMapChrome.fit(this.font,logisticsFreshness(),w),x,panel.y()+pad+30,MUTED,false);
+            }
+            int bodyTop=panel.y()+Math.max(1,shipmentHeader-3);
+            g.enableScissor(panel.x()+1,bodyTop,panel.right()-1,panel.bottom()-1);
+            try{
+                int cursor=panel.y()+(shipmentHeader>0?shipmentHeader:pad)-this.cardScroll;
+                if(shipmentHeader==0){g.drawWordWrap(this.font,title,x,cursor,w,TEXT);cursor+=this.font.wordWrapHeight(title,w)+10;}
+                Component status=journey.state().equals("cancelling")?shipmentMapText("cancelling"):com.example.examplemod.client.status.CcecStatusUi.title(journey.status());
+                double statusFlash=changed("shipment-state",journey.state(),250);
+                int statusHeight=this.font.wordWrapHeight(status,Math.max(1,w-16));
+                WorldMapChrome.rounded(g,x,cursor-5,w,statusHeight+10,3,DispatchMotion.tint(PANEL_ALT,0xFF31575B,statusFlash));
+                g.fill(x+5,cursor+2,x+8,cursor+5,journey.closed()?MUTED:ACCENT);
+                g.drawWordWrap(this.font,status,x+13,cursor,w-16,journey.closed()?MUTED:ACCENT);cursor+=statusHeight+SECTION+5;
+                Component progress=shipmentMapText("progress",journey.delivered(),journey.amount(),journey.inFlight());
+                double progressFlash=changed("shipment-progress",List.of(journey.delivered(),journey.inFlight(),journey.amount()),180);
+                g.drawWordWrap(this.font,progress,x,cursor,w,DispatchMotion.tint(TEXT,ACCENT,progressFlash));cursor+=this.font.wordWrapHeight(progress,w)+10;
+                g.fill(x,cursor,x+w,cursor+5,DispatchPalette.INSET);
+                long frame=System.nanoTime();
+                int accepted=(int)(w*this.deliveredBar.value(delivered,frame,this.map.reducedMotion(),250));
+                int inFlight=Math.max(accepted,(int)(w*this.inFlightBar.value(moving,frame,this.map.reducedMotion(),250)));
+                g.fill(x,cursor,x+inFlight,cursor+5,ACCENT);g.fill(x,cursor,x+accepted,cursor+5,MapPalette.GOOD);cursor+=13;
+                Component barLegend=dispatchText("progress_legend");
+                g.drawWordWrap(this.font,barLegend,x,cursor,w,MUTED);cursor+=this.font.wordWrapHeight(barLegend,w)+SECTION;
+                for(int i=0;i<journey.stops().size();i++){
+                    var stop=this.map.freightStop(journey.stops().get(i));boolean online=stop!=null&&stop.online();
+                    Component name=stop==null?shipmentMapText("missing_stop"):Component.literal(stop.name());
+                    String role=i==0&&journey.stops().size()>1?"source":i==journey.stops().size()-1?"destination":"transfer";
+                    int nameHeight=this.font.wordWrapHeight(name,Math.max(1,w-29)),rowHeight=Math.max(42,nameHeight+23);
+                    double stopFlash=changed("stop:"+journey.stops().get(i),online,250);
+                    if(stopFlash>0)WorldMapChrome.rounded(g,x+20,cursor-3,w-20,rowHeight,3,DispatchMotion.tint(PANEL,0xFF31575B,stopFlash));
+                    if(i<journey.stops().size()-1)g.fill(x+7,cursor+17,x+8,cursor+rowHeight+5,FRAME);
+                    g.fill(x,cursor,x+16,cursor+16,WorldMapChrome.INSET);g.renderOutline(x,cursor,16,16,online?ACCENT:MapPalette.ALERT);
+                    g.drawCenteredString(this.font,Integer.toString(i+1),x+8,cursor+4,online?ACCENT:MapPalette.ALERT);
+                    g.drawWordWrap(this.font,name,x+25,cursor,w-25,TEXT);
+                    Component detail=shipmentMapText(role).copy().append(" · ").append(dispatchText(online?"online":"offline"));
+                    g.drawString(this.font,WorldMapChrome.fit(this.font,detail,w-25),x+25,cursor+nameHeight+5,MUTED,false);
+                    cursor+=rowHeight+6;
+                }
+                boolean actual=this.map.freightHasRailGeometry();
+                Component geometry=shipmentMapText(actual?"rail_geometry":"schematic");
+                g.drawWordWrap(this.font,geometry,x,cursor,w,ACCENT);cursor+=this.font.wordWrapHeight(geometry,w)+SECTION;
+                Component hint=shipmentMapText(actual?"rail_help":"animation_help");
+                g.drawWordWrap(this.font,hint,x,cursor,w,MUTED);cursor+=this.font.wordWrapHeight(hint,w)+SECTION;
+                Component tools=shipmentMapText("tools_help");g.drawWordWrap(this.font,tools,x,cursor,w,MUTED);cursor+=this.font.wordWrapHeight(tools,w)+pad;
+                this.cardMaxScroll=Math.max(0,cursor+this.cardScroll-panel.bottom());this.cardScroll=Math.min(this.cardScroll,this.cardMaxScroll);
+            }finally{g.disableScissor();}
+        }finally{g.disableScissor();}
+        if(shipmentHeader>0)renderCardScroll(g,panel);
+        else if(this.cardMaxScroll>0){
+            int trackHeight=Math.max(1,panel.height()-2*pad),thumbHeight=Math.min(trackHeight,Math.max(6,trackHeight*trackHeight/(trackHeight+this.cardMaxScroll)));
+            int top=panel.y()+pad+(trackHeight-thumbHeight)*this.cardScroll/this.cardMaxScroll;
+            g.fill(panel.right()-5,panel.y()+pad,panel.right()-3,panel.y()+pad+trackHeight,FRAME);
+            g.fill(panel.right()-5,top,panel.right()-3,top+thumbHeight,ACCENT);
+        }
+    }
+
     /** "Сейчас важно": counts the player actually acts on, and a calm state when nothing is wrong. */
     private void renderOverview(GuiGraphics g) {
         var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
         this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
         String key="overview:"+this.mode;
-        if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;}
+        if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;this.dispatchChanges.clear();}
         int pad=WorldMapUiLayout.CARD_PADDING,x=panel.x()+pad,w=panel.width()-2*pad;
         plate(g,panel.x(),panel.y(),panel.width(),panel.height());
         g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
@@ -823,7 +938,8 @@ public final class PolishedWorldMapScreen extends Screen {
                 Component label=Component.translatable("gui.createcityexpansioncore.world_map.polish.metric."+metric.name().toLowerCase(Locale.ROOT));
                 g.drawString(this.font,WorldMapChrome.fit(this.font,label,w-48),x+8,cursor+11,MUTED,false);
                 String count=Integer.toString(this.map.overlayCount(metric));
-                g.drawString(this.font,count,x+w-8-this.font.width(count),cursor+11,TEXT,false);
+                double flash=changed("metric:"+this.mode+":"+metric,count,180);
+                g.drawString(this.font,count,x+w-8-this.font.width(count),cursor+11,DispatchMotion.tint(TEXT,ACCENT,flash),false);
                 cursor+=WorldMapUiLayout.SUMMARY_ROW_PITCH;
             }
             Component status=Component.translatable(problemCount()>0?"gui.createcityexpansioncore.world_map.overview.problems":"gui.createcityexpansioncore.world_map.overview.calm",problemCount());
@@ -857,7 +973,7 @@ public final class PolishedWorldMapScreen extends Screen {
         var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
         int x=panel.x()+pad,w=panel.width()-2*pad;
         String key=value.kind()+":"+(value.id()==null?value.pos().asLong():value.id());
-        if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;}
+        if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;this.dispatchChanges.clear();}
         this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
         plate(g,panel.x(),panel.y(),panel.width(),panel.height());
         g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
@@ -866,6 +982,7 @@ public final class PolishedWorldMapScreen extends Screen {
         int titleX=x+32;
         g.drawString(this.font,WorldMapChrome.fit(this.font,value.title(),w-32),titleX,panel.y()+pad,TEXT,false);
         g.drawString(this.font,WorldMapChrome.fit(this.font,selectionType(value),w-32),titleX,panel.y()+pad+15,value.own()?ACCENT:MUTED,false);
+        if(this.mode==Mode.LOGISTICS)g.drawString(this.font,WorldMapChrome.fit(this.font,logisticsFreshness(),w-32),titleX,panel.y()+pad+28,MUTED,false);
         offerTooltip(value.title(),inside(this.mouseXNow,this.mouseYNow,titleX,panel.y()+pad,w-32,12));
         g.hLine(x,x+w,panel.y()+WorldMapUiLayout.CARD_HEADER-7,FRAME);
         var body=WorldMapUiLayout.cardBody(panel);
@@ -873,7 +990,9 @@ public final class PolishedWorldMapScreen extends Screen {
         int cursor=panel.y()+WorldMapUiLayout.CARD_HEADER-this.cardScroll;
         try {
             if(pinned) {
-                WorldMapChrome.rounded(g,x,cursor,w,WorldMapUiLayout.STATUS_HEIGHT,4,value.warning()?0xFF452D2B:0xFF263A33);
+                double statusFlash=changed("selection-status:"+key,value.warning(),180);
+                WorldMapChrome.rounded(g,x,cursor,w,WorldMapUiLayout.STATUS_HEIGHT,4,
+                        DispatchMotion.tint(value.warning()?0xFF452D2B:0xFF263A33,0xFF31575B,statusFlash));
                 g.fill(x+7,cursor+8,x+11,cursor+12,value.warning()?MapPalette.ALERT:MapPalette.GOOD);
                 g.drawString(this.font,WorldMapChrome.fit(this.font,Component.translatable("gui.createcityexpansioncore.world_map.context.status."+(value.warning()?"attention":"clear")),w-24),x+17,cursor+7,value.warning()?0xFFE4A297:0xFFB3D1BE,false);
                 cursor+=WorldMapUiLayout.STATUS_HEIGHT+SECTION;
@@ -903,7 +1022,7 @@ public final class PolishedWorldMapScreen extends Screen {
                 cursor+=MICRO;this.cardActionY=cursor;
                 for(int i=0;i<this.cardActions.size();i++) {
                     var action=WorldMapUiLayout.cardAction(panel,this.cardActionY,i);
-                    WorldMapChrome.control(g,action,false,action.contains(this.mouseXNow,this.mouseYNow),true,i==0);
+                    WorldMapChrome.dispatchControl(g,action,false,action.contains(this.mouseXNow,this.mouseYNow),true,i==0);
                     g.drawCenteredString(this.font,WorldMapChrome.fit(this.font,this.cardActions.get(i),action.width()-SECTION),action.x()+action.width()/2,action.y()+(action.height()-8)/2,TEXT);
                 }
                 cursor+=this.cardActions.size()*WorldMapUiLayout.ACTION_PITCH;
@@ -1078,7 +1197,9 @@ public final class PolishedWorldMapScreen extends Screen {
         int statusX = strip.x() + leftWidth + 14;
         int statusWidth = right - coordinateWidth - statusX - 8;
         if (statusWidth > 40) graphics.drawString(this.font, this.font.plainSubstrByWidth(this.map.terrainStatus().getString(), statusWidth), statusX, strip.y() + 5, MUTED, false);
-        offerTooltip(this.map.terrainStatus(), strip.contains(mouseX, mouseY));
+        Component statusTooltip=this.map.terrainStatus();
+        if(this.mode==Mode.LOGISTICS)statusTooltip=statusTooltip.copy().append(" · ").append(logisticsFreshness());
+        offerTooltip(statusTooltip, strip.contains(mouseX, mouseY));
         if(statusWidth>40 && this.map.terrainLoading()) for(int i=0;i<3;i++) {
             int alpha=this.map.reducedMotion()?160:90+(int)(120*(.5+.5*Math.sin(System.nanoTime()/240_000_000.0-i*1.1)));
             graphics.fill(statusX-15+i*4,strip.y()+8,statusX-13+i*4,strip.y()+10,(alpha<<24)|(ACCENT&0xFFFFFF));
@@ -1119,7 +1240,7 @@ public final class PolishedWorldMapScreen extends Screen {
     }
 
     private static void plate(GuiGraphics graphics, int x, int y, int width, int height) {
-        WorldMapChrome.panel(graphics,x,y,width,height);
+        WorldMapChrome.dispatchPanel(graphics,x,y,width,height);
     }
 
     private static void statusChip(GuiGraphics graphics, int x, int y, int width) {
@@ -1129,6 +1250,11 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // A disappearing surface still owns its input until its final frame.
+        if(closingModal()||this.map!=null&&closingPopover(mouseX,mouseY))return true;
+        if(this.guideOpen||this.problemCenterOpen)return handleModalClick(mouseX,mouseY);
+        if(button!=0&&this.map!=null&&(this.layersOpen&&layersPopoverBounds().contains(mouseX,mouseY)
+                ||this.searchOpen&&WorldMapUiLayout.searchPopover(this.width,this.modeLabelWidths,this.globalLabelWidths,visibleSearchResults().size(),228).contains(mouseX,mouseY)))return true;
         if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&com.example.examplemod.client.screen.ProjectWorkspaceClient.click(mouseX,mouseY,button))return true;
         if (this.map != null && this.mode == Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation == null && this.tutorialTicks == 0 && !this.layersOpen && !this.searchOpen && !this.map.hasPendingClaim()
                 && projectWorkspace.click(mouseX,mouseY,button,true)) return true;
@@ -1366,6 +1492,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if(closingModal()||this.map!=null&&closingPopover(mouseX,mouseY))return true;
         if (this.mode==Mode.CITIES && projectWorkspace.blocksDrag(mouseX,mouseY)) return true;
         dismissTutorial();
         if (this.pendingMutation != null || this.guideOpen || this.problemCenterOpen || this.map != null && this.map.hasPendingClaim()) return true;
@@ -1387,6 +1514,7 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if(closingModal()||this.map!=null&&closingPopover(mouseX,mouseY))return true;
         if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.scroll(mouseX,mouseY,scrollY)) return true;
         if (this.guideOpen) { this.guideScroll = Math.max(0, Math.min(this.guideMaxScroll, this.guideScroll + (scrollY > 0 ? -16 : 16))); return true; }
         if (this.pendingMutation != null || this.map != null && this.map.hasPendingClaim()) return true;
@@ -1428,6 +1556,12 @@ public final class PolishedWorldMapScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if(closingModal())return true;
+        if(this.map!=null&&!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.map.hasPendingClaim()
+                &&keyCode==GLFW.GLFW_KEY_F&&(modifiers&GLFW.GLFW_MOD_CONTROL)!=0) {
+            if(!this.searchOpen)handleGlobalAction(WorldMapUiLayout.GLOBAL_SEARCH);
+            setFocused(this.searchBox);return true;
+        }
         if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.key(keyCode,scanCode,modifiers)) return true;
         if (this.pendingMutation != null) {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) this.pendingMutation = null;
@@ -1571,8 +1705,9 @@ public final class PolishedWorldMapScreen extends Screen {
     }
     @Override public void removed() {
         ProjectWorkspaceClient.clear();
+        this.freightFocusApplied=false;
         savePreferences(); this.followingTrain = null; this.pendingMutation = null;
-        if (this.map != null) { this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
+        if (this.map != null) { this.map.clearFreightShipmentFocus();this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
         if (this.readOnly && !openingIdentityEditor&&!tradeView) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
         com.example.examplemod.client.ProjectClientState.clear();
         super.removed();
@@ -1591,7 +1726,7 @@ public final class PolishedWorldMapScreen extends Screen {
             boolean active=i==2&&this.followingTrain!=null&&!this.followPaused||i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
             var selected=this.map.getSelection();
             boolean enabled=i!=2||this.followingTrain!=null||selected!=null&&selected.kind()==CityMapPanel.SelectionKind.TRAIN;
-            WorldMapChrome.control(g,r,active,r.contains(mx,my),enabled,false);
+            WorldMapChrome.dispatchControl(g,r,active,r.contains(mx,my),enabled,false);
             Component label=Component.translatable("gui.createcityexpansioncore.world_map.view."+(i==2&&this.followingTrain!=null&&this.followPaused?"resume_follow":VIEW_KEYS[i]));
             if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL)))
                 WorldMapChrome.viewIcon(g,i,r.x()+(r.width()-16)/2,r.y()+(r.height()-16)/2,enabled?TEXT:MapPalette.TEXT_FAINT);
@@ -1607,7 +1742,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private void handleViewAction(int index) {
         switch (index) {
             case 0 -> { this.followingTrain = null; this.map.centerOnPlayer(); }
-            case 1 -> { this.followingTrain = null; this.map.fitCity(); }
+            case 1 -> { this.followingTrain = null;if(!this.map.fitFreightShipment())this.map.fitCity(); }
             case 2 -> {
                 var selected = this.map.getSelection();
                 if (this.followingTrain != null && this.followPaused) this.followPaused=false;
@@ -1729,7 +1864,7 @@ public final class PolishedWorldMapScreen extends Screen {
             var result=new ArrayList<Legend>();
             result.add(new Legend("physical_track",0xFFB9B2A2,null,null));
             for(var kind:legendClasses())result.add(new Legend(kind.name().toLowerCase(Locale.ROOT),CityMapPanel.railInnerColor(kind),kind,null));
-            result.add(new Legend("selected_route",MapPalette.SELECTED,null,null));
+            result.add(new Legend("selected_route",DispatchPalette.SELECTED,null,null));
             result.add(new Legend("active_route",0xFF8BCDB1,null,null));
             result.add(new Legend("inactive_route",0xFFE0A776,null,null));
             result.add(new Legend("station",MapPalette.OWN,null,AtlasGlyph.STATION));
@@ -1739,6 +1874,8 @@ public final class PolishedWorldMapScreen extends Screen {
             new Legend("freight_point",MapPalette.OWN,null,AtlasGlyph.FREIGHT),
             new Legend("freight_hub",MapPalette.OWN,null,AtlasGlyph.HUB),
             new Legend("freight_link",0xB36ACFCE,null,null),
+            new Legend("shipment_path",DispatchPalette.SELECTED,null,null),
+            new Legend("shipment_rail",DispatchPalette.SELECTED,null,null),
             new Legend("train",MapPalette.OWN,null,AtlasGlyph.TRAIN),
             new Legend("attention",MapPalette.ALERT,null,AtlasGlyph.FREIGHT));
         if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEXT_FAINT,null,AtlasGlyph.ENERGY));
@@ -1787,11 +1924,12 @@ public final class PolishedWorldMapScreen extends Screen {
             else if(entry.rail()!=null){int inner=CityMapPanel.railInnerWidth(entry.rail());g.fill(r.x(),r.y()+5,r.x()+16,r.y()+7+inner,CityMapPanel.railOutlineColor(entry.rail()));g.fill(r.x(),r.y()+6,r.x()+16,r.y()+6+inner,entry.color());if(entry.rail()==CityMapPanel.RailClass.PUBLIC_PAID)g.fill(r.x()+7,r.y()+5,r.x()+9,r.y()+11,0xFFB6F5CD);}
             else if(entry.key().equals("territory")){g.fill(r.x(),r.y()+3,r.x()+16,r.y()+14,0x1ED3A363);g.renderOutline(r.x(),r.y()+3,16,11,entry.color());}
             else if(entry.key().endsWith("_route")) {
-                if(entry.key().equals("selected_route"))g.fill(r.x(),r.y()+3,r.x()+17,r.y()+12,0x38E7BA71);
+                if(entry.key().equals("selected_route"))g.fill(r.x(),r.y()+3,r.x()+17,r.y()+12,MapPalette.argb(DispatchPalette.SELECTED,56));
                 g.fill(r.x(),r.y()+5,r.x()+17,r.y()+10,0xE0121B20);
                 g.fill(r.x(),r.y()+6,r.x()+17,r.y()+9,entry.color());
             }
-            else if(entry.key().equals("freight_link")){for(int dx=0;dx<17;dx+=8)g.fill(r.x()+dx,r.y()+8,r.x()+Math.min(17,dx+4),r.y()+9,entry.color());}
+            else if(entry.key().equals("freight_link")||entry.key().equals("shipment_path")){for(int dx=0;dx<17;dx+=8)g.fill(r.x()+dx,r.y()+7,r.x()+Math.min(17,dx+5),r.y()+9,entry.color());}
+            else if(entry.key().equals("shipment_rail")){g.fill(r.x(),r.y()+5,r.x()+17,r.y()+11,0xE0121B20);g.fill(r.x(),r.y()+7,r.x()+17,r.y()+9,entry.color());}
             else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
             Component label=Component.translatable("gui.createcityexpansioncore.world_map.legend."+entry.key());
             g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-24),r.x()+24,r.y()+5,enabled?TEXT:MapPalette.TEXT_FAINT,false);

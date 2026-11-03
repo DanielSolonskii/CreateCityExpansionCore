@@ -308,34 +308,31 @@ public final class TransportSubLevelProtection {
         return granted ? TransportGrantStatus.GRANTED : TransportGrantStatus.REVOKED;
     }
 
+    /** Committed edits only. Never invoke the volume fallback from the per-block lifecycle. */
+    public static void onBlockChanged(ServerLevel level, BlockPos pos, ResourceLocation previous,
+                                      ResourceLocation next, CityManager cities) {
+        if (!cities.hasTransportAccessGrants()) return;
+        ServerSubLevel sublevel = containingSubLevel(level, pos);
+        if (sublevel == null) return;
+        CachedTerminal cached = CITY_CACHE.get(sublevel);
+        RegisteredTerminal terminal = cached != null && cached.cityId() != null && cached.token() != null
+                ? new RegisteredTerminal(cached.cityId(), cached.token(), cached.terminalPos(), null)
+                : scanLoadedTerminals(sublevel, cities);
+        if (terminal == null || terminal.token() == null) return;
+        CITY_CACHE.put(sublevel, new CachedTerminal(terminal.cityId(), terminal.token(), terminal.terminalPos(), level.getGameTime()));
+        cities.onTransportBlockChanged(cities.getCity(terminal.cityId()), terminal.token(),
+                pos.subtract(terminal.terminalPos()), previous, next);
+    }
+
     @Nullable
     private static RegisteredTerminal scanForTerminal(ServerSubLevel sublevel, CityManager cityManager) {
+        RegisteredTerminal found = scanLoadedTerminals(sublevel, cityManager);
+        if (found != null) return found;
         LevelPlot plot = sublevel.getPlot();
         if (plot == null) {
             return null;
         }
-
         Block terminal = com.example.examplemod.CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL.get();
-
-        // Первичный источник: BE-карты самих plot-чанков. Координатная
-        // арифметика не нужна вообще — plot хранит чанки в собственной
-        // локальной системе (toLocal/toGlobal), а bbox может быть ещё
-        // не посчитан.
-        java.util.Collection<dev.ryanhcode.sable.sublevel.plot.PlotChunkHolder> holders = plot.getLoadedChunks();
-        if (holders != null) {
-            for (dev.ryanhcode.sable.sublevel.plot.PlotChunkHolder holder : holders) {
-                net.minecraft.world.level.chunk.LevelChunk chunk = holder == null ? null : holder.getChunk();
-                if (chunk == null) {
-                    continue;
-                }
-                for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-                    RegisteredTerminal found = terminalOf(blockEntity, terminal, cityManager);
-                    if (found != null) {
-                        return found;
-                    }
-                }
-            }
-        }
 
         // Запасной путь: поблочный скан через embedded accessor в
         // пределах bbox plot'а (если он посчитан).
@@ -347,7 +344,7 @@ public final class TransportSubLevelProtection {
                 for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
                     for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
                         cursor.set(x, y, z);
-                        RegisteredTerminal found = terminalOf(
+                        found = terminalOf(
                                 accessor.getBlockEntity(cursor), terminal, cityManager);
                         if (found != null) {
                             return found;
@@ -357,6 +354,25 @@ public final class TransportSubLevelProtection {
             }
         }
 
+        return null;
+    }
+
+    /** Loaded block entities are enough for lifecycle cleanup, including after a server restart. */
+    @Nullable
+    private static RegisteredTerminal scanLoadedTerminals(ServerSubLevel sublevel, CityManager cityManager) {
+        LevelPlot plot = sublevel.getPlot();
+        if (plot == null) return null;
+        Block terminal = com.example.examplemod.CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL.get();
+        var holders = plot.getLoadedChunks();
+        if (holders == null) return null;
+        for (var holder : holders) {
+            var chunk = holder == null ? null : holder.getChunk();
+            if (chunk == null) continue;
+            for (BlockEntity entity : chunk.getBlockEntities().values()) {
+                RegisteredTerminal found = terminalOf(entity, terminal, cityManager);
+                if (found != null) return found;
+            }
+        }
         return null;
     }
 

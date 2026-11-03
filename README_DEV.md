@@ -1,142 +1,95 @@
-# README_DEV.md
+# Разработка CCEC
 
-Настройка окружения для разработки.
+Актуализировано: **2026-11-02**. Этот документ относится к Minecraft-моду в корне репозитория. Вложенные backend, launcher и bot имеют собственные сборки: [platform/STATE.md](platform/STATE.md).
 
-## Обязательные runtime-моды
+## Среда
 
-Create 6.0.10 требует два своих runtime-мода. Без них сервер не стартует:
+- JDK 21; версия проверяется командой `java -version`.
+- Gradle 9.2.1 через включённые `gradlew` / `gradlew.bat`.
+- Интернет для первого разрешения зависимостей. Offline-сборка требует заполненного кэша.
+- Закреплённые версии Minecraft/NeoForge/Create/EE: [gradle.properties](gradle.properties), [build.gradle](build.gradle).
 
-```
-Missing or unsupported mandatory dependencies:
-	Mod ID: 'ponder', Requested by: 'create'
-	Mod ID: 'flywheel', Requested by: 'create'
-```
-
-Runtime-моды должны лежать в `run/mods/`, отдельно от dev classpath. Теперь
-Gradle скачивает и подготавливает их автоматически — копировать JAR вручную не нужно.
-
-## После клонирования GitHub
-
-Нужны JDK 21 и интернет. Укажите `JAVA_HOME` на JDK 21, если он указывает на другую Java.
-Gradle устанавливать отдельно не требуется: wrapper включён в репозиторий.
-
-Windows PowerShell:
+Из PowerShell при необходимости задайте кэш в доступном каталоге:
 
 ```powershell
-.\gradlew.bat build verifyDevMods
+$env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
+.\gradlew.bat build --no-configuration-cache --console=plain
+```
+
+В обычной среде достаточно `.\gradlew.bat build`. В macOS/Linux используйте `bash ./gradlew build`. Сборка не требует заранее установленного игрового профиля.
+
+## Compile API и dev runtime
+
+[gradle/dev-mods.gradle](gradle/dev-mods.gradle) разделяет compile API и полные моды:
+
+- compile: Create `6.0.10-280:slim`, Ponder `1.0.82+mc1.21.1`, EE и опциональные API из `libs/`;
+- runtime: полный Create, внешний Ponder и EE в `run/mods/`;
+- полный Create содержит JarJar-зависимости Flywheel 1.0.6, Registrate MC1.21-1.3.0+67 и Ponder 1.0.82.
+
+`prepareDevMods` скачивает закреплённые runtime-артефакты и копирует EE. Он не удаляет пользовательские файлы и отказывает при конфликтующих версиях Create/Ponder/EE.
+
+```powershell
+.\gradlew.bat verifyDevMods
 .\gradlew.bat runClient
+# Отдельный осознанный запуск сервера разработки:
+.\gradlew.bat runServer
 ```
 
-macOS/Linux:
+Задачи `runClient`, `runServer`, `runData` и `runGameTestServer` вызывают подготовку автоматически. Обычные `build`/`check` игру не запускают. Не переносите полные mod JAR в `runtimeClasspath`: существующая схема NeoForge загружает их из `run/mods/`.
 
-```sh
-bash ./gradlew build verifyDevMods
-bash ./gradlew runClient
-```
+## Основная проверка
 
-`build` больше не зависит от заранее существующего `run/mods/ponder-*.jar`:
-compile-only Ponder загружается с Maven Create. `prepareDevMods` скачивает полные
-Create/Ponder в отдельной конфигурации `devRuntimeMods` и копирует их вместе с
-отслеживаемым Git `libs/electroenergetics-1.21.1-1.1.2.jar` в `run/mods/`.
-`runClient`, `runServer`, `runData` и `runGameTestServer` вызывают подготовку автоматически.
-`verifyDevMods` проверяет JAR и вложенные зависимости, не запуская Minecraft.
-
-Задача не удаляет другие моды, конфиги, мир или пользовательские файлы. Если найдена
-другая версия Create/Ponder/EE в `run/mods/`, она останавливается с понятной ошибкой:
-сначала самостоятельно переместите конфликтующий JAR в backup. На production задача
-ничего не устанавливает. Сборка не является деплоем.
-
-### Почему runtime-моды не входят в runtimeClasspath
-
-Для этого проекта полные mod JAR оставлены вне dev classpath (`localRuntime` /
-`implementation`): предыдущая такая конфигурация вызывала ошибку NeoForge:
-
-```
-Caused by: java.lang.NoClassDefFoundError: com/tterrag/registrate/AbstractRegistrate
-```
-
-Поэтому Gradle разрешает compile API и полные runtime-моды отдельно. Сохраняется
-проверенная проектом схема module layer; переход на другую схему не выполняется.
-
-### Состав run/mods
-
-| Файл | Источник |
-|---|---|
-| `create-1.21.1-6.0.10.jar` | Maven `com.simibubi.create:create-1.21.1:6.0.10-280`, полный JAR |
-| `electroenergetics-1.21.1-1.1.2.jar` | `libs/electroenergetics-1.21.1-1.1.2.jar` |
-| `ponder-neoforge-1.0.82+mc1.21.1.jar` | Maven `net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1` |
-
-Flywheel **1.0.6**, Registrate **MC1.21-1.3.0+67** и Ponder **1.0.82** также присутствуют
-в `META-INF/jarjar/` полного Create JAR. Отдельный Flywheel скачивать не требуется;
-внешний Ponder сохраняется согласно существующей dev-схеме проекта. Новые сторонние
-JAR в Git не добавляются; версии закреплены в `gradle/dev-mods.gradle`.
-
-Полный Create JAR автоматически разрешается Gradle по координатам:
-
-```
-com.simibubi.create:create-1.21.1:6.0.10-280
-```
-
-Артефакт `slim` (17 452 009 байт) для run/mods не подходит — нужен полный
-(19 123 767 байт).
-
-## Сборка
-
-```
-gradlew compileJava
-gradlew check
-gradlew build
+```powershell
+.\gradlew.bat build --offline --no-configuration-cache --console=plain
 git diff --check
 ```
 
-`check` запускает не только стандартные тесты, но и headless contracts для
-Freight, Railway ownership/accounting, route guard, World Map/layout,
-City Pylon, relations, train management, Geology v3 и Magnetic Analyzer.
-Актуальный перечень задач см. в `build.gradle`.
+Уберите `--offline`, если зависимости ещё не загружены. `check` включает проверки финансовых реестров и миграций, доставки/отмены/дорожных расходов, Railway, территории и разрешений, геологии, проектов, профиля/сообщества, HUD, ресурсов и геометрии интерфейсов. Актуальные задачи определяет [build.gradle](build.gradle).
 
-### Правило runtime-проверки
+Редакторы рецептов имеют отдельные init scripts и не включены в обычный `check`:
 
-Успешный `compileJava/check/build` подтверждает компиляцию, persistence contracts
-и чистые layout/domain invariants, но не подтверждает Minecraft interaction/render.
-Ручной runtime checklist выполняется отдельно владельцем проекта.
-
-Особенно после изменений геологии проверять:
-
-1. Analyzer: ПКМ в воздухе открывает survey.
-2. Analyzer: ПКМ по блоку использует тот же scan path.
-3. Первый scan проходит без ложного cooldown; повторный ограничен 60 ticks.
-4. Mine использует локальный potential и общий reserve после restart.
-5. Bulk iron выдаёт ×2 physical output без ×2 расхода reserve.
-
-После Freight/Railway изменений проверять физический путь Package, station/train
-eligibility, route selection, reserve/settlement и восстановление после restart.
-
-## Проверка рецептов
-
-Отдельный скрипт-валидатор проверяет JSON рецептов без запуска игры:
-
-- соответствие ширины строк паттерна
-- использование всех объявленных символов key
-- определение всех используемых символов
-- известные namespace
-
-Запуск сервера (`gradlew runServer`) ловит оставшиеся проблемы:
-`Parsing error loading recipe <id>` в логе означает некорректный рецепт.
-
-Ожидаемое состояние при старте:
-
-```
-[RECIPES] Override datapack enabled: createcityexpansioncore:datapacks/dependency_recipe_overrides (position TOP, always active)
-Loaded 2978 recipes
+```powershell
+.\gradlew.bat checkRecipeWorkbench -I src/main/java/com/example/examplemod/devtools/check.gradle --offline --no-configuration-cache
+.\gradlew.bat checkSequenceRecipe -I src/main/java/com/example/examplemod/devtools/check-sequence.gradle --offline --no-configuration-cache
 ```
 
-и НОЛЬ строк `Parsing error loading recipe`.
+[Описание devtools](src/main/java/com/example/examplemod/devtools/README.md). Фактические результаты полного прогона: [аудит](docs/audit-2026-11-02/README.md).
 
-## Канонические документы
+## Граница проверок
 
-- `MASTER_CONTEXT.md` — цели, принципы и архитектурные границы.
-- `CURRENT_STATE.md` — фактически реализованные системы и ограничения.
-- `DECISIONS.md` — принятые решения и причины.
+Успешный Gradle подтверждает компиляцию и выполненные проверки кода. Он не подтверждает OpenGL, GUI Scale, реальный обмен Create Postbox/поезд, поведение Sable/Simulated или сетевую приёмку живого Minecraft.
 
-Локальный MERGED worktree является source of truth. Старые chat summaries и
-GitHub-ветка не должны использоваться вместо сверки с текущим кодом.
+Для изменений логистики используйте [игровой checklist](docs/logistics/logistics-audit-2026-11-02-ru.md). Для остальных доменов проверяйте взаимодействия, роли/отказы, сохранение после перезахода и перезапуска на отдельном тестовом мире. Установленную клиентскую/серверную сборку определяйте по версии и хэшу фактического JAR.
+
+## Сохранения
+
+- Economy: формат 13, включая частичное закрытие отменённых доставок.
+- Railway: формат 5; неизвестный более новый формат должен отклоняться.
+- Geology: формат 4 и generator 2. Переход со старого генератора намеренно пересоздаёт геологию; это отдельное правило, а не обычная миграция остатка залежи.
+- Другие реестры и их границы перечислены в [CURRENT_STATE.md](CURRENT_STATE.md).
+
+Не понижайте сборку на новых данных и не регенерируйте мир для исправления проблемы отображения. Сначала сохраните копию и проверьте реальный формат и причину ошибки.
+
+## Git и GitNexus
+
+Основная GitHub-ветка — `main`. Работайте в отдельной `codex/<задача>` ветке, если сессия не требует текущей ветки. Не включайте чужие незавершённые изменения и содержимое `run/` или секреты в коммит.
+
+Следуйте [AGENTS.md](AGENTS.md): graph query/context для связей, upstream impact перед изменением существующих символов, HIGH/CRITICAL предупреждение, проверка UNKNOWN по исходникам и `detect_changes` перед коммитом. Индекс должен соответствовать HEAD и исходникам. Если инкрементальное обновление даёт неполные связи, выполните полное:
+
+```powershell
+node .gitnexus/run.cjs analyze --index-only --force
+node .gitnexus/run.cjs status --json
+node .gitnexus/run.cjs detect-changes --scope all --repo .
+```
+
+Если runner ещё не создан, используйте установленный GitNexus либо bootstrap из инструкции AGENTS. Для taint/PDG-аудита требуется индекс с `--pdg`; отсутствие слоя не означает отсутствие проблем.
+
+## Карта документации
+
+- [README](README.md) — вход для GitHub.
+- [CURRENT_STATE](CURRENT_STATE.md) — актуальный инвентарь и ограничения.
+- [MASTER_CONTEXT](MASTER_CONTEXT.md) — принципы и архитектура.
+- [DECISIONS](DECISIONS.md) — решения и актуальные уточнения.
+- [GUIDE_RU](GUIDE_RU.md) — действия игрока.
+- [Аудит](docs/audit-2026-11-02/README.md) — проверки и evidence.
+- Датированные прежние отчёты сохраняют исторические факты и не определяют текущий production.

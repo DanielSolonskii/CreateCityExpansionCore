@@ -14,8 +14,8 @@ public final class FreightRoadCharges{
  public boolean managed(UUID trip){return trips.containsKey(trip);}
  /** Null means ordinary railway accounting; false cancels navigation before leaving the station. */
  public Boolean reserve(Train train,CityFleetTrain fleet,UUID destination,UUID trip,long amount,RailwayManager railway){
-  var weights=new TreeMap<UUID,Long>();UUID direct=freight.carriers.payer(fleet.fleetTrainId(),destination,railway);
-  if(direct!=null){for(var a:freight.assignments.values())if(a.buyerTransport&&fleet.fleetTrainId().equals(a.train)&&freight.carriers.configured(a.subject)){weights.put(a.subject,1L);break;}}
+  var weights=new TreeMap<UUID,Long>();UUID direct=freight.carriers.directSubject(fleet.fleetTrainId(),destination,railway);
+  if(direct!=null)weights.put(direct,1L);
   else{
    var seen=new HashSet<UUID>();
    for(var carriage:train.carriages){var inventory=carriage.storage.getAllItems();if(inventory==null)continue;

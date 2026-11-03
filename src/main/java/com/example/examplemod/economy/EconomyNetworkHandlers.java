@@ -49,6 +49,13 @@ public final class EconomyNetworkHandlers {
             String reason=!context.city.canBuild(player.getUUID())?"freight_revoke_denied"
                     :payload.targetId()==null?"freight_revoke_unknown"
                     :context.manager.revokeDispatch(payload.targetId(),context.city.getId());
+            FreightNetworkService.result(player,payload.targetId(),reason.equals("freight_revoked")||reason.equals("freight_cancel_pending")||reason.equals("freight_revoke_already")?"ok":reason);
+            if(reason.equals("freight_revoked")||reason.equals("freight_cancel_pending"))FreightParcelRecovery.neutralizeUnsealed(player.getServer(),payload.targetId());
+            feedback(player,reason);sendState(context);return;
+        }
+        if(payload.action()==EconomyCommandPayload.Action.RECLAIM_FREIGHT){
+            String reason=FreightParcelRecovery.recoverHeld(player,payload.targetId(),false);
+            FreightNetworkService.result(player,payload.targetId(),reason.equals("freight_recovered")?"ok":reason);
             feedback(player,reason);sendState(context);return;
         }
         boolean specificFeedback=payload.action()==EconomyCommandPayload.Action.MANAGE_FREIGHT&&"rebind".equals(payload.note());

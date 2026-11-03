@@ -1,50 +1,20 @@
-# RE:CREATED Launcher
+# Происхождение исходного GUI launcher
 
-UI-only desktop launcher for the Create-based Minecraft server. All server state,
-profile data, file checks and launch actions are mocks for now.
+Актуализировано 02.11.2026. Этот файл сохраняет provenance UI prototype после
+интеграции в CCEC. Текущие команды и ограничения:
+[launcher README](../README.md), [platform STATE](../../STATE.md).
 
-## Stack
+Первоначальный GUI использовал Tauri 2, React/TypeScript, Vite/CSS и
+`LauncherGateway` с mock profile/news/status/launch actions. Старые demo
+credentials, plaintext storage и mock alpha keys не являются действующим
+account protocol и больше не приводятся как инструкция.
 
-- Tauri 2 — compact desktop shell and future secure access to the file system/processes.
-- React + TypeScript — component UI and typed service contracts.
-- Vite — fast local development and production frontend build.
-- Plain CSS — custom visual system without a large UI framework.
+Текущие исходники включают backend registration, Telegram/trusted-device flow,
+Windows Credential Manager, native Game Session, signed game/launcher updates,
+settings/status/news/profile/telemetry. При этом
+[MockLauncherGateway](../src/services/mockLauncherGateway.ts) остаётся
+bootstrap display snapshot; наличие mock файла не означает mock всех действий.
 
-The UI depends only on `LauncherGateway` from `src/types/launcher.ts`. Replace
-`MockLauncherGateway` with an HTTP/Tauri implementation to add a backend without
-rewriting components.
-
-## Run the UI
-
-```powershell
-npm install
-npm run dev
-```
-
-Open `http://localhost:1420`. This path needs Node.js only.
-
-## Run as a desktop app
-
-Install the current stable Rust toolchain and Microsoft C++ Build Tools, then:
-
-```powershell
-npm install
-npm run tauri dev
-```
-
-## Current mock behavior
-
-- The server status and news are local fixtures.
-- Login: `drannch1k`, password: `123`.
-- Registration accepts alpha key `RC-ALPHA-2026` and a Telegram handle in `@username` format.
-- Mock accounts and sessions are stored only in browser storage and are not suitable for production authentication.
-- The first click on **Играть** simulates a file check.
-- The second click simulates launching Minecraft.
-- Settings are UI-only and remain in memory until the app closes.
-
-## Recommended backend boundary
-
-Implement a `TauriLauncherGateway` with commands for authentication, manifest
-retrieval, checksum verification, incremental downloads and Minecraft process
-launch. Keep credentials in the OS credential store and restrict Tauri process
-permissions to the exact executable and arguments required by the launcher.
+Native сборка этой копии блокируется отсутствующими Rust modules/command.
+Результаты и runtime acceptance gaps: [аудит](../../../docs/audit-2026-11-02/PLATFORM_AUDIT_RU.md).
+История интеграции: [GUI import](../../docs/launcher-gui-import.md).

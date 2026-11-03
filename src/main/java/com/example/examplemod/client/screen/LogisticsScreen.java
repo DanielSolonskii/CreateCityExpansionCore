@@ -21,7 +21,7 @@ import static com.example.examplemod.client.screen.WorldMapChrome.*;
 
 /** Task-oriented workspace. List rows select; labelled controls perform validated actions. */
 public final class LogisticsScreen extends CityPylonPageScreen {
-    private enum View{SOURCE,LEGACY,LIST,DELIVERY,NODE,ROUTE,TRAIN,RENAME,REMOVE,REVOKE,BUDGET}
+    private enum View{SOURCE,LEGACY,LIST,DELIVERY,NODE,ROUTE,TRAIN,RENAME,REMOVE,REVOKE,BUDGET,RECOVER}
     private final Screen parent;private final WorldMapDataSource source;
     private EconomyStatePayload state;private LogisticsLayout layout;private View view=View.LIST;
     private int tab,filter,scroll,total,ticks;private UUID selected;private String draft="",error="";
@@ -39,7 +39,7 @@ public final class LogisticsScreen extends CityPylonPageScreen {
     private List<CompoundTag> deliveries(){return state==null?List.of():tags(state.logistics(),"Assignments");}
     private boolean local(){return state!=null&&state.logistics().getBoolean("CanManageNodes");}
     private boolean control(CompoundTag a){return state!=null&&state.logistics().getBoolean("CanDispatch")&&(a.getBoolean("OwnsDispatch")||!a.getBoolean("BuyerTransport")&&a.getBoolean("Outgoing"));}
-    private boolean done(CompoundTag a){return Set.of("complete","expired").contains(a.getString("State"));}
+    private boolean done(CompoundTag a){return Set.of("complete","expired","cancelled").contains(a.getString("State"));}
     private CcecStatus status(CompoundTag a){return a.contains("UiStatus")?CcecStatus.load(a.getCompound("UiStatus")):CcecStatus.of(CcecStatus.Category.WARNING,CcecStatus.Code.SHIPMENT_INVALIDATED,CcecStatus.Action.FIX_PROBLEM);}
     private void request(){if(ticks%100==0)PacketDistributor.sendToServer(RailwayCommandPayload.simple(source.getPylonPos(),RailwayCommandPayload.Action.REQUEST_STATE,null,null));PacketDistributor.sendToServer(EconomyCommandPayload.simple(source.getPylonPos(),EconomyCommandPayload.Action.REQUEST_STATE,null));}
     private void send(EconomyCommandPayload.Action action,UUID id,UUID second,long amount,int value,String title,String note){PacketDistributor.sendToServer(new EconomyCommandPayload(source.getPylonPos(),action,id,second,null,null,amount,0,0,value,title,"",note));request();}
@@ -62,7 +62,7 @@ public final class LogisticsScreen extends CityPylonPageScreen {
         button(new LogisticsLayout.Rect(layout.right()-78,1,78,22),tr("help"),false,()->true,()->FreightPonderPlugin.open(minecraft.screen));
         building=true;total=content(null);building=false;int next=layout.clampScroll(scroll,total);if(next!=scroll){scroll=next;rebuild();return;}
         var action=primary();button(layout.footerButton(0,3),tr("back"),false,()->!pendingRoute,this::onClose);
-        button(layout.footerButton(1,3),tr(view==View.LIST?"market":"on_map"),false,()->state!=null,()->{if(view==View.LIST)minecraft.setScreen(new MarketScreen(this,source));else onMap();});
+        button(layout.footerButton(1,3),tr(view==View.LIST?"market":"on_map"),false,()->state!=null&&(view==View.LIST||mapPoint()!=null),()->{if(view==View.LIST)minecraft.setScreen(new MarketScreen(this,source));else onMap();});
         button(layout.footerButton(2,3),action.label,true,action.enabled,action.run);
         if(focused&&field!=null){setInitialFocus(field);field.moveCursorTo(Math.min(cursor,draft.length()),false);}
     }
@@ -82,6 +82,7 @@ public final class LogisticsScreen extends CityPylonPageScreen {
         else if(view==View.TRAIN)y=trains(g,y,a);
         else if(view==View.BUDGET){y=heading(g,tr("budget"),tr("budget_help"),y);input(y,true);y+=35;y+=text(g,tr("budget_used",a.getLong("RoadSpent"),a.getLong("RoadReserved")),layout.left()+12,y,layout.width()-24,MUTED)+12;}
         else if(view==View.REVOKE)y=heading(g,tr("cancel_order"),Component.translatable("gui.createcityexpansioncore.freight.console.revoke_help"),y);
+        else if(view==View.RECOVER)y=heading(g,tr("recover_held"),tr("recover_help"),y);
         else y=shipment(g,y,a);
         return y-start+12;
     }
@@ -113,19 +114,25 @@ public final class LogisticsScreen extends CityPylonPageScreen {
         y+=text(g,tr("to",name(to)),layout.left()+12,y,layout.width()-24,TEXT)+12;
         long amount=Math.max(1,a.getLong("Amount")),delivered=a.getLong("Delivered");if(g!=null){g.fill(layout.left()+12,y,layout.right()-12,y+5,EDGE);g.fill(layout.left()+12,y,layout.left()+12+(int)((layout.width()-24)*Math.clamp(delivered/(double)amount,0,1)),y+5,0xff83d5b3);}y+=15;
         y+=text(g,tr("receipt",delivered,amount,a.getLong("InFlight")),layout.left()+12,y,layout.width()-24,MUTED)+12;
+        if(a.getBoolean("CancellationRequested"))y=heading(g,tr(a.getBoolean("CancellationPending")?"cancellation_pending":a.getString("State").equals("complete")?"complete":"cancelled"),tr("cancellation_summary",a.getLong("CancellationOutstanding"),a.getLong("CancellationPaid"),a.getLong("CancellationRefunded")),y);
         if(!done(a)){y=heading(g,tr("next_step"),nextHint(a),y);}
-        int bw=(layout.width()-6)/2;button(layout.left(),y,bw,tr(a.getBoolean("Regional")?"regional":"direct"),false,control(a)&&!a.getBoolean("RouteLocked"),()->{regional=a.getBoolean("Regional");hubs.clear();for(var h:tags(a,"Via"))hubs.add(h.getUUID("Id"));open(View.ROUTE,selected);});
+        int bw=(layout.width()-6)/2;button(layout.left(),y,bw,tr(a.getBoolean("Regional")?"regional":"direct"),false,!done(a)&&!a.getBoolean("CancellationPending")&&control(a)&&!a.getBoolean("RouteLocked"),()->{regional=a.getBoolean("Regional");hubs.clear();for(var h:tags(a,"Via"))hubs.add(h.getUUID("Id"));open(View.ROUTE,selected);});
         button(layout.left()+bw+6,y,bw,tr("equipment"),false,from!=null,()->open(View.NODE,from.id));y+=32;
-        if(a.getBoolean("BuyerTransport")){y+=text(g,tr("road_summary",a.getLong("RoadSpent"),a.getLong("RoadReserved"),a.getLong("RoadLimit")),layout.left()+12,y,layout.width()-24,MUTED)+10;button(layout.left(),y,layout.width(),tr("budget"),false,control(a)&&state.logistics().getBoolean("CanCreateOrder"),()->{draft=Long.toString(a.getLong("RoadLimit"));open(View.BUDGET,selected);});y+=30;}
+        if(a.getBoolean("BuyerTransport")){y+=text(g,tr("road_summary",a.getLong("RoadSpent"),a.getLong("RoadReserved"),a.getLong("RoadLimit")),layout.left()+12,y,layout.width()-24,MUTED)+10;button(layout.left(),y,layout.width(),tr("budget"),false,!done(a)&&control(a)&&state.logistics().getBoolean("CanCreateOrder"),()->{draft=Long.toString(a.getLong("RoadLimit"));open(View.BUDGET,selected);});y+=30;}
         y+=text(g,tr("goods",a.getLong("Reward")),layout.left()+12,y,layout.width()-24,MUTED)+12;
         var order=state.contracts().stream().filter(c->c.id().equals(a.getUUID("Subject"))).findFirst().orElse(null);
         if(order!=null&&order.kind()==EconomyTypes.ContractKind.ORDINARY){long fee=EconomyMath.applyBasisPoints(order.reward(),state.cityFeeBasisPoints());y+=text(g,tr("goods_fee",fee),layout.left()+12,y,layout.width()-24,MUTED)+12;}
         y+=text(g,tr("settlement"),layout.left()+12,y,layout.width()-24,MUTED)+12;
         if(a.hasUUID("Train")){y+=text(g,tr("assigned_train",a.getString("TrainName")),layout.left()+12,y,layout.width()-24,TEXT)+10;}
-        button(layout.left(),y,layout.width(),tr("choose_train"),false,control(a)&&!a.getBoolean("Regional")&&!a.getBoolean("Running"),()->open(View.TRAIN,selected));y+=30;
-        button(layout.left(),y,layout.width(),tr("cancel_order"),false,state.logistics().getBoolean("CanDispatch")&&a.getBoolean("Revocable"),()->open(View.REVOKE,selected));return y+32;
+        button(layout.left(),y,layout.width(),tr(a.getBoolean("CancellationPending")?"repair_route":"choose_train"),false,!done(a)&&control(a)&&!a.getBoolean("Regional")&&!a.getBoolean("Running"),()->open(View.TRAIN,selected));y+=30;
+        button(layout.left(),y,layout.width(),tr("cancel_order"),false,state.logistics().getBoolean("CanDispatch")&&a.getBoolean("Revocable"),()->open(View.REVOKE,selected));y+=32;
+        if(a.getBoolean("Outgoing")&&a.getBoolean("CancellationRequested")){
+            y+=text(g,tr("recover_help"),layout.left()+12,y,layout.width()-24,MUTED)+12;
+            button(layout.left(),y,layout.width(),tr("recover_held"),false,state.logistics().getBoolean("CanDispatch"),()->open(View.RECOVER,selected));y+=32;
+        }
+        button(layout.left(),y,layout.width(),tr("copy_id"),false,true,()->{minecraft.keyboardHandler.setClipboard(selected.toString());minecraft.player.displayClientMessage(tr("id_copied"),true);});return y+32;
     }
-    private Component phase(CompoundTag a){if(done(a))return tr("complete");if(a.getBoolean("BuyerTransport")&&!a.getString("DispatchError").isBlank())return tr("phase."+a.getString("DispatchError"));if(a.getBoolean("BuyerTransport")&&!a.getBoolean("Regional")){return tr("phase."+(a.getBoolean("Running")?a.getString("TransportPhase"):"paused"));}return CcecStatusUi.title(status(a));}
+    private Component phase(CompoundTag a){if(a.getBoolean("CancellationPending"))return tr("cancellation_pending");if(a.getString("State").equals("complete"))return tr("complete");if(a.getBoolean("CancellationRequested"))return tr("cancelled");if(done(a))return tr("expired");if(a.getBoolean("BuyerTransport")&&!a.getString("DispatchError").isBlank())return tr("phase."+a.getString("DispatchError"));if(a.getBoolean("BuyerTransport")&&!a.getBoolean("Regional")){return tr("phase."+(a.getBoolean("Running")?a.getString("TransportPhase"):"paused"));}return CcecStatusUi.title(status(a));}
     private Component nextHint(CompoundTag a){if(!control(a))return tr("receiver_help");if(!a.hasUUID("Source"))return tr("choose_source_help");if(a.getBoolean("Regional"))return tr("regional_help");if(!a.hasUUID("Train"))return tr("choose_train_help");if(a.getBoolean("BuyerTransport")&&a.getString("DispatchError").equals("transport_budget"))return tr("budget_help");return a.getBoolean("Running")?tr("running_help"):tr("start_help");}
     private int node(GuiGraphics g,int y){var p=point(selected);if(p==null)return heading(g,tr("missing"),tr("missing_help"),y);y=heading(g,Component.literal(p.name),FreightUi.tr(p.status),y);
         if(view==View.RENAME){input(y,false);return y+35;}if(view==View.REMOVE)return heading(g,tr("remove"),tr("remove_help"),y);
@@ -142,8 +149,9 @@ public final class LogisticsScreen extends CityPylonPageScreen {
         y+=text(g,tr("equipment_path"),layout.left()+12,y,layout.width()-24,ACCENT)+12;return y;
     }
     private int sourceList(GuiGraphics g,int y,CompoundTag a){y=heading(g,tr(a==null?"choose_receiver":"choose_source"),tr("source_help"),y);
+        if(points().stream().noneMatch(p->p.cityId.equals(state.cityId())&&p.enabled&&!p.removed&&(a==null?p.mode.receives():p.mode.sends())))return heading(g,tr("empty_nodes"),tr("empty_nodes_help"),y);
         for(var p:points())if(p.cityId.equals(state.cityId())&&p.enabled&&!p.removed&&(a==null?p.mode.receives():p.mode.sends())){UUID subject=selected;row(g,y,62,new ItemStack(Items.CHEST),Component.literal(p.name),FreightUi.tr(p.status),ACCENT,()->{});button(layout.left(),y+33,layout.width(),tr("select"),false,p.online(),()->{send(a==null?EconomyCommandPayload.Action.SETUP_FREIGHT:EconomyCommandPayload.Action.CONTROL_DISPATCH,subject,p.id,0,0,"","");open(View.DELIVERY,subject);});y+=70;}return y;}
-    private int trains(GuiGraphics g,int y,CompoundTag a){y=heading(g,tr("choose_train"),tr("train_help"),y);for(var train:tags(a,"TrainCandidates")){var id=train.getUUID("Id");row(g,y,65,new ItemStack(Items.MINECART),Component.literal(train.getString("Name")),tr(train.getBoolean("Own")?"own_train":"seller_train"),train.getBoolean("Available")?ACCENT:MUTED,()->{});button(layout.left(),y+35,layout.width(),tr(train.getBoolean("Available")?"quote_route":"train_unavailable"),false,train.getBoolean("Available"),()->send(EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES,selected,id,0,0,"",""));y+=74;}return registrations(g,y);}
+    private int trains(GuiGraphics g,int y,CompoundTag a){y=heading(g,tr("choose_train"),tr("train_help"),y);if(tags(a,"TrainCandidates").isEmpty())y=heading(g,tr("empty_trains"),tr("empty_trains_help"),y);for(var train:tags(a,"TrainCandidates")){var id=train.getUUID("Id");if(a.getBoolean("CancellationPending")&&(!a.hasUUID("Train")||!a.getUUID("Train").equals(id)))continue;row(g,y,65,new ItemStack(Items.MINECART),Component.literal(train.getString("Name")),tr(train.getBoolean("Own")?"own_train":"seller_train"),train.getBoolean("Available")?ACCENT:MUTED,()->{});button(layout.left(),y+35,layout.width(),tr(train.getBoolean("Available")?"quote_route":"train_unavailable"),false,train.getBoolean("Available"),()->send(EconomyCommandPayload.Action.REQUEST_FREIGHT_ROUTES,selected,id,0,0,"",""));y+=74;}return registrations(g,y);}
     private int route(GuiGraphics g,int y,CompoundTag a){y=heading(g,tr("route"),tr("route_help"),y);int bw=(layout.width()-6)/2;button(layout.left(),y,bw,tr("direct"),!regional,true,()->{regional=false;rebuild();});button(layout.left()+bw+6,y,bw,tr("regional"),regional,true,()->{regional=true;rebuild();});y+=32;
         if(regional){y+=text(g,tr("regional_help"),layout.left()+12,y,layout.width()-24,MUTED)+12;
             for(int i=0;i<hubs.size();i++){final int pos=i;var p=point(hubs.get(i));y+=text(g,Component.literal((i+1)+" · "+name(p)),layout.left()+12,y,layout.width()-24,TEXT)+5;int w=(layout.width()-10)/3;button(layout.left(),y,w,tr("up"),false,i>0,()->{Collections.swap(hubs,pos,pos-1);rebuild();});button(layout.left()+w+5,y,w,tr("down"),false,i<hubs.size()-1,()->{Collections.swap(hubs,pos,pos+1);rebuild();});button(layout.left()+2*(w+5),y,w,tr("remove_stop"),false,true,()->{hubs.remove(pos);rebuild();});y+=30;}
@@ -153,9 +161,10 @@ public final class LogisticsScreen extends CityPylonPageScreen {
     private void input(int y,boolean numeric){if(building&&y>=layout.top()&&y+22<=layout.bottom()){field=new EditBox(font,layout.left()+12,y,layout.width()-24,22,tr("budget"));field.setMaxLength(numeric?18:64);if(numeric)field.setFilter(v->v.isBlank()||v.chars().allMatch(Character::isDigit));field.setValue(draft);field.setResponder(v->draft=v);addRenderableWidget(field);}}
     private record Primary(Component label,java.util.function.BooleanSupplier enabled,Runnable run){}
     private Primary primary(){var a=delivery();var p=point(selected);if(state==null)return new Primary(tr("loading"),()->false,()->{});
-        if(view==View.ROUTE)return new Primary(tr(pendingRoute?"saving":"save_route"),()->a!=null&&control(a)&&!a.getBoolean("RouteLocked"),()->{pendingRevision=state.logistics().getLong("MutationRevision");pendingAt=net.minecraft.Util.getMillis();pendingRoute=true;network(FreightNetworkRequest.Action.ROUTE,selected,regional,List.copyOf(hubs));rebuild();});
-        if(view==View.BUDGET)return new Primary(tr("save_budget"),()->!draft.isBlank(),()->{try{awaitMutation(EconomyCommandPayload.Action.FREIGHT_BUDGET,selected,null,Long.parseLong(draft),"");}catch(NumberFormatException e){error="invalid";rebuild();}});
-        if(view==View.REVOKE)return new Primary(tr("confirm_cancel"),()->a!=null&&a.getBoolean("Revocable"),()->{send(EconomyCommandPayload.Action.REVOKE_FREIGHT,selected,null,0,0,"","");open(View.DELIVERY,selected);});
+        if(view==View.ROUTE)return new Primary(tr(pendingRoute?"saving":"save_route"),()->a!=null&&!done(a)&&!a.getBoolean("CancellationPending")&&control(a)&&!a.getBoolean("RouteLocked"),()->{pendingRevision=state.logistics().getLong("MutationRevision");pendingAt=net.minecraft.Util.getMillis();pendingRoute=true;network(FreightNetworkRequest.Action.ROUTE,selected,regional,List.copyOf(hubs));rebuild();});
+        if(view==View.BUDGET)return new Primary(tr("save_budget"),()->a!=null&&!done(a)&&control(a)&&!draft.isBlank(),()->{try{awaitMutation(EconomyCommandPayload.Action.FREIGHT_BUDGET,selected,null,Long.parseLong(draft),"");}catch(NumberFormatException e){error="invalid";rebuild();}});
+        if(view==View.REVOKE)return new Primary(tr(pendingRoute?"saving":"confirm_cancel"),()->a!=null&&!done(a)&&a.getBoolean("Revocable"),()->awaitMutation(EconomyCommandPayload.Action.REVOKE_FREIGHT,selected,null,0,""));
+        if(view==View.RECOVER)return new Primary(tr("confirm_recover"),()->a!=null&&a.getBoolean("Outgoing")&&a.getBoolean("CancellationRequested"),()->awaitMutation(EconomyCommandPayload.Action.RECLAIM_FREIGHT,selected,null,0,""));
         if(view==View.RENAME)return new Primary(tr("save"),()->local()&&!draft.isBlank(),()->{send(EconomyCommandPayload.Action.MANAGE_FREIGHT,selected,null,0,0,draft,"rename");open(View.NODE,selected);});
         if(view==View.REMOVE)return new Primary(tr("confirm_remove"),()->local(),()->{send(EconomyCommandPayload.Action.MANAGE_FREIGHT,selected,null,0,0,"","remove");open(View.LIST,null);});
         if(view==View.DELIVERY&&a!=null&&!done(a)){
@@ -168,9 +177,10 @@ public final class LogisticsScreen extends CityPylonPageScreen {
         return new Primary(tr(tab==1?"create_terminal":"market"),()->tab!=1||local(),()->{if(tab==1)FreightGuideClient.begin(source.getPylonPos(),null);else minecraft.setScreen(new MarketScreen(this,source));});
     }
     private String name(FreightPoint p){return p==null?tr("not_selected").getString():p.name;}
-    private void onMap(){var p=view==View.NODE?point(selected):delivery()!=null?point(delivery().getUUID("Destination")):null;if(p!=null)minecraft.setScreen(new PolishedWorldMapScreen(source).freightFocus(this,p.dimension,p.postbox));}
+    private FreightPoint mapPoint(){return view==View.NODE?point(selected):delivery()!=null?point(delivery().getUUID("Destination")):null;}
+    private void onMap(){var p=mapPoint();if(p!=null)minecraft.setScreen(new PolishedWorldMapScreen(source).freightFocus(this,p.dimension,p.postbox,view==View.NODE?null:selected));}
     @Override public void onClose(){if(pendingRoute){pendingRoute=false;}if(view!=View.LIST){view=View.LIST;selected=null;scroll=0;rebuild();}else minecraft.setScreen(parent);}
     @Override public void render(GuiGraphics g,int mx,int my,float pt){pointerX=mx;pointerY=my;g.fill(0,0,width,height,0xFF141A1D);g.drawString(font,fit(font,title,layout.width()-90),layout.left(),12,ACCENT,false);CityPylonWorkspace.clip(g,layout.left(),layout.top(),layout.right(),layout.bottom());content(g);g.disableScissor();for(var check:enabled)check.run();super.render(g,mx,my,pt);}
-    @Override public boolean mouseClicked(double x,double y,int b){if(super.mouseClicked(x,y,b))return true;if(b==0&&layout.contains(x,y))for(var hit:rows)if(hit.bounds.contains(x,y)){minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(),.25f,1f);hit.run.run();return true;}return false;}
+    @Override public boolean mouseClicked(double x,double y,int b){if(super.mouseClicked(x,y,b))return true;if(!pendingRoute&&b==0&&layout.contains(x,y))for(var hit:rows)if(hit.bounds.contains(x,y)){minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(),.25f,1f);hit.run.run();return true;}return false;}
     @Override public boolean mouseScrolled(double x,double y,double dx,double dy){if(!layout.contains(x,y)||dy==0)return false;scroll=layout.clampScroll(scroll+(dy<0?1:-1)*Math.min(28,Math.max(1,layout.viewport()-22)),total);rebuild();return true;}
 }

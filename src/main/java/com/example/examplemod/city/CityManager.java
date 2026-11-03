@@ -926,12 +926,49 @@ public class CityManager extends SavedData {
     /** Снимает разрешение. {@code true} — блок действительно был открытым. */
     public boolean removeInteractionGrant(City city, BlockPos pos) {
         if (city == null || pos == null || cities.get(city.getId()) != city) return false;
-        boolean removed = interactionGrants
-                .getOrDefault(city.getId(), java.util.Map.of())
-                .remove(pos)
-                != null;
+        Map<BlockPos, InteractionGrant> grants = interactionGrants.get(city.getId());
+        if (grants == null) return false;
+        boolean removed = grants.remove(pos) != null;
+        if (grants.isEmpty()) interactionGrants.remove(city.getId());
         if (removed) setDirty();
         return removed;
+    }
+
+    /** Constant-time gate for the committed world-change hook; never scans cities or blocks. */
+    public boolean hasBlockAccessGrants() {
+        return !interactionGrants.isEmpty() || !transportGrants.isEmpty();
+    }
+
+    public boolean hasTransportAccessGrants() {
+        return !transportGrants.isEmpty();
+    }
+
+    /** A committed type transition revokes the old position, including chest -> air -> chest. */
+    public void onBlockChanged(ResourceLocation dimension, BlockPos pos,
+                               ResourceLocation previousBlock, ResourceLocation nextBlock) {
+        if (dimension == null || pos == null || previousBlock == null || nextBlock == null
+                || previousBlock.equals(nextBlock) || interactionGrants.isEmpty()) return;
+        // Inspect saved grant maps only, not cities' plots or blocks. A grant can outlive
+        // a territory move, so the current claim owner alone is not sufficient here.
+        boolean removed = false;
+        var iterator = interactionGrants.entrySet().iterator();
+        while (iterator.hasNext()) {
+            var grants = iterator.next().getValue();
+            InteractionGrant grant = grants.get(pos);
+            if (grant != null && grant.dimension().equals(dimension)) {
+                grants.remove(pos);
+                removed = true;
+            }
+            if (grants.isEmpty()) iterator.remove();
+        }
+        if (removed) setDirty();
+    }
+
+    /** Same lifecycle for a real sublevel block; assembly relocation does not call this hook. */
+    public void onTransportBlockChanged(City city, UUID token, BlockPos delta,
+                                        ResourceLocation previousBlock, ResourceLocation nextBlock) {
+        if (previousBlock == null || nextBlock == null || previousBlock.equals(nextBlock)) return;
+        purgeTransportAccess(city, token, delta);
     }
 
     /**
@@ -983,6 +1020,7 @@ public class CityManager extends SavedData {
         if (removed) {
             setDirty();
             if (grants.isEmpty()) byToken.remove(token);
+            if (byToken.isEmpty()) transportGrants.remove(city.getId());
             return false;
         }
         grants.put(delta, blockId);
@@ -1022,6 +1060,7 @@ public class CityManager extends SavedData {
         if (grants.remove(delta) != null) {
             setDirty();
             if (grants.isEmpty()) byToken.remove(token);
+            if (byToken.isEmpty()) transportGrants.remove(city.getId());
         }
     }
 

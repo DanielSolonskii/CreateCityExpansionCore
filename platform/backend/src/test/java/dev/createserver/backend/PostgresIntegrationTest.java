@@ -17,7 +17,7 @@ class PostgresIntegrationTest {
 
     @Test
     void realPostgresStartsWithMigrationAndJpa() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("11");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("14");
         assertThat(health.isAvailable()).isTrue();
     }
 }

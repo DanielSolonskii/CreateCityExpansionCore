@@ -36,7 +36,7 @@ final class TerrainAtlas {
         ResourceLocation id(){return page.id;}
         void pin(){usedFrame=frame;lastUse=++use;}
     }
-    private record Quad(int left,int top,int right,int bottom,float u0,float v0,float u1,float v1) {}
+    private record Quad(int left,int top,int right,int bottom,float u0,float v0,float u1,float v1,float alpha) {}
     static void begin() { frame++; PAGES.forEach(page->page.quads.clear()); }
     static Slot acquire(Object owner) {
         Slot oldest=null;
@@ -62,10 +62,13 @@ final class TerrainAtlas {
         slot.page.texture.setFilter(false,false);
     }
     static void queue(Slot slot,int left,int top,int right,int bottom,float u,float v,float size) {
+        queue(slot,left,top,right,bottom,u,v,size,1);
+    }
+    static void queue(Slot slot,int left,int top,int right,int bottom,float u,float v,float size,float alpha) {
         slot.pin();
         float scale=1f/AtlasMapScale.ATLAS_SIZE;
         slot.page.quads.add(new Quad(left,top,right,bottom,(slot.x+1+u)*scale,(slot.z+1+v)*scale,
-                (slot.x+1+u+size)*scale,(slot.z+1+v+size)*scale));
+                (slot.x+1+u+size)*scale,(slot.z+1+v+size)*scale,Math.clamp(alpha,0,1)));
     }
     /** One actual draw call per occupied page, rather than one GuiGraphics.blit per 32² tile. */
     static void flush(GuiGraphics g) {
@@ -74,17 +77,17 @@ final class TerrainAtlas {
         RenderSystem.setShaderColor(1,1,1,1);
         RenderSystem.enableBlend();RenderSystem.defaultBlendFunc();RenderSystem.disableDepthTest();
         try {
-            RenderSystem.setShader(GameRenderer::getPositionTexShader);
+            RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
             var matrix=g.pose().last().pose();
             for(Page page:PAGES) {
                 if(page.quads.isEmpty())continue;
                 RenderSystem.setShaderTexture(0,page.id);
-                BufferBuilder buffer=Tesselator.getInstance().begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_TEX);
+                BufferBuilder buffer=Tesselator.getInstance().begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_TEX_COLOR);
                 for(Quad q:page.quads) {
-                    buffer.addVertex(matrix,q.left,q.top,0).setUv(q.u0,q.v0);
-                    buffer.addVertex(matrix,q.left,q.bottom,0).setUv(q.u0,q.v1);
-                    buffer.addVertex(matrix,q.right,q.bottom,0).setUv(q.u1,q.v1);
-                    buffer.addVertex(matrix,q.right,q.top,0).setUv(q.u1,q.v0);
+                    buffer.addVertex(matrix,q.left,q.top,0).setUv(q.u0,q.v0).setColor(1f,1f,1f,q.alpha);
+                    buffer.addVertex(matrix,q.left,q.bottom,0).setUv(q.u0,q.v1).setColor(1f,1f,1f,q.alpha);
+                    buffer.addVertex(matrix,q.right,q.bottom,0).setUv(q.u1,q.v1).setColor(1f,1f,1f,q.alpha);
+                    buffer.addVertex(matrix,q.right,q.top,0).setUv(q.u1,q.v0).setColor(1f,1f,1f,q.alpha);
                 }
                 BufferUploader.drawWithShader(buffer.buildOrThrow());page.quads.clear();
             }

@@ -15,6 +15,8 @@ public final class FreightDispatchCheck {
         require(!FreightDispatchPolicy.eligibleTrain(RailwayTypes.TrainType.PASSENGER,true,true,false,false),"passenger excluded");
         require(!FreightDispatchPolicy.eligibleTrain(RailwayTypes.TrainType.FREIGHT,true,false,false,false),"train must be at source");
         require(!FreightDispatchPolicy.eligibleTrain(RailwayTypes.TrainType.FREIGHT,true,true,true,false),"active trip excluded");
+        require(!FreightDispatchPolicy.eligibleTrain(RailwayTypes.TrainType.FREIGHT,true,true,false,true),"another dispatch's reservation is excluded");
+        require(!FreightDispatchPolicy.eligibleTrain(RailwayTypes.TrainType.FREIGHT,false,true,false,false),"foreign train is excluded even with a valid route quote");
         require(FreightDispatchPolicy.readiness(false,false,100,10,64,64)==FreightDispatchPolicy.Readiness.TRAIN_NOT_ASSIGNED,"train selection gate");
         require(FreightDispatchPolicy.readiness(true,false,100,10,64,64)==FreightDispatchPolicy.Readiness.ROUTE_NOT_SELECTED,"route selection / invalidation gate");
         require(FreightDispatchPolicy.readiness(true,true,9,10,64,64)==FreightDispatchPolicy.Readiness.INSUFFICIENT_FUNDS,"funds gate");

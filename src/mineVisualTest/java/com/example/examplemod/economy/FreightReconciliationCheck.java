@@ -229,16 +229,17 @@ public final class FreightReconciliationCheck {
                 "half the cargo is already accepted");
         UUID inFlight=partial.token(64);
         require(partial.m.freight().revocable(partial.c.id(),partial.buyerCity).equals("ok"),"an in-flight shipment is still revocable");
-        require(partial.m.revokeDispatch(partial.c.id(),partial.buyerCity).equals("freight_revoked"),"revoke with a partial shipment succeeds");
+        require(partial.m.revokeDispatch(partial.c.id(),partial.buyerCity).equals("freight_cancel_pending"),"in-flight cancellation waits for actual cargo resolution");
         require(partial.c.deliveredAmount()==64L,"accepted cargo is never rolled back");
-        require(partial.m.treasury(partial.buyerCity)==9000L&&partial.m.treasury(partial.sellerCity)==9000L,"accepted half paid, unused half refunded once");
-        require(partial.m.shipmentToken(inFlight).state()==EconomyTypes.ShipmentTokenState.INVALID,"unused token invalidated");
+        require(partial.m.treasury(partial.buyerCity)==0L&&partial.m.treasury(partial.sellerCity)==9000L&&partial.c.escrow()==9000L,"accepted half paid; sealed half retains its reserve");
+        require(partial.m.shipmentToken(inFlight).state()==EconomyTypes.ShipmentTokenState.ACTIVE,"sealed token stays valid while closing");
         require(partial.m.shipmentToken(landed).state()==EconomyTypes.ShipmentTokenState.CONSUMED,"consumed token is left alone");
-        require(partial.receive(inFlight,64)==EconomyTypes.IntakeAttributionError.INVALID_SHIPMENT,
-                "a late package after a revoke is rejected");
+        require(partial.receive(inFlight,64)==EconomyTypes.IntakeAttributionError.NONE,
+                "already sealed cargo can finish after a cancellation request");
         require(partial.receive(landed,64)==EconomyTypes.IntakeAttributionError.SHIPMENT_ALREADY_USED,
                 "a replayed package after a revoke makes no progress");
-        require(partial.c.deliveredAmount()==64L,"no settlement happens after a revoke");
+        require(partial.c.deliveredAmount()==128L&&partial.m.treasury(partial.sellerCity)==18000L&&partial.c.escrow()==0L,
+                "actual final receipt settles the retained half once");
 
         // ----------------------------------------------------- revoke: delivered and disputed stay
         Fixture delivered=new Fixture();
@@ -302,6 +303,7 @@ public final class FreightReconciliationCheck {
         require(pushed.m.revokeDispatch(pushed.c.id(),pushed.buyerCity).equals("freight_revoked"),"revoke accepted");
         require(pushed.m.freight().pushPending(),"a revoke requests a push");
 
+        FreightCancellationCheck.run();
         System.out.println("PASS: "+checks+" freight reconciliation, rebind and revoke checks");
     }
 

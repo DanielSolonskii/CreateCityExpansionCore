@@ -55,17 +55,23 @@ public final class FreightCarriers {
     }
     public boolean select(ServerLevel level,City city,UUID subject,UUID fleetId,UUID optionId){
         var q=quotes.get(optionId);var a=freight.assignments.get(subject);var railway=RailwayManager.get(level);var fleet=railway.train(fleetId);
-        if(q==null||q.expires<net.minecraft.Util.getMillis()||!q.subject.equals(subject)||!q.city.equals(city.getId())||!q.fleet.equals(fleetId)||!eligible(a,city.getId(),fleet)||a.running||freight.transit.activeCargo(subject))return false;
+        if(q==null||q.expires<net.minecraft.Util.getMillis()||!q.subject.equals(subject)||!q.city.equals(city.getId())||!q.fleet.equals(fleetId)||!eligible(a,city.getId(),fleet)||a.running
+                ||freight.transit.activeCargo(subject)&&!Objects.equals(a.train,fleetId))return false;
         var actual=CreateRailwayAdapter.train(fleet.createTrainId());var previous=a.train==null?null:railway.train(a.train);
         // A quote is not a lease: native controls may have moved either train since it was shown.
         if(actual==null||actual.getCurrentStation()==null||actual.navigation.destination!=null||railway.activeTrip(fleet.createTrainId())!=null||previous!=null&&railway.activeTrip(previous.createTrainId())!=null||foreignParcels(actual,subject))return false;
+        if(freight.transit.activeCargo(subject)){
+            var source=freight.point(a.source);
+            if(source==null||!Objects.equals(source.station,actual.getCurrentStation().id))return false;
+        }
         quotes.remove(optionId);plans.put(subject,new Plan(fleetId,q.strategy,budget(subject)));a.train=fleetId;a.running=false;a.routeSelection=null;a.dispatchError="";phases.put(subject,"ready");freight.markChanged();return true;
     }
 
     public void clearPlan(UUID subject){plans.remove(subject);loading.remove(subject);phases.remove(subject);freight.markChanged();}
     public boolean configured(UUID subject){return plans.containsKey(subject);}
     public String phase(UUID subject){return phases.getOrDefault(subject,plans.containsKey(subject)?"ready":"route");}
-    public UUID payer(UUID fleet,UUID destination,RailwayManager railway){for(var a:freight.assignments.values())if(a.buyerTransport&&fleet.equals(a.train)&&live(a.subject)&&plans.containsKey(a.subject)){var selected=railway.selectedRoute(fleet);if(!a.running&&(selected==null||!Objects.equals(a.routeSelection,selected.selectionId())))continue;var s=freight.point(a.source);var d=freight.point(a.destination);if(s!=null&&d!=null&&(destination.equals(s.station)||destination.equals(d.station)))return controller(a);}return null;}
+    UUID directSubject(UUID fleet,UUID destination,RailwayManager railway){for(var a:freight.assignments.values())if(a.buyerTransport&&fleet.equals(a.train)&&live(a.subject)&&plans.containsKey(a.subject)){var selected=railway.selectedRoute(fleet);if(!a.running&&(selected==null||!Objects.equals(a.routeSelection,selected.selectionId())))continue;var s=freight.point(a.source);var d=freight.point(a.destination);if(s!=null&&d!=null&&(destination.equals(s.station)||destination.equals(d.station)))return a.subject;}return null;}
+    public UUID payer(UUID fleet,UUID destination,RailwayManager railway){UUID subject=directSubject(fleet,destination,railway);return subject==null?null:controller(freight.assignments.get(subject));}
     public void tick(MinecraftServer server){
         if(server.getTickCount()%5!=0)return;
         var railway=RailwayManager.get(server.overworld());

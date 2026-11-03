@@ -1,41 +1,83 @@
-# Infrastructure
+# Инфраструктура платформы
 
-Локальная инфраструктура и будущие deployment-манифесты.
+Актуализировано 02.11.2026. Dev compose и deployment templates/helpers под
+конкретное `/opt/create-server` окружение. Это не live VDS inventory: SSH,
+installed configs, ports/TLS/health/systemd runtime здесь не проверялись.
+[STATE](../STATE.md), [аудит](../../docs/audit-2026-11-02/PLATFORM_AUDIT_RU.md).
 
-- `compose.yaml` поднимает только PostgreSQL и Redis для разработки.
-- backend, bot и launcher пока запускаются отдельно после выбора стека.
-- production secrets не хранятся в Git и не передаются в launcher.
-- Minecraft server bridge должен слушать приватный интерфейс или защищённую сеть.
+## Локальный PostgreSQL
 
-Для локального запуска из корня проекта:
+[compose.yaml](compose.yaml): PostgreSQL **17-alpine**, Redis **7-alpine**,
+loopback ports, persistent volumes. Backend/bot запускаются отдельно; Redis
+в их runtime не используется и для текущего backend не нужен.
+Нужны Docker Engine/Desktop и Compose v2. Из корня CCEC:
 
-```text
-docker compose -f infra/compose.yaml --env-file .env up -d
+```powershell
+$env:POSTGRES_DB = 'create_server_dev'
+$env:POSTGRES_USER = 'create_server_dev'
+$dbCredential = Get-Credential -UserName $env:POSTGRES_USER -Message 'Пароль локальной dev БД'
+$env:POSTGRES_PASSWORD = $dbCredential.GetNetworkCredential().Password
+docker compose -f platform/infra/compose.yaml up -d postgres
+docker compose -f platform/infra/compose.yaml ps
+# После работы:
+docker compose -f platform/infra/compose.yaml stop postgres
+Remove-Item Env:POSTGRES_PASSWORD
 ```
 
-## Текущий VDS (без Docker и Redis)
+Команды не выполнялись в аудите. Init database/user/password применяются при
+создании нового data volume; env change не пересоздаёт существующую БД.
+`down -v` не является обычной остановкой. Backend получает те же variables
+отдельным процессом. `platform/.env.example` — старый справочник с частично
+неиспользуемыми переменными, `change-me`/`replace-me` не рабочие secrets.
 
-Production использует штатные Ubuntu PostgreSQL/OpenJDK 21 packages и systemd.
-`compose.yaml` — прежний dev example, на VDS он не используется.
+## Сохранённые templates
 
-- `systemd/create-server-backend.service`: localhost API, защищённый EnvironmentFile.
-- `systemd/create-server-minecraft.service`: NeoForge runtime, штатный console stop.
-- `systemd/create-server-telegram-bot.service` + `create-server-telegram-bot.service.d/wireguard.conf`:
-  активный бот от отдельного пользователя `createtelegram`; secrets только на VDS.
-- `systemd/create-server-telegram-guard.service`, `create-server-telegram-routing.service`
-  и `wireguard/`: selective routing + fail-closed для бота; `wg-quick@wgtelegram`
-  использует закрытый server-side config с `Table = off`, без изменения default route.
-- `start-linux.sh` / `stop-linux.sh`: Linux запуск через установленный unix_args.txt
-  и сохранение мира через service-user-only console FIFO.
+| Файлы | Назначение / ограничение |
+| --- | --- |
+| [backend unit](systemd/create-server-backend.service) | Java 21 app.jar, `createserver`, protected EnvironmentFile |
+| [Minecraft unit](systemd/create-server-minecraft.service), [start](start-linux.sh), [stop](stop-linux.sh) | MC 1.21.1/NeoForge 21.1.251, FIFO console, save/stop wait; фиксированные paths |
+| [bot unit](systemd/create-server-telegram-bot.service), [drop-in](systemd/create-server-telegram-bot.service.d/wireguard.conf) | Base `createserver`; drop-in меняет на `createtelegram`, требует routing/guard/WireGuard |
+| [WireGuard helpers](wireguard/), [units](systemd/) | Selective routing/fail-closed для bot; нужна подготовленная Linux конфигурация |
+| [Caddyfile](caddy/Caddyfile) | Public API allowlist, `/launcher`/`/releases` file roots под `api.recreated.ru`, loopback backend |
+| [game-auth](game-auth/) | stunnel TLS template и отдельный secret EnvironmentFile |
+| [launcher publisher](launcher/) | Signed installer publication/channel, POSIX file locking |
+| [broadcast helpers](broadcasts/) | Server-specific deployment/smoke, читают installed secrets; не generic local tests |
 
-Backend опубликован через Caddy: https://api.recreated.ru (80/tcp и 443/tcp).
-Сам Backend, PostgreSQL и Caddy admin остаются только на localhost.
-Существующие SSH, Minecraft/Sable и правило 10050/tcp сохранены.
-Launcher остаётся Windows-клиентом и на этом этапе не пересобирался.
-Конфигурация: `caddy/Caddyfile`; актуальный
-[HTTPS deployment и Launcher URL](../docs/backend-https-deployment.md).
-Units/scripts соответствуют текущему `/opt/create-server`; не устанавливать их
-вслепую поверх другого runtime. Секреты и мир в Git не добавляются.
-Полный [deployment report и runbook](../docs/vds-deployment.md).
-Актуальный [WireGuard deployment и проверки после reboot](../docs/telegram-wireguard.md)
-уточняет более раннее состояние Telegram Bot в migration report.
+Units hardcode Java path `/usr/lib/jvm/java-21-openjdk-amd64`, service users,
+memory limits и `/opt/create-server`; это не переносимый installer.
+WireGuard private config, world, DB dumps, TLS private keys и реальные
+EnvironmentFiles не должны добавляться в Git.
+
+## Proxy contract и gaps
+
+Public origin/file roots в Caddyfile описывают snapshot, не live TLS/DNS.
+Backend default — `127.0.0.1:8080`, PostgreSQL должен оставаться private.
+Public edge использует allowlist с catch-all 404, не proxy всех `/api/**`.
+Private bot/game/identity endpoints публично открывать нельзя.
+
+Caddy snapshot не содержит `/api/launcher/news`, registration `/restart` и
+`/api/mini-app/**`, хотя эти API реализованы в коде. Их доступность через этот
+файл не обеспечивается. Нужна отдельная конфигурационная/runtime сверка;
+это не доказательство ошибки live production. Game TLS template требует
+согласовать public IP, bind interface, certificate и CCEC auth settings.
+
+## Проверки
+
+Node suite из `platform/launcher`: `npm run test:release`. Python helpers из
+корня CCEC:
+
+```text
+python -B -m unittest discover -s platform/launcher/scripts -p test_release_workflow.py
+python -B -m unittest discover -s platform/infra/launcher -p test_publish_launcher.py
+```
+
+Вторая suite требует POSIX `fcntl`/Linux: на Windows import падает. Первая на
+Windows пропускает client atomic-symlink publication tests. Это hermetic checks,
+не реальные systemd/world/Telegram tests. `broadcasts/check-broadcasts.py`
+читает server secrets и обращается к live endpoints; не запускайте его как
+обычный локальный unit test.
+
+Install/enable/restart, routing/firewall/TLS changes и publication — отдельные
+операции. История: [VDS](../docs/vds-deployment.md),
+[HTTPS](../docs/backend-https-deployment.md), [WireGuard](../docs/telegram-wireguard.md),
+[controlled release](../docs/controlled-release-workflow.md).

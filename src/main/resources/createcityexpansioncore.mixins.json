@@ -6,6 +6,7 @@
   "plugin": "com.example.examplemod.mixin.TransportMixinPlugin",
   "mixins": [
     "CarriageBogeyAccessor",
+    "LevelBlockGrantMixin",
     "ContraptionInteractionPacketMixin",
     "TrainRelocationPacketMixin",
     "StationBlockEntityMixin",

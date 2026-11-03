@@ -1,5 +1,10 @@
 # Industrial Mine — visual v2
 
+Проверено по исходникам и файлам **02.11.2026**. Общий статус проекта:
+[CURRENT_STATE.md](../../CURRENT_STATE.md), [аудит](../../docs/audit-2026-11-02/README.md).
+Этот README описывает ресурсы и контракт renderer; игровая визуальная приёмка
+остаётся отдельной проверкой.
+
 Редактируемый источник: `industrial_mine.bbmodel`, Generic Model / Blockbench 5.x.
 Отдельные attachments: `power_module.bbmodel`, `output_module.bbmodel`.
 Общий пиксельный атлас: `industrial_mine.png`, 64×64, встроен в каждый проект.
@@ -101,21 +106,43 @@ STARTING/RUNNING разгоняют привод до 30°/с за 60 client tic
 Граница отрисовки — 96 блоков от Controller; частицы — до 40 блоков, не чаще
 одного burst за 3 ticks, с защитой от повторения в одном tick. Частицы только
 RUNNING и привязаны к четырём drill anchors. Global VFX framework/CRE-62 не затронут.
-Все неподвижные и динамические модели проходят один solid buffer. Линза состояния
-использует FULL_BRIGHT, остальная машина — обычный lightmap.
+Все неподвижные и динамические модели проходят один solid buffer. Цветная линза
+состояния использует FULL_BRIGHT. Для корпуса, привода и интерфейсов renderer
+выбирает обычное освещение по открытым точкам вокруг машины, а не только по
+находящемуся внутри структуры Controller.
 
 ## Проверки и ограничения
 
-`gradlew build` включает `checkMineVisualCoordinates`: проверяются 64 позиции
+Из корня репозитория, Java 21 и зависимости из [README_DEV.md](../../README_DEV.md):
+
+```powershell
+.\gradlew.bat checkMineVisualCoordinates --offline
+```
+
+`build` через `check` включает `checkMineVisualCoordinates`: проверяются 64 позиции
 буров, 116 допустимых power-layouts, наружные нормали Gateway по всему периметру,
 все 4 ориентации, отрицательные координаты и состав 298 member positions.
 Generator проверяет UUID, число валов, пределы Java JSON, зазоры вращающихся
 роторов и площадь проекции. Отчёт: `asset_validation.json`.
 
-Dedicated server запущен в отдельном временном мире на localhost и штатно
-остановлен. В class-load log нет `CreateCityExpansionCoreClient` и
-`com.example.examplemod.client.render.*`. Подключение реального Minecraft-клиента
-к этому серверу и visual gameplay checklist пока не выполнены.
+02.11 повторно прочитаны bbmodel, UV, PNG-заголовки и runtime JSON: 539 элементов,
+10 частей, атлас 64×64; UUID уникальны, размеры кубов положительны, координаты
+runtime находятся в Java-диапазоне −16…32. Генератор в этом аудите не запускался,
+ресурсы не перезаписывались. [Подробности проверок](../../docs/audit-2026-11-02/TOOLS_ART_AUDIT_RU.md).
+
+Исторический [checkpoint 27.09](CHECKPOINT_RU.md) содержит сведения о запуске
+временного dedicated server и изоляции client classes. Это не повторная проверка
+сборки от 02.11. Подключение реального Minecraft-клиента и visual gameplay
+checklist в текущем аудите не выполнялись.
+
+Воспроизведение ресурсов требует Python 3, Pillow и numpy:
+
+```powershell
+python tools/build_industrial_mine.py
+```
+
+Команда перезаписывает bbmodel, atlas, manifest, validation, previews и действующие
+JSON/текстуру в `src/main/resources`; запускать её после сохранения ручных правок.
 
 Ручная проверка перед художественным принятием:
 

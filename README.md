@@ -1,203 +1,95 @@
-# CreateCityExpansionCore
+# Create: City Expansion Core
 
-> Актуальный срез команды от 14.10.2026: [State, подключения, роли и чеклист](docs/audit-2026-10-14/README.md).
-> Backend, Telegram bot, Windows launcher и infra находятся в `platform/`. Рабочая ветка: `codex/next-ai-work`.
+Индустриальный мод для Minecraft 1.21.1 / NeoForge. CCEC связывает города, промышленную добычу, производство Create, физические перевозки и экономику.
 
-> **Индустриальный мод для Minecraft 1.21.1 (NeoForge)**  
-> Связывает Create, Create: Electro Energetics, железные дороги и городскую экономику в единую производственную прогрессию.
+**Срез репозитория: 3 ноября 2026. Версия мода: 1.0.2.14.** Исходники, проверки и ограничения описаны в [CURRENT_STATE.md](CURRENT_STATE.md) и [полном аудите](docs/audit-2026-11-02/README.md). Основная ветка GitHub — `main`.
 
----
+## Что находится в репозитории
 
-## 🎯 Концепция
+| Проект | Назначение | Документация |
+| --- | --- | --- |
+| CCEC, `src/` | Minecraft-мод, клиентские экраны и серверная логика | [Состояние](CURRENT_STATE.md), [разработка](README_DEV.md), [игроку](GUIDE_RU.md) |
+| `platform/backend/` | Spring Boot API, учётные записи, game-session/bridge, launcher и companion API | [README](platform/backend/README.md) |
+| `platform/launcher/` | React/Vite UI и Rust/Tauri launcher | [README](platform/launcher/README.md) |
+| `platform/telegram-bot/` | Java Telegram-бот и локальные тесты | [README](platform/telegram-bot/README.md) |
+| `platform/infra/` | Конфигурационные примеры и эксплуатационные инструкции | [README](platform/infra/README.md) |
+| `tools/`, `art/` | Утилиты, исходники моделей, рецепты и ресурсы | [Аудит инструментов](docs/audit-2026-11-02/TOOLS_ART_AUDIT_RU.md) |
 
-**CreateCityExpansionCore** — это мод для индустриального survival-сервера, где **Create является основой геймплея**.
+Вложенная платформа имеет отдельные сборки: корневая Gradle-задача их не проверяет. Исторические `tools/*-platform/` сохранены как архивы. Соседний отдельный репозиторий CreateServerPlatform не входит в этот срез.
 
-Мод **НЕ заменяет** Create волшебными машинами. Он создаёт **причины** строить большие производственные линии Create:
-- Города растут за счёт реальных ресурсов, а не абстрактных очков
-- Заводы работают на физических сырьё и энергии
-- Железные дороги перевозят миллионы предметов, а не стеки
-- Экономика базируется на контрактах, складах и логистике
+## Возможности мода
 
-> **Это НЕ RPG. Это НЕ геополитический симулятор.**  
-> Это инженерный песочник, где физика материалов диктует архитектуру мира.
+- **Города и территория:** пилон, роли и приглашения, участки, развитие I → II, проекты, отношения и отдельные разрешения доступа.
+- **Геология и добыча:** пространственные месторождения, магнитный анализатор, общий запас залежи и промышленная шахта с питанием Electro Energetics.
+- **Промышленность:** материалы, Create-рецепты, dependency override datapack, доменная печь, коксовая батарея и сталеплавильные системы.
+- **Железные дороги:** регистрация станций/поездов, линии, владение путями, разрешённые маршруты, дорожные резервы и расчёт рейсов.
+- **Логистика:** Packager → физический транспорт коробок → Postbox/поезд → конечная приёмка; прямые рейсы партиями и пересылка через центры.
+- **Экономика:** личные счета и городская казна, рынок, контракты, escrow, Master City, отдельный дорожный бюджет.
+- **Интерфейсы:** WorldMap и миникарта/HUD, профиль, сообщество, альянсы, помощник первых шагов и Ponder.
+- **Транспорт и доступ:** регистрационный терминал, защита зарегистрированного транспорта Create и опциональная совместимость с Sable/Simulated.
+- **Инструменты разработчика:** редактор рецептов, в том числе sequenced assembly, с отдельными проверками.
 
----
+Наличие реализации в исходниках и успешных проверок без игры не означает завершённую игровую приёмку каждого сценария. Известные ограничения перечислены в [аудите мода](docs/audit-2026-11-02/MOD_AUDIT_RU.md).
 
-## ⚙️ Технологический стек
+## Логистика: актуальные изменения
 
-| Компонент | Версия |
-|-----------|--------|
+Подключение точки начинается с последовательного выбора Packager/Postbox. Единственный подходящий соседний блок определяется автоматически; неоднозначную пару выбирает игрок, сохранение подтверждается отдельно.
+
+Отмена прекращает выпуск новых коробок. Принятый товар оплачивается, неупакованный остаток возвращается в деньги заказчика, а резерв за коробки в пути сохраняется до настоящей приёмки или физического возврата. Обратная железная дорога не требуется.
+
+WorldMap выделяет выбранную доставку, показывает остановки и прогресс. Анимация схемы показывает направление, а известные координаты поездов отображаются отдельно.
+
+[Устройство и первый запуск](docs/logistics/freight-logistics-v2-ru.md) · [отмена, OP-команды и игровой checklist](docs/logistics/logistics-audit-2026-11-02-ru.md)
+
+## Зависимости
+
+| Компонент | Закреплённая версия |
+| --- | --- |
 | Minecraft | 1.21.1 |
 | NeoForge | 21.1.251 |
-| Java | 21 |
-| Create | 6.0.10 (280) |
+| JDK | 21 |
+| Gradle Wrapper | 9.2.1 |
+| Create | 6.0.10-280 |
 | Create: Electro Energetics | 1.21.1-1.1.2 |
-| FTB Quests | (опционально, для гайдов) |
+| Ponder для dev-среды | 1.0.82+mc1.21.1 |
 
-**Mod ID:** `createcityexpansioncore`
+Точные координаты и диапазоны: [build.gradle](build.gradle), [gradle.properties](gradle.properties), [dev-mods.gradle](gradle/dev-mods.gradle), [метаданные мода](src/main/templates/META-INF/neoforge.mods.toml). Опциональные API Sable/Simulated/Veil используются только соответствующей совместимостью.
 
----
+## Сборка и запуск разработки
 
-## 🏭 Реализованные системы
+Windows PowerShell, JDK 21:
 
-### 🏙 Городская система
-- **City Pylon** — центральный блок города и единый hub для Overview, Economy, Logistics, Management, Railway и World Map
-- Роли, приглашения, проекты, развитие I → II, односторонний Trusted и взаимный Partner
-- Роли: Owner / Admin / Builder / Resident — с правами и UI для управления
-- Приглашения игроков, проекты развития, уровни города (I → II)
-- Сохранение в `CityManager` (SavedData), перенос пилона через предмет
-
-### ⛏ Промышленная шахта и Geology v3
-- Мультиблок **10×3×10**: Mine Frame, Technical Block, Drill Unit, Controller, Power Port, Gateway
-- Питание от **Electro Energetics** (вольты, амперы, ватты, перегрузки)
-- Процедурные пространственные залежи радиусом 150–480 блоков, общий reserve и локальный potential
-- Magnetic Analyzer — поиск аномалии и локальный замер; ПКМ в воздухе и по блоку, server-authoritative cooldown
-- Bulk iron с Fe-equivalent accounting и цепочкой raw ore → crushed → concentrate → ingot
-- Звуковой контроллер: бурильщики, запуск/остановка, аварийная остановка
-- Комиссионирование под город, привязка к Ж/Д станции
-
-### 🚂 Железные дороги
-- Регистрация/управление станциями и поездами через City Pylon; Dispatcher Key сохранён как физический/legacy инструмент
-- **RailLine** — расписания (Create schedules), типы линий, цикличность
-- **RailwayLineEditorScreen** — компактный редактор линий с остановками, режимами, таймингами
-- Persistent ownership сетей/участков, PUBLIC/PRIVATE, freight tariff
-- Trip reserve/settlement, Route Planner, RouteReservation и RouteGuard
-
-### 💰 Экономика
-- Личные кошельки, **City Treasury**, закупки (Procurement Budget, Smart Orders)
-- **Marketplace** — частные листинги (продажа/покупка/бартер) + городские контракты
-- **Contract Intake** / **Warehouse Gateway** — инфраструктура ввода/вывода ресурсов
-- Эскроу, physical delivery settlement и Master City warehouse/procurement
-- Экономический интерфейс с вкладками: Рынок, Моя шахта, Создать, Инфраструктура, Мастер
-
-### 📦 Freight Logistics
-- Единые SEND/RECEIVE/BOTH Freight Points поверх Create Station + Postbox + Packager
-- P2P и оба направления Master City используют один physical Package pipeline
-- Автоматический Create address + ShipmentToken; cargo не телепортируется
-- Успешная валидированная распаковка является proof of delivery
-
-### 🧭 World Map
-- Тайловый рендеринг рельефа (кэширование, LOD, запрос по вьюпорту)
-- **Соседние города** — получаются один раз с сервера, фильтруются по дистанции (≤512 блоков), рисуются с viewport culling
-- Собственный город — яркий акцент, чужие — приглушённые цвета (инфраструктурная карта, не политическая)
-- Ж/Д слои: ownership, sections, tariff/access, stations, trains, selected routes и active reservations
-- Freight Points, Master City, relation links, context cards и Problem Center
-- Зум 0.5×–4×, панорамирование, кнопки слоёв
-
-### 📊 Статусы и persistence
-- Общий `CcecStatus`: SUCCESS / ACTION_REQUIRED / BLOCKED / WARNING
-- SavedData для города, relations, Geology v3, Economy/Freight и Railway v5
-- Restart-safe escrow, reserves, shipment tokens, ownership, trips и reservations
-
----
-
-## 📦 Ресурсные Tier (не путать с City Level)
-
-| Tier | Описание | Примеры | Нужно |
-|------|----------|---------|-------|
-| **Tier 1** | Сырьё | Железо, медь, цинк, уголь, камень, песок, глина, кварц | Десятки тысяч (rail bulk) |
-| **Tier 2** | Пром. материалы | Кокс, сталь, балки, крепёж, арматура, рельсы, шпалы, бетон, керамика, медная шина | Сотни/тысячи (Create automation) |
-| **Tier 3** | Инж. продукция | Рама тяж. машины, ICU, силовой модуль | Единицы/десятки (Sequenced Assembly) |
-
-> **Принцип:** *Industrial grind, not manual grind.* Массовые материалы имеют batch-выход и естественно автоматизируются через Create.
-
----
-
-## 🔧 Рецепты и датапаки
-
-- **Override datapack** (SERVER_DATA, Pack.Position.TOP) заменяет дешёвые рецепты Create/EE:
-  - `create:track`, `track_station`, `track_signal`, `controller_rail`
-  - `electroenergetics:connector`, `insulator` (Terracotta → Technical Ceramic)
-- Собственные рецепты в `data/createcityexpansioncore/recipe/` (blasting, compacting, crafting, cutting, mechanical_crafting, mixing, pressing, sequenced_assembly, smelting)
-- **Creative tab:** `createcityexpansioncore:industrial` — порядок Tier 1-derived → Tier 2 → Tier 3 → Машины → Инфраструктура → Строительные блоки
-
----
-
-## 🎨 Ассеты
-
-- **City Pylon** — полная Blockbench-модель (`art/city_pylon/`) с 12 анимированными частями, pivot-based rotation, эмиссивные текстуры
-- **Reinforced Concrete** — строительный блок
-- **26 новых предметов** с текстурами 16×16 (Create-style)
-- **Звуковой пакет** — 60+ OGG: пилон, шахта, экономика, Ж/Д, UI, анализатор, проекты, диспетчер, склад
-- Локализация: `en_us.json`, `ru_ru.json`
-
----
-
-## 🚀 Установка
-
-1. Установите **NeoForge 21.1.251** для Minecraft 1.21.1
-2. Установите **Create 6.0.10** и **Create: Electro Energetics 1.1.2**
-3. Положите `CreateCityExpansionCore-<version>.jar` в `mods/`
-4. (Опционально) FTB Quests для встроенных гайдов
-
-> Мод регистрирует свой **always-active datapack** для рецептов — отдельного датапака ставить не нужно.
-
----
-
-## 🛠 Для разработчиков
-
-### Сборка
-```bash
-./gradlew build
-```
-Артефакт: `build/libs/CreateCityExpansionCore-<version>.jar`
-
-### Структура пакетов
-```
-com.example.examplemod
-├── block/              # CityPylonBlock, BlockEntity, ReinforcedConcrete
-├── city/               # City, CityManager, CityMember, CityProject, Development
-├── client/
-│   ├── map/            # CityMapPanel (тайлы, peers, Ж/Д, проекты)
-│   ├── render/         # CityPylonRenderer, CityPylonModels
-│   ├── screen/         # CityPylonScreen, MagneticAnalyzerScreen, MineControllerScreen, ModalOverlayScreen...
-│   ├── gui/            # CityButton
-│   └── sound/          # PylonSoundController, MineSoundController, LoopSoundManager
-├── economy/            # Economy v2, Freight Points, contracts, Master City, tokens
-├── geology/            # Spatial deposits, Geology v3, survey/analyzer
-├── mine/               # MineController, MineMultiblock, Electrical, State
-├── railway/            # Fleet, ownership, planner, trips, reservations/guard
-├── network/            # Payloadы (City, Economy, Mine, Railway, Geology)
-├── recipe/             # DependencyRecipeOverride (datapack registration)
-└── sound/              # ModSounds, WorldSoundHelper
+```powershell
+git clone https://github.com/DanielSolonskii/CreateCityExpansionCore.git
+cd CreateCityExpansionCore
+.\gradlew.bat build
 ```
 
-### Ключевые архитектурные решения
-- **Create = основа производства** — никаких магических машин (D-001)
-- **Tier ≠ City Level** — материал и прогресс города разделены (D-002)
-- **Batch output** для массовых материалов (D-003)
-- **Специализация через экономику**, а не классы (D-004)
-- **Recipe override через datapack**, а не runtime-мутацию (D-006)
-- **Physical Truth** — руда добыта физически → переработана → привезена → использована
+macOS/Linux:
 
----
+```sh
+git clone https://github.com/DanielSolonskii/CreateCityExpansionCore.git
+cd CreateCityExpansionCore
+bash ./gradlew build
+```
 
-## 📝 Лицензия
+Артефакт: `build/libs/createcityexpansioncore-1.0.2.14.jar`. Первый запуск сборки разрешает зависимости из сети; `--offline` работает только с подготовленным кэшем. Подготовка dev-модов и запуск Minecraft описаны в [README_DEV.md](README_DEV.md).
 
-Проект распространяется под лицензией **MIT** (или укажите свою).  
-Ассеты City Pylon (Blockbench) — авторство **Astra** (integration_manifest.json).
+Для игрового профиля нужны совместимые NeoForge, полный Create и Electro Energetics. Slim Create предназначен для компиляции. Клиент и сервер должны использовать согласованные версии мода и зависимостей.
 
----
+**Формат экономики — 13.** Переход проверяется тестами миграции; старая сборка не должна читать новое сохранение. Правила геологии и перехода generator v2 отдельно описаны в [CURRENT_STATE.md](CURRENT_STATE.md).
 
-## 🔗 Полезные ссылки
+## Проверки и аудит
 
-- [Create Mod](https://www.cursedforge.com/minecraft/mc-mods/create)
-- [Create: Electro Energetics](https://www.cursedforge.com/minecraft/mc-mods/create-electro-energetics)
-- [NeoForge](https://neoforged.net/)
-- [Blockbench](https://blockbench.net/) — для редактирования модели пилона
+- Корневая CI: [GitHub Actions Build](.github/workflows/build.yml), выполняет `./gradlew build`.
+- [Текущий полный аудит](docs/audit-2026-11-02/README.md): модули, результаты проверок, найденные дефекты и оставшаяся приёмка.
+- [Архитектурный контекст](MASTER_CONTEXT.md) и [решения](DECISIONS.md).
+- [Состояние вложенной платформы](platform/STATE.md): собственные ограничения сборок и проверок.
 
----
+Аудит локального дерева не подтверждает текущую версию production, состояние VDS или успешный игровой прогон. Push исходников не является установкой сборки на сервер.
 
-## 🤝 Контрибьюция
+## Лицензирование и вклад
 
-1. Форкните репозиторий
-2. Создайте ветку (`git checkout -b feature/amazing-feature`)
-3. Закоммитьте изменения (`git commit -m 'feat: amazing feature'`)
-4. Запушьте (`git push origin feature/amazing-feature`)
-5. Откройте Pull Request
+Метаданные CCEC указывают **All Rights Reserved**. [TEMPLATE_LICENSE.txt](TEMPLATE_LICENSE.txt) относится к исходному NeoForged MDK-шаблону и не объявляет весь CCEC или сторонние JAR MIT-проектом. Для сторонних модов и ресурсов действуют их собственные условия и сведения об авторстве.
 
-**Стиль коммитов:** Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `build:`)
-
----
-
-> *Сделано для индустриального survival-сообщества. Строите заводы, прокладывайте рельсы, объединяйтесь в города — и пусть паровые гиганты будут с вами.*
+Для изменений создавайте ветку `codex/<краткое-название>`, сохраняйте существующие рабочие данные, выполняйте подходящие проверки и прикладывайте понятное описание результата. Правила анализа связей перед изменением кода и коммитом находятся в [AGENTS.md](AGENTS.md).
