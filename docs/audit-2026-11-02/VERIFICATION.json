@@ -8,8 +8,8 @@
   "scope": "Current CCEC repository and nested projects; completed parallel WorldMap changes included",
   "artifact": {
     "path": "build/libs/createcityexpansioncore-1.0.2.14.jar",
-    "bytes": 5143009,
-    "sha256": "236a61278b6d8b7e9fd6ae0f4fe8cdc04e6b09aab73b86fc17bc081b8e5a4dac"
+    "bytes": 5143589,
+    "sha256": "af6bf2fab26d07f05d3a60c635de31b6489270bdb15d039b88df744280dd41b2"
   },
   "checks": [
     {
@@ -19,7 +19,7 @@
       "tasks": 72,
       "executed": 69,
       "upToDate": 3,
-      "localLog": ".codex-project-audit-final.log",
+      "localLog": ".codex-release-complete-check.log",
       "checkTasks": [
         "checkAlliances",
         "checkAtlasExperience",
@@ -88,7 +88,8 @@
         "check",
         "checkRecipeWorkbench",
         "checkSequenceRecipe"
-      ]
+      ],
+      "duration": "3m 20s"
     },
     {
       "id": "city-grant-regression",
@@ -178,6 +179,26 @@
       "newDocs": 2,
       "missingLocalLinks": 0,
       "hashPolicy": "CRLF normalized to LF"
+    },
+    {
+      "id": "native-saveddata-boundary",
+      "status": "PASS",
+      "railwayAssertions": 16,
+      "cancellationAssertions": 60,
+      "redLogs": [
+        ".codex-railway-native-red.log",
+        ".codex-economy-native-red.log"
+      ],
+      "greenLog": ".codex-release-complete-check.log",
+      "cases": [
+        "Native DimensionDataStorage future format must not construct empty state",
+        "Cached lookup remains unavailable",
+        "Ordinary save leaves future bytes unchanged",
+        "Forced save recreates exact retained NBT after deleting the fixture file",
+        "Native async I/O is awaited",
+        "Supported v5/v13 retain existing ownership, cargo and escrow"
+      ],
+      "scope": "Native storage subsystem in headless JVM; no live gameplay/GUI test"
     }
   ],
   "graph": {
@@ -220,6 +241,34 @@
     ]
   },
   "runtimeAcceptance": "not-run",
-  "productionDeployment": "separate user-authorized release follows audit commit; see subsequent release receipt",
-  "localEvidencePolicy": "Logs, JUnit XML, build outputs and caches are ignored local evidence; not committed"
+  "productionDeployment": "ROLLED_BACK; old JAR/economy restored, channels unchanged",
+  "localEvidencePolicy": "Logs, JUnit XML, build outputs and caches are ignored local evidence; not committed",
+  "supersededArtifact": {
+    "path": "build/libs/createcityexpansioncore-1.0.2.14.jar",
+    "bytes": 5143009,
+    "sha256": "236a61278b6d8b7e9fd6ae0f4fe8cdc04e6b09aab73b86fc17bc081b8e5a4dac",
+    "note": "Intermediate audit artifact deployed once before additional native boundary hardening; not published to client channels"
+  },
+  "preReleaseHardening": {
+    "baseCommit": "74ab360563459ce65a10dbb34023fee04fc76c39",
+    "graphGate": {
+      "changed_count": 37,
+      "affected_count": 152,
+      "changed_files": 13,
+      "risk_level": "critical",
+      "partial": false,
+      "truncated": false
+    },
+    "reason": "Minecraft catches deserializer Exceptions; reject access after storage lookup and preserve raw data"
+  },
+  "status": "SOURCE_AUDIT_PASSED_DEPLOYMENT_BLOCKED_SCHEMA_DIVERGENCE",
+  "deploymentIncident": {
+    "path": "docs/releases/2026-11-03-compatibility-incident.md",
+    "productionEconomyFormat": 15,
+    "candidateEconomyFormat": 13,
+    "workingJarSha256": "040766463749530001475fd3b75fc24b5e5cbd7ce5127223c60685d32b59e086",
+    "restoredEconomySha256": "d764f084935194a8b7ef2dbfcbd30f576c4cdd0130cde6e2a60b73f43555061e",
+    "fullWorldRestored": false,
+    "channelsChanged": false
+  }
 }

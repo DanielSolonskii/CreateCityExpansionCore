@@ -152,6 +152,7 @@ final class FreightCancellationCheck {
                 && migrated.shipmentToken(previousToken).state()==EconomyTypes.ShipmentTokenState.ACTIVE
                 && migrated.freight().tokenTargets(previousToken,previous.destination.id), "v12 migration preserves existing live cargo, destination and escrow");
         CompoundTag future=oldSave.copy();future.putInt("FormatVersion",14);
+        nativeFinancialStorage(future,previous.contract.id(),previousToken);
         try{reloadManager(future);throw new AssertionError("newer financial schema accepted");}
         catch(java.lang.reflect.InvocationTargetException expected){require(expected.getCause() instanceof IllegalStateException,"future financial format is rejected");}
 
@@ -227,4 +228,45 @@ final class FreightCancellationCheck {
         load.setAccessible(true);
         return (EconomyManager) load.invoke(null, tag, null);
     }
+
+    private static void nativeFinancialStorage(CompoundTag future, UUID contractId, UUID tokenId) throws Exception {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        CompoundTag raw=future.copy();raw.putString("UnknownFinancialField","keep-all-ledgers");
+        var directory=java.nio.file.Files.createTempDirectory(java.nio.file.Path.of("").toAbsolutePath(),"economy-native-");
+        try {
+            var file=directory.resolve("createcityexpansioncore_economy.dat");
+            CompoundTag diskRoot=new CompoundTag();diskRoot.put("data",raw.copy());
+            net.minecraft.nbt.NbtUtils.addCurrentDataVersion(diskRoot);
+            net.minecraft.nbt.NbtIo.writeCompressed(diskRoot,file);
+            byte[] before=java.nio.file.Files.readAllBytes(file);
+            var storage=new net.minecraft.world.level.storage.DimensionDataStorage(directory.toFile(),null,null);
+            boolean rejected=false;
+            try { EconomyManager.fromStorage(storage); } catch(IllegalStateException expected) { rejected=true; }
+            require(rejected,"native storage must not turn a future financial format into empty accounts");
+            storage.save();net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+            require(java.util.Arrays.equals(before,java.nio.file.Files.readAllBytes(file)),"native ordinary save leaves future financial file unchanged");
+            var cached=storage.get(new net.minecraft.world.level.saveddata.SavedData.Factory<EconomyManager>(EconomyManager::new,
+                    (tag,registries)->{throw new AssertionError("future financial registry must remain cached");}),"createcityexpansioncore_economy");
+            require(cached!=null&&cached.save(new CompoundTag(),null).equals(raw),"native cache retains future money, escrow, tokens and unknown fields");
+            java.nio.file.Files.delete(file);cached.setDirty();storage.save();
+            net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+            require(net.minecraft.nbt.NbtIo.readCompressed(file,net.minecraft.nbt.NbtAccounter.unlimitedHeap()).getCompound("data").equals(raw),
+                    "forced native financial save writes the retained data without downgrade");
+            rejected=false;
+            try { EconomyManager.fromStorage(storage); } catch(IllegalStateException expected) { rejected=true; }
+            require(rejected,"repeated native lookup still blocks the future financial schema");
+            CompoundTag supported=raw.copy();supported.putInt("FormatVersion",13);diskRoot.put("data",supported);
+            net.minecraft.nbt.NbtIo.writeCompressed(diskRoot,file);
+            var restored=EconomyManager.fromStorage(new net.minecraft.world.level.storage.DimensionDataStorage(directory.toFile(),null,null));
+            require(restored.contract(contractId).escrow()==101&&restored.shipmentToken(tokenId).state()==EconomyTypes.ShipmentTokenState.ACTIVE,
+                    "supported native financial load retains live cargo and its escrow");
+        } finally {
+            net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+            if(!directory.toRealPath().startsWith(java.nio.file.Path.of("").toRealPath()))throw new AssertionError("unsafe financial fixture cleanup");
+            try(var paths=java.nio.file.Files.walk(directory)) {
+                for(var path:paths.sorted(java.util.Comparator.reverseOrder()).toList())java.nio.file.Files.delete(path);
+            }
+        }
+    }
+
 }

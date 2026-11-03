@@ -24,6 +24,7 @@ import java.util.Set;
 public final class RailwayManager extends SavedData {
     private static final String DATA_NAME = "createcityexpansioncore_railway";
     private static final int FORMAT_VERSION = 5;
+    @Nullable private CompoundTag unsupportedData;
 
     private final Map<UUID, CityRailStation> stations = new LinkedHashMap<>();
     private final Map<UUID, CityFleetTrain> trains = new LinkedHashMap<>();
@@ -38,8 +39,18 @@ public final class RailwayManager extends SavedData {
 
     public static RailwayManager get(ServerLevel anyLevel) {
         ServerLevel overworld = anyLevel.getServer().overworld();
-        return overworld.getDataStorage().computeIfAbsent(
+        return fromStorage(overworld.getDataStorage());
+    }
+
+    static RailwayManager fromStorage(net.minecraft.world.level.storage.DimensionDataStorage storage) {
+        RailwayManager manager = storage.computeIfAbsent(
                 new SavedData.Factory<>(RailwayManager::new, RailwayManager::load), DATA_NAME);
+        // DimensionDataStorage catches deserializer exceptions and constructs a fresh
+        // registry. Reject only after that boundary, with the raw future data cached.
+        if (manager.unsupportedData != null)
+            throw new IllegalStateException("Railway save format " + manager.unsupportedData.getInt("FormatVersion")
+                    + " is newer than supported " + FORMAT_VERSION);
+        return manager;
     }
 
     public RailwayManager() {}
@@ -215,9 +226,10 @@ public final class RailwayManager extends SavedData {
 
     private static RailwayManager load(CompoundTag root, HolderLookup.Provider registries) {
         RailwayManager manager = new RailwayManager();
-        if (root.getInt("FormatVersion") > FORMAT_VERSION)
-            throw new IllegalStateException("Railway save format " + root.getInt("FormatVersion")
-                    + " is newer than supported " + FORMAT_VERSION);
+        if (root.getInt("FormatVersion") > FORMAT_VERSION) {
+            manager.unsupportedData = root.copy();
+            return manager;
+        }
         for (Tag raw : root.getList("Stations", Tag.TAG_COMPOUND)) {
             try {
                 CompoundTag tag = (CompoundTag) raw;
@@ -275,6 +287,7 @@ public final class RailwayManager extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+        if (unsupportedData != null) return unsupportedData.copy();
         root.putInt("FormatVersion", FORMAT_VERSION);
         ListTag stationTags = new ListTag();
         for (CityRailStation station : stations.values()) {

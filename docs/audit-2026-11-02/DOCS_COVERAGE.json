@@ -8,7 +8,7 @@
     "requestedDocs": 22,
     "existingAtBase": 20,
     "newDocs": 2,
-    "archivalDocs": 8,
+    "archivalDocs": 7,
     "missingLinks": 0,
     "absoluteFileLinks": 0
   },
@@ -16,7 +16,7 @@
     {
       "path": "CURRENT_STATE.md",
       "present": true,
-      "sha256": "503b39cc34dcac9c9c412239eef62ce59b70b27dd97e2207a927aa86596ca999",
+      "sha256": "2672af232870e00ebda4a3b6ecc29c055dbfe120004ee291b944bf0ebc1744e5",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -26,7 +26,7 @@
     {
       "path": "README.md",
       "present": true,
-      "sha256": "4a06e5e7e6a96273b6ea3e89bf19565caf13a78032513af308818902bcbdd882",
+      "sha256": "cc39a82b574fce042dcdd03fb230e9a185cd79cc100132ab95406628ca02e034",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -36,7 +36,7 @@
     {
       "path": "README_DEV.md",
       "present": true,
-      "sha256": "3a5968e020bb138d1646812df13d14d7c244d277e44a12161c44b4240d543dbc",
+      "sha256": "32e5b5a87472f2fe0e675e577cba4fe596a09dfd998ca1d9ad496a998a8d8214",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -96,11 +96,11 @@
     {
       "path": "docs/audit-2026-11-02/README.md",
       "present": true,
-      "sha256": "837738e8e4b8420c237608d667da684ffdbb37e405ce10285f2217d273fdf3ac",
+      "sha256": "b94da7f88e2de0e5a97140e4452fb846cfd32bf852cb2f7dce39f845b4a7704d",
       "existedAtBase": false,
       "changedSinceBase": true,
       "dated": true,
-      "archival": true,
+      "archival": false,
       "currentDateMarker": true
     },
     {

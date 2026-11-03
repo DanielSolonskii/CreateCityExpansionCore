@@ -26,6 +26,8 @@ public final class EconomyManager extends SavedData {
     public record TransportPayout(boolean cityAccount, UUID ownerId, long amount) {}
     private static final String DATA_NAME = "createcityexpansioncore_economy";
     private static final int FORMAT_VERSION = 13;
+    @Nullable private CompoundTag unavailableData;
+    @Nullable private RuntimeException loadFailure;
     private final Map<UUID,UUID> contractProjects=new LinkedHashMap<>();
     private final Map<UUID,Long> closedContractPayouts=new LinkedHashMap<>();
     public long closedContractPayout(UUID id){return closedContractPayouts.getOrDefault(id,0L);}
@@ -111,8 +113,28 @@ public final class EconomyManager extends SavedData {
 
     public static EconomyManager get(ServerLevel anyLevel) {
         ServerLevel overworld = anyLevel.getServer().overworld();
-        return overworld.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(EconomyManager::new, EconomyManager::load), DATA_NAME);
+        return fromStorage(overworld.getDataStorage());
+    }
+
+    static EconomyManager fromStorage(net.minecraft.world.level.storage.DimensionDataStorage storage) {
+        EconomyManager manager = storage.computeIfAbsent(
+                new SavedData.Factory<>(EconomyManager::new, EconomyManager::loadForStorage), DATA_NAME);
+        // Throw outside DimensionDataStorage's exception handler; otherwise it
+        // silently replaces a rejected financial registry with empty accounts.
+        if (manager.loadFailure != null)
+            throw new IllegalStateException("Economy save cannot be loaded; original data retained", manager.loadFailure);
+        return manager;
+    }
+
+    private static EconomyManager loadForStorage(CompoundTag root, HolderLookup.Provider registries) {
+        try {
+            return load(root, registries);
+        } catch (RuntimeException failure) {
+            EconomyManager unavailable = new EconomyManager();
+            unavailable.unavailableData = root.copy();
+            unavailable.loadFailure = failure;
+            return unavailable;
+        }
     }
 
     public long wallet(UUID playerId) { return wallets.getOrDefault(playerId, 0L); }
@@ -1340,6 +1362,7 @@ public final class EconomyManager extends SavedData {
     }
 
     @Override public CompoundTag save(CompoundTag root, HolderLookup.Provider registries) {
+        if (unavailableData != null) return unavailableData.copy();
         var cancellations=new ListTag();freightCancellations.forEach((subject,value)->cancellations.add(value.save(subject)));root.put("FreightCancellations",cancellations);
         var closures=new ListTag();closedContractPayouts.forEach((id,paid)->{var t=new CompoundTag();t.putUUID("Contract",id);t.putLong("Paid",paid);closures.add(t);});root.put("ContractClosures",closures);
         var links=new ListTag();contractProjects.forEach((contract,project)->{var tag=new CompoundTag();tag.putUUID("Contract",contract);tag.putUUID("Project",project);links.add(tag);});root.put("ContractProjects",links);

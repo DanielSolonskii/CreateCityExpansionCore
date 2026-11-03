@@ -736,7 +736,7 @@
     "Full inventory and targeted code review do not imply every source line was verified"
   ],
   "finalSnapshot": {
-    "observedUtc": "2026-11-03T19:22:19.482Z",
+    "observedUtc": "2026-11-03T19:48:59.804Z",
     "modVersion": "1.0.2.14",
     "mainJavaFileCount": 585,
     "mineVisualJavaFileCount": 71,
@@ -835,7 +835,7 @@
       },
       {
         "path": "src/main/java/com/example/examplemod/economy/EconomyManager.java",
-        "sha256": "15bbf59e2fe12360c4e252bb41bb897d39102e29d5ba9194f30ba3d3c03b334e"
+        "sha256": "d3f82268be62ddb10afb8448a4e709cd7b70699e7adcd7e69de6692f19526778"
       },
       {
         "path": "src/main/java/com/example/examplemod/economy/EconomyNetworkHandlers.java",
@@ -891,7 +891,7 @@
       },
       {
         "path": "src/main/java/com/example/examplemod/railway/RailwayManager.java",
-        "sha256": "713da92dd4a2bd32595fdf00d0105064f5ea41cd4c544baadd8813c754333434"
+        "sha256": "38f5ab3ddf1e6fe2aaf98e36d1647d84f3a21ab3310c15c1b95b804be18120d7"
       },
       {
         "path": "src/mineVisualTest/java/com/example/examplemod/city/CityTerritoryCheck.java",
@@ -911,7 +911,7 @@
       },
       {
         "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightCancellationCheck.java",
-        "sha256": "b2c99eec980ff6f1b5f97ddba15aeb6e3ff53999ba80a58a8de78c627dce6e03"
+        "sha256": "aaf806b43ac89737c8b6e4d4ca79409fe903372ea8ce38d3738d4327d587f13a"
       },
       {
         "path": "src/mineVisualTest/java/com/example/examplemod/economy/FreightCarrierCheck.java",
@@ -939,9 +939,10 @@
       },
       {
         "path": "src/mineVisualTest/java/com/example/examplemod/railway/RailwayOwnershipCheck.java",
-        "sha256": "0bd39e3839a325183d771818d4811de46046cc44530efe87cb5ca3944bcad572"
+        "sha256": "998ef1a8ea56c76dfc16c0a6e2d2034c5673b6502a5e372cc6406df0454590ac"
       }
     ],
-    "limits": "Original graph evidence and counts above retain their original observedUtc; this block describes the final source tree"
+    "limits": "Original graph evidence and counts above retain their original observedUtc; this block describes the final source tree",
+    "sourceBaseCommit": "74ab360563459ce65a10dbb34023fee04fc76c39"
   }
 }
