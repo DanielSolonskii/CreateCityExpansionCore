@@ -3,7 +3,6 @@ package com.example.examplemod.block;
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
-import com.example.examplemod.railway.CreateRailwayAdapter;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.Contraption;
 import com.simibubi.create.content.contraptions.actors.seat.SeatBlock;

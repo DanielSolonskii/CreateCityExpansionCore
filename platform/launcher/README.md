@@ -1,5 +1,7 @@
 # RE:CREATED Launcher — CCEC snapshot
 
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
+
 Актуализировано 02.11.2026. Windows desktop launcher: React 19, TypeScript 5.7,
 Vite 6, Tauri 2/Rust. `package.json`, `Cargo.toml`, `tauri.conf.json` согласованы
 на **0.1.13**; это source version, не подтверждённый latest installer.
@@ -123,3 +125,14 @@ Inputs `release-input/client` и `release-input/server` — локальные a
 См. [controlled release](../docs/controlled-release-workflow.md),
 [distribution](../docs/launcher-distribution.md),
 [self-update](../docs/launcher-self-update.md).
+
+## Защита обновления CCEC — 2026-11-04
+
+`Release.ps1 dry-run/server-deploy` проверяет Economy/Cargo SavedData по metadata из фактического кандидатного CCEC JAR. Read-only `inspect-server.mjs` передаёт JAR в память Python через SSH stdin; production файлы не записываются. Deploy повторяет проверку после graceful final save до установки.
+
+```text
+python -B scripts/test_save_compatibility.py
+python -B scripts/test_release_workflow.py
+```
+
+Новый набор: 12 regression tests PASS; прежний набор на Windows: 11 PASS / 8 Linux-only skips. Это не сборка installer и не live acceptance. При неподдерживаемом downgrade rollback останавливается; legacy JAR без metadata требует ручного восстановления.

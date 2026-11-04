@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "auditDate": "2026-11-02",
+  "auditDate": "2026-11-04",
   "baseCommit": "ff4959ec8267291c36dc245357c27fba28cf8216",
   "discovery": "git tracked + non-ignored untracked Markdown; basename contains README or STATE, case-insensitive",
   "hashPolicy": "SHA-256 of UTF-8 Markdown with CRLF normalized to LF; all other text is preserved",
   "summary": {
-    "requestedDocs": 22,
+    "requestedDocs": 23,
     "existingAtBase": 20,
-    "newDocs": 2,
-    "archivalDocs": 7,
+    "newDocs": 3,
+    "archivalDocs": 8,
     "missingLinks": 0,
     "absoluteFileLinks": 0
   },
@@ -16,7 +16,7 @@
     {
       "path": "CURRENT_STATE.md",
       "present": true,
-      "sha256": "2672af232870e00ebda4a3b6ecc29c055dbfe120004ee291b944bf0ebc1744e5",
+      "sha256": "0d62b2582fdea5fa473bdc7406a3dd92f2cad246d916249379f491811e807768",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -26,7 +26,7 @@
     {
       "path": "README.md",
       "present": true,
-      "sha256": "cc39a82b574fce042dcdd03fb230e9a185cd79cc100132ab95406628ca02e034",
+      "sha256": "bb03ec855d2489e472bf786677e0ca94503da9a9a727301463f059b79dc26efe",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -36,7 +36,7 @@
     {
       "path": "README_DEV.md",
       "present": true,
-      "sha256": "32e5b5a87472f2fe0e675e577cba4fe596a09dfd998ca1d9ad496a998a8d8214",
+      "sha256": "e7fb24d50cfe3ffe4426a3ee5aefee7de140d3ba7a0d3adcaef359bca44cde17",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -46,7 +46,7 @@
     {
       "path": "art/city_pylon/README_RU.md",
       "present": true,
-      "sha256": "21e61122835231707637c94c2eef9679f3bc77de62784c32bb3a1fedc94f4e49",
+      "sha256": "14882a0f7dc680119e83b9862d0733268c80f950a579f543b3d17b34e592add7",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -56,7 +56,7 @@
     {
       "path": "art/industrial_mine/README.md",
       "present": true,
-      "sha256": "330dd78af8e7abe448c94c0bcc286094a960a15e5c901c00f683a7c725b48bf6",
+      "sha256": "5851ecb7c08070dccb7755915351dd6a57b3fc6d6be37504602e9f8f0516feb6",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -66,7 +66,7 @@
     {
       "path": "docs/STATE-2026-10-25.md",
       "present": true,
-      "sha256": "ad90515430c6d652396789c7aa130de88a94e0d944289ff74e41cea2634679f2",
+      "sha256": "24822badf88e0170cf9263b023e5a71f4b65a2502cb259384059614927148cd8",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": true,
@@ -76,7 +76,7 @@
     {
       "path": "docs/audit-2026-10-14/README.md",
       "present": true,
-      "sha256": "9f56d7c9ce1c35aa15b19cb56c14fd43efcf52daaf29f6b093f80dff891add1c",
+      "sha256": "a227ed09e0fba9080302dca6092f110e4c4d448bbf816dad726ee2f6636e0d09",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": true,
@@ -86,7 +86,7 @@
     {
       "path": "docs/audit-2026-10-14/STATE_RU.md",
       "present": true,
-      "sha256": "24fb6464f1e091dd47355a5a9d5feb69fba98c9913dfb3785ef5cf5f19b762d2",
+      "sha256": "3d017a5c0720dd8ff70c9a6e4a7601f2df71c1c71796a2c6242188ca54f104b1",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": true,
@@ -96,7 +96,17 @@
     {
       "path": "docs/audit-2026-11-02/README.md",
       "present": true,
-      "sha256": "b94da7f88e2de0e5a97140e4452fb846cfd32bf852cb2f7dce39f845b4a7704d",
+      "sha256": "fca53436556d3b640102f2232c7fe2a47f8f7f46bdd6a1f1ccbf420b02da8233",
+      "existedAtBase": false,
+      "changedSinceBase": true,
+      "dated": true,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "docs/audit-2026-11-04/README.md",
+      "present": true,
+      "sha256": "aa22711683d4c15e773d8b899741bdfb9f70c526febf4258e22c47715f6d9dd7",
       "existedAtBase": false,
       "changedSinceBase": true,
       "dated": true,
@@ -106,7 +116,7 @@
     {
       "path": "platform/README.md",
       "present": true,
-      "sha256": "34c52139ed755a690d0cfe49b81bf53104f53e426a6b7a9f2672a2fd805301f0",
+      "sha256": "b24a0dfe01d8c20b0d3789ba25a0f70b28eb097325cb6f5e7d319d235a6ba7c7",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -116,7 +126,7 @@
     {
       "path": "platform/STATE.md",
       "present": true,
-      "sha256": "f17ec3fdb47f7e7c304a9ea99fa38a05cae085f3f7d82733ca663aa27a376579",
+      "sha256": "947bebd25a7a237892948c3bb78d750f576d03ecb56fb62c073bbee2a123155f",
       "existedAtBase": false,
       "changedSinceBase": true,
       "dated": false,
@@ -126,7 +136,7 @@
     {
       "path": "platform/backend/README.md",
       "present": true,
-      "sha256": "3d6e6172f86fccde959f62300972abab490e25849c9bd357453d05136eca5155",
+      "sha256": "cbd051986fc6ba6763d7eff1395d90934057d342c4dbeb56562b61df50b7e08f",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -136,7 +146,7 @@
     {
       "path": "platform/infra/README.md",
       "present": true,
-      "sha256": "f7fdbea2c69a6f444a61856df2832c7dcc4e12e0090c421d2d29cb1cf2bc0e80",
+      "sha256": "229a41caf825ad2a5d3db68aff492860378e35a6d314b32969e3a37ac62a6a93",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -146,7 +156,7 @@
     {
       "path": "platform/launcher/README.md",
       "present": true,
-      "sha256": "2e41e6e026b58dc1f7a18e5989d56efb5bf326d5cabc7e25d4c56df46c5452d6",
+      "sha256": "805c09b89615984da77aaecf8e384d450a40aa892d6a53a05800020f6540d8ec",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -156,7 +166,7 @@
     {
       "path": "platform/launcher/docs/source-readme.md",
       "present": true,
-      "sha256": "1b1504f8115616eeee41710e969a6015f8154da3fbc5c0bc61cf5bcff2d0876e",
+      "sha256": "db3fb49b12d6ae6841b82ee04dfb0e08ff8122d5705646efc90b36201f3eb6df",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -166,7 +176,7 @@
     {
       "path": "platform/telegram-bot/README.md",
       "present": true,
-      "sha256": "8b8555645d099ab1f78e7506ffde7695fc95efe0a6a85e59d324e40c84f7f8e3",
+      "sha256": "f7467f43ce9febf2e1f3f26b63c4625f082b3fe0ea73fd813ccbd5c32914cc5b",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -176,7 +186,7 @@
     {
       "path": "src/main/java/com/example/examplemod/devtools/README.md",
       "present": true,
-      "sha256": "cffbd1ac591065027206611719e6336240acbdbb5dd7767c9dc83c0a29aded62",
+      "sha256": "c8f97ca6a51af04e48a4506da46671c7d95efe6fbfb9f633c78c7254a0660ed1",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -186,7 +196,7 @@
     {
       "path": "tools/community-platform/README.md",
       "present": true,
-      "sha256": "d51caf96b9705cca61ef0e4d11626b6cd7f170608ab027425fb020105480c5fd",
+      "sha256": "766e7c42163c156ea3e9788938e57524c3b08deb779d0f7a65009552cee8f6ae",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -196,7 +206,7 @@
     {
       "path": "tools/ftb-campaign/README_RU.md",
       "present": true,
-      "sha256": "8af4bad6c287ebc1011ee9733319786ae2166109d8beb96d5959570d083db162",
+      "sha256": "c2c0784b9fb80153b2d3e46ef50bdf40a0cb4d53a7d2588be458187936083b10",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -206,7 +216,7 @@
     {
       "path": "tools/menu-platform/telegram-bot/README.md",
       "present": true,
-      "sha256": "e16e5cc56c50b347854af63e32736a055310cc66ff83e1cf9ffa47b8df694cda",
+      "sha256": "0add73555ceccde8691fa8fc41dcb17b3ea465b215be78b6004f40a1e2e5b127",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -216,7 +226,7 @@
     {
       "path": "tools/telemetry-fix/README.md",
       "present": true,
-      "sha256": "d8f521dcd86c76d3df118c82e10bb8847e992954b261ba8eeb0adb17be898d97",
+      "sha256": "ac5c587b7e11aa0c9c7017986ebfdf6fc1bbbe4828f6459613a2a4a0e469af96",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,
@@ -226,7 +236,7 @@
     {
       "path": "tools/yuushya-quiet/README.md",
       "present": true,
-      "sha256": "c5e7f3d578699a453a95f1befd91a37399be96fde2671ff83386d00257339322",
+      "sha256": "1b5b314602cbd75cefdfd4d072f554cb3a4c6e84e19ca0fb88209b7412cc6249",
       "existedAtBase": true,
       "changedSinceBase": true,
       "dated": false,

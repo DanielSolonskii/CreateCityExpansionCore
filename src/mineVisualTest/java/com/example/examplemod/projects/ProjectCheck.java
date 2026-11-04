@@ -221,11 +221,18 @@ public final class ProjectCheck {
     }
     private static void compatibility()throws Exception {
         EconomyManager original=new EconomyManager();UUID player=UUID.randomUUID(),city=UUID.randomUUID();original.adminSetWallet(player,1234);original.adminSetTreasury(city,5678);
-        CompoundTag old=original.save(new CompoundTag(),null);old.remove("CityProjects");old.putInt("FormatVersion",7);
+        CompoundTag old=original.save(new CompoundTag(),null);old.remove("CityProjects");old.putInt("FormatVersion",7);var retired=new CompoundTag();retired.putString("Opaque","retired-state");old.put("FreightLogistics",retired);old.put("Commerce",retired.copy());
         var load=EconomyManager.class.getDeclaredMethod("load",CompoundTag.class,HolderLookup.Provider.class);load.setAccessible(true);
         EconomyManager migrated=(EconomyManager)load.invoke(null,old,null);
         require(migrated.wallet(player)==1234&&migrated.treasury(city)==5678&&migrated.projects().all().isEmpty(),"v7 save loads with unchanged balances and no projects");
-        CompoundTag round=migrated.save(new CompoundTag(),null);require(round.getInt("FormatVersion")==13&&round.contains("FreightLogistics")&&round.contains("PersonalBank")&&round.getCompound("FreightLogistics").contains("Routing"),"v13 retains Freight, personal banking and regional routing after legacy migration");
+        CompoundTag round=migrated.save(new CompoundTag(),null);require(round.getInt("FormatVersion")==16&&round.contains("PersonalBank")&&round.getCompound("CargoCommerce").getInt("Version")==2&&round.getCompound("FreightLogistics").equals(retired)&&round.getCompound("Commerce").equals(retired),"v16 retains cargo escrow, cancellation state and inert historical data verbatim");
+        var payer=com.example.examplemod.cargo.center.OwnerRef.player(player);var payee=com.example.examplemod.cargo.center.OwnerRef.player(UUID.randomUUID());UUID cargoOrder=UUID.randomUUID();
+        migrated.cargo().reserve(cargoOrder,payer,payee,cargoOrder,null,1,34,java.util.List.of());migrated.cargo().markAttempted(cargoOrder);
+        EconomyManager pending=(EconomyManager)load.invoke(null,migrated.save(new CompoundTag(),null),null);
+        require(pending.wallet(player)==1200&&pending.cargo().order(cargoOrder).orElseThrow().state()==com.example.examplemod.cargo.center.CargoCommerceBook.State.ATTEMPTED,"real wallet debit and native request flag persist in the same economic save");
+        require(pending.cargo().settle(cargoOrder,true,hop->true)&&pending.wallet(payee.id())==34,"real economy pays only after explicit full physical evidence");
+        EconomyManager paid=(EconomyManager)load.invoke(null,pending.save(new CompoundTag(),null),null);
+        require(!paid.cargo().settle(cargoOrder,true,hop->true)&&paid.wallet(payee.id())==34&&paid.wallet(player)==1200,"same-file settlement survives restart without double payout");
     }
     private static void cityGuards()throws Exception {
         CityManager cities=new CityManager();UUID owner=UUID.randomUUID();City city=cities.createCity("Test",owner,DIM,new BlockPos(0,64,0));

@@ -1,5 +1,7 @@
 # Create Server Platform — snapshot внутри CCEC
 
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
+
 Актуализировано 02.11.2026 по исходникам этого репозитория. `platform/` содержит
 backend, Telegram bot, Windows launcher и инфраструктурные шаблоны. Это
 самостоятельные сборки внутри CreateCityExpansionCore, а не Gradle subprojects

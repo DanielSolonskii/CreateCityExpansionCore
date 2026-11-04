@@ -109,9 +109,6 @@ public final class ModSounds {
      * =========================================
      */
 
-    public static final DeferredHolder<SoundEvent, SoundEvent> RAIL_STATION_BIND = sound("rail.station_bind");
-    public static final DeferredHolder<SoundEvent, SoundEvent> RAIL_SHIPMENT_COMPLETE = sound("rail.shipment_complete");
-
     /*
      * =========================================
      * ECONOMY
@@ -119,7 +116,6 @@ public final class ModSounds {
      */
 
     public static final DeferredHolder<SoundEvent, SoundEvent> ECONOMY_LISTING_CREATE = sound("economy.listing_create");
-    public static final DeferredHolder<SoundEvent, SoundEvent> ECONOMY_TRADE_COMPLETE = sound("economy.trade_complete");
 
     /*
      * =========================================
@@ -127,18 +123,11 @@ public final class ModSounds {
      * =========================================
      */
 
-    public static final DeferredHolder<SoundEvent, SoundEvent> CONTRACT_ACCEPT = sound("contract.accept");
-    public static final DeferredHolder<SoundEvent, SoundEvent> CONTRACT_DELIVERY_TICK = sound("contract.delivery_tick");
-    public static final DeferredHolder<SoundEvent, SoundEvent> CONTRACT_CONFIRMED = sound("contract.confirmed");
-
     /*
      * =========================================
      * WAREHOUSE
      * =========================================
      */
-
-    public static final DeferredHolder<SoundEvent, SoundEvent> WAREHOUSE_INPUT_TICK = sound("warehouse.input_tick");
-    public static final DeferredHolder<SoundEvent, SoundEvent> WAREHOUSE_BATCH = sound("warehouse.batch");
 
     /*
      * =========================================

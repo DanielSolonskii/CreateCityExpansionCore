@@ -1,5 +1,7 @@
 # Инфраструктура платформы
 
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
+
 Актуализировано 02.11.2026. Dev compose и deployment templates/helpers под
 конкретное `/opt/create-server` окружение. Это не live VDS inventory: SSH,
 installed configs, ports/TLS/health/systemd runtime здесь не проверялись.

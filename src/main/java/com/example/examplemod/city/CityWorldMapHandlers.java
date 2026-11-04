@@ -16,8 +16,6 @@ public final class CityWorldMapHandlers {
         var publicView = CityPublicAtlas.view(player);
         if (publicView == null || !publicView.dimension().equals(city.getPylonDimension())) return true;
         PacketDistributor.sendToPlayer(player, CityProjectNetworkHandlers.createState(player.getServer(), city, player));
-        com.example.examplemod.railway.RailwayNetworkHandlers.sendMemberView(player);
-        com.example.examplemod.economy.EconomyNetworkHandlers.sendMemberView(player);
         CityRelationsNetworkHandlers.sendMemberView(player);
         CityTerritoryHandlers.sendTerritories(player, city);
         return true;

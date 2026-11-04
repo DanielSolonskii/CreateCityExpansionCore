@@ -8,7 +8,6 @@ import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.mine.MineControllerBlockEntity;
 import com.example.examplemod.network.CityDevelopmentPayload;
 import com.example.examplemod.network.CityPylonStatePayload;
-import com.example.examplemod.railway.RailwayManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -41,7 +40,6 @@ public final class CityProjectNetworkHandlers {
         if (project == null) {
             return;
         }
-        RailwayManager.get(player.serverLevel()).linkProject(project.projectId(), null);
 
         ServerLevel projectLevel = player.getServer().getLevel(
                 ResourceKey.create(Registries.DIMENSION, project.dimensionId())

@@ -26,13 +26,12 @@ public final class CityPylonWorkspace extends Screen {
     private final CityPylonOverviewScreen overview;
     private final Map<Screen,int[]> initializedPages=new WeakHashMap<>();
     private Screen page;
-    private MarketScreen market;
-    private LogisticsScreen logistics;
+
     private CityPylonWorkspaceLayout geometry;
     private int section;
     private boolean pointerCaptured;
-    private static final String[] SECTIONS={"overview","marketplace","logistics","management","map"};
-    private static final Item[] ICONS={Items.COMPASS,Items.EMERALD,Items.MINECART,Items.WRITABLE_BOOK,Items.FILLED_MAP};
+    private static final String[] SECTIONS={"overview","management","map"};
+    private static final Item[] ICONS={Items.COMPASS,Items.WRITABLE_BOOK,Items.FILLED_MAP};
 
     private CityPylonWorkspace(CityPylonScreen root) {
         super(Component.translatable("gui.createcityexpansioncore.city.pylon"));
@@ -47,9 +46,9 @@ public final class CityPylonWorkspace extends Screen {
         if(next instanceof CityPylonScreen pylon&&pylon.getMenu().hasCity()) {
             boolean fresh=session==null||session.root.getMenu()!=pylon.getMenu();
             if(fresh)session=new CityPylonWorkspace(pylon);
-            boolean fromMap=event.getCurrentScreen() instanceof PolishedWorldMapScreen||event.getCurrentScreen() instanceof WorldMapScreen;
+            boolean fromMap=event.getCurrentScreen() instanceof PolishedWorldMapScreen;
             if(fresh)session.show(session.overview);
-            else if(!fromMap||session.root.workspaceSection()==3&&session.section!=3)
+            else if(!fromMap||session.root.workspaceSection()==1&&session.section!=1)
                 session.show(session.root.workspaceSection()==0?session.overview:session.root);
             if(event.getCurrentScreen()==session)event.setCanceled(true);else event.setNewScreen(session);
         }else if(session!=null&&session.valid()&&isPage(next)
@@ -60,8 +59,7 @@ public final class CityPylonWorkspace extends Screen {
     }
     private static boolean isPage(Screen screen) {
         return screen instanceof CityPylonPageScreen||screen instanceof CityRoleScreen
-                ||screen instanceof CityColorPaletteScreen||screen instanceof CityRemoveMemberConfirmScreen
-                ||screen instanceof RailwayLineEditorScreen;
+                ||screen instanceof CityColorPaletteScreen||screen instanceof CityRemoveMemberConfirmScreen;
     }
     public static boolean isEmbedded(Screen screen) {
         return session!=null&&session.valid()&&(session.page==screen||session.root==screen)&&Minecraft.getInstance().screen==session;
@@ -86,27 +84,19 @@ public final class CityPylonWorkspace extends Screen {
     }
     private void layout() {
         geometry=CityPylonWorkspaceLayout.calculate(width,height,page==root);
-        if(page instanceof LogisticsScreen||page instanceof RailwayRouteSelectionScreen)geometry=CityPylonWorkspaceLayout.readable(width,height);
         if(page!=root)prepare(page,geometry.virtualWidth(),geometry.virtualHeight());
     }
     private void show(Screen next) {
         pointerCaptured=false;
-        if(next instanceof MarketScreen){if(market==null)market=(MarketScreen)next;next=market;section=1;}
-        else if(next instanceof LogisticsScreen){logistics=(LogisticsScreen)next;section=2;}
-        else if(next==root)section=3;
+        if(next==root)section=1;
         else if(next==overview)section=0;
         if(page!=next)page.setFocused(null);
         page=next;if(minecraft!=null)layout();
     }
-    private void navigate(int index) {
-        if(index==4){minecraft.setScreen(new PolishedWorldMapScreen(root));return;}
-        switch(index) {
-            case 0->{root.workspaceSelect(0);show(overview);}
-            case 1->show(market==null?new MarketScreen(root):market);
-            case 2->show(logistics==null?new LogisticsScreen(root):logistics);
-            case 3->{root.workspaceSelect(2);show(root);}
-            default->{}
-        }
+    private void navigate(int index){
+        if(index==2){minecraft.setScreen(new PolishedWorldMapScreen(root));return;}
+        if(index==0){root.workspaceSelect(0);show(overview);}
+        else if(index==1){root.workspaceSelect(2);show(root);}
     }
     @Override public void tick() {
         if(!valid()){minecraft.setScreen(null);return;}
@@ -133,7 +123,7 @@ public final class CityPylonWorkspace extends Screen {
         int cityY=fy+(fh<240?36:44);
         if(sidebar>=60)g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),sidebar-26),fx+13,cityY,TEXT,false);
         if(fh>=240)g.drawString(font,Component.translatable("gui.createcityexpansioncore.workspace.level",root.getMenu().getCityLevel()),fx+13,cityY+17,MUTED,false);
-        for(int i=0;i<5;i++) {
+        for(int i=0;i<SECTIONS.length;i++) {
             int y=geometry.navY(i),h=geometry.navHeight();boolean selected=section==i;
             boolean hover=in(mx,my,fx+7,y,sidebar-14,h);
             rounded(g,fx+7,y,sidebar-14,h,4,selected?0xFF383123:hover?PANEL:METAL);
@@ -159,7 +149,7 @@ public final class CityPylonWorkspace extends Screen {
     }
     private boolean canCollect(){return section==3&&minecraft.player!=null
             &&minecraft.player.getUUID().equals(root.getMenu().getOwner());}
-    private Component navLabel(int index) {return Component.translatable(index==2?"gui.createcityexpansioncore.freight.title":"gui.createcityexpansioncore.city.tab."+SECTIONS[index]);}
+    private Component navLabel(int index) {return Component.translatable("gui.createcityexpansioncore.city.tab."+SECTIONS[index]);}
     private static boolean in(double x,double y,int left,int top,int w,int h) {return x>=left&&x<left+w&&y>=top&&y<top+h;}
     @Override public boolean mouseClicked(double x,double y,int button) {
         int fx=geometry.frameX(),fy=geometry.frameY();
@@ -174,7 +164,7 @@ public final class CityPylonWorkspace extends Screen {
                 PlayerProfileScreen.open(this,minecraft.player.getUUID());return true;
             }
             if(x>=fx+7&&x<fx+geometry.sidebarWidth()-7) {
-                for(int i=0;i<5;i++)if(in(x,y,fx+7,geometry.navY(i),geometry.sidebarWidth()-14,geometry.navHeight())){navigate(i);return true;}
+                for(int i=0;i<SECTIONS.length;i++)if(in(x,y,fx+7,geometry.navY(i),geometry.sidebarWidth()-14,geometry.navHeight())){navigate(i);return true;}
                 if(y>=fy+geometry.frameHeight()-26&&y<fy+geometry.frameHeight()-4&&page!=overview){onClose();return true;}
             }
         }

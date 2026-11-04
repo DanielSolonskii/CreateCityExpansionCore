@@ -8,17 +8,7 @@ import com.example.examplemod.city.CityDevelopmentRequirementSnapshot;
 import com.example.examplemod.city.CityDevelopmentRequirements;
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.network.CityPylonStatePayload;
-import com.example.examplemod.network.RailwayMapPayload;
-import com.example.examplemod.network.RailwayStatePayload;
-import com.example.examplemod.network.RailwayRouteOptionsPayload;
-import com.example.examplemod.network.EconomyStatePayload;
 import com.example.examplemod.network.CityRelationsStatePayload;
-import com.example.examplemod.railway.RailwayLineSnapshot;
-import com.example.examplemod.railway.RailwayStationSnapshot;
-import com.example.examplemod.railway.RailwayTrainSnapshot;
-import com.example.examplemod.railway.RailwayTrainCandidate;
-import com.example.examplemod.railway.RailwayOwnershipSnapshot;
-import com.example.examplemod.railway.RailwaySectionSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -58,15 +48,7 @@ public class CityPylonMenu extends AbstractContainerMenu implements com.example.
     private List<CityDevelopmentRequirementSnapshot> developmentRequirements;
     private boolean pylonActive;
     private final List<CityMapTilePayload> pendingMapTiles = new ArrayList<>();
-    private List<RailwayStationSnapshot> railwayStations = new ArrayList<>();
-    private List<RailwayTrainSnapshot> railwayTrains = new ArrayList<>();
-    private List<RailwayTrainCandidate> railwayTrainCandidates = new ArrayList<>();
-    private List<RailwayLineSnapshot> railwayLines = new ArrayList<>();
-    private List<RailwayOwnershipSnapshot> railwayOwnership = new ArrayList<>();
-    private List<RailwaySectionSnapshot> railwayOwnedSections = new ArrayList<>();
-    private RailwayMapPayload pendingRailwayMap;
-    private RailwayRouteOptionsPayload pendingRouteOptions;
-    private EconomyStatePayload economyState;
+
     private CityRelationsStatePayload relationsState;
 
     public CityPylonMenu(
@@ -329,55 +311,8 @@ public class CityPylonMenu extends AbstractContainerMenu implements com.example.
         return result;
     }
 
-    public List<RailwayStationSnapshot> getRailwayStations() {
-        return List.copyOf(this.railwayStations);
-    }
-
-    public List<RailwayTrainSnapshot> getRailwayTrains() {
-        return List.copyOf(this.railwayTrains);
-    }
-
     /** Create trains visible to this pylon that are not registered in CCEC yet. */
-    public List<RailwayTrainCandidate> getRailwayTrainCandidates() {
-        return List.copyOf(this.railwayTrainCandidates);
-    }
 
-    public List<RailwayLineSnapshot> getRailwayLines() {
-        return List.copyOf(this.railwayLines);
-    }
-    public List<RailwayOwnershipSnapshot> getRailwayOwnership(){return List.copyOf(this.railwayOwnership);}
-    public List<RailwaySectionSnapshot> getRailwayOwnedSections(){return List.copyOf(this.railwayOwnedSections);}
-
-    public void applyRailwayState(RailwayStatePayload payload) {
-        if (!this.pylonPos.equals(payload.pylonPos())) {
-            return;
-        }
-        this.railwayStations = new ArrayList<>(payload.stations());
-        this.railwayTrains = new ArrayList<>(payload.trains());
-        this.railwayTrainCandidates = new ArrayList<>(payload.candidates());
-        this.railwayLines = new ArrayList<>(payload.lines());
-        this.railwayOwnership = new ArrayList<>(payload.ownership());
-        this.railwayOwnedSections = new ArrayList<>(payload.ownedSections());
-    }
-
-    public void acceptRailwayMap(RailwayMapPayload payload) {
-        if (this.pylonPos.equals(payload.pylonPos())
-                && this.dimensionId.equals(payload.dimension())) {
-            this.pendingRailwayMap = payload;
-        }
-    }
-
-    public RailwayMapPayload drainRailwayMap() {
-        RailwayMapPayload result = this.pendingRailwayMap;
-        this.pendingRailwayMap = null;
-        return result;
-    }
-    public void acceptRouteOptions(RailwayRouteOptionsPayload payload){if(payload.pylonPos().equals(this.pylonPos))this.pendingRouteOptions=payload;}
-    public RailwayRouteOptionsPayload drainRouteOptions(){RailwayRouteOptionsPayload value=pendingRouteOptions;pendingRouteOptions=null;return value;}
-    public void applyEconomyState(EconomyStatePayload payload) {
-        if (this.pylonPos.equals(payload.pylonPos())) this.economyState = payload;
-    }
-    public EconomyStatePayload getEconomyState() { return economyState; }
     public void applyRelationsState(CityRelationsStatePayload payload) {
         if (this.pylonPos.equals(payload.pylonPos())) this.relationsState = payload;
     }

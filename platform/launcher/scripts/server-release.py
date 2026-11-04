@@ -1,7 +1,9 @@
 """Explicit Minecraft file deployment/rollback. Never reads or switches client channels."""
 import argparse
+import gzip
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
@@ -13,6 +15,8 @@ import tempfile
 import time
 import uuid
 import sys
+import struct
+import zipfile
 
 if 'release_common' in sys.modules:
     common = sys.modules['release_common']
@@ -21,6 +25,155 @@ else:
     common = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(common)
 SERVICE = 'create-server-minecraft.service'
+SAVE_FORMATS = 'META-INF/ccec-save-formats.json'
+CCEC_JAR = re.compile(r'mods/createcityexpansioncore(?:[-_.][^/]*)?\.jar', re.I)
+
+
+def saved_versions(filename, keys):
+    """Read only requested integer headers; validate bounded Minecraft SavedData NBT."""
+    if filename.is_symlink() or not filename.is_file() or filename.stat().st_size > 64 * 1024**2:
+        raise RuntimeError('Unsafe or oversized SavedData: ' + filename.name)
+    with open(filename, 'rb') as source:
+        compressed = source.read(2) == b'\x1f\x8b'
+    opener = gzip.open if compressed else open
+    with opener(filename, 'rb') as source:
+        raw = source.read(128 * 1024**2 + 1)
+    if len(raw) > 128 * 1024**2:
+        raise RuntimeError('Oversized SavedData NBT: ' + filename.name)
+    data = memoryview(raw)
+    offset = 0
+    budget = 1000000
+    wanted = {tuple(['data'] + key.split('.')): key for key in keys}
+    result = {}
+
+    def take(count):
+        nonlocal offset
+        if count < 0 or offset + count > len(data):
+            raise RuntimeError('Truncated SavedData NBT: ' + filename.name)
+        value = data[offset:offset + count]
+        offset += count
+        return value
+
+    def number(fmt):
+        return struct.unpack(fmt, take(struct.calcsize(fmt)))[0]
+
+    def name():
+        return bytes(take(number('>H'))).decode('utf-8', errors='replace')
+
+    def payload(kind, path, depth):
+        nonlocal budget
+        budget -= 1
+        if depth > 64 or budget < 0:
+            raise RuntimeError('SavedData NBT nesting/item limit: ' + filename.name)
+        if path in wanted:
+            if kind != 3:
+                raise RuntimeError('SavedData version must be TAG_Int: ' + filename.name)
+            result[wanted[path]] = number('>i')
+            return
+        sizes = {1: 1, 2: 2, 3: 4, 4: 8, 5: 4, 6: 8}
+        if kind in sizes:
+            take(sizes[kind])
+        elif kind in (7, 11, 12):
+            count = number('>i')
+            if count < 0:
+                raise RuntimeError('Negative SavedData NBT array size')
+            take(count * {7: 1, 11: 4, 12: 8}[kind])
+        elif kind == 8:
+            take(number('>H'))
+        elif kind == 9:
+            subtype, count = number('>B'), number('>i')
+            if count < 0 or count > budget or not 0 <= subtype <= 12 or (subtype == 0 and count):
+                raise RuntimeError('Invalid SavedData NBT list')
+            for _ in range(count):
+                payload(subtype, None, depth + 1)
+        elif kind == 10:
+            names = set()
+            while True:
+                subtype = number('>B')
+                if subtype == 0:
+                    break
+                child = name()
+                if child in names:
+                    raise RuntimeError('Duplicate SavedData NBT tag: ' + child)
+                names.add(child)
+                payload(subtype, path + (child,) if path is not None else None, depth + 1)
+        else:
+            raise RuntimeError('Invalid SavedData NBT tag')
+
+    if number('>B') != 10:
+        raise RuntimeError('SavedData NBT root must be a compound')
+    name()
+    payload(10, (), 0)
+    if offset != len(data):
+        raise RuntimeError('Trailing SavedData NBT bytes: ' + filename.name)
+    return result
+
+
+def save_formats(jar):
+    try:
+        with zipfile.ZipFile(io.BytesIO(jar) if isinstance(jar, bytes) else jar) as package:
+            entry = package.getinfo(SAVE_FORMATS)
+            if entry.file_size > 32768:
+                raise RuntimeError('Oversized CCEC save compatibility metadata')
+            metadata = json.loads(package.read(entry))
+    except (KeyError, zipfile.BadZipFile, json.JSONDecodeError) as error:
+        raise RuntimeError('CCEC candidate has no valid save compatibility metadata') from error
+    if set(metadata) != {'schemaVersion', 'savedData'} or metadata['schemaVersion'] != 1 or not isinstance(metadata['savedData'], dict):
+        raise RuntimeError('Invalid CCEC save compatibility metadata')
+    for filename, headers in metadata['savedData'].items():
+        if not re.fullmatch(r'(createcityexpansioncore_economy|ccec_cargo_[a-z_]+)', filename) or not isinstance(headers, dict) or not headers:
+            raise RuntimeError('Invalid CCEC SavedData name/headers')
+        for key, rule in headers.items():
+            if not re.fullmatch(r'[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)*', key) or not isinstance(rule, dict) or not {'min', 'max'} <= set(rule) <= {'min', 'max', 'optional'}:
+                raise RuntimeError('Invalid CCEC SavedData version rule')
+            if type(rule['min']) is not int or type(rule['max']) is not int or not 0 <= rule['min'] <= rule['max'] or ('optional' in rule and type(rule['optional']) is not bool):
+                raise RuntimeError('Invalid CCEC SavedData version range')
+    if 'createcityexpansioncore_economy' not in metadata['savedData']:
+        raise RuntimeError('CCEC candidate omits Economy compatibility')
+    return metadata['savedData']
+
+
+def check_save_compatibility(world, manifest, objects):
+    candidates = [entry for entry in manifest['files'] if CCEC_JAR.fullmatch(entry['path'])]
+    removed = any(CCEC_JAR.fullmatch(entry['path']) for entry in manifest['remove'])
+    if not candidates and not removed:
+        return []
+    if len(candidates) != 1:
+        raise RuntimeError('Exactly one CCEC candidate required; refusing CCEC removal')
+    entry = candidates[0]
+    if objects is None:
+        raise RuntimeError('CCEC candidate bytes required for save compatibility preflight')
+    jar = objects.get(entry['sha256']) if isinstance(objects, dict) else common.safe_file(objects, entry['sha256'])
+    if isinstance(jar, bytes):
+        if len(jar) != entry['size'] or hashlib.sha256(jar).hexdigest() != entry['sha256']:
+            raise RuntimeError('CCEC preflight object hash/size mismatch')
+    else:
+        common.check_object(jar, entry)
+    formats = save_formats(jar)
+    directory = world / 'data'
+    if directory.is_symlink():
+        raise RuntimeError('SavedData directory symlink refused')
+    report = []
+    if not directory.exists():
+        return report
+    for filename in sorted(directory.glob('*.dat')):
+        stem = filename.stem
+        if stem != 'createcityexpansioncore_economy' and not stem.startswith('ccec_cargo_'):
+            continue
+        if stem not in formats:
+            raise RuntimeError('CCEC candidate cannot read SavedData: ' + filename.name)
+        rules = formats[stem]
+        versions = saved_versions(filename, rules)
+        for key, rule in rules.items():
+            if key not in versions:
+                if rule.get('optional', False):
+                    continue
+                raise RuntimeError('Missing SavedData version: ' + filename.name + ':' + key)
+            value = versions[key]
+            if not rule['min'] <= value <= rule['max']:
+                raise RuntimeError(f'Incompatible SavedData {filename.name}:{key}={value}; candidate supports {rule["min"]}..{rule["max"]}')
+        report.append({'file': filename.name, 'versions': versions})
+    return report
 
 
 def allowed(p):
@@ -81,7 +234,7 @@ def tree_size(root):
     return total
 
 
-def plan_release(game, manifest):
+def plan_release(game, manifest, objects=None):
     world_name, world = world_path(game)
     operations = []
     for e in manifest['files']:
@@ -98,7 +251,8 @@ def plan_release(game, manifest):
         if not target.is_file() or common.sha_file(target) != e['expectedSha256']:
             raise RuntimeError('Removal precondition mismatch: ' + e['path'])
         operations.append({'path': e['path'], 'action': 'removed', 'before': e['expectedSha256']})
-    return {'version': manifest['version'], 'world': world_name, 'operations': operations}
+    compatibility = check_save_compatibility(world, manifest, objects)
+    return {'version': manifest['version'], 'world': world_name, 'operations': operations, 'saveCompatibility': compatibility}
 
 
 class Systemd:
@@ -193,14 +347,15 @@ def deploy(root, archive, version, expected_plan, timeout=180, adapter=None, dry
     with tempfile.TemporaryDirectory(prefix='server-inspect-') as directory:
         incoming = pathlib.Path(directory)
         manifest = load_package(archive, version, incoming)
-        plan = plan_release(game, manifest)
+        objects = incoming / 'server/objects'
+        plan = plan_release(game, manifest, objects)
         plan_hash = hashlib.sha256(common.canonical(plan)).hexdigest()
         if dry_run:
             return {'status': 'DRY_RUN', 'plan': plan, 'planSha256': plan_hash, 'channelChanged': False}
         with common.lock(root / 'secrets/server-deploy.lock'):
             if plan_hash != expected_plan:
                 raise RuntimeError('Server changed since dry-run; inspect new plan')
-            if plan_release(game, manifest) != plan:
+            if plan_release(game, manifest, objects) != plan:
                 raise RuntimeError('Concurrent server file change')
             for pending in (root / 'backups').glob('server-deploy-*/state.json'):
                 if json.loads(pending.read_bytes())['status'] not in ('DEPLOYED', 'ROLLED_BACK'):
@@ -218,7 +373,7 @@ def deploy(root, archive, version, expected_plan, timeout=180, adapter=None, dry
             save_state(backup, state)
             try:
                 adapter.stop()
-                if plan_release(game, manifest) != plan:
+                if plan_release(game, manifest, objects) != plan:
                     raise RuntimeError('Files changed during graceful stop; abort and inspect')
                 tree_size(world)  # Re-check links after the final save, before backup.
                 state['status'] = 'BACKING_UP'
@@ -286,7 +441,25 @@ def rollback(root, backup, timeout=180, adapter=None, restore_world=False):
                 original = common.safe_file(backup / 'files', e['path'])
                 if common.sha_file(original) != e['before']:
                     raise RuntimeError('Backup hash mismatch')
+        # A files-only rollback must never start an older CCEC against newer data.
+        # Legacy JARs without a declared format range require manual recovery.
+        rollback_files = []
+        rollback_objects = {}
+        rollback_removed = []
+        for e in state['changes']:
+            if not CCEC_JAR.fullmatch(e['path']):
+                continue
+            if e['before']:
+                original = common.safe_file(backup / 'files', e['path'])
+                rollback_files.append({'path': e['path'], 'sha256': e['before'], 'size': original.stat().st_size})
+                rollback_objects[e['before']] = original.read_bytes()
+            else:
+                rollback_removed.append({'path': e['path']})
+        _, current_world = world_path(game)
+        rollback_manifest = {'files': rollback_files, 'remove': rollback_removed}
+        check_save_compatibility(current_world, rollback_manifest, rollback_objects)
         adapter.stop(require_save=False)
+        check_save_compatibility(current_world, rollback_manifest, rollback_objects)
         state['status'] = 'ROLLING_BACK'
         save_state(backup, state)
         for e in reversed(state['changes']):

@@ -1,5 +1,7 @@
 # Telemetry contract correction (2026-10-08)
 
+**Исторический срез. Навигация сверена 2026-11-04.** Результаты и версии ниже относятся к указанной прежней дате; действующая Cargo-база и интеграция CCEC 1.0.2.15 описаны в [актуальном аудите](../../docs/audit-2026-11-04/README.md).
+
 **Archived repair packet. Reviewed 2026-11-02.** The incident, test counts,
 deployment and hashes below describe October 8. They are not evidence of the
 current production version. Current sources are in [platform/backend](../../platform/backend/README.md)

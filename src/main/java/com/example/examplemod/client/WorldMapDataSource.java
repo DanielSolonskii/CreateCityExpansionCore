@@ -4,13 +4,6 @@ import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.network.CityPylonStatePayload;
 import com.example.examplemod.network.CityRelationsStatePayload;
-import com.example.examplemod.network.EconomyStatePayload;
-import com.example.examplemod.network.RailwayMapPayload;
-import com.example.examplemod.network.RailwayStatePayload;
-import com.example.examplemod.railway.RailwayOwnershipSnapshot;
-import com.example.examplemod.railway.RailwayStationSnapshot;
-import com.example.examplemod.railway.RailwayTrainCandidate;
-import com.example.examplemod.railway.RailwayTrainSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 
@@ -57,19 +50,7 @@ public interface WorldMapDataSource {
     /** Тайлы местности, накопленные с прошлого запроса. */
     List<CityMapTilePayload> drainMapTiles();
 
-    List<RailwayStationSnapshot> getRailwayStations();
-
-    List<RailwayTrainSnapshot> getRailwayTrains();
-
-    List<RailwayTrainCandidate> getRailwayTrainCandidates();
-
-    List<RailwayOwnershipSnapshot> getRailwayOwnership();
-
     /** Снимок рельсовой сети; {@code null}, если ещё не приходил. */
-    RailwayMapPayload drainRailwayMap();
-
-    default com.example.examplemod.network.RailwayRouteOptionsPayload drainRouteOptions(){return null;}
-    EconomyStatePayload getEconomyState();
 
     CityRelationsStatePayload getRelationsState();
 
@@ -78,12 +59,6 @@ public interface WorldMapDataSource {
     void applyState(CityPylonStatePayload payload);
 
     void acceptMapTile(CityMapTilePayload payload);
-
-    void applyRailwayState(RailwayStatePayload payload);
-
-    void acceptRailwayMap(RailwayMapPayload payload);
-
-    void applyEconomyState(EconomyStatePayload payload);
 
     void applyRelationsState(CityRelationsStatePayload payload);
 }

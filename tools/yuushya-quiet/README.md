@@ -1,5 +1,7 @@
 # Yuushya quiet join compatibility mod
 
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
+
 Source/build audit: **2026-11-02**. See the [current project audit](../../docs/audit-2026-11-02/README.md).
 
 Targets only the unconditional `Yuushya.lambda$init$4(ServerPlayer)` disclaimer

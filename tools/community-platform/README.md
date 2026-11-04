@@ -1,5 +1,7 @@
 # Community relay integration sources
 
+**Исторический срез. Навигация сверена 2026-11-04.** Результаты и версии ниже относятся к указанной прежней дате; действующая Cargo-база и интеграция CCEC 1.0.2.15 описаны в [актуальном аудите](../../docs/audit-2026-11-04/README.md).
+
 **Archive / legacy integration packet. Reviewed 2026-11-02.** Current Backend/Bot
 sources in this repository are [platform/backend](../../platform/backend/README.md)
 and [platform/telegram-bot](../../platform/telegram-bot/README.md). Start with

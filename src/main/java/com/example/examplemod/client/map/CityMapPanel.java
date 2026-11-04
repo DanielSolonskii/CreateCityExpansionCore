@@ -7,18 +7,9 @@ import com.example.examplemod.network.RequestCityMapTilePayload;
 import com.example.examplemod.city.CityColors;
 import com.example.examplemod.city.CityPlot;
 import com.example.examplemod.city.CityProjectSnapshot;
-import com.example.examplemod.network.RailwayMapPayload;
-import com.example.examplemod.network.EconomyStatePayload;
 import com.example.examplemod.network.CityRelationSnapshot;
-import com.example.examplemod.economy.FreightPoint;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import com.example.examplemod.railway.RailwayStationSnapshot;
-import com.example.examplemod.railway.RailwayTrainSnapshot;
-import com.example.examplemod.railway.RailwayTrainCandidate;
-import com.example.examplemod.client.status.CcecStatusUi;
-import com.example.examplemod.status.CcecStatus;
-import com.example.examplemod.status.CcecStatusResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -123,26 +114,8 @@ public final class CityMapPanel {
     }
     private final ResourceLocation dimensionId;
     private List<CityProjectSnapshot> projects;
-    private List<RailwayMapPayload.TrackSegment> railwayTracks = List.of();
-    private List<RailwayMapPayload.NetworkView> railwayNetworks = List.of();
-    private List<RailwayMapPayload.SectionView> railwaySections = List.of();
-    private List<RailwayMapPayload.RouteView> railwayRoutes = List.of();
-    private List<RailwayStationSnapshot> railwayStations = List.of();
-    private List<RailwayTrainSnapshot> railwayTrains = List.of();
-    private List<RailwayTrainCandidate> railwayTrainCandidates = List.of();
-    private List<EconomyStatePayload.InfrastructureView> economyInfrastructure = List.of();
-    private List<FreightPoint> freightPoints = List.of();
-    private List<FreightLink> freightLinks = List.of();
-    private Map<UUID, FreightJourney> freightJourneys = Map.of();
-    private UUID focusedFreightShipment;
-    private boolean pendingFreightFit;
-    private UUID freightFramedRailRoute;
-    private List<UUID> freightFramedStops=List.of();
-    private int freightViewportWidth=-1,freightViewportHeight=-1;
-    private CompoundTag freightSnapshot;
-    private List<FreightCandidate> freightCandidates = List.of();
-    private Map<UUID, String> routeStrategies = Map.of();
-    private Map<UUID, CityRelationSnapshot.Status> relations = Map.of();
+
+private Map<UUID, CityRelationSnapshot.Status> relations = Map.of();
     /**
      * Соседние города, полученные с сервера один раз при открытии пилона.
      * Хранятся как есть и переиспользуются каждый кадр — никаких
@@ -235,13 +208,8 @@ public final class CityMapPanel {
         this.pendingClaim = plot;
         this.overlayLines = List.of();
     }
-    private final Map<UUID, TrainPosition> previousTrainPositions = new HashMap<>();
-    private long railwaySnapshotAtMillis;
-    private boolean showTracks = true;
-    private boolean showStations = true;
-    private boolean showTrains = true;
-    private boolean showTradeInfrastructure = true;
-    private boolean showCities = true;
+
+private boolean showCities = true;
     private boolean showTerritory = true;
     private int territoryMode;
     private boolean projectFocus, projectPicking, showPlotGrid;
@@ -252,6 +220,9 @@ public final class CityMapPanel {
     public void setProjectFocus(boolean focus,boolean picking){projectFocus=focus;projectPicking=picking;}
     private boolean showProjects = true;
     private boolean showRelations;
+    private boolean showTracks = true;
+    private int trackCount;
+    private java.util.function.BiConsumer<GuiGraphics, CityMapPanel> railOverlay;
     private boolean drawInternalControls = true;
     private Selection selection;
     private Selection hoveredSelection;
@@ -299,17 +270,6 @@ public final class CityMapPanel {
     private Overlay paintingLayer;
     private Selection hoverOutline;
     private DispatchMotion.Transition hoverGlow = new DispatchMotion.Transition(0);
-    private final java.util.LinkedHashMap<UUID,RouteAnimation> routeAnimations = new java.util.LinkedHashMap<>();
-    private static final class RouteAnimation {
-        final List<RailwayMapPayload.TrackSegment> source;
-        final List<RouteRevealGeometry.Segment> chain;
-        long started, seen;
-        RouteAnimation(List<RailwayMapPayload.TrackSegment> source,long now) {
-            this.source=source;this.started=this.seen=now;
-            this.chain=RouteRevealGeometry.order(source.stream().map(s->new RouteRevealGeometry.Segment(
-                    new RouteRevealGeometry.Point(s.x1(),s.z1()),new RouteRevealGeometry.Point(s.x2(),s.z2()))).toList());
-        }
-    }
 
     private int overlayMask() {
         int mask=0;for(Overlay layer:Overlay.values())if(isOverlayEnabled(layer))mask|=1<<layer.ordinal();return mask;
@@ -336,24 +296,16 @@ public final class CityMapPanel {
     private void renderDispatchLayers(GuiGraphics g,int mouseX,int mouseY) {
         int mask=overlayMask();
         int cityX=(mask&(1<<Overlay.CITIES.ordinal()))!=0?mouseX:-10000;
-        int railX=(mask&(1<<Overlay.TRACKS.ordinal()))!=0?mouseX:-10000;
-        int stationX=(mask&(1<<Overlay.STATIONS.ordinal()))!=0?mouseX:-10000;
-        int trainX=(mask&(1<<Overlay.TRAINS.ordinal()))!=0?mouseX:-10000;
         int projectX=(mask&(1<<Overlay.PROJECTS.ordinal()))!=0?mouseX:-10000;
-        int tradeX=(mask&(1<<Overlay.TRADE.ordinal()))!=0?mouseX:-10000;
         drawLayer(g,Overlay.TERRITORIES,()->{
             if(showPlotGrid&&plotClaimRequest!=null)renderPlotGrid(g);
             renderPeers(g,-10000,-10000);renderTerritory(g);if(!projectFocus)renderClaimHint(g);
         });
         drawLayer(g,Overlay.RELATIONS,()->renderPeers(g,-10000,-10000));
         drawLayer(g,Overlay.CITIES,()->renderPeers(g,cityX,mouseY));
-        drawLayer(g,Overlay.TRACKS,()->renderRailway(g,railX,mouseY));
-        drawLayer(g,Overlay.TRADE,()->renderFreightJourneys(g));
-        drawLayer(g,Overlay.STATIONS,()->renderRailway(g,stationX,mouseY));
-        drawLayer(g,Overlay.TRAINS,()->renderRailway(g,trainX,mouseY));
+        drawLayer(g,Overlay.TRACKS,()->{if(this.railOverlay!=null)this.railOverlay.accept(g,this);});
         drawLayer(g,Overlay.CITIES,()->renderMarkers(g,cityX,mouseY));
         drawLayer(g,Overlay.PROJECTS,()->renderMarkers(g,projectX,mouseY));
-        drawLayer(g,Overlay.TRADE,()->renderMarkers(g,tradeX,mouseY));
         // The player has no visibility toggle and is drawn exactly once above the other layers.
         withOverlayMask(0,()->renderMarkers(g,mouseX,mouseY));
     }
@@ -364,7 +316,7 @@ public final class CityMapPanel {
             this.hoverOutline=candidate; // A moving train keeps its latest marker position without restarting the glow.
         }
         double strength=this.hoverGlow.value(candidate==null?0:1,System.nanoTime(),reducedMotion,100);
-        if(this.hoverOutline==null||strength<=0||this.hoverOutline.kind()==SelectionKind.ROUTE||this.hoverOutline.kind()==SelectionKind.RAILWAY_SECTION)return;
+        if(this.hoverOutline==null||strength<=0)return;
         ScreenPoint point=markerPoint(this.hoverOutline.kind(),this.hoverOutline.id(),this.hoverOutline.pos());
         g.renderOutline(point.x()-13,point.y()-13,26,26,MapPalette.argb(DispatchPalette.ACCENT,(int)(180*strength)));
     }
@@ -414,8 +366,7 @@ public final class CityMapPanel {
         }
     }
 
-
-    private int viewportX;
+private int viewportX;
     private int viewportY;
     private int viewportWidth;
     private int viewportHeight;
@@ -436,13 +387,8 @@ public final class CityMapPanel {
 
     private final ItemStack cityIcon = item("createcityexpansioncore:city_pylon");
     private final ItemStack mineIcon = item("createcityexpansioncore:mine_controller");
-    private final ItemStack stationIcon = item("create:track_station");
-    private final ItemStack trainIcon = item("create:controls");
-    private final ItemStack contractIcon = item("createcityexpansioncore:contract_intake");
-    private final ItemStack warehouseIcon = item("createcityexpansioncore:warehouse_gateway");
-    private final ItemStack freightIcon = item("create:white_postbox");
-    private final ItemStack hubIcon = item("minecraft:barrel");
-    private final ItemStack networkIcon = item("create:track");
+
+private final ItemStack networkIcon = item("create:track");
     private final ItemStack playerIcon = item("minecraft:compass");
 
     /*
@@ -663,9 +609,6 @@ public final class CityMapPanel {
             case TERRITORIES -> this.showTerritory = enabled;
             case PROJECTS -> this.showProjects = enabled;
             case TRACKS -> this.showTracks = enabled;
-            case STATIONS -> this.showStations = enabled;
-            case TRAINS -> this.showTrains = enabled;
-            case TRADE -> this.showTradeInfrastructure = enabled;
             case RELATIONS -> this.showRelations = enabled;
         }
     }
@@ -676,12 +619,16 @@ public final class CityMapPanel {
             case TERRITORIES -> this.showTerritory;
             case PROJECTS -> this.showProjects;
             case TRACKS -> this.showTracks;
-            case STATIONS -> this.showStations;
-            case TRAINS -> this.showTrains;
-            case TRADE -> this.showTradeInfrastructure;
             case RELATIONS -> this.showRelations;
         };
     }
+
+    /** Rail geometry comes from the logistics overlay; the panel only owns when it is painted. */
+    public void setRailOverlay(java.util.function.BiConsumer<GuiGraphics, CityMapPanel> overlay) {
+        this.railOverlay = overlay;
+    }
+
+    public void setTrackCount(int count) { this.trackCount = Math.max(0, count); }
 
     public Selection getSelection() {
         return this.selection;
@@ -696,10 +643,7 @@ public final class CityMapPanel {
     }
 
     public void setSelection(Selection value) {
-        if (value != null && value.kind() == SelectionKind.ROUTE
-                && (this.selection == null || !value.id().equals(this.selection.id()))) {
-            this.routeSelectionStartedAt = System.currentTimeMillis();
-        }
+
         if (!sameTarget(this.selection,value)) selectionStarted=System.nanoTime();
         this.selection = value;
     }
@@ -713,11 +657,8 @@ public final class CityMapPanel {
      * changes kind in place — most importantly right after the player registers a Create train,
      * where re-centering would yank the map away from what they were looking at.
      */
-    public void selectTrain(RailwayTrainSnapshot train) {
-        this.selection = trainSelection(train);
-    }
 
-    public ScreenPoint selectionAnchor(Selection value) {
+public ScreenPoint selectionAnchor(Selection value) {
         return value == null ? null : markerPosition(value.kind(), value.id(), value.pos(),
                 worldToScreenX(value.pos().getX() + 0.5),
                 worldToScreenY(value.pos().getZ() + 0.5));
@@ -782,42 +723,14 @@ public final class CityMapPanel {
         for (CityMapPeersPayload.Peer peer : CityMapCities.matching(this.peers, query)) {
             matches.add(peerSelection(peer));
         }
-        for (RailwayStationSnapshot station : this.railwayStations) {
-            if (station.dimension().equals(this.dimensionId)
-                    && station.name().toLowerCase(Locale.ROOT).contains(query)) matches.add(stationSelection(station));
-        }
-        for (RailwayTrainSnapshot train : this.railwayTrains) {
-            if (train.dimension() != null && train.dimension().equals(this.dimensionId)
-                    && train.name().toLowerCase(Locale.ROOT).contains(query)) matches.add(trainSelection(train));
-        }
-        for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
-            if (train.dimension() != null && train.dimension().equals(this.dimensionId)
-                    && train.name().toLowerCase(Locale.ROOT).contains(query)) matches.add(unregisteredTrainSelection(train));
-        }
-        for (CityProjectSnapshot project : this.projects) {
+
+for (CityProjectSnapshot project : this.projects) {
             String translated = Component.translatable("gui.createcityexpansioncore.project.industrial_mine").getString();
             if (this.dimensionId.equals(project.dimensionId())
                     && translated.toLowerCase(Locale.ROOT).contains(query)) matches.add(projectSelection(project));
         }
-        for (EconomyStatePayload.InfrastructureView value : this.economyInfrastructure) {
-            Component name = infrastructureName(value);
-            if (this.dimensionId.equals(value.dimension())
-                    && name.getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(infrastructureSelection(value));
-        }
-        for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId)&&point.name.toLowerCase(Locale.ROOT).contains(query))matches.add(freightSelection(point));
-        for (var section : this.railwaySections) {
-            Selection value = sectionSelection(section);
-            if (!section.segments().isEmpty() && value.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(value);
-        }
-        for (var route : this.railwayRoutes) {
-            Selection value = routeSelection(route);
-            if (!route.segments().isEmpty() && value.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(value);
-        }
-        for (var candidate : this.freightCandidates) {
-            Selection value = discoverySelection(candidate);
-            if (value.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(value);
-        }
-        for (int index = 0; index < this.personalPins.size(); index++) {
+
+for (int index = 0; index < this.personalPins.size(); index++) {
             Selection pin = pinSelection(index);
             if (pin.title().getString().toLowerCase(Locale.ROOT).contains(query)) matches.add(pin);
         }
@@ -830,108 +743,7 @@ public final class CityMapPanel {
         animateTo(pos.getX()+.5, pos.getZ()+.5, zoom);
     }
 
-    public void setEconomyInfrastructure(List<EconomyStatePayload.InfrastructureView> values) {
-        if (this.economyInfrastructure.equals(values)) {
-            return;
-        }
-        this.economyInfrastructure = List.copyOf(values);
-    }
-
-    public void setFreightData(CompoundTag logistics) {
-        // Network snapshots are immutable to the view; do not rebuild every render frame.
-        if (logistics == this.freightSnapshot) return;
-        this.freightSnapshot=logistics;
-        if (logistics == null) { this.freightPoints=List.of();this.freightLinks=List.of();this.freightJourneys=Map.of();this.freightCandidates=List.of();this.routeStrategies=Map.of();return; }
-        List<FreightPoint> points=new ArrayList<>();for(Tag raw:logistics.getList("Points",Tag.TAG_COMPOUND))try{FreightPoint point=FreightPoint.load((CompoundTag)raw);if(!point.removed)points.add(point);}catch(RuntimeException ignored){}
-        List<FreightLink> links=new ArrayList<>();Map<UUID,String> strategies=new HashMap<>();
-        Map<UUID,FreightJourney> journeys=new LinkedHashMap<>();
-        for(Tag raw:logistics.getList("Assignments",Tag.TAG_COMPOUND)){
-            CompoundTag value=(CompoundTag)raw;
-            if(value.hasUUID("Subject")&&value.hasUUID("Destination")){
-                List<UUID> stops=new ArrayList<>();if(value.hasUUID("Source"))stops.add(value.getUUID("Source"));
-                for(Tag stop:value.getList("Via",10)){var hop=(CompoundTag)stop;if(hop.hasUUID("Id"))stops.add(hop.getUUID("Id"));}
-                stops.add(value.getUUID("Destination"));
-                UUID id=value.getUUID("Subject");String state=value.getBoolean("CancellationPending")?"cancelling":value.getBoolean("CancellationRequested")&&!value.getString("State").equals("complete")?"cancelled":value.getString("State");
-                CcecStatus status=value.contains("UiStatus")?CcecStatus.load(value.getCompound("UiStatus")):CcecStatus.of(CcecStatus.Category.WARNING,CcecStatus.Code.SHIPMENT_INVALIDATED,CcecStatus.Action.FIX_PROBLEM);
-                journeys.put(id,new FreightJourney(id,value.getString("Title"),stops,state,value.getLong("Delivered"),value.getLong("Amount"),value.getLong("InFlight"),value.getBoolean("Running"),value.hasUUID("RouteSelection")?value.getUUID("RouteSelection"):null,value.hasUUID("Source")?value.getUUID("Source"):null,status));
-                if(value.hasUUID("Source"))for(int i=1;i<stops.size();i++)links.add(new FreightLink(id,stops.get(i-1),stops.get(i),state));
-            }
-            if(value.hasUUID("RouteSelection")&&!value.getString("RouteStrategy").isBlank())strategies.put(value.getUUID("RouteSelection"),value.getString("RouteStrategy"));
-        }
-        List<FreightCandidate> candidates=new ArrayList<>();for(Tag raw:logistics.getList("Candidates",Tag.TAG_COMPOUND)){CompoundTag value=(CompoundTag)raw;candidates.add(new FreightCandidate(BlockPos.of(value.getLong("Postbox")),BlockPos.of(value.getLong("Packager")),value.getString("Station")));}
-        this.freightPoints=List.copyOf(points);this.freightLinks=List.copyOf(links);this.freightJourneys=Map.copyOf(journeys);this.freightCandidates=List.copyOf(candidates);this.routeStrategies=Map.copyOf(strategies);
-    }
-
-    public record FreightJourney(UUID id,String title,List<UUID> stops,String state,long delivered,long amount,
-                                 long inFlight,boolean running,UUID routeSelection,UUID source,CcecStatus status) {
-        public FreightJourney { stops=List.copyOf(stops); }
-        public boolean closed(){return Set.of("complete","expired","cancelled").contains(state);}
-    }
-    public record FreightStop(String name,BlockPos pos,ResourceLocation dimension,boolean hub,boolean online) {}
-    public FreightJourney focusedFreightJourney(){return this.focusedFreightShipment==null?null:this.freightJourneys.get(this.focusedFreightShipment);}
-    public FreightStop freightStop(UUID id){var point=freight(id);return point==null?null:new FreightStop(point.name,point.postbox,point.dimension,point.kind==FreightPoint.Kind.HUB,point.online());}
-    public boolean freightHasRailGeometry(){var journey=focusedFreightJourney();var selected=journey==null?null:route(journey.routeSelection());return selected!=null&&!selected.segments().isEmpty()&&journey.stops().size()==2;}
-    public void focusFreightShipment(UUID id){this.focusedFreightShipment=id;this.pendingFreightFit=id!=null;this.freightFramedRailRoute=null;this.freightFramedStops=List.of();this.freightViewportWidth=-1;this.freightViewportHeight=-1;this.selection=null;}
-    public void clearFreightShipmentFocus(){this.focusedFreightShipment=null;this.pendingFreightFit=false;this.freightFramedRailRoute=null;this.freightFramedStops=List.of();}
-    private void prepareFreightViewport(){
-        var journey=focusedFreightJourney();if(journey==null)return;
-        if(this.freightViewportWidth!=this.viewportWidth||this.freightViewportHeight!=this.viewportHeight||!this.freightFramedStops.equals(journey.stops()))this.pendingFreightFit=true;
-        if(freightHasRailGeometry()&&!java.util.Objects.equals(this.freightFramedRailRoute,journey.routeSelection())){this.pendingFreightFit=true;this.freightFramedRailRoute=journey.routeSelection();}
-        this.freightViewportWidth=this.viewportWidth;this.freightViewportHeight=this.viewportHeight;this.freightFramedStops=journey.stops();
-        if(this.pendingFreightFit&&fitFreightShipment())this.pendingFreightFit=false;
-    }
-    public boolean fitFreightShipment(){
-        var journey=focusedFreightJourney();if(journey==null)return false;
-        var path=new ArrayList<ShipmentRouteGeometry.Point>();
-        for(UUID id:journey.stops()){var point=freight(id);if(point!=null&&point.dimension.equals(this.dimensionId))path.add(new ShipmentRouteGeometry.Point(point.postbox.getX()+.5,point.postbox.getZ()+.5));}
-        if(freightHasRailGeometry())for(var segment:route(journey.routeSelection()).segments()){path.add(new ShipmentRouteGeometry.Point(segment.x1(),segment.z1()));path.add(new ShipmentRouteGeometry.Point(segment.x2(),segment.z2()));}
-        var view=ShipmentRouteGeometry.fit(path,this.viewportWidth,this.viewportHeight,48,MIN_ZOOM,MAX_ZOOM);
-        if(view==null||this.viewportWidth<1||this.viewportHeight<1)return false;
-        animateTo(view.x(),view.z(),view.zoom());return true;
-    }
-
-    public void setRailwayData(
-            List<RailwayStationSnapshot> stations,
-            List<RailwayTrainSnapshot> trains
-    ) {
-        if (this.railwayStations.equals(stations) && this.railwayTrains.equals(trains)) {
-            return;
-        }
-        Map<UUID, TrainPosition> current = new HashMap<>();
-        for (RailwayTrainSnapshot train : this.railwayTrains) {
-            if (train.dimension() != null) {
-                current.put(train.fleetTrainId(), new TrainPosition(train.dimension(), train.x(), train.z()));
-            }
-        }
-        this.previousTrainPositions.clear();
-        this.previousTrainPositions.putAll(current);
-        this.railwayStations = List.copyOf(stations);
-        this.railwayTrains = List.copyOf(trains);
-        this.railwaySnapshotAtMillis = System.currentTimeMillis();
-    }
-
-    /**
-     * Create trains that exist but are not registered in CCEC. Kept separate from
-     * {@link #setRailwayData} because registering a train changes this list without changing the
-     * registered one, and the early-return above would otherwise swallow the update.
-     */
-    public void setUnregisteredTrains(List<RailwayTrainCandidate> candidates) {
-        List<RailwayTrainCandidate> copy = List.copyOf(candidates);
-        if (this.railwayTrainCandidates.equals(copy)) return;
-        this.railwayTrainCandidates = copy;
-    }
-
-    public boolean receive(RailwayMapPayload payload) {
-        if (!this.pylonPos.equals(payload.pylonPos())
-                || !this.dimensionId.equals(payload.dimension())) {
-            return false;
-        }
-        this.railwayTracks = List.copyOf(payload.segments());
-        this.railwayNetworks=List.copyOf(payload.networks());this.railwaySections=List.copyOf(payload.sections());this.railwayRoutes=List.copyOf(payload.routes());
-        return true;
-    }
-
-    /**
+/**
      * Масштаб интерфейса. Панель рисуется внутри pose().scale(...),
      * а GuiGraphics.enableScissor ожидает экранные координаты.
      */
@@ -975,7 +787,6 @@ public final class CityMapPanel {
         this.centerButtonY = y + height - 15;
         this.layerButtonsX = x + width - 166;
         this.layerButtonsY = y + 4;
-        prepareFreightViewport();
         updateMotion();
         updateLayerMotion();
         if(motionEnabled&&!projectPicking) {
@@ -1007,14 +818,13 @@ public final class CityMapPanel {
              * текстуры, а оверлеи поверх идут в том же батче.
              * Scissor меняется уже вне блока, порядок с текстом сохраняется.
              */
+
+            // Terrain owns a complete, flushed pass. Its texture uploads must never share an
+            // unfinished GUI batch with city/player markers or the world-border overlay.
+            guiGraphics.drawManaged(() -> renderTerrain(guiGraphics));
             guiGraphics.drawManaged(() -> {
-                renderTerrain(guiGraphics);
                 if (hud) return;
-                if (this.focus == Focus.RAILWAY) {
-                    guiGraphics.fill(x, y, x + width, y + this.viewportHeight, 0x24101618);
-                } else if (this.focus == Focus.TRADE) {
-                    guiGraphics.fill(x, y, x + width, y + this.viewportHeight, 0x16101618);
-                } else if (this.focus == Focus.ENERGY) {
+                if (this.focus == Focus.ENERGY) {
                     guiGraphics.fill(x, y, x + width, y + this.viewportHeight, 0x32101618);
                 }
                 if (this.showCoordinateGrid) renderGrid(guiGraphics);
@@ -1026,45 +836,52 @@ public final class CityMapPanel {
                 // остаётся главным акцентом, чужие — фоном.
                 if (this.showTerritory || this.showCities || this.projectPicking) renderPeers(guiGraphics, mouseX, mouseY);
                 if (this.showTerritory || this.projectPicking) {
-                    if(projectPicking)renderConstructionMask(guiGraphics);
+                    if (projectPicking) renderConstructionMask(guiGraphics);
                     renderTerritory(guiGraphics);
                     if (!projectFocus) renderClaimHint(guiGraphics);
                 }
-                renderRailway(guiGraphics, mouseX, mouseY);
+                renderCityTooltips(guiGraphics, mouseX, mouseY);
+                // Рельсы — часть полотна карты, а не маркеров: города и поезда
+                // должны оставаться поверх путей.
+                if (this.showTracks && this.railOverlay != null) this.railOverlay.accept(guiGraphics, this);
                 renderMarkers(guiGraphics, mouseX, mouseY);
                 }
                 renderCityTooltips(guiGraphics, mouseX, mouseY);
                 if(motionEnabled)renderHoverGlow(guiGraphics);
                 // Placement previews and project markers must stay visible over city/player icons.
                 if (this.visualOverlay != null) this.visualOverlay.accept(guiGraphics);
-                if(!hud&&Minecraft.getInstance().level!=null&&dimensionId.equals(Minecraft.getInstance().level.dimension().location())&&!projectPicking)
-                    com.example.examplemod.client.screen.MapSocialLayer.render(guiGraphics,this,viewportX,viewportY,viewportWidth,viewportHeight,mouseX,mouseY);
+                if (!hud && Minecraft.getInstance().level != null && dimensionId.equals(Minecraft.getInstance().level.dimension().location()) && !projectPicking)
+                    com.example.examplemod.client.screen.MapSocialLayer.render(guiGraphics, this, viewportX, viewportY, viewportWidth, viewportHeight, mouseX, mouseY);
                 else com.example.examplemod.client.screen.MapSocialLayer.clear(this);
-                renderPersonalTools(guiGraphics,mouseX,mouseY);
-                if (placingPin && insideViewport(mouseX,mouseY)) {
-                    guiGraphics.renderOutline(mouseX-4,mouseY-4,9,9,MapPalette.SELECTED);
-                    var label=Component.literal((int)Math.floor(screenToWorldX(mouseX))+" / "+(int)Math.floor(screenToWorldZ(mouseY)));
-                    var font=Minecraft.getInstance().font;
-                    int lx=Math.max(viewportX+3,Math.min(mouseX+10,viewportX+viewportWidth-font.width(label)-4));
-                    int ly=Math.max(viewportY+3,Math.min(mouseY+12,viewportY+viewportHeight-12));
-                    guiGraphics.fill(lx-3,ly-3,lx+font.width(label)+3,ly+11,MapPalette.PAPER_SUNK);
-                    guiGraphics.drawString(font,label,lx,ly,MapPalette.TEXT,false);
+                renderPersonalTools(guiGraphics, mouseX, mouseY);
+                if (placingPin && insideViewport(mouseX, mouseY)) {
+                    guiGraphics.renderOutline(mouseX - 4, mouseY - 4, 9, 9, MapPalette.SELECTED);
+                    var label = Component.literal((int) Math.floor(screenToWorldX(mouseX)) + " / " + (int) Math.floor(screenToWorldZ(mouseY)));
+                    var font = Minecraft.getInstance().font;
+                    int lx = Math.max(viewportX + 3, Math.min(mouseX + 10, viewportX + viewportWidth - font.width(label) - 4));
+                    int ly = Math.max(viewportY + 3, Math.min(mouseY + 12, viewportY + viewportHeight - 12));
+                    guiGraphics.fill(lx - 3, ly - 3, lx + font.width(label) + 3, ly + 11, MapPalette.PAPER_SUNK);
+                    guiGraphics.drawString(font, label, lx, ly, MapPalette.TEXT, false);
                 }
-                if (motionEnabled && !reducedMotion && selection!=null) {
-                    double t=(System.nanoTime()-selectionStarted)/400_000_000.0;
-                    if(t>=0 && t<1) {
-                        ScreenPoint selectedPoint=markerPoint(selection.kind(),selection.id(),selection.pos());
-                        int sx=selectedPoint.x(), sy=selectedPoint.y();
-                        int r=12+(int)(12*MapMotion.ease(t)), color=((int)(170*(1-t))<<24)|(MapPalette.SELECTED&0xFFFFFF);
-                        for(int a=0;a<48;a++) { double angle=a*Math.PI/24; int px=sx+(int)Math.round(Math.cos(angle)*r),py=sy+(int)Math.round(Math.sin(angle)*r); guiGraphics.fill(px,py,px+1,py+1,color); }
+                if (motionEnabled && !reducedMotion && selection != null) {
+                    double t = (System.nanoTime() - selectionStarted) / 400_000_000.0;
+                    if (t >= 0 && t < 1) {
+                        ScreenPoint selectedPoint = markerPoint(selection.kind(), selection.id(), selection.pos());
+                        int sx = selectedPoint.x(), sy = selectedPoint.y();
+                        int r = 12 + (int) (12 * MapMotion.ease(t)), color = ((int) (170 * (1 - t)) << 24) | (MapPalette.SELECTED & 0xFFFFFF);
+                        for (int a = 0; a < 48; a++) {
+                            double angle = a * Math.PI / 24;
+                            int px = sx + (int) Math.round(Math.cos(angle) * r), py = sy + (int) Math.round(Math.sin(angle) * r);
+                            guiGraphics.fill(px, py, px + 1, py + 1, color);
+                        }
                     }
                 }
             });
-                guiGraphics.drawManaged(() -> MapBorderLayer.render(guiGraphics, this, dimensionId, x, y, width, viewportHeight, mouseX, mouseY));
-                if (hud) {
-                    var mc = Minecraft.getInstance();
-                    MapMarkerRenderer.renderPlayer(guiGraphics, worldToScreenX(mc.player.getX()), worldToScreenY(mc.player.getZ()), this.playerIcon, false, false, mc.player.getYRot()+180);
-                }
+            guiGraphics.drawManaged(() -> MapBorderLayer.render(guiGraphics, this, dimensionId, x, y, width, viewportHeight, mouseX, mouseY));
+            if (hud) {
+                var mc = Minecraft.getInstance();
+                MapMarkerRenderer.renderPlayer(guiGraphics, worldToScreenX(mc.player.getX()), worldToScreenY(mc.player.getZ()), this.playerIcon, false, false, mc.player.getYRot() + 180);
+            }
         } finally {
             guiGraphics.disableScissor();
         }
@@ -1225,19 +1042,8 @@ public final class CityMapPanel {
             this.showProjects = !this.showProjects;
             return true;
         }
-        if (this.drawInternalControls && inside(mouseX, mouseY, layerButtonsX + 68, layerButtonsY, 30, 12)) {
-            this.showTracks = !this.showTracks;
-            return true;
-        }
-        if (this.drawInternalControls && inside(mouseX, mouseY, layerButtonsX + 102, layerButtonsY, 30, 12)) {
-            this.showStations = !this.showStations;
-            return true;
-        }
-        if (this.drawInternalControls && inside(mouseX, mouseY, layerButtonsX + 136, layerButtonsY, 30, 12)) {
-            this.showTrains = !this.showTrains;
-            return true;
-        }
-        if (insideViewport(mouseX, mouseY)) {
+
+if (insideViewport(mouseX, mouseY)) {
             this.selection = null;
             this.dragging = true;
             return true;
@@ -1246,44 +1052,13 @@ public final class CityMapPanel {
     }
 
     private Selection findSelection(double mouseX, double mouseY) {
-        if(this.showTracks){Selection route=findRouteSelection(mouseX,mouseY);if(route!=null)return route;Selection section=findSectionSelection(mouseX,mouseY);if(section!=null)return section;}
+
         Selection player = playerSelection();
         if (player != null) {
             ScreenPoint point = markerPoint(player.kind(), player.id(), player.pos());
             if (inside(mouseX, mouseY, point.x() - 13, point.y() - 13, 26, 26)) return player;
         }
-        if (this.showTradeInfrastructure && this.zoom >= MIN_ZOOM) for (EconomyStatePayload.InfrastructureView value : this.economyInfrastructure) {
-            if (!value.cityOwned() || !this.dimensionId.equals(value.dimension())) continue;
-            Selection candidate = infrastructureSelection(value);
-            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
-        }
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint point:this.freightPoints){if(point.dimension.equals(this.dimensionId)){Selection candidate=freightSelection(point);ScreenPoint marker=markerPoint(candidate.kind(),candidate.id(),candidate.pos());if(inside(mouseX,mouseY,marker.x()-11,marker.y()-11,22,22))return candidate;}}
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate value:this.freightCandidates){int x=worldToScreenX(value.postbox.getX()+.5),y=worldToScreenY(value.postbox.getZ()+.5);if(inside(mouseX,mouseY,x-8,y-9,16,18))return discoverySelection(value);}
-        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
-            if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
-            Selection candidate = trainSelection(train);
-            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
-        }
-        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
-            if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
-            Selection candidate = unregisteredTrainSelection(train);
-            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
-        }
-        if (this.showStations && this.zoom >= MIN_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
-            if (!station.dimension().equals(this.dimensionId)) continue;
-            Selection candidate = stationSelection(station);
-            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
-        }
-        if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : this.projects) {
-            if (!this.dimensionId.equals(project.dimensionId())) continue;
-            Selection candidate = projectSelection(project);
-            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (inside(mouseX, mouseY, point.x() - 11, point.y() - 11, 22, 22)) return candidate;
-        }
+
         if (this.showCities) for (CityMapPeersPayload.Peer peer : this.peers) {
             if (atAnchor(peer)) continue;
             Selection candidate = peerSelection(peer);
@@ -1326,46 +1101,8 @@ public final class CityMapPanel {
         Selection player = playerSelection();
         if (player != null) addMarker(entries, player.kind(), player.id(), player.pos(),
                 Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), 100);
-        if (this.showStations && this.zoom >= MIN_ZOOM) for (RailwayStationSnapshot station : this.railwayStations) {
-            if (station.dimension().equals(this.dimensionId)) addMarker(entries, SelectionKind.STATION,
-                    station.registrationId(), station.pos(), station.pos().getX() + 0.5,
-                    station.pos().getZ() + 0.5, 70);
-        }
-        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainSnapshot train : this.railwayTrains) {
-            if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
-            TrainPosition previous = this.previousTrainPositions.get(train.fleetTrainId());
-            double progress = Math.min(1.0,
-                    Math.max(0.0, (System.currentTimeMillis() - this.railwaySnapshotAtMillis) / 1000.0));
-            double x = previous != null && previous.dimension().equals(train.dimension())
-                    ? previous.x() + (train.x() - previous.x()) * progress : train.x();
-            double z = previous != null && previous.dimension().equals(train.dimension())
-                    ? previous.z() + (train.z() - previous.z()) * progress : train.z();
-            addMarker(entries, SelectionKind.TRAIN, train.fleetTrainId(),
-                    BlockPos.containing(train.x(), 0, train.z()), x, z, 40);
-        }
-        if (this.showTrains && this.zoom >= MIN_ZOOM) for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
-            if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
-            addMarker(entries, SelectionKind.TRAIN_UNREGISTERED, train.createTrainId(),
-                    BlockPos.containing(train.x(), 0, train.z()), train.x(), train.z(), 41);
-        }
-        if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : this.projects) {
-            if (this.dimensionId.equals(project.dimensionId())) addMarker(entries, SelectionKind.INDUSTRY,
-                    project.projectId(), project.controllerPos(), project.controllerPos().getX() + 0.5,
-                    project.controllerPos().getZ() + 0.5, 50);
-        }
-        if (this.showTradeInfrastructure && this.zoom >= MIN_ZOOM) {
-            for (EconomyStatePayload.InfrastructureView value : this.economyInfrastructure) {
-                if (value.cityOwned() && this.dimensionId.equals(value.dimension())) addMarker(entries,
-                        SelectionKind.TRADE_INFRASTRUCTURE, value.id(), value.pos(),
-                        value.pos().getX() + 0.5, value.pos().getZ() + 0.5, 60);
-            }
-        }
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint point:this.freightPoints)if(point.dimension.equals(this.dimensionId))addMarker(entries,SelectionKind.FREIGHT_POINT,point.id,point.postbox,point.postbox.getX()+.5,point.postbox.getZ()+.5,65);
 
-        entries.sort(Comparator.comparingInt(MarkerEntry::priority).reversed()
-                .thenComparingInt(entry -> entry.key().kind().ordinal())
-                .thenComparing(entry -> entry.key().stableId()));
-        this.markerPositions.clear();
+this.markerPositions.clear();
         List<ScreenPoint> placed = new ArrayList<>(entries.size());
         for (MarkerEntry entry : entries) {
             ScreenPoint anchor = new ScreenPoint(worldToScreenX(entry.worldX()), worldToScreenY(entry.worldZ()));
@@ -1511,6 +1248,14 @@ public final class CityMapPanel {
         }
         int minX=terrainCoordinate(screenToWorldX(viewportX),level),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),level);
         int minZ=terrainCoordinate(screenToWorldZ(viewportY),level),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),level);
+        // An unloaded/partial tile is visibly unexplored, not a featureless black rectangle.
+        // Paint the missing-data base BEFORE fallback parents and final detailed tiles.
+        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
+            TileKey key=new TileKey(dimensionId,x,z,level);
+            var raw=tileCache.get(key);var texture=terrainTextures.get(key);
+            if(raw==null||!raw.complete()||texture==null||texture.id()==null)
+                renderMissingTile(guiGraphics,key,requestedTiles.containsKey(key));
+        }
         // A cropped parent only fills a missing/partial child: never redraw eight full-screen LODs.
         for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
             TileKey key=new TileKey(dimensionId,x,z,level);
@@ -1626,19 +1371,21 @@ public final class CityMapPanel {
     }
 
     private void renderMissingTile(GuiGraphics guiGraphics, TileKey key, boolean requested) {
-        int originX = key.tileX() * CityMapTilePayload.WORLD_SIZE;
-        int originZ = key.tileZ() * CityMapTilePayload.WORLD_SIZE;
+        double span = key.span();
+        double originX = key.tileX() * span;
+        double originZ = key.tileZ() * span;
         int left = worldToScreenX(originX);
         int top = worldToScreenY(originZ);
-        int right = worldToScreenX(originX + CityMapTilePayload.WORLD_SIZE);
-        int bottom = worldToScreenY(originZ + CityMapTilePayload.WORLD_SIZE);
+        int right = worldToScreenX(originX + span);
+        int bottom = worldToScreenY(originZ + span);
         int parity = (key.tileX() + key.tileZ()) & 1;
         /*
          * Незаведённый тайл — это бумага, а не пустота: по нему
          * видно, что «сюда ещё не смотрели», и он не спорит с
          * линиями, которые на нём нарисованы.
          */
-        int color = MapSurveyTransform.unexploredPaper(parity);
+        int color = failedTiles.contains(key) ? 0xFF30282A : requested ?
+                (parity == 0 ? 0xFF202A2E : 0xFF1C2428) : MapSurveyTransform.unexploredPaper(parity);
         guiGraphics.fill(left, top, right, bottom, color);
     }
 
@@ -1744,8 +1491,7 @@ public final class CityMapPanel {
              * чужих городов делал соседние территории неразличимыми.
              */
 
-
-            if (!this.showCities) continue;
+if (!this.showCities) continue;
             drawMarkerLeader(guiGraphics, markerX, markerY,
                     worldToScreenX(peer.pylonX() + 0.5), worldToScreenY(peer.pylonZ() + 0.5));
             renderCityMarker(guiGraphics, markerX, markerY, peer.own(),
@@ -2362,28 +2108,7 @@ public final class CityMapPanel {
                                 project.controllerPos().getX(), project.controllerPos().getZ()));
             }
         }
-        if (this.showTradeInfrastructure && this.zoom >= MIN_ZOOM) for (EconomyStatePayload.InfrastructureView value : economyInfrastructure) {
-            if (!value.cityOwned() || !dimensionId.equals(value.dimension())) continue;
-            ScreenPoint point = markerPoint(SelectionKind.TRADE_INFRASTRUCTURE, value.id(), value.pos());
-            int x = point.x(), y = point.y();
-            drawMarkerLeader(guiGraphics, x, y,
-                    worldToScreenX(value.pos().getX() + .5), worldToScreenY(value.pos().getZ() + .5));
-            ItemStack icon = value.type() == com.example.examplemod.economy.EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                    ? this.contractIcon : this.warehouseIcon;
-            MapMarkerRenderer.renderMap(guiGraphics, this.zoom, x, y, icon, value.cityOwned(), !value.available(),
-                    matchesTarget(this.hoveredSelection, SelectionKind.TRADE_INFRASTRUCTURE, value.id()),
-                    matchesTarget(this.selection, SelectionKind.TRADE_INFRASTRUCTURE, value.id()));
-            if (inside(mouseX, mouseY, x - 11, y - 11, 22, 22)) deferTooltip(mouseX, mouseY,
-                    Component.translatable(value.type() == com.example.examplemod.economy.EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                            ? "block.createcityexpansioncore.contract_intake" : "block.createcityexpansioncore.warehouse_gateway"),
-                    Component.translatable(value.available() ? "status.createcityexpansioncore.railway.available"
-                            : "status.createcityexpansioncore.railway.missing"),
-                    Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",
-                            value.pos().getX(), value.pos().getZ()));
-        }
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightPoint freight:this.freightPoints){if(!freight.dimension.equals(this.dimensionId))continue;ScreenPoint point=markerPoint(SelectionKind.FREIGHT_POINT,freight.id,freight.postbox);drawMarkerLeader(guiGraphics,point.x(),point.y(),worldToScreenX(freight.postbox.getX()+.5),worldToScreenY(freight.postbox.getZ()+.5));MapMarkerRenderer.renderMap(guiGraphics, this.zoom,point.x(),point.y(),freight.kind==FreightPoint.Kind.HUB?this.hubIcon:this.freightIcon,freight.cityId.equals(ownCityId()),!freight.online(),matchesTarget(this.hoveredSelection,SelectionKind.FREIGHT_POINT,freight.id),matchesTarget(this.selection,SelectionKind.FREIGHT_POINT,freight.id));if(inside(mouseX,mouseY,point.x()-11,point.y()-11,22,22))deferTooltip(mouseX,mouseY,Component.literal(freight.name),Component.translatable("gui.createcityexpansioncore.freight_network.kind."+freight.kind.name().toLowerCase(Locale.ROOT)),Component.literal(freight.stationName),Component.translatable("gui.createcityexpansioncore.world_map.freight."+(freight.online()?"online":"offline")));}
-        if(this.showTradeInfrastructure&&this.zoom>=MIN_ZOOM)for(FreightCandidate candidate:this.freightCandidates){int x=worldToScreenX(candidate.postbox.getX()+.5),y=worldToScreenY(candidate.postbox.getZ()+.5);boolean hovered=inside(mouseX,mouseY,x-8,y-9,16,18),selected=matchesTarget(this.selection,SelectionKind.DISCOVERY,discoveryId(candidate));int pulse=reducedMotion?32:(int)(32+10*Math.sin(System.nanoTime()/650_000_000.0));guiGraphics.fill(x-5,y-7,x+6,y+7,hovered||selected?0xF06B4A20:0xE54A3518);guiGraphics.renderOutline(x-5,y-7,11,14,0xFFFFC45B);if(hovered||selected)guiGraphics.renderOutline(x-7,y-9,15,18,(pulse<<24)|0x00FFC45B);guiGraphics.drawCenteredString(Minecraft.getInstance().font,"!",x,y-4,0xFFFFFFFF);if(hovered)deferTooltip(mouseX,mouseY,Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(candidate.station.isBlank()?candidate.postbox.toShortString():candidate.station));}
-        if(this.showTradeInfrastructure)renderFreightStops(guiGraphics);
+
     }
 
     private void deferTooltip(int mouseX, int mouseY, Component... lines) {
@@ -2401,131 +2126,7 @@ public final class CityMapPanel {
         drawLine(graphics, anchorX, anchorY, x, y, 0x907C6C50);
     }
 
-    private void renderRailway(GuiGraphics graphics, int mouseX, int mouseY) {
-        if (this.showTracks) {
-            double minWorldX = screenToWorldX(this.viewportX) - 8;
-            double maxWorldX = screenToWorldX(this.viewportX + this.viewportWidth) + 8;
-            double minWorldZ = screenToWorldZ(this.viewportY) - 8;
-            double maxWorldZ = screenToWorldZ(this.viewportY + this.viewportHeight) + 8;
-            for (RailwayMapPayload.TrackSegment segment : this.railwayTracks) {
-                if ((segment.x1() < minWorldX && segment.x2() < minWorldX)
-                        || (segment.x1() > maxWorldX && segment.x2() > maxWorldX)
-                        || (segment.z1() < minWorldZ && segment.z2() < minWorldZ)
-                        || (segment.z1() > maxWorldZ && segment.z2() > maxWorldZ)) continue;
-                int x1 = worldToScreenX(segment.x1()), y1 = worldToScreenY(segment.z1());
-                int x2 = worldToScreenX(segment.x2()), y2 = worldToScreenY(segment.z2());
-                int color = this.focus == Focus.RAILWAY ? 0xFFB9B2A2 : 0xFF928B7F;
-                for (int ox=-1;ox<=1;ox++) for(int oy=-1;oy<=1;oy++)
-                    drawLine(graphics,x1+ox,y1+oy,x2+ox,y2+oy,0xF00B1013);
-                drawLine(graphics,x1,y1,x2,y2,color);
-            }
-            for(var section:this.railwaySections){drawSemanticSection(graphics,section);}
-            RailwayMapPayload.RouteView focused = this.selection != null && this.selection.kind() == SelectionKind.ROUTE ? route(this.selection.id()) : null;
-            if (focused != null) graphics.fill(this.viewportX, this.viewportY, this.viewportX + this.viewportWidth, this.viewportY + this.viewportHeight, 0x24101719);
-            for(var route:this.railwayRoutes) {
-                if (focused != null && !focused.id().equals(route.id())) continue;
-                int color=focused!=null||route.selected()?MapPalette.SELECTED:route.status().equals("active")?0xFF8BCDB1:0xFFE0A776;
-                if(focused!=null||route.selected())drawAnimatedRoute(graphics,route,color);
-                else {drawSegments(graphics,route.segments(),0xE0121B20,-1,5);drawSegments(graphics,route.segments(),color,3);}
-            }
-        }
-        // Freight links belong to the logistics overlay, independently of railway visibility.
-        if(this.showTradeInfrastructure)renderFreightJourneys(graphics);
-        if (this.showStations && this.zoom >= MIN_ZOOM) {
-            for (RailwayStationSnapshot station : this.railwayStations) {
-                if (!station.dimension().equals(this.dimensionId)) continue;
-                ScreenPoint point = markerPoint(SelectionKind.STATION, station.registrationId(), station.pos());
-                int x = point.x();
-                int y = point.y();
-                drawMarkerLeader(graphics, x, y,
-                        worldToScreenX(station.pos().getX() + 0.5), worldToScreenY(station.pos().getZ() + 0.5));
-                MapMarkerRenderer.renderMap(graphics, this.zoom, x, y, this.stationIcon, station.cityOwned(),
-                        !station.available(),
-                        matchesTarget(this.hoveredSelection, SelectionKind.STATION, station.registrationId()),
-                        matchesTarget(this.selection, SelectionKind.STATION, station.registrationId()));
-                if (matchesTarget(this.hoveredSelection, SelectionKind.STATION, station.registrationId())
-                        || matchesTarget(this.selection, SelectionKind.STATION, station.registrationId())) {
-                    graphics.drawString(Minecraft.getInstance().font, station.name(), x + 6, y - 4,
-                            station.available() ? 0xFFBEE5ED : 0xFFD6A4A7, true);
-                }
-                if (inside(mouseX, mouseY, x - 11, y - 11, 22, 22)) {
-                    deferTooltip(mouseX, mouseY,
-                            Component.literal(station.name()),
-                            Component.translatable("gui.createcityexpansioncore.railway.station_type."
-                                    + station.type().name().toLowerCase(Locale.ROOT)),
-                            Component.translatable("status.createcityexpansioncore.railway."
-                                    + (station.available() ? "available" : "missing")));
-                }
-            }
-        }
-        if (this.showTrains && this.zoom >= MIN_ZOOM) {
-            double progress = Math.min(1.0,
-                    Math.max(0.0, (System.currentTimeMillis() - this.railwaySnapshotAtMillis) / 1000.0));
-            for (RailwayTrainSnapshot train : this.railwayTrains) {
-                if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
-                TrainPosition previous = this.previousTrainPositions.get(train.fleetTrainId());
-                double xPos = previous != null && previous.dimension().equals(train.dimension())
-                        ? previous.x() + (train.x() - previous.x()) * progress : train.x();
-                double zPos = previous != null && previous.dimension().equals(train.dimension())
-                        ? previous.z() + (train.z() - previous.z()) * progress : train.z();
-                BlockPos trainBlockPos = BlockPos.containing(train.x(), 0, train.z());
-                ScreenPoint point = markerPosition(SelectionKind.TRAIN, train.fleetTrainId(), trainBlockPos,
-                        worldToScreenX(xPos), worldToScreenY(zPos));
-                int x = point.x();
-                int y = point.y();
-                drawMarkerLeader(graphics, x, y, worldToScreenX(xPos), worldToScreenY(zPos));
-                MapMarkerRenderer.renderMap(graphics, this.zoom, x, y, this.trainIcon, train.cityOwned(),
-                        train.automationSuspended(),
-                        matchesTarget(this.hoveredSelection, SelectionKind.TRAIN, train.fleetTrainId()),
-                        matchesTarget(this.selection, SelectionKind.TRAIN, train.fleetTrainId()));
-                if (inside(mouseX, mouseY, x - 11, y - 11, 22, 22)) {
-                    deferTooltip(mouseX, mouseY,
-                            Component.literal(train.name()),
-                            train.lineName().isEmpty()
-                                    ? Component.translatable("status.createcityexpansioncore.railway.no_schedule")
-                                    : Component.literal(train.lineName()),
-                            Component.translatable("status.createcityexpansioncore.railway." + train.statusKey()),
-                            train.nextStation().isEmpty() ? Component.empty()
-                                    : Component.translatable("gui.createcityexpansioncore.railway.next_station",
-                                    train.nextStation()));
-                }
-            }
-            for (RailwayTrainCandidate train : this.railwayTrainCandidates) {
-                if (train.dimension() == null || !train.dimension().equals(this.dimensionId)) continue;
-                BlockPos trainBlockPos = BlockPos.containing(train.x(), 0, train.z());
-                ScreenPoint point = markerPosition(SelectionKind.TRAIN_UNREGISTERED, train.createTrainId(),
-                        trainBlockPos, worldToScreenX(train.x()), worldToScreenY(train.z()));
-                int x = point.x();
-                int y = point.y();
-                drawMarkerLeader(graphics, x, y, worldToScreenX(train.x()), worldToScreenY(train.z()));
-                MapMarkerRenderer.renderMap(graphics, this.zoom, x, y, this.trainIcon, false, true,
-                        matchesTarget(this.hoveredSelection, SelectionKind.TRAIN_UNREGISTERED, train.createTrainId()),
-                        matchesTarget(this.selection, SelectionKind.TRAIN_UNREGISTERED, train.createTrainId()));
-                if (inside(mouseX, mouseY, x - 11, y - 11, 22, 22)) {
-                    deferTooltip(mouseX, mouseY,
-                            Component.literal(train.name()),
-                            Component.translatable("status.createcityexpansioncore.unified.train_unregistered.title"),
-                            train.stationName().isEmpty() ? Component.empty()
-                                    : Component.translatable("gui.createcityexpansioncore.railway.next_station",
-                                    train.stationName()));
-                }
-            }
-        }
-
-        if (!this.drawInternalControls) return;
-        renderLayerButton(graphics, this.layerButtonsX, this.layerButtonsY,
-                Component.translatable("gui.createcityexpansioncore.map.layer.territory_short"), this.showTerritory, mouseX, mouseY);
-        renderLayerButton(graphics, this.layerButtonsX + 34, this.layerButtonsY,
-                Component.translatable("gui.createcityexpansioncore.map.layer.projects_short"), this.showProjects, mouseX, mouseY);
-        renderLayerButton(graphics, this.layerButtonsX + 68, this.layerButtonsY,
-                Component.translatable("gui.createcityexpansioncore.map.layer.tracks_short"), this.showTracks, mouseX, mouseY);
-        renderLayerButton(graphics, this.layerButtonsX + 102, this.layerButtonsY,
-                Component.translatable("gui.createcityexpansioncore.map.layer.stations_short"), this.showStations, mouseX, mouseY);
-        renderLayerButton(graphics, this.layerButtonsX + 136, this.layerButtonsY,
-                Component.translatable("gui.createcityexpansioncore.map.layer.trains_short"), this.showTrains, mouseX, mouseY);
-    }
-
-    private static void renderLayerButton(GuiGraphics graphics, int x, int y, Component label,
+private static void renderLayerButton(GuiGraphics graphics, int x, int y, Component label,
                                           boolean enabled, int mouseX, int mouseY) {
         boolean hovered = inside(mouseX, mouseY, x, y, 30, 12);
         graphics.fill(x, y, x + 30, y + 12, enabled ? 0xD04A3A20 : 0xD0202729);
@@ -2657,9 +2258,7 @@ public final class CityMapPanel {
         return Component.translatable("status.createcityexpansioncore.mine." + key);
     }
 
-    private record TrainPosition(ResourceLocation dimension, double x, double z) {}
-
-    /**
+/**
  * Сообщает карте, где заканчивается доступная область.
  *
      * <p>Правая контекстная колонка World Map лежит поверх карты, и
@@ -2709,10 +2308,7 @@ public final class CityMapPanel {
             case CITIES -> this.peers.size();
             case TERRITORIES -> plotCount();
             case PROJECTS -> (int) this.projects.stream().filter(p -> this.dimensionId.equals(p.dimensionId())).count();
-            case TRACKS -> this.railwayTracks.size();
-            case STATIONS -> (int) this.railwayStations.stream().filter(p -> this.dimensionId.equals(p.dimension())).count();
-            case TRAINS -> (int) this.railwayTrains.stream().filter(p -> this.dimensionId.equals(p.dimension())).count();
-            case TRADE -> freightPointCount();
+            case TRACKS -> this.trackCount;
             case RELATIONS -> (int) this.peers.stream().filter(p -> !p.own() && this.relations.getOrDefault(p.cityId(), CityRelationSnapshot.Status.NONE) != CityRelationSnapshot.Status.NONE).count();
         };
     }
@@ -2761,16 +2357,8 @@ public final class CityMapPanel {
     }
 
     /** Counts for the World Map overview panel; filtered to this dimension so the numbers mean something. */
-    public int freightPointCount() {
-        int total = 0;
-        for (FreightPoint point : this.freightPoints) if (point.dimension.equals(this.dimensionId)) total++;
-        return total;
-    }
 
-    /** Unregistered Postbox/Packager pairs the player could still turn into a Freight Point. */
-    public int freightCandidateCount() { return this.freightCandidates.size(); }
-
-    public void setPresentation(boolean grid, boolean overview) { this.showCoordinateGrid = grid; this.showOverview = overview; }
+public void setPresentation(boolean grid, boolean overview) { this.showCoordinateGrid = grid; this.showOverview = overview; }
     public boolean coordinateGrid() { return this.showCoordinateGrid; }
     public boolean overviewVisible() { return this.showOverview; }
     public double centerX() { return this.centerX; }
@@ -2782,6 +2370,11 @@ public final class CityMapPanel {
     }
     public double centerZ() { return this.centerZ; }
     public double zoom() { return this.zoom; }
+    public ResourceLocation dimensionId() { return this.dimensionId; }
+    public int viewportLeft() { return this.viewportX; }
+    public int viewportTop() { return this.viewportY; }
+    public int viewportRight() { return this.viewportX + this.viewportWidth; }
+    public int viewportBottom() { return this.viewportY + this.viewportHeight; }
     public void restoreView(double x, double z, double zoom) {
         if (!Double.isFinite(x) || !Double.isFinite(z) || !Double.isFinite(zoom)) return;
         stopMotion();
@@ -2860,11 +2453,17 @@ public final class CityMapPanel {
     }
     public void retryTerrain() { this.failedTiles.clear(); this.tileAttempts.clear(); this.requestedTiles.clear(); }
 
-    public enum Overlay { CITIES, TERRITORIES, PROJECTS, TRACKS, STATIONS, TRAINS, TRADE, RELATIONS }
+    public enum Overlay { CITIES, TERRITORIES, PROJECTS, RELATIONS, TRACKS;
+        /**
+         * Bits are frozen by saved preferences. TRACKS keeps its historical bit 3 and RELATIONS its
+         * historical bit 7, so adding the enum constant at the end cannot silently reshuffle either.
+         */
+        public int preferenceBit(){return this==TRACKS?3:this==RELATIONS?7:ordinal();}
+    }
 
-    public enum Focus { WORLD, RAILWAY, TRADE, ENERGY }
+    public enum Focus { WORLD, ENERGY }
 
-    public enum SelectionKind { WAYPOINT, PLAYER, CITY, STATION, TRAIN, TRAIN_UNREGISTERED, INDUSTRY, TRADE_INFRASTRUCTURE, FREIGHT_POINT, DISCOVERY, RAILWAY_SECTION, ROUTE }
+    public enum SelectionKind { WAYPOINT, PLAYER, CITY, INDUSTRY }
 
     public record Selection(SelectionKind kind, UUID id, Component title, BlockPos pos,
                             boolean own, List<Component> details, ItemStack icon, boolean warning) {
@@ -2882,13 +2481,8 @@ public final class CityMapPanel {
     }
 
     private record MarkerEntry(MarkerKey key, double worldX, double worldZ, int priority) {}
-    private record FreightLink(UUID id,UUID source,UUID destination,String status) {}
-    private record FreightCandidate(BlockPos postbox,BlockPos packager,String station) {}
 
-    private UUID discoveryId(FreightCandidate value){return UUID.nameUUIDFromBytes((this.dimensionId+":"+value.postbox.asLong()+":"+value.packager.asLong()).getBytes(StandardCharsets.UTF_8));}
-    private Selection discoverySelection(FreightCandidate value){return new Selection(SelectionKind.DISCOVERY,discoveryId(value),Component.translatable("gui.createcityexpansioncore.world_map.discovery.title"),value.postbox,true,List.of(Component.translatable("gui.createcityexpansioncore.world_map.discovery.freight"),Component.literal(value.station.isBlank()?value.postbox.toShortString():value.station),Component.translatable("gui.createcityexpansioncore.world_map.discovery.setup_hint")),this.freightIcon,true);}
-
-    private Selection peerSelection(CityMapPeersPayload.Peer peer) {
+private Selection peerSelection(CityMapPeersPayload.Peer peer) {
         var profile = com.example.examplemod.client.CityPublicDirectory.profile(peer.cityId());
         List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.context.plots",profile == null ? peer.plots().size() : profile.plots()));if(peer.master())details.add(Component.translatable("gui.createcityexpansioncore.world_map.master_city"));
         CityRelationSnapshot.Status relation = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
@@ -2918,55 +2512,9 @@ public final class CityMapPanel {
                 ? minecraft.player.blockPosition() : null;
     }
 
-    private Selection stationSelection(RailwayStationSnapshot station) {
-        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.railway.station_type."+station.type().name().toLowerCase(Locale.ROOT)));details.add(Component.translatable("status.createcityexpansioncore.railway."+(station.available()?"available":"missing")));this.freightPoints.stream().filter(point->station.name().equals(point.stationName)).findFirst().ifPresent(point->details.add(Component.translatable("gui.createcityexpansioncore.world_map.station.freight",point.name)));
-        return new Selection(SelectionKind.STATION, station.registrationId(), Component.literal(station.name()),
-                station.pos(), station.cityOwned(), details,
-                this.stationIcon, !station.available());
-    }
+/** A Create train the player has not registered yet: card explains the gap and offers the fix. */
 
-    private Selection trainSelection(RailwayTrainSnapshot train) {
-        List<Component> details = new ArrayList<>();
-        details.add(CcecStatusUi.title(train.uiStatus()));
-        details.add(Component.translatable("status.createcityexpansioncore.railway." + train.statusKey()));
-        details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.owner",
-                Component.literal(train.ownerLabel())));
-        details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.station",
-                train.currentStation().isEmpty() ? Component.literal("—") : Component.literal(train.currentStation())));
-        details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.line",
-                train.lineName().isEmpty() ? Component.literal("—") : Component.literal(train.lineName())));
-        details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.type",
-                Component.translatable("gui.createcityexpansioncore.railway.train_type."
-                        + train.type().name().toLowerCase(Locale.ROOT))));
-        if (!train.activeTrip().isEmpty()) {
-            details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.trip",
-                    Component.translatable("gui.createcityexpansioncore.railway.trip_status." + train.activeTrip())));
-        }
-        if (!train.activeShipment().isEmpty()) {
-            details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.shipment",
-                    Component.translatable("gui.createcityexpansioncore.railway.shipment_status." + train.activeShipment())));
-        }
-        return new Selection(SelectionKind.TRAIN, train.fleetTrainId(), Component.literal(train.name()),
-                BlockPos.containing(train.x(), 0, train.z()), train.canManage(), details,
-                this.trainIcon, train.automationSuspended());
-    }
-
-    /** A Create train the player has not registered yet: card explains the gap and offers the fix. */
-    private Selection unregisteredTrainSelection(RailwayTrainCandidate train) {
-        var status = CcecStatusResolver.unregisteredTrain();
-        List<Component> details = new ArrayList<>();
-        details.add(CcecStatusUi.title(status));
-        details.add(CcecStatusUi.reason(status));
-        if (!train.stationName().isEmpty()) {
-            details.add(Component.translatable("gui.createcityexpansioncore.world_map.train.station",
-                    Component.literal(train.stationName())));
-        }
-        return new Selection(SelectionKind.TRAIN_UNREGISTERED, train.createTrainId(), Component.literal(train.name()),
-                BlockPos.containing(train.x(), 0, train.z()), train.canManage(), details,
-                this.trainIcon, true);
-    }
-
-    private Selection projectSelection(CityProjectSnapshot project) {
+private Selection projectSelection(CityProjectSnapshot project) {
         return new Selection(SelectionKind.INDUSTRY, project.projectId(),
                 Component.translatable("gui.createcityexpansioncore.project.industrial_mine"),
                 project.controllerPos(), true, List.of(
@@ -2976,234 +2524,25 @@ public final class CityMapPanel {
                 this.mineIcon, !"RUNNING".equals(project.status()));
     }
 
-    private Selection infrastructureSelection(EconomyStatePayload.InfrastructureView value) {
-        return new Selection(SelectionKind.TRADE_INFRASTRUCTURE, value.id(), infrastructureName(value),
-                value.pos(), value.cityOwned(), List.of(Component.translatable(value.available()
-                ? "status.createcityexpansioncore.railway.available"
-                : "status.createcityexpansioncore.railway.missing")),
-                value.type() == com.example.examplemod.economy.EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                        ? this.contractIcon : this.warehouseIcon, !value.available());
-    }
+private static double distanceToSegment(double px,double py,double x1,double y1,double x2,double y2){double dx=x2-x1,dy=y2-y1;if(dx==0&&dy==0)return Math.hypot(px-x1,py-y1);double t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy)));return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));}
 
-    private Selection freightSelection(FreightPoint point){String city=cityName(point.cityId);List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.freight_network.kind."+point.kind.name().toLowerCase(Locale.ROOT)));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.city",city));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight.station",point.stationName.isBlank()?"—":point.stationName));if(point.kind==FreightPoint.Kind.HUB)details.add(Component.translatable("gui.createcityexpansioncore.freight_network."+(point.publicTransit?"public":"private")));details.add(Component.translatable("gui.createcityexpansioncore.world_map.freight."+(point.online()?"online":"offline")));return new Selection(SelectionKind.FREIGHT_POINT,point.id,Component.literal(point.name),point.postbox,point.cityId.equals(ownCityId()),details,point.kind==FreightPoint.Kind.HUB?this.hubIcon:this.freightIcon,!point.online());}
-    private void drawFreightSchematic(GuiGraphics g,int x0,int y0,int x1,int y1,int color){
-        drawFreightSchematic(g,x0,y0,x1,y1,color,false,false);
-    }
-    private void drawFreightSchematic(GuiGraphics g,int x0,int y0,int x1,int y1,int color,boolean selected,boolean running){
-        var line=MapLineClip.clip(x0,y0,x1,y1,viewportX,viewportY,viewportX+viewportWidth,viewportY+viewportHeight);if(line==null)return;
-        double dx=(double)line.x2()-line.x1(),dy=(double)line.y2()-line.y1();int steps=(int)Math.ceil(Math.max(Math.abs(dx),Math.abs(dy)));
-        int phase=selected&&running&&motionEnabled&&!reducedMotion?(int)(System.nanoTime()/55_000_000L%12):0;
-        if(selected)for(int i=0;i<=steps;i++){
-            double f=steps==0?0:i/(double)steps;int x=(int)Math.round(line.x1()+dx*f),y=(int)Math.round(line.y1()+dy*f);
-            g.fill(x-2,y-2,x+3,y+3,0xA912191D);
-        }
-        for(int i=0;i<=steps;i++){
-            double f=steps==0?0:i/(double)steps;int x=(int)Math.round(line.x1()+dx*f),y=(int)Math.round(line.y1()+dy*f);
-            if(((i-phase)%12+12)%12<7)g.fill(x,y,x+(selected?2:1),y+(selected?2:1),color);
-        }
-        if(selected&&steps>28){
-            double length=Math.hypot(dx,dy),ux=dx/length,uy=dy/length;
-            for(double distance=26;distance<length;distance+=64){
-                int x=(int)Math.round(line.x1()+ux*distance),y=(int)Math.round(line.y1()+uy*distance);
-                drawLine(g,x,y,(int)Math.round(x-ux*5-uy*3),(int)Math.round(y-uy*5+ux*3),color);
-                drawLine(g,x,y,(int)Math.round(x-ux*5+uy*3),(int)Math.round(y-uy*5-ux*3),color);
-            }
-        }
-    }
-    private void renderFreightJourneys(GuiGraphics g){
-        var focused=focusedFreightJourney();
-        for(var link:this.freightLinks){
-            var journey=this.freightJourneys.get(link.id());boolean selected=link.id().equals(this.focusedFreightShipment);
-            if(journey==null||journey.closed()&&!selected)continue;
-            var from=freight(link.source());var to=freight(link.destination());
-            if(from==null||to==null||!from.dimension.equals(this.dimensionId)||!to.dimension.equals(this.dimensionId))continue;
-            int selectedColor=motionEnabled?DispatchPalette.SELECTED:MapPalette.SELECTED;
-            int color=selected?freightHasRailGeometry()?MapPalette.argb(selectedColor,153):selectedColor:focused==null?0xB37FA9A9:0x387F9494;
-            drawFreightSchematic(g,worldToScreenX(from.postbox.getX()+.5),worldToScreenY(from.postbox.getZ()+.5),worldToScreenX(to.postbox.getX()+.5),worldToScreenY(to.postbox.getZ()+.5),color,selected,journey.running()&&!journey.closed());
-        }
-        if(focused==null)return;
-        if(freightHasRailGeometry()){
-            if(motionEnabled&&!reducedMotion)drawAnimatedRoute(g,route(focused.routeSelection()),MapPalette.SELECTED);
-            else drawSegments(g,route(focused.routeSelection()).segments(),motionEnabled?DispatchPalette.SELECTED:MapPalette.SELECTED,3);
-        }
-        // This moving seal is explicitly labelled as schematic direction in the shipment card.
-        if(reducedMotion||!motionEnabled||!focused.running()||focused.closed()||focused.source()==null||focused.inFlight()<=0||freightHasRailGeometry())return;
-        var path=new ArrayList<ShipmentRouteGeometry.Point>();
-        for(UUID id:focused.stops()){
-            var point=freight(id);if(point==null||!point.dimension.equals(this.dimensionId))return;
-            path.add(new ShipmentRouteGeometry.Point(point.postbox.getX()+.5,point.postbox.getZ()+.5));
-        }
-        var cursor=ShipmentRouteGeometry.sample(path,(System.nanoTime()%8_000_000_000L)/8_000_000_000.0);
-        if(cursor==null)return;int x=worldToScreenX(cursor.point().x()),y=worldToScreenY(cursor.point().z());
-        if(!insideViewport(x,y))return;
-        g.fill(x-7,y-6,x+8,y+7,0xF0141B20);g.renderOutline(x-6,y-5,13,11,DispatchPalette.SELECTED);
-        g.fill(x-1,y-4,x+2,y+5,DispatchPalette.SELECTED);g.hLine(x-5,x+5,y-2,DispatchPalette.SELECTED);
-    }
-    private void renderFreightStops(GuiGraphics g){
-        var journey=focusedFreightJourney();if(journey==null)return;var font=Minecraft.getInstance().font;
-        for(int i=0;i<journey.stops().size();i++){
-            var stop=freight(journey.stops().get(i));if(stop==null||!stop.dimension.equals(this.dimensionId))continue;
-            var p=markerPoint(SelectionKind.FREIGHT_POINT,stop.id,stop.postbox);int x=p.x(),y=p.y();
-            if(x<viewportX-32||x>viewportX+viewportWidth+32||y<viewportY-32||y>viewportY+viewportHeight+32)continue;
-            int color=stop.online()?(motionEnabled?DispatchPalette.SELECTED:MapPalette.SELECTED):MapPalette.ALERT;
-            g.renderOutline(x-13,y-13,26,26,color);
-            String number=Integer.toString(i+1);int badgeWidth=Math.max(11,font.width(number)+5);
-            g.fill(x+6,y-17,x+6+badgeWidth,y-5,0xFF182126);g.renderOutline(x+6,y-17,badgeWidth,12,color);
-            g.drawString(font,number,x+9,y-15,color,false);
-            if(this.zoom>=.12){
-                String name=font.plainSubstrByWidth(stop.name,94);int width=font.width(name);
-                g.fill(x-width/2-4,y+15,x+(width+1)/2+4,y+28,0xE9182025);
-                g.drawString(font,name,x-width/2,y+18,MapPalette.TEXT,false);
-            }
-        }
-    }
-    private Selection findSectionSelection(double mouseX, double mouseY) {
-        for (var section : this.railwaySections)
-            if (hitSegments(section.segments(), mouseX, mouseY, 5)) return sectionSelection(section);
-        return null;
-    }
-    private Selection sectionSelection(RailwayMapPayload.SectionView section) {
-        var network=network(section.networkId());String owner=network==null?"?":network.ownerName();List<Component> details=List.of(Component.translatable("gui.createcityexpansioncore.world_map.rail.owner",owner),Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.owner_type."+network.ownerType().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.length",String.format(Locale.ROOT,"%.1f",section.length())),Component.translatable("gui.createcityexpansioncore.world_map.rail.access",network==null?"?":Component.translatable("gui.createcityexpansioncore.world_map.rail.access."+network.access().name().toLowerCase(Locale.ROOT))),Component.translatable("gui.createcityexpansioncore.world_map.rail.tariff",network==null?0:network.tariff()),Component.translatable("gui.createcityexpansioncore.world_map.rail.status",Component.translatable("gui.createcityexpansioncore.world_map.rail.status."+section.status().name().toLowerCase(Locale.ROOT))));return new Selection(SelectionKind.RAILWAY_SECTION,section.id(),Component.literal(network==null?shortId(section.networkId()):network.name()),midpoint(section.segments()),ownsNetwork(network),details,this.networkIcon,section.status()!=com.example.examplemod.railway.RailwayOwnershipTypes.SectionStatus.ONLINE);
-    }
-    private Selection findRouteSelection(double mouseX, double mouseY) {
-        for (var route : this.railwayRoutes)
-            if (hitSegments(route.segments(), mouseX, mouseY, 6)) return routeSelection(route);
-        return null;
-    }
-    private Selection routeSelection(RailwayMapPayload.RouteView route) {
-        List<Component> details=new ArrayList<>();details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.distance",String.format(Locale.ROOT,"%.1f",route.distance())));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.price",route.price()));if(route.etaTicks()>0)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.eta",route.etaTicks()/20));String strategy=this.routeStrategies.get(route.id());if(strategy!=null)details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.strategy",Component.translatable("gui.createcityexpansioncore.railway.route.strategy."+strategy.toLowerCase(Locale.ROOT))));details.add(Component.translatable("gui.createcityexpansioncore.world_map.route.status",route.status()));return new Selection(SelectionKind.ROUTE,route.id(),Component.translatable(route.selected()?"gui.createcityexpansioncore.world_map.route.selected":"gui.createcityexpansioncore.world_map.route.active"),midpoint(route.segments()),true,details,this.networkIcon,!route.status().equals("active")&&!route.selected());
-    }
-    private boolean hitSegments(List<RailwayMapPayload.TrackSegment> segments,double mouseX,double mouseY,double radius){for(var s:segments)if(distanceToSegment(mouseX,mouseY,worldToScreenX(s.x1()),worldToScreenY(s.z1()),worldToScreenX(s.x2()),worldToScreenY(s.z2()))<=radius)return true;return false;}
-    private static double distanceToSegment(double px,double py,double x1,double y1,double x2,double y2){double dx=x2-x1,dy=y2-y1;if(dx==0&&dy==0)return Math.hypot(px-x1,py-y1);double t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy)));return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));}
-    private static BlockPos midpoint(List<RailwayMapPayload.TrackSegment> values){if(values.isEmpty())return BlockPos.ZERO;var s=values.get(values.size()/2);return BlockPos.containing((s.x1()+s.x2())/2,0,(s.z1()+s.z2())/2);}
-    private void drawSegments(GuiGraphics graphics,List<RailwayMapPayload.TrackSegment> values,int color,int width){drawSegments(graphics,values,color,0,width);}
-    private void drawSegments(GuiGraphics graphics,List<RailwayMapPayload.TrackSegment> values,int color,int start,int count){
-        for(var s:values){int x1=worldToScreenX(s.x1()),y1=worldToScreenY(s.z1()),x2=worldToScreenX(s.x2()),y2=worldToScreenY(s.z2());double length=Math.max(1,Math.hypot(x2-x1,y2-y1));double nx=-(y2-y1)/length,ny=(x2-x1)/length;for(int offset=start;offset<start+count;offset++){double band=offset-(count-1)/2.0-start;int dx=(int)Math.round(nx*band),dy=(int)Math.round(ny*band);drawLine(graphics,x1+dx,y1+dy,x2+dx,y2+dy,color);}}
-    }
-
-    /**
-     * How a railway line reads on the atlas. Colour alone is not the contract: every class also has
-     * its own inner width and is named in the railway legend, so ownership and access survive a
-     * greyscale screenshot or a colour-blind reader.
-     */
-    public enum RailClass { OWN, PUBLIC_FREE, PUBLIC_PAID, PRIVATE, OFFLINE }
-
-    /**
+/**
      * Classifies one section from data the server already sends. Deliberately takes primitives so
      * the policy is verified headless instead of only through a rendered frame.
      *
      * <p>An offline section is reported as such whatever its access is: a dark, dead line must not
      * keep advertising a tariff or an ownership as if it were usable.
      */
-    public static RailClass classifyRail(boolean own,boolean isPublic,long tariff,boolean online) {
-        if (!online) return RailClass.OFFLINE;
-        if (own) return RailClass.OWN;
-        if (!isPublic) return RailClass.PRIVATE;
-        return tariff > 0L ? RailClass.PUBLIC_PAID : RailClass.PUBLIC_FREE;
-    }
 
-    /** Inner line colour. Paid public track is the one saturated colour on the map, on purpose. */
-    public static int railInnerColor(RailClass kind) {
-        return switch (kind) {
-            case OWN -> 0xFFC7D0D6;
-            case PUBLIC_FREE -> 0xFF7FA8BE;
-            case PUBLIC_PAID -> 0xFF70C58E;
-            case PRIVATE -> 0xFFB47B79;
-            case OFFLINE -> 0xFF6E777C;
-        };
-    }
+/** Inner line colour. Paid public track is the one saturated colour on the map, on purpose. */
 
-    /** Outline under every railway line, so it reads on terrain, territory fills and each other. */
-    public static int railOutlineColor(RailClass kind) {
-        return kind == RailClass.PRIVATE || kind == RailClass.OFFLINE ? 0xE00A0507 : 0xE00B0F11;
-    }
+/** Inner width. Paid and own track are the heaviest, private the lightest. */
 
-    /** Inner width. Paid and own track are the heaviest, private the lightest. */
-    public static int railInnerWidth(RailClass kind) {
-        return switch (kind) {
-            case OWN -> 3;
-            case PUBLIC_PAID -> 3;
-            case PUBLIC_FREE -> 2;
-            case PRIVATE, OFFLINE -> 1;
-        };
-    }
-
-    private void drawSemanticSection(GuiGraphics graphics,RailwayMapPayload.SectionView section) {
-        RailwayMapPayload.NetworkView network = network(section.networkId());
-        RailClass kind = classifyRail(
-                ownsNetwork(network),
-                network != null && network.access() == com.example.examplemod.railway.RailwayOwnershipTypes.Access.PUBLIC,
-                network == null ? 0L : network.tariff(),
-                section.status() == com.example.examplemod.railway.RailwayOwnershipTypes.SectionStatus.ONLINE);
-        int inner = railInnerWidth(kind);
-        // Dark first, one pixel above and below the colour band, then the semantic colour on top.
-        drawSegments(graphics, section.segments(), railOutlineColor(kind), -1, inner + 2);
-        drawSegments(graphics, section.segments(), railInnerColor(kind), 0, inner);
-        // Carry screen distance across tessellated curves: two-block samples still get tariff ticks.
-        if (kind == RailClass.PUBLIC_PAID) {
-            double remaining=28;
-            for (var segment:section.segments()) {
-                int x1=worldToScreenX(segment.x1()),y1=worldToScreenY(segment.z1());
-                int x2=worldToScreenX(segment.x2()),y2=worldToScreenY(segment.z2());
-                double length=Math.hypot((double)x2-x1,(double)y2-y1);
-                if(length<=0)continue;
-                var visible=MapLineClip.clip(x1,y1,x2,y2,viewportX,viewportY,viewportX+viewportWidth,viewportY+viewportHeight);
-                double from=visible==null?length+1:Math.hypot((double)visible.x1()-x1,(double)visible.y1()-y1);
-                double to=visible==null?-1:Math.hypot((double)visible.x2()-x1,(double)visible.y2()-y1);
-                double first=remaining+Math.max(0,Math.ceil((from-remaining)/28))*28;
-                for(double offset=first;offset<=to;offset+=28){
-                    int px=(int)Math.round(x1+(x2-x1)*offset/length),py=(int)Math.round(y1+(y2-y1)*offset/length);
-                    if(px<viewportX||py<viewportY||px>viewportX+viewportWidth||py>viewportY+viewportHeight)continue;
-                    graphics.fill(px-1,py-2,px+2,py+3,0xFF123726);graphics.fill(px,py-1,px+1,py+2,0xFFB6F5CD);
-                }
-                remaining=28-((length-remaining)%28+28)%28;
-            }
-        }
-    }
-
-    private void drawAnimatedRoute(GuiGraphics graphics,RailwayMapPayload.RouteView route,int color) {
-        if(route.segments().isEmpty())return;
-        long now=System.nanoTime();
-        if(motionEnabled)color=DispatchPalette.SELECTED;
-        RouteAnimation animation=routeAnimations.get(route.id());
-        if(animation==null||!animation.source.equals(route.segments())) {
-            animation=new RouteAnimation(route.segments(),now);routeAnimations.put(route.id(),animation);
-            while(routeAnimations.size()>32)routeAnimations.remove(routeAnimations.keySet().iterator().next());
-        } else if(now-animation.seen>500_000_000L)animation.started=now;
-        animation.seen=now;
-        double reveal=!motionEnabled||reducedMotion||animation.chain.isEmpty()?1:MapMotion.ease((now-animation.started)/350_000_000.0);
-        int alpha=!motionEnabled||reducedMotion?36:(int)(36+12*Math.sin(now/1_100_000_000.0));
-        drawSegments(graphics,route.segments(),(alpha<<24)|(color&0xFFFFFF),-2,9);
-        drawSegments(graphics,route.segments(),0xF011181D,-1,5);
-        drawSegments(graphics,route.segments(),reveal<1?DispatchMotion.tint(DispatchPalette.EDGE,color,.3):color,3);
-        if(reveal<1)for(var edge:RouteRevealGeometry.prefix(animation.chain,reveal)) {
-            int x1=worldToScreenX(edge.from().x()),y1=worldToScreenY(edge.from().z());
-            int x2=worldToScreenX(edge.to().x()),y2=worldToScreenY(edge.to().z());
-            for(int offset=-1;offset<=1;offset++)drawLine(graphics,x1,y1+offset,x2,y2+offset,color);
-        }
-        var first=route.segments().getFirst();var last=route.segments().getLast();
-        for(var point:List.of(new double[]{first.x1(),first.z1()},new double[]{last.x2(),last.z2()})) {
-            int x=worldToScreenX(point[0]),y=worldToScreenY(point[1]);
-            graphics.fill(x-3,y-3,x+4,y+4,0xFF172025);
-            graphics.renderOutline(x-3,y-3,7,7,color);graphics.fill(x-1,y-1,x+2,y+2,color);
-        }
-    }
-    private RailwayMapPayload.RouteView route(UUID id){return railwayRoutes.stream().filter(value->value.id().equals(id)).findFirst().orElse(null);}
-    private RailwayMapPayload.NetworkView network(UUID id){return railwayNetworks.stream().filter(value->value.id().equals(id)).findFirst().orElse(null);}
-    private boolean ownsNetwork(RailwayMapPayload.NetworkView network){if(network==null)return false;if(network.ownerType()==com.example.examplemod.railway.RailwayOwnershipTypes.OwnerType.CITY)return network.ownerId().equals(ownCityId());return Minecraft.getInstance().player!=null&&network.ownerId().equals(Minecraft.getInstance().player.getUUID());}
-    private FreightPoint freight(UUID id){return freightPoints.stream().filter(value->value.id.equals(id)).findFirst().orElse(null);}
-    private UUID ownCityId(){return peers.stream().filter(CityMapPeersPayload.Peer::own).map(CityMapPeersPayload.Peer::cityId).findFirst().orElse(null);}
+private UUID ownCityId(){return peers.stream().filter(CityMapPeersPayload.Peer::own).map(CityMapPeersPayload.Peer::cityId).findFirst().orElse(null);}
     private String cityName(UUID id){return peers.stream().filter(peer->peer.cityId().equals(id)).map(CityMapPeersPayload.Peer::name).findFirst().orElse(shortId(id));}
     private static String shortId(UUID id){return id==null?"?":id.toString().substring(0,8);}
 
-    private static Component infrastructureName(EconomyStatePayload.InfrastructureView value) {
-        return Component.translatable(value.type()
-                == com.example.examplemod.economy.EconomyTypes.InfrastructureType.CONTRACT_INTAKE
-                ? "block.createcityexpansioncore.contract_intake"
-                : "block.createcityexpansioncore.warehouse_gateway");
-    }
-
-    private static boolean sameTarget(Selection first, Selection second) {
+private static boolean sameTarget(Selection first, Selection second) {
         if (first == second) return true;
         if (first == null || second == null || first.kind() != second.kind()) return false;
         return first.id() != null ? first.id().equals(second.id()) : first.pos().equals(second.pos());

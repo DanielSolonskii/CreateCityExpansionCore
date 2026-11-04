@@ -1,6 +1,6 @@
 # Разработка CCEC
 
-Актуализировано: **2026-11-02**. Этот документ относится к Minecraft-моду в корне репозитория. Вложенные backend, launcher и bot имеют собственные сборки: [platform/STATE.md](platform/STATE.md).
+Актуализировано: **2026-11-04**. Этот документ относится к Minecraft-моду в корне репозитория. Вложенные backend, launcher и bot имеют собственные сборки: [platform/STATE.md](platform/STATE.md).
 
 ## Среда
 
@@ -44,7 +44,7 @@ $env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
 git diff --check
 ```
 
-Уберите `--offline`, если зависимости ещё не загружены. `check` включает проверки финансовых реестров и миграций, доставки/отмены/дорожных расходов, Railway, территории и разрешений, геологии, проектов, профиля/сообщества, HUD, ресурсов и геометрии интерфейсов. Актуальные задачи определяет [build.gradle](build.gradle).
+Уберите `--offline`, если зависимости ещё не загружены. `check` включает проверки финансовых реестров и миграций, действующей Cargo-доставки/маршрутов, территории и разрешений, геологии, проектов, профиля/сообщества, HUD, ресурсов и геометрии интерфейсов. Актуальные задачи определяет [build.gradle](build.gradle).
 
 Редакторы рецептов имеют отдельные init scripts и не включены в обычный `check`:
 
@@ -53,18 +53,19 @@ git diff --check
 .\gradlew.bat checkSequenceRecipe -I src/main/java/com/example/examplemod/devtools/check-sequence.gradle --offline --no-configuration-cache
 ```
 
-[Описание devtools](src/main/java/com/example/examplemod/devtools/README.md). Фактические результаты полного прогона: [аудит](docs/audit-2026-11-02/README.md).
+[Описание devtools](src/main/java/com/example/examplemod/devtools/README.md). Фактические результаты полного прогона: [аудит](docs/audit-2026-11-04/README.md).
 
 ## Граница проверок
 
-Успешный Gradle подтверждает компиляцию и выполненные проверки кода. Финансовые и Railway checks также используют настоящий DimensionDataStorage с изолированными файлами: future-format, cache, native async save и поддерживаемый формат. Он не подтверждает OpenGL, GUI Scale, реальный обмен Create Postbox/поезд, поведение Sable/Simulated или сетевую приёмку живого Minecraft.
+Успешный Gradle подтверждает компиляцию и выполненные проверки кода. Native storage regression checks используют настоящий DimensionDataStorage с изолированными файлами: future-format, cache, native async save и поддерживаемый формат. Проверки удалённого Railway в старой квитанции не являются проверкой Cargo. Он не подтверждает OpenGL, GUI Scale, реальный обмен Create Postbox/поезд, поведение Sable/Simulated или сетевую приёмку живого Minecraft.
 
-Для изменений логистики используйте [игровой checklist](docs/logistics/logistics-audit-2026-11-02-ru.md). Для остальных доменов проверяйте взаимодействия, роли/отказы, сохранение после перезахода и перезапуска на отдельном тестовом мире. Установленную клиентскую/серверную сборку определяйте по версии и хэшу фактического JAR.
+Для изменений логистики используйте [актуальный Cargo checklist](docs/audit-2026-11-04/README.md). Для остальных доменов проверяйте взаимодействия, роли/отказы, сохранение после перезахода и перезапуска на отдельном тестовом мире. Установленную клиентскую/серверную сборку определяйте по версии и хэшу фактического JAR.
 
 ## Сохранения
 
-- Economy: формат 13, включая частичное закрытие отменённых доставок. Ошибки codec не должны превращаться в пустые счета через native SavedData fallback.
-- Railway: формат 5; будущий формат удерживается как raw-data, доступ блокируется после native SavedData loader.
+- Целевая версия CCEC 1.0.2.15: Economy FormatVersion 16, CargoCommerce Version 2, Cargo shipments Version 2; чтение действующих production Economy 15 / Cargo Version 1 должно проверяться миграциями.
+- Остальные Cargo SavedData: Version 1. Старые Freight/Railway удалены из действующей базы, их задачи не следует восстанавливать только ради старого checklist.
+- `META-INF/ccec-save-formats.json` объявляет диапазоны для preflight release helper; metadata и реальные decoder constants проверяются вместе. Ошибки codec не должны превращаться в пустые счета через native SavedData fallback.
 - Geology: формат 4 и generator 2. Переход со старого генератора намеренно пересоздаёт геологию; это отдельное правило, а не обычная миграция остатка залежи.
 - Другие реестры и их границы перечислены в [CURRENT_STATE.md](CURRENT_STATE.md).
 
@@ -91,5 +92,5 @@ node .gitnexus/run.cjs detect-changes --scope all --repo .
 - [MASTER_CONTEXT](MASTER_CONTEXT.md) — принципы и архитектура.
 - [DECISIONS](DECISIONS.md) — решения и актуальные уточнения.
 - [GUIDE_RU](GUIDE_RU.md) — действия игрока.
-- [Аудит](docs/audit-2026-11-02/README.md) — проверки и evidence.
+- [Аудит](docs/audit-2026-11-04/README.md) — проверки и evidence.
 - Датированные прежние отчёты сохраняют исторические факты и не определяют текущий production.

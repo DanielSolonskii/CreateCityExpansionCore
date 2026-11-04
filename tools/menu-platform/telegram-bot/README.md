@@ -1,5 +1,7 @@
 # Create Server Telegram bot — архив milestone 3
 
+**Исторический срез. Навигация сверена 2026-11-04.** Результаты и версии ниже относятся к указанной прежней дате; действующая Cargo-база и интеграция CCEC 1.0.2.15 описаны в [актуальном аудите](../../../docs/audit-2026-11-04/README.md).
+
 **Архивный source-пакет; проверено 02.11.2026.** Здесь нет `build.gradle`,
 `settings.gradle` и Gradle wrapper. Команды сборки из этого каталога неприменимы.
 Текущий bot находится в [platform/telegram-bot](../../../platform/telegram-bot/README.md),

@@ -5,6 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "plugin": "com.example.examplemod.mixin.TransportMixinPlugin",
   "mixins": [
+    "PackagerCargoReceiptMixin",
+    "GlobalStationCargoMixin",
     "CarriageBogeyAccessor",
     "LevelBlockGrantMixin",
     "ContraptionInteractionPacketMixin",

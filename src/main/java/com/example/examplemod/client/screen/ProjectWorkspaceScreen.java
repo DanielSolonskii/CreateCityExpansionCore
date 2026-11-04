@@ -47,7 +47,6 @@ public final class ProjectWorkspaceScreen extends CommunityPage {
         clip(g);int y=0;
         if(project==null){var r=row(0,80);text(g,Component.translatable("gui.createcityexpansioncore.projects.result."+result),r.x()+14,r.y()+24,r.width()-28,MUTED);}
         else if(tab==0){
-            var supply=row(y,34);button(g,supply,Component.translatable("gui.createcityexpansioncore.trade.supplies"),()->RemoteMarketEntry.supplies(this,project.id(),project.title()),project.scope()==Project.Scope.CITY&&confirmation==null,false);y+=42;
             var r=row(y,66);card(g,r,ACCENT);person(g,project.author(),tr("author"),r.x()+12,r.y()+10,240);if(project.executor()!=null)person(g,project.executor().representative(),tr(project.executor().kind()==Project.ApplicantKind.CITY?"city_representative":"executor"),r.x()+295,r.y()+10,260);else text(g,tr("unassigned"),r.x()+300,r.y()+22,260,MUTED);y+=76;
             for(var line:font.split(Component.literal(project.description()),550)){r=row(y,14);g.drawString(font,line,r.x()+12,r.y(),TEXT,false);y+=14;}y+=10;
             if(!project.reviewNote().isBlank()){r=row(y,50);card(g,r,0xffd19478);text(g,tr("review_note"),r.x()+12,r.y()+8,550,ACCENT);text(g,Component.literal(project.reviewNote()),r.x()+12,r.y()+28,550,TEXT);hint(r,Component.literal(project.reviewNote()));y+=60;}

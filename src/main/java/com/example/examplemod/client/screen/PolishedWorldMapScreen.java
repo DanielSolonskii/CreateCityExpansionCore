@@ -13,13 +13,8 @@ import com.example.examplemod.client.map.DispatchPalette;
 import com.example.examplemod.client.map.MapPresentationDraw;
 import java.nio.file.Path;
 import java.util.UUID;
-import com.example.examplemod.client.status.CcecProblemCenter;
 import com.example.examplemod.menu.CityPylonMenu;
-import com.example.examplemod.network.EconomyCommandPayload;
-import com.example.examplemod.network.RailwayCommandPayload;
-import com.example.examplemod.network.RailwayMapPayload;
 import com.example.examplemod.network.RequestCityTerritoriesPayload;
-import com.example.examplemod.railway.RailwayTypes;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -121,10 +116,15 @@ public final class PolishedWorldMapScreen extends Screen {
     private int cardScroll, cardMaxScroll;
     private int guideScroll, guideMaxScroll;
     private int layerScroll,legendScroll,mouseXNow,mouseYNow;
+    /**
+     * The logistics center owns its map and always needs the rail layer, but that must not rewrite
+     * the atlas preference of a player who turned railways off on the normal world map. When the
+     * session forces the layer on, the saved mask keeps its previous bit.
+     */
+    private boolean sessionForcedTracks;
     private String cardKey = "";
-    private UUID followingTrain;
-    private boolean followPaused;
-    private AtlasPreferences preferences;
+
+private AtlasPreferences preferences;
     private String preferenceWorld;
     private Runnable pendingMutation;
     private Component mutationTitle;
@@ -135,7 +135,7 @@ public final class PolishedWorldMapScreen extends Screen {
             new DispatchMotion.Transition(0), new DispatchMotion.Transition(0)};
     private final double[] surfaceAlpha = new double[5];
     private final java.util.Map<String,DispatchMotion.Change> dispatchChanges = new java.util.HashMap<>();
-    private com.example.examplemod.network.EconomyStatePayload observedEconomy;
+
     private long logisticsSnapshotAt;
     private DispatchMotion.Transition deliveredBar = new DispatchMotion.Transition(0), inFlightBar = new DispatchMotion.Transition(0);
 
@@ -230,7 +230,7 @@ public final class PolishedWorldMapScreen extends Screen {
         }
         boolean accepted = this.data.getPylonPos() == null || payload.dimension().equals(this.data.getDimensionId());
         if (accepted && this.readOnly && payload.offset() == 0 && this.data.getPylonPos() != null && !payload.anchor().equals(this.data.getPylonPos())) {
-            savePreferences(); if (map != null) map.releaseTerrainTextures(); map = null; preferences = null;
+            savePreferences(); if (map != null) map.releaseTerrainTextures(); map = null; preferences = null; sessionForcedTracks = false;
             CityWorldMapSession.INSTANCE.begin(payload.anchor(), payload.dimension());
         }
         return accepted;
@@ -294,22 +294,23 @@ public final class PolishedWorldMapScreen extends Screen {
 
     private Screen communityReturn;
     private boolean planningSession;
-    private boolean tradeView;private net.minecraft.core.BlockPos tradeFocus;private java.util.UUID freightShipment;private boolean freightFocusApplied;
-    public PolishedWorldMapScreen freightFocus(Screen parent,net.minecraft.resources.ResourceLocation dimension,net.minecraft.core.BlockPos pos){return freightFocus(parent,dimension,pos,null);}
-    public PolishedWorldMapScreen freightFocus(Screen parent,net.minecraft.resources.ResourceLocation dimension,net.minecraft.core.BlockPos pos,java.util.UUID shipmentId){tradeView=true;communityReturn=parent;requestedDimension=dimension;tradeFocus=pos;freightShipment=shipmentId;mode=Mode.LOGISTICS;return this;}
-    public void returnToCommunity(Screen screen){communityReturn=screen;}
+
+public void returnToCommunity(Screen screen){communityReturn=screen;}
     public void planningDimension(ResourceLocation dimension){requestedDimension=dimension;mode=Mode.CITIES;planningSession=true;}
 
     @Override
     public void onClose() {
+        com.example.examplemod.client.logistics.LogisticsMapOverlay.deactivate();
         com.example.examplemod.client.screen.ProjectWorkspaceClient.clear();
         if (this.map != null) {
             this.map.setDrawInternalControls(true);
+            this.map.setRailOverlay(null);
+            this.map.setTrackCount(0);
             // The terrain textures are derived from the cached samples and the panel is shared with the
             // pylon screen, so they are released here instead of lingering on the GPU between openings.
             this.map.releaseTerrainTextures();
         }
-        if (this.readOnly&&!tradeView) {
+        if (this.readOnly) {
             // Данные принадлежат сессии, а не этому экрану: держать их открытыми
             // после закрытия незачем, иначе к городу можно было бы вернуться без
             // нового запроса и увидеть устаревшую карту.
@@ -333,8 +334,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private java.util.UUID framedAlliance;
     @Override
     public void tick() {
-        if(map!=null&&tradeFocus!=null){applyMode(Mode.LOGISTICS);map.setOverlay(CityMapPanel.Overlay.TRADE,true);map.focusFreightShipment(freightShipment);freightFocusApplied=true;if(freightShipment==null)map.centerOn(tradeFocus);tradeFocus=null;}
-        if(map!=null&&freightShipment!=null&&!freightFocusApplied){map.focusFreightShipment(freightShipment);freightFocusApplied=true;}
+
         com.example.examplemod.client.AllianceClient.ensure();
         if(this.map!=null&&com.example.examplemod.client.AllianceClient.focusedAlliance!=null&&!com.example.examplemod.client.AllianceClient.focusedAlliance.equals(framedAlliance)&&this.map.focusAlliance(com.example.examplemod.client.AllianceClient.focusedCities))framedAlliance=com.example.examplemod.client.AllianceClient.focusedAlliance;
         if (!this.readOnly && this.parent != null) this.parent.refreshMapClaimAccess();
@@ -362,6 +362,10 @@ public final class PolishedWorldMapScreen extends Screen {
             this.refreshTicks = 0;
             requestSnapshots(false);
         }
+        if (this.map != null && this.mode == Mode.CITIES
+                && this.map.isOverlayEnabled(CityMapPanel.Overlay.TRACKS)) {
+            com.example.examplemod.client.logistics.LogisticsMapOverlay.attach(this.data.getDimensionId());
+        }
     }
 
     private void requestSnapshots(boolean includeMap) {
@@ -381,11 +385,8 @@ public final class PolishedWorldMapScreen extends Screen {
             requestVisibleTerritories();
             return;
         }
-        PacketDistributor.sendToServer(RailwayCommandPayload.simple(
-                this.data.getPylonPos(), RailwayCommandPayload.Action.REQUEST_STATE, null, null));
-        PacketDistributor.sendToServer(EconomyCommandPayload.simple(
-                this.data.getPylonPos(), EconomyCommandPayload.Action.REQUEST_STATE, null));
-        /*
+
+/*
          * Атлас использует ту же панель, что и вкладка «Карта», поэтому он
          * обязан переспрашивать и снимок территорий. Раньше он полагался
          * только на отправку при открытии пилона: если снимок не дошёл,
@@ -394,8 +395,6 @@ public final class PolishedWorldMapScreen extends Screen {
          * этом экране.
          */
         requestVisibleTerritories();
-        if (includeMap) PacketDistributor.sendToServer(RailwayCommandPayload.simple(
-                this.data.getPylonPos(), RailwayCommandPayload.Action.REQUEST_MAP, null, null));
     }
 
     private void requestVisibleTerritories() {
@@ -408,22 +407,12 @@ public final class PolishedWorldMapScreen extends Screen {
     private void syncMapData() {
         if (this.map == null) return;
         this.data.drainMapTiles().forEach(this.map::receive);
-        RailwayMapPayload railwayMap = this.data.drainRailwayMap();
-        if (railwayMap != null) this.map.receive(railwayMap);
-        this.map.setProjects(this.data.getProjects());
-        this.map.setRailwayData(this.data.getRailwayStations(), this.data.getRailwayTrains());
-        this.map.setUnregisteredTrains(this.data.getRailwayTrainCandidates());
-        if (this.data.getEconomyState() != null) {
-            if(this.observedEconomy!=this.data.getEconomyState()) {
-                this.observedEconomy=this.data.getEconomyState();this.logisticsSnapshotAt=System.currentTimeMillis();
-            }
-            this.map.setEconomyInfrastructure(this.data.getEconomyState().infrastructure());
-            this.map.setFreightData(this.data.getEconomyState().logistics());
-        } else {this.observedEconomy=null;this.logisticsSnapshotAt=0;}
-        if (this.data.getRelationsState() != null) this.map.setRelations(this.data.getRelationsState().cities());
-        reconcileTrainSelection();
-        updateFollowingTrain();
-        if (this.searchOpen) updateSearchResults();
+
+this.map.setProjects(this.data.getProjects());
+
+if (this.data.getRelationsState() != null) this.map.setRelations(this.data.getRelationsState().cities());
+
+if (this.searchOpen) updateSearchResults();
     }
 
     /**
@@ -491,20 +480,8 @@ public final class PolishedWorldMapScreen extends Screen {
      * TRAIN marker takes its place). Re-pin the same train so the player keeps context and the card
      * immediately switches from "Register" to the type/management actions.
      */
-    private void reconcileTrainSelection() {
-        CityMapPanel.Selection selected = this.map.getSelection();
-        if (selected == null || selected.kind() != CityMapPanel.SelectionKind.TRAIN_UNREGISTERED) return;
-        var now = this.data.getRailwayTrains().stream()
-                .filter(train -> selected.id().equals(train.createTrainId())).findFirst().orElse(null);
-        if (now != null) {
-            this.map.selectTrain(now);
-        } else if (this.data.getRailwayTrainCandidates().stream()
-                .noneMatch(candidate -> selected.id().equals(candidate.createTrainId()))) {
-            this.map.clearSelection();
-        }
-    }
 
-    /**
+/**
      * The render pipeline, in one fixed order:
      * background, terrain and map geometry, markers, the chrome, the context column, the tutorial
      * strip, then any modal, then the tooltip. A modal is the last thing painted and the only thing
@@ -544,8 +521,13 @@ public final class PolishedWorldMapScreen extends Screen {
         projectWorkspace.prepareMap(this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY);
         this.map.setProjectFocus(projectWorkspace.open() && this.mode==Mode.CITIES,projectWorkspace.territoryPicking() && this.mode==Mode.CITIES);
         this.map.setVisualOverlay(this.mode==Mode.CITIES && projectWorkspace.mapLayerVisible() && !modal ? projectWorkspace::renderMapLayer : null);
+        this.map.setRailOverlay(this.mode==Mode.CITIES && this.map.isOverlayEnabled(CityMapPanel.Overlay.TRACKS)
+                ? com.example.examplemod.client.logistics.LogisticsMapOverlay::renderRails : null);
+        this.map.setTrackCount(this.mode==Mode.CITIES
+                ? com.example.examplemod.client.logistics.LogisticsMapOverlay.railCount(this.data.getDimensionId()) : 0);
         this.map.render(graphics, mapLeft, mapTop, mapWidth, Math.max(1, mapBottom - mapTop), mouseX, mouseY);
         com.example.examplemod.client.screen.ProjectWorkspaceClient.render(graphics,this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
+        com.example.examplemod.client.logistics.LogisticsMapOverlay.render(graphics,this.map,this.data.getDimensionId(),mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
         // 3-4: markers are inside the panel render above; 5-6: chrome and the context column.
         renderTitle(graphics);
         renderModeToolbar(graphics, mouseX, mouseY);
@@ -612,7 +594,7 @@ public final class PolishedWorldMapScreen extends Screen {
             boolean hover = enabled && bounds.contains(mouseX, mouseY);
             WorldMapChrome.dispatchControl(graphics,bounds,selected,hover,enabled,false);
 
-            MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY; case RAILWAY -> AtlasGlyph.TRAIN; case LOGISTICS -> AtlasGlyph.FREIGHT; case ENERGY -> AtlasGlyph.ENERGY; }, bounds.x() + MICRO, bounds.y() + (bounds.height()-16)/2, !enabled ? 0xFF667377 : selected ? ACCENT : TEXT);
+            MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY;   case ENERGY -> AtlasGlyph.ENERGY; }, bounds.x() + MICRO, bounds.y() + (bounds.height()-16)/2, !enabled ? 0xFF667377 : selected ? ACCENT : TEXT);
             if (WorldMapUiLayout.modeTabsLabelled(this.width)) {
                 int labelColour = !enabled ? 0xFF6E787C : selected ? ACCENT : TEXT;
                 graphics.drawString(this.font, value.label(), bounds.x() + MICRO + 16 + MICRO, bounds.y() + (bounds.height()-8)/2,
@@ -682,23 +664,14 @@ public final class PolishedWorldMapScreen extends Screen {
     private List<CityMapPanel.Overlay> activeOverlays() {
         return switch (this.mode) {
             case CITIES -> List.of(CityMapPanel.Overlay.CITIES, CityMapPanel.Overlay.TERRITORIES,
-                    CityMapPanel.Overlay.RELATIONS, CityMapPanel.Overlay.PROJECTS);
-            case RAILWAY -> List.of(CityMapPanel.Overlay.TRACKS, CityMapPanel.Overlay.STATIONS,
-                    CityMapPanel.Overlay.TRAINS, CityMapPanel.Overlay.CITIES);
-            case LOGISTICS -> List.of(CityMapPanel.Overlay.TRADE, CityMapPanel.Overlay.TRAINS,
-                    CityMapPanel.Overlay.CITIES);
-            case ENERGY -> List.of();
+                    CityMapPanel.Overlay.TRACKS, CityMapPanel.Overlay.RELATIONS, CityMapPanel.Overlay.PROJECTS);
+
+case ENERGY -> List.of();
         };
     }
 
-    /** Railway classes in legend order; the swatches come from the same policy the map draws with. */
-    private static List<CityMapPanel.RailClass> legendClasses() {
-        return List.of(CityMapPanel.RailClass.OWN, CityMapPanel.RailClass.PUBLIC_FREE,
-                CityMapPanel.RailClass.PUBLIC_PAID, CityMapPanel.RailClass.PRIVATE, CityMapPanel.RailClass.OFFLINE);
-    }
-
-    private int layersRowCount() {
-        return activeOverlays().size() + 2 + (VIEW_KEYS.length - 5) + (this.mode == Mode.RAILWAY ? legendClasses().size() + 1 : 0);
+private int layersRowCount() {
+        return activeOverlays().size() + 2 + (VIEW_KEYS.length - 5);
     }
 
     private void renderLayers(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -740,25 +713,7 @@ public final class PolishedWorldMapScreen extends Screen {
             graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), bounds.width() - 20), bounds.x() + 14, bounds.y() + 5, TEXT, false);
             offerTooltip(label, hover);
         }
-        if (this.mode != Mode.RAILWAY) return;
-        // In railway mode the legend is the whole point: a line must be identifiable without hovering it.
-        WorldMapUiLayout.Rect header = layerRow(row++);
-            graphics.hLine(header.x(), header.right(), header.y() + WorldMapUiLayout.POPOVER_ROW / 2, FRAME);
-        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.legend.title"),
-                header.x() + WorldMapUiLayout.MICRO, header.y() + 5, ACCENT, false);
-        for (CityMapPanel.RailClass kind : legendClasses()) {
-            WorldMapUiLayout.Rect bounds = layerRow(row++);
-            int inner = CityMapPanel.railInnerWidth(kind);
-            // Drawn exactly the way the map draws it: outline underneath, semantic colour on top.
-            graphics.fill(bounds.x() + WorldMapUiLayout.MICRO, bounds.y() + 5,
-                    bounds.x() + 8 + WorldMapUiLayout.MICRO, bounds.y() + 6 + inner,
-                    CityMapPanel.railOutlineColor(kind));
-            graphics.fill(bounds.x() + WorldMapUiLayout.MICRO, bounds.y() + 6,
-                    bounds.x() + 8 + WorldMapUiLayout.MICRO, bounds.y() + 6 + inner,
-                    CityMapPanel.railInnerColor(kind));
-            graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.legend."
-                    + kind.name().toLowerCase(Locale.ROOT)), bounds.x() + 22, bounds.y() + 5, TEXT, false);
-        }
+
         } finally { graphics.disableScissor(); }
     }
 
@@ -809,7 +764,7 @@ public final class PolishedWorldMapScreen extends Screen {
             this.cardActionCount = 0;
             this.cardActionY = -1;
             motionCardKey="";
-            if(this.mode==Mode.LOGISTICS&&this.map.focusedFreightJourney()!=null){renderFreightJourneyCard(graphics,this.map.focusedFreightJourney());return;}
+
             renderOverview(graphics);
             return;
         }
@@ -835,82 +790,6 @@ public final class PolishedWorldMapScreen extends Screen {
         long now=System.nanoTime();return !this.layersOpen&&surfaceMotion[0].sample(now)>0&&layersPopoverBounds().contains(x,y)
                 ||!this.searchOpen&&surfaceMotion[1].sample(now)>0&&WorldMapUiLayout.searchPopover(this.width,this.modeLabelWidths,this.globalLabelWidths,visibleSearchResults().size(),228).contains(x,y);
     }
-    private void renderFreightJourneyCard(GuiGraphics g,CityMapPanel.FreightJourney journey){
-        var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
-        this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
-        double delivered=Math.clamp(journey.delivered()/(double)Math.max(1,journey.amount()),0,1);
-        double moving=Math.clamp((journey.delivered()+(double)journey.inFlight())/Math.max(1,journey.amount()),delivered,1);
-        String key="shipment:"+journey.id();if(!key.equals(this.cardKey)){
-            this.cardKey=key;this.cardScroll=0;this.dispatchChanges.clear();
-            this.deliveredBar=new DispatchMotion.Transition(delivered);this.inFlightBar=new DispatchMotion.Transition(moving);
-        }
-        int pad=WorldMapUiLayout.CARD_PADDING,x=panel.x()+pad,w=panel.width()-2*pad;
-        int shipmentHeader=com.example.examplemod.client.map.ShipmentRouteGeometry.cardHeaderHeight(panel.height());
-        plate(g,panel.x(),panel.y(),panel.width(),panel.height());
-        g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
-        try{
-            Component title=journey.title().isBlank()?shipmentMapText("title"):Component.literal(journey.title());
-            if(shipmentHeader>0){
-                MapMarkerRenderer.drawGlyph(g,AtlasGlyph.FREIGHT,x,panel.y()+pad,ACCENT);
-                g.drawString(this.font,WorldMapChrome.fit(this.font,title,w-24),x+24,panel.y()+pad,TEXT,false);
-                offerTooltip(title,inside(this.mouseXNow,this.mouseYNow,x,panel.y()+pad,w,16));
-                g.drawString(this.font,WorldMapChrome.fit(this.font,dispatchText("itinerary",journey.stops().size()),w),x,panel.y()+pad+17,ACCENT,false);
-                g.drawString(this.font,WorldMapChrome.fit(this.font,logisticsFreshness(),w),x,panel.y()+pad+30,MUTED,false);
-            }
-            int bodyTop=panel.y()+Math.max(1,shipmentHeader-3);
-            g.enableScissor(panel.x()+1,bodyTop,panel.right()-1,panel.bottom()-1);
-            try{
-                int cursor=panel.y()+(shipmentHeader>0?shipmentHeader:pad)-this.cardScroll;
-                if(shipmentHeader==0){g.drawWordWrap(this.font,title,x,cursor,w,TEXT);cursor+=this.font.wordWrapHeight(title,w)+10;}
-                Component status=journey.state().equals("cancelling")?shipmentMapText("cancelling"):com.example.examplemod.client.status.CcecStatusUi.title(journey.status());
-                double statusFlash=changed("shipment-state",journey.state(),250);
-                int statusHeight=this.font.wordWrapHeight(status,Math.max(1,w-16));
-                WorldMapChrome.rounded(g,x,cursor-5,w,statusHeight+10,3,DispatchMotion.tint(PANEL_ALT,0xFF31575B,statusFlash));
-                g.fill(x+5,cursor+2,x+8,cursor+5,journey.closed()?MUTED:ACCENT);
-                g.drawWordWrap(this.font,status,x+13,cursor,w-16,journey.closed()?MUTED:ACCENT);cursor+=statusHeight+SECTION+5;
-                Component progress=shipmentMapText("progress",journey.delivered(),journey.amount(),journey.inFlight());
-                double progressFlash=changed("shipment-progress",List.of(journey.delivered(),journey.inFlight(),journey.amount()),180);
-                g.drawWordWrap(this.font,progress,x,cursor,w,DispatchMotion.tint(TEXT,ACCENT,progressFlash));cursor+=this.font.wordWrapHeight(progress,w)+10;
-                g.fill(x,cursor,x+w,cursor+5,DispatchPalette.INSET);
-                long frame=System.nanoTime();
-                int accepted=(int)(w*this.deliveredBar.value(delivered,frame,this.map.reducedMotion(),250));
-                int inFlight=Math.max(accepted,(int)(w*this.inFlightBar.value(moving,frame,this.map.reducedMotion(),250)));
-                g.fill(x,cursor,x+inFlight,cursor+5,ACCENT);g.fill(x,cursor,x+accepted,cursor+5,MapPalette.GOOD);cursor+=13;
-                Component barLegend=dispatchText("progress_legend");
-                g.drawWordWrap(this.font,barLegend,x,cursor,w,MUTED);cursor+=this.font.wordWrapHeight(barLegend,w)+SECTION;
-                for(int i=0;i<journey.stops().size();i++){
-                    var stop=this.map.freightStop(journey.stops().get(i));boolean online=stop!=null&&stop.online();
-                    Component name=stop==null?shipmentMapText("missing_stop"):Component.literal(stop.name());
-                    String role=i==0&&journey.stops().size()>1?"source":i==journey.stops().size()-1?"destination":"transfer";
-                    int nameHeight=this.font.wordWrapHeight(name,Math.max(1,w-29)),rowHeight=Math.max(42,nameHeight+23);
-                    double stopFlash=changed("stop:"+journey.stops().get(i),online,250);
-                    if(stopFlash>0)WorldMapChrome.rounded(g,x+20,cursor-3,w-20,rowHeight,3,DispatchMotion.tint(PANEL,0xFF31575B,stopFlash));
-                    if(i<journey.stops().size()-1)g.fill(x+7,cursor+17,x+8,cursor+rowHeight+5,FRAME);
-                    g.fill(x,cursor,x+16,cursor+16,WorldMapChrome.INSET);g.renderOutline(x,cursor,16,16,online?ACCENT:MapPalette.ALERT);
-                    g.drawCenteredString(this.font,Integer.toString(i+1),x+8,cursor+4,online?ACCENT:MapPalette.ALERT);
-                    g.drawWordWrap(this.font,name,x+25,cursor,w-25,TEXT);
-                    Component detail=shipmentMapText(role).copy().append(" · ").append(dispatchText(online?"online":"offline"));
-                    g.drawString(this.font,WorldMapChrome.fit(this.font,detail,w-25),x+25,cursor+nameHeight+5,MUTED,false);
-                    cursor+=rowHeight+6;
-                }
-                boolean actual=this.map.freightHasRailGeometry();
-                Component geometry=shipmentMapText(actual?"rail_geometry":"schematic");
-                g.drawWordWrap(this.font,geometry,x,cursor,w,ACCENT);cursor+=this.font.wordWrapHeight(geometry,w)+SECTION;
-                Component hint=shipmentMapText(actual?"rail_help":"animation_help");
-                g.drawWordWrap(this.font,hint,x,cursor,w,MUTED);cursor+=this.font.wordWrapHeight(hint,w)+SECTION;
-                Component tools=shipmentMapText("tools_help");g.drawWordWrap(this.font,tools,x,cursor,w,MUTED);cursor+=this.font.wordWrapHeight(tools,w)+pad;
-                this.cardMaxScroll=Math.max(0,cursor+this.cardScroll-panel.bottom());this.cardScroll=Math.min(this.cardScroll,this.cardMaxScroll);
-            }finally{g.disableScissor();}
-        }finally{g.disableScissor();}
-        if(shipmentHeader>0)renderCardScroll(g,panel);
-        else if(this.cardMaxScroll>0){
-            int trackHeight=Math.max(1,panel.height()-2*pad),thumbHeight=Math.min(trackHeight,Math.max(6,trackHeight*trackHeight/(trackHeight+this.cardMaxScroll)));
-            int top=panel.y()+pad+(trackHeight-thumbHeight)*this.cardScroll/this.cardMaxScroll;
-            g.fill(panel.right()-5,panel.y()+pad,panel.right()-3,panel.y()+pad+trackHeight,FRAME);
-            g.fill(panel.right()-5,top,panel.right()-3,top+thumbHeight,ACCENT);
-        }
-    }
-
     /** "Сейчас важно": counts the player actually acts on, and a calm state when nothing is wrong. */
     private void renderOverview(GuiGraphics g) {
         var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
@@ -926,9 +805,8 @@ public final class PolishedWorldMapScreen extends Screen {
             int cursor=panel.y()+WorldMapUiLayout.CARD_HEADER-this.cardScroll;
             List<CityMapPanel.Overlay> metrics=switch(this.mode) {
                 case CITIES->List.of(CityMapPanel.Overlay.CITIES,CityMapPanel.Overlay.TERRITORIES,CityMapPanel.Overlay.PROJECTS);
-                case RAILWAY->List.of(CityMapPanel.Overlay.TRACKS,CityMapPanel.Overlay.STATIONS,CityMapPanel.Overlay.TRAINS);
-                case LOGISTICS->List.of(CityMapPanel.Overlay.TRADE,CityMapPanel.Overlay.TRAINS,CityMapPanel.Overlay.CITIES);
-                case ENERGY->List.of();
+
+case ENERGY->List.of();
             };
             var body=WorldMapUiLayout.cardBody(panel);
             g.enableScissor(body.x(),body.y(),body.right(),body.bottom());
@@ -982,7 +860,6 @@ public final class PolishedWorldMapScreen extends Screen {
         int titleX=x+32;
         g.drawString(this.font,WorldMapChrome.fit(this.font,value.title(),w-32),titleX,panel.y()+pad,TEXT,false);
         g.drawString(this.font,WorldMapChrome.fit(this.font,selectionType(value),w-32),titleX,panel.y()+pad+15,value.own()?ACCENT:MUTED,false);
-        if(this.mode==Mode.LOGISTICS)g.drawString(this.font,WorldMapChrome.fit(this.font,logisticsFreshness(),w-32),titleX,panel.y()+pad+28,MUTED,false);
         offerTooltip(value.title(),inside(this.mouseXNow,this.mouseYNow,titleX,panel.y()+pad,w-32,12));
         g.hLine(x,x+w,panel.y()+WorldMapUiLayout.CARD_HEADER-7,FRAME);
         var body=WorldMapUiLayout.cardBody(panel);
@@ -1039,104 +916,13 @@ public final class PolishedWorldMapScreen extends Screen {
      * selection are reachable straight from the World Map; everything else keeps one action.
      * An empty list means "read-only card": the viewer has no rights on that selection.
      */
-    private List<Component> contextActions(CityMapPanel.Selection value) {
-        if (value == null) return List.of();
-        /*
-         * В режиме чтения на карте нет ни одной кнопки.
-         *
-         * <p>Проверка стоит здесь, до всех частных случаев, потому что частные
-         * случаи считают права по своим данным, а карта по клавише вообще не
-         * должна предлагать действие — даже если сервер по ошибке прислал снимок с
-         * признаком «управлять можно». Скрытие действия на клиенте не является
-         * защитой: настоящая защита в том, что команды по-прежнему требуют
-         * открытое меню пилона.
-         */
-        if (this.readOnly) return List.of();
-        if (value.kind() == CityMapPanel.SelectionKind.TRAIN) {
-            var train = this.data.getRailwayTrains().stream()
-                    .filter(registered -> registered.fleetTrainId().equals(value.id())).findFirst().orElse(null);
-            if (train == null || !train.canManage()) return List.of();
-            return List.of(
-                    Component.translatable("gui.createcityexpansioncore.world_map.action.change_type"),
-                    Component.translatable("gui.createcityexpansioncore.world_map.action.manage_railway"),
-                    Component.translatable("gui.createcityexpansioncore.world_map.action.select_route"));
-        }
-        if (value.kind() == CityMapPanel.SelectionKind.TRAIN_UNREGISTERED) {
-            var candidate = this.data.getRailwayTrainCandidates().stream()
-                    .filter(pending -> pending.createTrainId().equals(value.id())).findFirst().orElse(null);
-            if (candidate == null || !candidate.canManage()) return List.of();
-            return List.of(
-                    Component.translatable("gui.createcityexpansioncore.world_map.action.register_train"),
-                    Component.translatable("gui.createcityexpansioncore.world_map.action.manage_railway"));
-        }
-        if (!value.own() || value.kind() == CityMapPanel.SelectionKind.WAYPOINT) return List.of();
-        return List.of(contextAction(value));
-    }
+    private List<Component> contextActions(CityMapPanel.Selection value){return value==null?List.of():List.of(contextAction(value));}
 
-    private void handleContextAction(CityMapPanel.Selection value, int index) {
-        int managed = contextActions(value).size();
-        if (index >= managed) { handleNavigationAction(value, index - managed); return; }
-        // Повторяет проверку contextActions: кнопки скрыты, поэтому сюда попасть
-        // нельзя, но обработчик не должен доверять собственному UI.
-        if (this.readOnly) {
-            // Все ветви ниже отправляют пакеты или открывают экраны управления, где
-            // город можно менять. Проверка одна на весь метод, а не в каждой ветви:
-            // забытая ветвь означала бы действие на карте, которая для чтения.
-            return;
-        }
-        if (value.kind() == CityMapPanel.SelectionKind.TRAIN) {
-            var train = this.data.getRailwayTrains().stream()
-                    .filter(registered -> registered.fleetTrainId().equals(value.id())).findFirst().orElse(null);
-            if (train == null || !train.canManage()) return;
-            if (index == 0) {
-                RailwayTypes.TrainType next = RailwayTypes.TrainType.values()[
-                        (train.type().ordinal() + 1) % RailwayTypes.TrainType.values().length];
-                this.mutationTitle = Component.translatable("gui.createcityexpansioncore.world_map.confirm.type", train.name(), Component.translatable("gui.createcityexpansioncore.railway.train_type." + next.name().toLowerCase(Locale.ROOT)));
-                this.pendingMutation = () -> PacketDistributor.sendToServer(new RailwayCommandPayload(this.data.getPylonPos(), RailwayCommandPayload.Action.SET_TRAIN_TYPE, train.fleetTrainId(), null, "", next.ordinal(), true, List.of()));
-            } else if (index == 1) {
-                this.parent.openTrainManagement(train.fleetTrainId());
-                if (this.minecraft != null) this.minecraft.setScreen(this.parent);
-            } else if (index == 2) {
-                this.parent.openTrainManagement(train.fleetTrainId());
-                PacketDistributor.sendToServer(RailwayCommandPayload.simple(this.data.getPylonPos(),
-                        RailwayCommandPayload.Action.REQUEST_ROUTES, train.fleetTrainId(), null));
-                if (this.minecraft != null) this.minecraft.setScreen(this.parent);
-            }
-            return;
-        }
-        if (value.kind() == CityMapPanel.SelectionKind.TRAIN_UNREGISTERED) {
-            var candidate = this.data.getRailwayTrainCandidates().stream()
-                    .filter(pending -> pending.createTrainId().equals(value.id())).findFirst().orElse(null);
-            if (candidate == null || !candidate.canManage()) return;
-            if (index == 0) {
-                // Server replies with a fresh state; reconcileTrainSelection() re-pins the new
-                // TRAIN marker and the card immediately offers the type action.
-                this.mutationTitle = Component.translatable("gui.createcityexpansioncore.world_map.confirm.register", candidate.name());
-                this.pendingMutation = () -> PacketDistributor.sendToServer(RailwayCommandPayload.simple(this.data.getPylonPos(), RailwayCommandPayload.Action.REGISTER_TRAIN, candidate.createTrainId(), null));
-            } else {
-                this.parent.openTrainManagement();
-                if (this.minecraft != null) this.minecraft.setScreen(this.parent);
-            }
-            return;
-        }
-        if (index == 0) handleContextAction(value);
-    }
+    private void handleContextAction(CityMapPanel.Selection value,int index){handleContextAction(value);}
 
-    private Component contextAction(CityMapPanel.Selection value) {
-        return Component.translatable(switch (value.kind()) {
-            case FREIGHT_POINT, TRAIN -> "gui.createcityexpansioncore.world_map.action.open_logistics";
-            case DISCOVERY -> "gui.createcityexpansioncore.world_map.action.setup_freight";
-            case CITY -> "gui.createcityexpansioncore.world_map.action.open_relations";
-            case RAILWAY_SECTION -> "gui.createcityexpansioncore.world_map.action.manage_railway";
-            case ROUTE, STATION -> "gui.createcityexpansioncore.world_map.action.railway_focus";
-            default -> "gui.createcityexpansioncore.world_map.action.center";
-        });
-    }
+    private Component contextAction(CityMapPanel.Selection value){return Component.translatable(value.kind()==CityMapPanel.SelectionKind.CITY?"gui.createcityexpansioncore.world_map.action.open_relations":"gui.createcityexpansioncore.world_map.action.center");}
 
-    private int problemCount() {
-        return CcecProblemCenter.count(this.data.getEconomyState(), this.data.getRailwayOwnership(),
-                this.data.getRailwayTrains());
-    }
+    private int problemCount(){return problemObjects().size();}
 
     /**
      * A summary card, not a screen takeover: the map stays visible behind a light dim so the player
@@ -1151,7 +937,7 @@ public final class PolishedWorldMapScreen extends Screen {
         graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.problem_count", problemCount()), panel.x() + SECTION, panel.y() + 26, TEXT, false);
         List<CityMapPanel.Selection> objects = problemObjects();
         this.problemOffset = Math.min(this.problemOffset, Math.max(0, objects.size() - problemRows()));
-        if (objects.isEmpty()) graphics.drawWordWrap(this.font, Component.translatable(CcecProblemCenter.nextStepKey(this.data.getEconomyState(), problemCount())), panel.x() + SECTION, panel.y() + 50, panel.width() - SECTION * 2, MUTED);
+        if (objects.isEmpty()) graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.ready"), panel.x() + SECTION, panel.y() + 50, panel.width() - SECTION * 2, MUTED);
         for (int index = 0; index < Math.min(problemRows(), objects.size() - this.problemOffset); index++) {
             var value = objects.get(index + this.problemOffset); int y = panel.y() + 48 + index * 25;
             graphics.fill(panel.x() + SECTION, y, panel.right() - SECTION, y + 22, PANEL_ALT);
@@ -1161,7 +947,7 @@ public final class PolishedWorldMapScreen extends Screen {
             graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, panel.width() - 54), panel.x() + SECTION + 24, y + 13, MUTED, false);
         }
         graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.world_map.problems.located", objects.size(), problemCount()), panel.x() + SECTION, panel.bottom() - 52, panel.width() - SECTION * 2, MUTED);
-        graphics.drawCenteredString(this.font, Component.translatable(this.readOnly ? "gui.createcityexpansioncore.world_map.close" : "gui.createcityexpansioncore.city.hub.open_logistics"), panel.x() + panel.width() / 2, panel.bottom() - 20, ACCENT);
+        graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.close"), panel.x() + panel.width() / 2, panel.bottom() - 20, ACCENT);
     }
 
     private void renderGuide(GuiGraphics graphics) {
@@ -1198,7 +984,6 @@ public final class PolishedWorldMapScreen extends Screen {
         int statusWidth = right - coordinateWidth - statusX - 8;
         if (statusWidth > 40) graphics.drawString(this.font, this.font.plainSubstrByWidth(this.map.terrainStatus().getString(), statusWidth), statusX, strip.y() + 5, MUTED, false);
         Component statusTooltip=this.map.terrainStatus();
-        if(this.mode==Mode.LOGISTICS)statusTooltip=statusTooltip.copy().append(" · ").append(logisticsFreshness());
         offerTooltip(statusTooltip, strip.contains(mouseX, mouseY));
         if(statusWidth>40 && this.map.terrainLoading()) for(int i=0;i<3;i++) {
             int alpha=this.map.reducedMotion()?160:90+(int)(120*(.5+.5*Math.sin(System.nanoTime()/240_000_000.0-i*1.1)));
@@ -1255,6 +1040,7 @@ public final class PolishedWorldMapScreen extends Screen {
         if(this.guideOpen||this.problemCenterOpen)return handleModalClick(mouseX,mouseY);
         if(button!=0&&this.map!=null&&(this.layersOpen&&layersPopoverBounds().contains(mouseX,mouseY)
                 ||this.searchOpen&&WorldMapUiLayout.searchPopover(this.width,this.modeLabelWidths,this.globalLabelWidths,visibleSearchResults().size(),228).contains(mouseX,mouseY)))return true;
+        if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&com.example.examplemod.client.logistics.LogisticsMapOverlay.click(mouseX,mouseY,button))return true;
         if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&com.example.examplemod.client.screen.ProjectWorkspaceClient.click(mouseX,mouseY,button))return true;
         if (this.map != null && this.mode == Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation == null && this.tutorialTicks == 0 && !this.layersOpen && !this.searchOpen && !this.map.hasPendingClaim()
                 && projectWorkspace.click(mouseX,mouseY,button,true)) return true;
@@ -1304,7 +1090,7 @@ public final class PolishedWorldMapScreen extends Screen {
         }
         for (int index = 0; index < this.viewButtons.size(); index++) {
             if (!this.problemCenterOpen && !this.guideOpen && this.viewButtons.get(index).contains(mouseX, mouseY)) {
-                handleViewAction(index); dismissTutorial(); return true;
+                handleViewAction(index<2?index:index+1); dismissTutorial(); return true;
             }
         }
         // A modal owns the click: the map must not pan, select or dismiss anything underneath it.
@@ -1326,7 +1112,7 @@ public final class PolishedWorldMapScreen extends Screen {
         if (this.layersOpen && handleLayerClick(mouseX, mouseY)) return true;
         if (this.searchOpen && handleSearchClick(mouseX, mouseY)) return true;
         if(WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)){
-            var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null,null));rows.add(new Legend("social_project",0xFFE4B65B,null,null));for(int i=0;i<rows.size();i++)if(rows.get(i).key().equals("alliance")&&WorldMapUiLayout.legendRow(panel,i,this.legendScroll).contains(mouseX,mouseY))com.example.examplemod.client.AllianceClient.clearFocus();return true;
+            var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null));rows.add(new Legend("social_project",0xFFE4B65B,null));for(int i=0;i<rows.size();i++)if(rows.get(i).key().equals("alliance")&&WorldMapUiLayout.legendRow(panel,i,this.legendScroll).contains(mouseX,mouseY))com.example.examplemod.client.AllianceClient.clearFocus();return true;
         }
         CityMapPanel.Selection selected = this.map.getSelection();
         if (selected != null && this.cardActionY >= 0 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) {
@@ -1340,7 +1126,7 @@ public final class PolishedWorldMapScreen extends Screen {
         }
         if (this.cardWidth > 0
                 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) return true;
-        this.followPaused = this.followingTrain != null;
+
         this.map.clearSelection();
         dismissTutorial();
         CityMapPanel.Selection before = selected;
@@ -1353,8 +1139,7 @@ public final class PolishedWorldMapScreen extends Screen {
         return handled || super.mouseClicked(mouseX, mouseY, button);
     }
 
-    /** Any click inside an open modal closes it; the problem card's own button opens Logistics. */
-    private boolean handleModalClick(double mouseX, double mouseY) {
+private boolean handleModalClick(double mouseX, double mouseY) {
         if (this.problemCenterOpen) {
             var objects = problemObjects();
             var bounds = WorldMapUiLayout.problemModal(this.width, this.height);
@@ -1366,11 +1151,8 @@ public final class PolishedWorldMapScreen extends Screen {
                     panel.width() - WorldMapUiLayout.SECTION * 2, 24);
             this.problemCenterOpen = false;
             // В режиме чтения экран проблем информационный: его кнопка ведёт в
-            // Logistics, где можно принимать и отменять контракты.
-            if (open && !this.readOnly && this.minecraft != null) {
-                this.minecraft.setScreen(new LogisticsScreen(this.parent));
-            }
-            return true;
+
+return true;
         }
         this.guideOpen = false;
         tutorialSeen = true;
@@ -1381,7 +1163,7 @@ public final class PolishedWorldMapScreen extends Screen {
         switch (index) {
             case WorldMapUiLayout.GLOBAL_BACK -> { navigateBack(); dismissTutorial(); }
             case WorldMapUiLayout.GLOBAL_FORWARD -> { navigateForward(); dismissTutorial(); }
-            case WorldMapUiLayout.GLOBAL_CENTER_CITY -> { this.followingTrain = null; this.map.centerOn(this.data.getPylonPos()); dismissTutorial(); }
+            case WorldMapUiLayout.GLOBAL_CENTER_CITY -> {  this.map.centerOn(this.data.getPylonPos()); dismissTutorial(); }
             case WorldMapUiLayout.GLOBAL_SEARCH -> {
                 updateSearchResults();
                 this.searchOpen = !this.searchOpen;
@@ -1404,44 +1186,21 @@ public final class PolishedWorldMapScreen extends Screen {
 
     private void navigateBack() {
         if (this.backHistory.isEmpty()) return;
-        this.followingTrain = null;
+
         CityMapPanel.Selection current=this.map.getSelection();if(current!=null)this.forwardHistory.push(current);
         this.map.selectAndCenter(this.backHistory.pop());
     }
 
     private void navigateForward() {
         if (this.forwardHistory.isEmpty()) return;
-        this.followingTrain = null;
+
         CityMapPanel.Selection current=this.map.getSelection();if(current!=null)this.backHistory.push(current);
         this.map.selectAndCenter(this.forwardHistory.pop());
     }
 
-    /**
-     * Единственное действие карты по клику: перейти к выбранному объекту.
-     *
-     * <p>В режиме чтения остаётся только навигация — то, что не меняет город.
-     * Переходы в Logistics, отношения и управление рельсами исключены: каждый из
-     * них ведёт на экран, где что-то можно принять, отменить или настроить, а
-     * здесь можно только смотреть.
-     */
-    private void handleContextAction(CityMapPanel.Selection value) {
-        switch (value.kind()) {
-            case FREIGHT_POINT, TRAIN, DISCOVERY -> {
-                if (this.readOnly) { this.map.centerOn(value.pos()); return; }
-                if (this.minecraft != null) this.minecraft.setScreen(new LogisticsScreen(this.parent));
-            }
-            case CITY -> {
-                if (this.readOnly) { this.map.centerOn(value.pos()); return; }
-                if (this.minecraft != null) CommunityScreen.openRelations(this);
-            }
-            case RAILWAY_SECTION -> {
-                if (this.readOnly || this.parent == null) { this.map.centerOn(value.pos()); return; }
-                this.parent.openRailwayManagement();
-                if (this.minecraft != null) this.minecraft.setScreen(this.parent);
-            }
-            case ROUTE, STATION -> applyMode(Mode.RAILWAY);
-            default -> this.map.centerOn(value.pos());
-        }
+private void handleContextAction(CityMapPanel.Selection value){
+        if(value.kind()==CityMapPanel.SelectionKind.CITY&&!this.readOnly&&this.minecraft!=null)CommunityScreen.openRelations(this);
+        else this.map.centerOn(value.pos());
     }
 
     /** Only the overlays the current mode owns are clickable; a row that is not drawn is not a row. */
@@ -1499,7 +1258,6 @@ public final class PolishedWorldMapScreen extends Screen {
         // Панорамировать нечего, пока панели нет: свайп по экрану загрузки.
         if (this.map == null) return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         boolean dragged = this.map.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        if (dragged) this.followPaused = this.followingTrain != null;
         return dragged || super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
@@ -1631,27 +1389,28 @@ public final class PolishedWorldMapScreen extends Screen {
         this.map.setFocus(mode.focus);
         this.map.setOverlay(CityMapPanel.Overlay.CITIES, true);
         switch (mode) {
-            case CITIES -> setOverlays(true, true, false, false, false, false);
-            case RAILWAY -> setOverlays(false, false, true, true, true, false);
-            case LOGISTICS -> setOverlays(false, false, true, true, true, true);
-            case ENERGY -> setOverlays(false, false, false, false, false, false);
+            case CITIES -> setOverlays(true,true);
+
+case ENERGY -> setOverlays(false,false);
         }
         this.map.setOverlay(CityMapPanel.Overlay.RELATIONS, mode == Mode.CITIES);
-        if (this.preferences != null && this.preferences.overlays[mode.ordinal()] >= 0) {
-            int mask = this.preferences.overlays[mode.ordinal()];
-            for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.ordinal())) != 0);
+        if (this.preferences != null && this.preferences.overlays[mode==Mode.CITIES?0:3] >= 0) {
+            int mask = this.preferences.overlays[mode==Mode.CITIES?0:3];
+            for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.preferenceBit())) != 0);
+        }
+        /*
+         * The logistics center map is about the rail network; its own "line" chip is the control
+         * that hides rails there. A normal atlas preference (where railways may be off) must not
+         * make the center's map show stations without the tracks that connect them.
+         */
+        if (mode == Mode.CITIES && com.example.examplemod.client.logistics.LogisticsMapOverlay.isSession()
+                && !this.map.isOverlayEnabled(CityMapPanel.Overlay.TRACKS)) {
+            this.map.setOverlay(CityMapPanel.Overlay.TRACKS, true);
+            this.sessionForcedTracks = true;
         }
     }
 
-    private void setOverlays(boolean territories, boolean projects, boolean tracks,
-                             boolean stations, boolean trains, boolean trade) {
-        this.map.setOverlay(CityMapPanel.Overlay.TERRITORIES, territories);
-        this.map.setOverlay(CityMapPanel.Overlay.PROJECTS, projects);
-        this.map.setOverlay(CityMapPanel.Overlay.TRACKS, tracks);
-        this.map.setOverlay(CityMapPanel.Overlay.STATIONS, stations);
-        this.map.setOverlay(CityMapPanel.Overlay.TRAINS, trains);
-        this.map.setOverlay(CityMapPanel.Overlay.TRADE, trade);
-    }
+    private void setOverlays(boolean territories,boolean projects){this.map.setOverlay(CityMapPanel.Overlay.TERRITORIES,territories);this.map.setOverlay(CityMapPanel.Overlay.PROJECTS,projects);}
 
     private static Component selectionType(CityMapPanel.Selection value) {
         return Component.translatable("gui.createcityexpansioncore.world_map.selection."
@@ -1679,19 +1438,29 @@ public final class PolishedWorldMapScreen extends Screen {
         this.preferenceWorld = server + ":" + (this.minecraft.player == null ? "" : this.minecraft.player.getUUID()) + ":" + this.data.getDimensionId();
         AtlasPreferences loaded = AtlasPreferences.loadWorld(preferencePath(), this.preferenceWorld);
         this.preferences = null;
-        applyMode(planningSession?Mode.CITIES:Mode.values()[loaded.mode]);
+        applyMode(Mode.CITIES);
         this.preferences = loaded;
         if (this.preferences.positioned) this.map.restoreView(this.preferences.centerX, this.preferences.centerZ, this.preferences.zoom);
         this.map.setPresentation(this.preferences.grid, this.preferences.minimap);
         this.map.setTerritoryPresentation(this.preferences.territoryMode,this.preferences.plotGrid);
         this.map.setMotion(true,this.preferences.reducedMotion);
         this.map.setPersonalPins(this.preferences.pins);
-        int mask = this.preferences.overlays[this.mode.ordinal()];
-        if (mask >= 0) for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.ordinal())) != 0);
+        int mask = this.preferences.overlays[this.mode==Mode.CITIES?0:3];
+        if (mask >= 0) for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.preferenceBit())) != 0);
+        /*
+         * Masks written before TRACKS joined the CITIES layer list have bit 3 clear because the
+         * layer did not exist there. Treat such a mask as "not asked yet" once: the first updated
+         * map shows real rails, and a deliberate toggle-off is persisted in every later mask.
+         */
+        if (!this.preferences.tracksPreference) {
+            this.map.setOverlay(CityMapPanel.Overlay.TRACKS, true);
+            this.preferences.tracksPreference = true;
+        }
     }
     private void rememberOverlays() {
-        int mask = 0; for (var layer : CityMapPanel.Overlay.values()) if (this.map.isOverlayEnabled(layer)) mask |= 1 << layer.ordinal();
-        this.preferences.overlays[this.mode.ordinal()] = mask;
+        int mask = 0; for (var layer : CityMapPanel.Overlay.values()) if (this.map.isOverlayEnabled(layer)) mask |= 1 << layer.preferenceBit();
+        if (this.sessionForcedTracks) mask &= ~(1 << CityMapPanel.Overlay.TRACKS.preferenceBit());
+        this.preferences.overlays[this.mode==Mode.CITIES?0:3] = mask;
     }
     private void savePreferences() {
         if (this.preferences == null || this.map == null) return;
@@ -1704,30 +1473,34 @@ public final class PolishedWorldMapScreen extends Screen {
         catch (java.io.IOException error) { org.slf4j.LoggerFactory.getLogger(PolishedWorldMapScreen.class).warn("Cannot save local atlas view", error); }
     }
     @Override public void removed() {
+        // Every way out of the atlas (ESC, a child screen, the "open object" action) must stop the
+        // ambient logistics feed; otherwise a finished center session leaks its markers onto the
+        // next normal world map opened in this client.
+        com.example.examplemod.client.logistics.LogisticsMapOverlay.deactivate();
         ProjectWorkspaceClient.clear();
-        this.freightFocusApplied=false;
-        savePreferences(); this.followingTrain = null; this.pendingMutation = null;
-        if (this.map != null) { this.map.clearFreightShipmentFocus();this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
-        if (this.readOnly && !openingIdentityEditor&&!tradeView) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
+        savePreferences();  this.pendingMutation = null;
+        if (this.map != null) { this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
+        if (this.readOnly && !openingIdentityEditor) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
         com.example.examplemod.client.ProjectClientState.clear();
         super.removed();
     }
     private int layoutViewButtons(int mapWidth) {
         this.viewButtons.clear();
         int start=WorldMapUiLayout.popoverY(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL;
-        int[] labels=new int[5];
-        for(int i=0;i<labels.length;i++)labels[i]=this.font.width(Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i]));
+        int[] labels=new int[4];
+        for(int i=0;i<labels.length;i++)labels[i]=this.font.width(Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i<2?i:i+1]));
         this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,start,labels));
         return this.viewButtons.getLast().bottom()+NORMAL;
     }
     private void renderViewButtons(GuiGraphics g,int mx,int my) {
-        for(int i=0;i<this.viewButtons.size();i++) {
-            var r=this.viewButtons.get(i);
-            boolean active=i==2&&this.followingTrain!=null&&!this.followPaused||i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
+        for(int viewIndex=0;viewIndex<this.viewButtons.size();viewIndex++) {
+            int i=viewIndex<2?viewIndex:viewIndex+1;
+            var r=this.viewButtons.get(viewIndex);
+            boolean active=i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
             var selected=this.map.getSelection();
-            boolean enabled=i!=2||this.followingTrain!=null||selected!=null&&selected.kind()==CityMapPanel.SelectionKind.TRAIN;
+            boolean enabled=i!=2;
             WorldMapChrome.dispatchControl(g,r,active,r.contains(mx,my),enabled,false);
-            Component label=Component.translatable("gui.createcityexpansioncore.world_map.view."+(i==2&&this.followingTrain!=null&&this.followPaused?"resume_follow":VIEW_KEYS[i]));
+            Component label=Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i]);
             if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL)))
                 WorldMapChrome.viewIcon(g,i,r.x()+(r.width()-16)/2,r.y()+(r.height()-16)/2,enabled?TEXT:MapPalette.TEXT_FAINT);
             else g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-SECTION),r.x()+6,r.y()+(r.height()-8)/2,enabled?TEXT:MapPalette.TEXT_FAINT,false);
@@ -1741,13 +1514,9 @@ public final class PolishedWorldMapScreen extends Screen {
 
     private void handleViewAction(int index) {
         switch (index) {
-            case 0 -> { this.followingTrain = null; this.map.centerOnPlayer(); }
-            case 1 -> { this.followingTrain = null;if(!this.map.fitFreightShipment())this.map.fitCity(); }
-            case 2 -> {
-                var selected = this.map.getSelection();
-                if (this.followingTrain != null && this.followPaused) this.followPaused=false;
-                else { this.followingTrain = this.followingTrain != null ? null : selected != null && selected.kind() == CityMapPanel.SelectionKind.TRAIN ? selected.id() : null; this.followPaused=false; }
-            }
+            case 0 -> {  this.map.centerOnPlayer(); }
+            case 1 -> {  this.map.fitCity(); }
+
             case 3 -> this.map.togglePinTool();
             case 4 -> this.map.toggleMeasureTool();
             case 5 -> this.map.setPresentation(this.map.coordinateGrid(), !this.map.overviewVisible());
@@ -1763,41 +1532,24 @@ public final class PolishedWorldMapScreen extends Screen {
             default -> { }
         }
     }
-    private void updateFollowingTrain() {
-        var selected = this.map.getSelection();
-        if (this.followingTrain == null) {
-            if (selected != null && selected.kind() == CityMapPanel.SelectionKind.TRAIN) {
-                var current = this.data.getRailwayTrains().stream().filter(value -> value.fleetTrainId().equals(selected.id())).findFirst().orElse(null);
-                if (current == null || !this.data.getDimensionId().equals(current.dimension())) this.map.clearSelection();
-                else this.map.selectTrain(current);
-            }
-            return;
-        }
-        var train = this.data.getRailwayTrains().stream().filter(value -> this.followingTrain.equals(value.fleetTrainId()) && this.data.getDimensionId().equals(value.dimension())).findFirst().orElse(null);
-        if (train == null) { this.followingTrain = null; return; }
-        if (!this.followPaused) { this.map.followPosition(train.x(),train.z()); this.map.selectTrain(train); }
-    }
+
     private List<Component> navigationActions(CityMapPanel.Selection value) {
         List<Component> actions = new ArrayList<>();
         actions.add(Component.translatable("gui.createcityexpansioncore.world_map.action.center"));
-        if (value.kind() == CityMapPanel.SelectionKind.TRAIN) actions.add(Component.translatable("gui.createcityexpansioncore.world_map.view.follow"));
+
         if (value.kind() == CityMapPanel.SelectionKind.WAYPOINT) actions.add(Component.translatable("gui.createcityexpansioncore.world_map.pin.remove"));
         var profile = value.kind() == CityMapPanel.SelectionKind.CITY ? com.example.examplemod.client.CityPublicDirectory.profile(value.id()) : null;
         if (profile != null && profile.editable()) actions.add(Component.translatable("gui.createcityexpansioncore.city.identity.edit"));
         if(value.kind()==CityMapPanel.SelectionKind.CITY)actions.add(AllianceScreen.tr("city_entry"));
         return actions;
     }
-    private void handleNavigationAction(CityMapPanel.Selection value, int index) {
+    private void handleNavigationAction(CityMapPanel.Selection value,int index){
         if(value.kind()==CityMapPanel.SelectionKind.CITY&&index==navigationActions(value).size()-1){AllianceScreen.open(this,value.id());return;}
-        if (index == 0) { this.followingTrain = null; this.map.centerOn(value.pos()); }
-        else if (index == 1 && value.kind() == CityMapPanel.SelectionKind.TRAIN) { this.followingTrain = value.id().equals(this.followingTrain) && !this.followPaused ? null : value.id(); this.followPaused=false; }
-        else if (index == 1 && value.kind() == CityMapPanel.SelectionKind.WAYPOINT) this.map.removeSelectedPin();
-        else if (index == 1 && value.kind() == CityMapPanel.SelectionKind.CITY) {
-            var profile = com.example.examplemod.client.CityPublicDirectory.profile(value.id());
-            if (profile != null && profile.editable()) {
-                openingIdentityEditor = true; com.example.examplemod.client.CityPublicDirectory.cancelLoading();
-                this.minecraft.setScreen(new CityIdentityEditorScreen(this, profile));
-            }
+        if(index==0){this.map.centerOn(value.pos());return;}
+        if(index==1&&value.kind()==CityMapPanel.SelectionKind.WAYPOINT)this.map.removeSelectedPin();
+        else if(index==1&&value.kind()==CityMapPanel.SelectionKind.CITY){
+            var profile=com.example.examplemod.client.CityPublicDirectory.profile(value.id());
+            if(profile!=null&&profile.editable()){openingIdentityEditor=true;com.example.examplemod.client.CityPublicDirectory.cancelLoading();this.minecraft.setScreen(new CityIdentityEditorScreen(this,profile));}
         }
     }
     private int searchRows() { return Math.max(1, Math.min(8, (this.height - popoverY() - 96) / 25)); }
@@ -1823,14 +1575,13 @@ public final class PolishedWorldMapScreen extends Screen {
         return new WorldMapUiLayout.Rect(panel.x() + 6 + index * width, panel.y() + 28, width - 3, 19);
     }
     private void selectObject(CityMapPanel.Selection value) {
-        this.followingTrain = null;
+
         var before = this.map.getSelection();
         if (before != null && !before.equals(value)) this.backHistory.push(before);
-        this.forwardHistory.clear(); this.followingTrain = null;
+        this.forwardHistory.clear();
         switch (value.kind()) {
-            case TRAIN, TRAIN_UNREGISTERED, STATION, ROUTE, RAILWAY_SECTION -> applyMode(Mode.RAILWAY);
-            case FREIGHT_POINT, DISCOVERY, TRADE_INFRASTRUCTURE -> applyMode(Mode.LOGISTICS);
-            default -> applyMode(Mode.CITIES);
+
+default -> applyMode(Mode.CITIES);
         }
         for (var layer : activeOverlays()) this.map.setOverlay(layer, true);
         this.map.selectAndCenter(value);
@@ -1858,52 +1609,30 @@ public final class PolishedWorldMapScreen extends Screen {
         } else if (inside(x, y, rect.x() + LARGE * 2 + half, rect.bottom() - 34, half, 22)) this.pendingMutation = null;
     }
 
-    private record Legend(String key,int color,CityMapPanel.RailClass rail,AtlasGlyph glyph) {}
+    private record Legend(String key,int color,AtlasGlyph glyph) {}
     private List<Legend> legendRows() {
-        if(this.mode==Mode.RAILWAY) {
-            var result=new ArrayList<Legend>();
-            result.add(new Legend("physical_track",0xFFB9B2A2,null,null));
-            for(var kind:legendClasses())result.add(new Legend(kind.name().toLowerCase(Locale.ROOT),CityMapPanel.railInnerColor(kind),kind,null));
-            result.add(new Legend("selected_route",DispatchPalette.SELECTED,null,null));
-            result.add(new Legend("active_route",0xFF8BCDB1,null,null));
-            result.add(new Legend("inactive_route",0xFFE0A776,null,null));
-            result.add(new Legend("station",MapPalette.OWN,null,AtlasGlyph.STATION));
-            result.add(new Legend("train",MapPalette.OWN,null,AtlasGlyph.TRAIN));return result;
-        }
-        if(this.mode==Mode.LOGISTICS)return List.of(
-            new Legend("freight_point",MapPalette.OWN,null,AtlasGlyph.FREIGHT),
-            new Legend("freight_hub",MapPalette.OWN,null,AtlasGlyph.HUB),
-            new Legend("freight_link",0xB36ACFCE,null,null),
-            new Legend("shipment_path",DispatchPalette.SELECTED,null,null),
-            new Legend("shipment_rail",DispatchPalette.SELECTED,null,null),
-            new Legend("train",MapPalette.OWN,null,AtlasGlyph.TRAIN),
-            new Legend("attention",MapPalette.ALERT,null,AtlasGlyph.FREIGHT));
-        if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEXT_FAINT,null,AtlasGlyph.ENERGY));
-        return List.of(new Legend("own_city",MapPalette.OWN,null,AtlasGlyph.CITY),
-            new Legend("other_city",MapPalette.NEUTRAL,null,AtlasGlyph.CITY),
-            new Legend("alliance",MapPalette.OWN,null,null),
-            new Legend("territory",MapPalette.OWN,null,null),
-            new Legend("industry",MapPalette.OWN,null,AtlasGlyph.MINE),
-            new Legend("partner",0xB365D8AF,null,null),
-            new Legend("trusted",0xA06EAED0,null,null),
-            new Legend("pending",0x906F7596,null,null));
+
+if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEXT_FAINT,AtlasGlyph.ENERGY));
+        return List.of(new Legend("own_city",MapPalette.OWN,AtlasGlyph.CITY),
+            new Legend("other_city",MapPalette.NEUTRAL,AtlasGlyph.CITY),
+            new Legend("alliance",MapPalette.OWN,null),
+            new Legend("territory",MapPalette.OWN,null),
+            new Legend("industry",MapPalette.OWN,AtlasGlyph.MINE),
+            new Legend("partner",0xB365D8AF,null),
+            new Legend("trusted",0xA06EAED0,null),
+            new Legend("pending",0x906F7596,null));
     }
-    private boolean legendEnabled(Legend entry) {
+    private boolean legendEnabled(Legend entry){
         if(entry.key().startsWith("social_"))return true;
-        var layer=entry.rail()!=null||entry.key().endsWith("_route")?CityMapPanel.Overlay.TRACKS:switch(entry.key()) {
-            case "own_city","other_city","alliance" -> CityMapPanel.Overlay.CITIES;
-            case "territory" -> CityMapPanel.Overlay.TERRITORIES;
-            case "industry" -> CityMapPanel.Overlay.PROJECTS;
-            case "partner","trusted","pending" -> CityMapPanel.Overlay.RELATIONS;
-            case "train" -> CityMapPanel.Overlay.TRAINS;
-            case "station" -> CityMapPanel.Overlay.STATIONS;
-            case "physical_track" -> CityMapPanel.Overlay.TRACKS;
-            default -> CityMapPanel.Overlay.TRADE;
-        };
-        return this.mode.available()&&this.map.isOverlayEnabled(layer);
+        var layer=switch(entry.key()){
+            case "own_city","other_city","alliance"->CityMapPanel.Overlay.CITIES;
+            case "territory"->CityMapPanel.Overlay.TERRITORIES;
+            case "industry"->CityMapPanel.Overlay.PROJECTS;
+            default->CityMapPanel.Overlay.RELATIONS;
+        };return this.mode.available()&&this.map.isOverlayEnabled(layer);
     }
     private void renderModeLegend(GuiGraphics g) {
-        var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null,null));rows.add(new Legend("social_project",0xFFE4B65B,null,null));
+        var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null));rows.add(new Legend("social_project",0xFFE4B65B,null));
         int full=WorldMapUiLayout.legendHeader(panel)+rows.size()*WorldMapUiLayout.LEGEND_ROW;
         this.legendScroll=Math.min(this.legendScroll,Math.max(0,full-panel.height()));
         plate(g,panel.x(),panel.y(),panel.width(),panel.height());
@@ -1920,17 +1649,10 @@ public final class PolishedWorldMapScreen extends Screen {
                 g.fill(r.x()+13,r.y()+12,r.x()+16,r.y()+15,enabled?badge:MapPalette.TEXT_FAINT);
             }
             else if(entry.key().equals("alliance")){g.renderOutline(r.x()+1,r.y()+3,13,13,enabled?entry.color():MapPalette.TEXT_FAINT);g.renderOutline(r.x()+10,r.y()+1,5,5,enabled?entry.color():MapPalette.TEXT_FAINT);}
-            else if(entry.key().equals("physical_track")){g.fill(r.x(),r.y()+6,r.x()+17,r.y()+9,0xF00B1013);g.fill(r.x(),r.y()+7,r.x()+17,r.y()+8,entry.color());}
-            else if(entry.rail()!=null){int inner=CityMapPanel.railInnerWidth(entry.rail());g.fill(r.x(),r.y()+5,r.x()+16,r.y()+7+inner,CityMapPanel.railOutlineColor(entry.rail()));g.fill(r.x(),r.y()+6,r.x()+16,r.y()+6+inner,entry.color());if(entry.rail()==CityMapPanel.RailClass.PUBLIC_PAID)g.fill(r.x()+7,r.y()+5,r.x()+9,r.y()+11,0xFFB6F5CD);}
-            else if(entry.key().equals("territory")){g.fill(r.x(),r.y()+3,r.x()+16,r.y()+14,0x1ED3A363);g.renderOutline(r.x(),r.y()+3,16,11,entry.color());}
-            else if(entry.key().endsWith("_route")) {
-                if(entry.key().equals("selected_route"))g.fill(r.x(),r.y()+3,r.x()+17,r.y()+12,MapPalette.argb(DispatchPalette.SELECTED,56));
-                g.fill(r.x(),r.y()+5,r.x()+17,r.y()+10,0xE0121B20);
-                g.fill(r.x(),r.y()+6,r.x()+17,r.y()+9,entry.color());
-            }
-            else if(entry.key().equals("freight_link")||entry.key().equals("shipment_path")){for(int dx=0;dx<17;dx+=8)g.fill(r.x()+dx,r.y()+7,r.x()+Math.min(17,dx+5),r.y()+9,entry.color());}
-            else if(entry.key().equals("shipment_rail")){g.fill(r.x(),r.y()+5,r.x()+17,r.y()+11,0xE0121B20);g.fill(r.x(),r.y()+7,r.x()+17,r.y()+9,entry.color());}
-            else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
+
+else if(entry.key().equals("territory")){g.fill(r.x(),r.y()+3,r.x()+16,r.y()+14,0x1ED3A363);g.renderOutline(r.x(),r.y()+3,16,11,entry.color());}
+
+else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
             Component label=Component.translatable("gui.createcityexpansioncore.world_map.legend."+entry.key());
             g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-24),r.x()+24,r.y()+5,enabled?TEXT:MapPalette.TEXT_FAINT,false);
             Component tooltip=enabled?label:label.copy().append(" · ").append(Component.translatable("gui.createcityexpansioncore.world_map.polish.layer_hidden"));
@@ -1941,10 +1663,8 @@ public final class PolishedWorldMapScreen extends Screen {
 
     private enum Mode {
         CITIES("minecraft:compass", "gui.createcityexpansioncore.world_map.mode.cities", CityMapPanel.Focus.WORLD, true),
-        RAILWAY("create:track", "gui.createcityexpansioncore.world_map.mode.railway", CityMapPanel.Focus.RAILWAY, true),
         // The shipment seal, not an emerald: emerald reads as the vanilla villager currency, and a
-        // freight mode has nothing to do with it.
-        LOGISTICS("createcityexpansioncore:shipment_seal", "gui.createcityexpansioncore.world_map.mode.logistics", CityMapPanel.Focus.TRADE, true),
+
         ENERGY("minecraft:redstone", "gui.createcityexpansioncore.world_map.mode.energy", CityMapPanel.Focus.ENERGY, false);
 
         private final ItemStack icon;

@@ -1,5 +1,7 @@
 # Create Server Telegram bot
 
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
+
 Актуализировано 02.11.2026 по CCEC snapshot. Java 21, Gradle wrapper 9.2.1,
 Telegram Bot API long polling, Jackson, OkHttp 4.12.0. Прямого PostgreSQL/JPA/Redis
 доступа нет: accounts, permissions и delivery outbox принадлежат backend.

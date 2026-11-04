@@ -14,6 +14,22 @@ public final class TerrainPipelineCheck {
     private static int checks;
     private static void require(boolean ok,String label){checks++;if(!ok)throw new AssertionError(label);}
     public static void run()throws Exception {
+        // A render-thread regression cannot be exercised by the headless raster checks below.
+        // Guard the production integration seam too: Minecraft owns render state, and terrain is
+        // submitted in a finished pass before marker/border GUI batches are built.
+        String atlasSource=Files.readString(Path.of("src/main/java/com/example/examplemod/client/map/TerrainAtlas.java"));
+        require(atlasSource.contains("g.bufferSource().getBuffer(RenderType.textSeeThrough(page.id))"),
+                "atlas uses managed Minecraft render type, including shader-mod hooks");
+        require(!atlasSource.contains("RenderSystem.")&&!atlasSource.contains("BufferUploader.drawWithShader"),
+                "terrain cannot leak manually forced shader/depth/blend state to city markers");
+        require(atlasSource.contains("setColor(1f,1f,1f,q.alpha)")&&atlasSource.contains("setLight(0xF000F0)"),
+                "terrain preserves white RGB and full brightness while allowing the tile transition alpha");
+        String panelSource=Files.readString(Path.of("src/main/java/com/example/examplemod/client/map/CityMapPanel.java"));
+        require(panelSource.contains("guiGraphics.drawManaged(() -> renderTerrain(guiGraphics));"),
+                "terrain flush and marker submission have separate managed passes");
+        require(panelSource.contains("renderMissingTile(guiGraphics,key,requestedTiles.containsKey(key));")
+                &&panelSource.contains("double span = key.span();"),
+                "missing terrain remains visible at every LOD without 32-block placeholder gaps");
         int[] white=new int[1024];Arrays.fill(white,0xFFFFFFFF);short[] height=new short[1024];Arrays.fill(height,(short)80);
         var pyramid=new TerrainPyramid();
         for(int z=-2;z<2;z++)for(int x=-2;x<2;x++)pyramid.put(x,z,white,height);

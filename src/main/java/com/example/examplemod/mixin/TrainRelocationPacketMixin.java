@@ -1,7 +1,7 @@
 package com.example.examplemod.mixin;
 
 import com.example.examplemod.block.TransportProtection;
-import com.example.examplemod.railway.CreateRailwayAdapter;
+import com.simibubi.create.content.trains.RailwaySavedData;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.entity.TrainRelocationPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,7 +34,7 @@ public abstract class TrainRelocationPacketMixin {
         if (player == null) {
             return;
         }
-        Train train = CreateRailwayAdapter.train(trainId);
+        Train train = RailwaySavedData.load(player.server).getTrains().get(trainId);
         if (train == null) {
             return;
         }

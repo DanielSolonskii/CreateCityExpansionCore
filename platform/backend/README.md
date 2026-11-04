@@ -1,5 +1,7 @@
 # Create Server backend
 
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
+
 Актуализировано 02.11.2026: Java 21, Spring Boot 4.0.8, Gradle wrapper 9.2.1,
 Spring Data JPA/JDBC, PostgreSQL и Flyway V1–V14. Artifact version —
 `0.1.0-SNAPSHOT`, не номер последнего deployment. Это вложенный snapshot CCEC:

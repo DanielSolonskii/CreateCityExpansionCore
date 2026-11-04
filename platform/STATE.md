@@ -1,4 +1,6 @@
-# Platform STATE — 02.11.2026
+# Platform STATE — 04.11.2026
+
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
 
 ## Область доказательств
 
@@ -60,3 +62,11 @@ Game Session 4B присутствует в коде. Старые README-фра
 Документационный аудит не применял production migrations, не менял доступы,
 не устанавливал/перезапускал сервисы и не публиковал signed release channels.
 Исторические deployment notes — прошлые receipt, не readiness сегодня.
+
+## Обновление release safety — 2026-11-04
+
+CCEC game release и launcher installer остаются разными продуктами. Целевой мод 1.0.2.15 не изменяет package version launcher 0.1.13 и не устраняет native compile blocker.
+
+В `scripts/server-release.py` / `inspect-server.mjs` добавлен preflight реального кандидатного JAR и Economy/Cargo SavedData до stop/deploy, повтор после final save и проверка files-only rollback. 12 новых hermetic regression tests PASS; существующие 19 Python release tests: 11 PASS, 8 Linux-only skips на Windows. `node --check` PASS. Эти проверки не устанавливали мод и не переключали каналы.
+
+Прежний production CCEC восстановлен на 1.0.2.13 / Economy15, Windows alpha-0.1.32 и macOS alpha-0.1.32-mac.1 не переключались. Финальные deployment/channel receipts публикуются отдельно после совместимого выпуска. Старые JAR без save metadata требуют ручной проверки восстановления.

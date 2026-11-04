@@ -4,9 +4,6 @@ import com.example.examplemod.client.CityBoundaryRenderer;
 import com.example.examplemod.client.CityWorldMapKey;
 import com.example.examplemod.client.CityInviteClientHandler;
 import com.example.examplemod.client.CityTerritorySnapshot;
-import com.example.examplemod.client.CokeBatteryGuideRenderer;
-import com.example.examplemod.client.BlastFurnaceGuideRenderer;
-import com.example.examplemod.client.SteelConverterGuideRenderer;
 import com.example.examplemod.client.BuildGuideKeyMappings;
 import com.example.examplemod.client.ModFluidClientExtensions;
 import com.example.examplemod.client.render.CityPylonModels;
@@ -23,8 +20,6 @@ import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
-import com.example.examplemod.network.CokeBatteryGuidePayload;
-import com.example.examplemod.network.BlastFurnaceGuidePayload;
 import com.example.examplemod.network.SyncCityMemberRemovalPayload;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
@@ -43,7 +38,6 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
-
 
 @Mod(
         value = CreateCityExpansionCore.MODID,
@@ -92,8 +86,7 @@ public class CreateCityExpansionCoreClient {
                 com.example.examplemod.client.render.IndustrialMineVisuals::changed;
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.render.IndustrialMineVisuals.class);
 
-
-        /*
+/*
          * =========================================
          * РЕГИСТРАЦИЯ CLIENT PAYLOADS
          * =========================================
@@ -107,8 +100,7 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
         modEventBus.addListener(ModFluidClientExtensions::register);
 
-
-        /*
+/*
          * =========================================
          * РЕГИСТРАЦИЯ РЕНДЕРЕРА ГРАНИЦ ГОРОДА
          * =========================================
@@ -121,10 +113,8 @@ public class CreateCityExpansionCoreClient {
         );
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.PlayerProfileKey.class);
-        NeoForge.EVENT_BUS.register(CokeBatteryGuideRenderer.class);
-        NeoForge.EVENT_BUS.register(BlastFurnaceGuideRenderer.class);
-        NeoForge.EVENT_BUS.register(SteelConverterGuideRenderer.class);
-    }
+
+}
     private void registerRenderers(
             EntityRenderersEvent.RegisterRenderers event
     ) {
@@ -152,14 +142,10 @@ public class CreateCityExpansionCoreClient {
                 CreateCityExpansionCore.CITY_PYLON_MENU.get(),
                 CityPylonScreen::new
         );
-        event.register(
-                CreateCityExpansionCore.ECONOMY_INFRASTRUCTURE_MENU.get(),
-                com.example.examplemod.client.screen.EconomyInfrastructureScreen::new
-        );
+
     }
 
-
-    /*
+/*
      * =========================================
      * CLIENT PAYLOAD HANDLERS
      * =========================================
@@ -186,17 +172,7 @@ public class CreateCityExpansionCoreClient {
             invokeEnqueueWork(context, () -> MineControllerScreen.receiveCommissionContext(payload));
         };
 
-        CreateCityExpansionCore.COKE_BATTERY_GUIDE_HANDLER = (payload, context) -> {
-            invokeEnqueueWork(context, () -> CokeBatteryGuideRenderer.toggle(payload.controllerPos()));
-        };
-
-        CreateCityExpansionCore.BLAST_FURNACE_GUIDE_HANDLER = (payload, context) -> {
-            invokeEnqueueWork(context, () -> BlastFurnaceGuideRenderer.toggle(payload.controllerPos()));
-        };
-        CreateCityExpansionCore.STEEL_CONVERTER_GUIDE_HANDLER = (payload, context) ->
-                invokeEnqueueWork(context, () -> SteelConverterGuideRenderer.toggle(payload.controllerPos()));
-
-        CreateCityExpansionCore.CITY_INVITE_NOTIFICATION_HANDLER = (payload, context) -> {
+CreateCityExpansionCore.CITY_INVITE_NOTIFICATION_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> CityInviteClientHandler.receiveInvite(payload));
         };
 
@@ -257,13 +233,13 @@ public class CreateCityExpansionCoreClient {
         Minecraft minecraft = Minecraft.getInstance();
         if (!payload.openScreen()) {
             MineControllerScreen.updateIfOpen(
-                    payload.snapshot(), payload.railwayStationName(), payload.railwayStationAvailable());
+                    payload.snapshot());
             return;
         }
         if (payload.snapshot().structureValid()) {
             MultiblockPreviewRenderer.hide();
             MineControllerScreen.openOrUpdate(
-                    payload.snapshot(), payload.railwayStationName(), payload.railwayStationAvailable());
+                    payload.snapshot());
             return;
         }
 
