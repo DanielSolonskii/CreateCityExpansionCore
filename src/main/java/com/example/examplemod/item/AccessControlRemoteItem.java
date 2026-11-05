@@ -81,6 +81,11 @@ public final class AccessControlRemoteItem extends Item {
                 refuse(player, "transport_not_member");
                 return InteractionResult.CONSUME;
             }
+            case UNRESOLVED -> {
+                player.displayClientMessage(Component.translatable(
+                        "message.createcityexpansioncore.transport_protection.loading"), true);
+                return InteractionResult.CONSUME;
+            }
             case UNREGISTERED -> {
                 refuse(player, "transport_unregistered");
                 return InteractionResult.CONSUME;

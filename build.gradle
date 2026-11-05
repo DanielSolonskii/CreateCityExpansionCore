@@ -789,3 +789,12 @@ tasks.named('check') { dependsOn tasks.named('checkDispatchPresentation') }
     }
     tasks.named('check') { dependsOn tasks.named(taskName) }
 }
+
+// Headless protection regressions; no optional Sable runtime required.
+tasks.register('checkTransportTerminalBinding', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.block.TransportTerminalBindingCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkTransportTerminalBinding') }

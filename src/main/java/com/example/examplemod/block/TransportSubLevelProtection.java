@@ -7,10 +7,11 @@ import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
-import dev.ryanhcode.sable.sublevel.plot.EmbeddedPlotLevelAccessor;
 import dev.ryanhcode.sable.sublevel.plot.LevelPlot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,9 +20,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Map;
 import java.util.UUID;
-import java.util.WeakHashMap;
 
 /**
  * Защита физических конструкций (sublevel'ов Create Simulated /
@@ -51,36 +50,13 @@ import java.util.WeakHashMap;
  */
 public final class TransportSubLevelProtection {
 
-    /**
-     * Разумный предел на объём сканируемого региона: это защита от
-     * вечного цикла на вырожденном bounding box, а не оптимизация.
-     */
-    private static final int MAX_SCAN_VOLUME = 2_000_000;
+    private enum LookupState { FOUND, UNREGISTERED, UNRESOLVED }
 
-    /** Сколько тиков живёт кэшированный отрицательный результат. */
-    private static final long NEGATIVE_TTL_TICKS = 100;
-
-    /**
-     * Кэш «sublevel -> город». Привязка не меняется в полёте, а
-     * sublevel пересоздаётся при пересборке — WeakHashMap чистится
-     * сам. Отрицательный результат живёт ограниченное время: сразу
-     * после сборки BlockEntity могут быть ещё не зарегистрированы в
-     * plot-чанках, и закэшированный «пусто» навсегда отключил бы
-     * защиту (баг первой версии).
-     *
-     * <p>Положительный результат кэшируется целиком только вместе с
-     * токеном грантов: терминал без токена (старые миры) резканится
-     * заново на каждом обращении, пока участник не сгенерирует его
-     * пультом, — после этого кэш снова становится постоянным.
-     */
-    private static final Map<ServerSubLevel, CachedTerminal> CITY_CACHE = new WeakHashMap<>();
-
-    private record CachedTerminal(
-            @Nullable UUID cityId,
-            @Nullable UUID token,
-            @Nullable BlockPos terminalPos,
-            long cachedAt
-    ) {
+    /** Missing plot data is not proof that a vessel is unregistered. */
+    private record TerminalLookup(LookupState state, @Nullable RegisteredTerminal terminal) {
+        private static TerminalLookup found(RegisteredTerminal terminal) {
+            return new TerminalLookup(LookupState.FOUND, terminal);
+        }
     }
 
     /** Найденный сканом терминал: город, токен пульта, позиция в координатах plot'а. */
@@ -95,14 +71,18 @@ public final class TransportSubLevelProtection {
     public record OutlineTerminal(UUID cityId, UUID token, BlockPos pos) {}
 
     public static OutlineTerminal outlineTerminal(ServerSubLevel sublevel, ServerLevel level) {
-        var terminal = registeredTerminal(sublevel, level);
+        var terminal = registeredTerminal(sublevel, level).terminal();
         return terminal == null || terminal.token() == null ? null
                 : new OutlineTerminal(terminal.cityId(), terminal.token(), terminal.terminalPos());
     }
 
     public static void invalidateTerminalCache(ServerLevel level, BlockPos pos) {
         var sublevel = Sable.HELPER.getContaining(level, new ChunkPos(pos));
-        if (sublevel instanceof ServerSubLevel server) CITY_CACHE.remove(server);
+        if (sublevel instanceof ServerSubLevel server) {
+            // These notifications can precede a cancelled edit. A subsequent lookup
+            // always reads live plot BEs again, so it can rebuild the binding safely.
+            server.setUserDataTag(TransportTerminalBinding.clear(server.getUserDataTag()));
+        }
     }
 
     private TransportSubLevelProtection() {
@@ -125,10 +105,11 @@ public final class TransportSubLevelProtection {
         if (sublevel == null) {
             return true;
         }
-        City city = registeredCity(sublevel, level);
-        if (city == null) {
-            return true;
-        }
+        TerminalLookup lookup = registeredTerminal(sublevel, level);
+        if (lookup.state() == LookupState.UNRESOLVED) return denyLoading(player);
+        if (lookup.state() == LookupState.UNREGISTERED) return true;
+        City city = CityManager.get(level.getServer().overworld()).getCity(lookup.terminal().cityId());
+        if (city == null) return true;
         boolean allowed = CityManager.get(level.getServer().overworld())
                 .allowsTerritoryAction(city, player.getUUID(), true);
         return allowed;
@@ -148,10 +129,11 @@ public final class TransportSubLevelProtection {
             // Сборка новой конструкции — защищать нечего.
             return true;
         }
-        City city = registeredCity(serverSubLevel, level);
-        if (city == null) {
-            return true;
-        }
+        TerminalLookup lookup = registeredTerminal(serverSubLevel, level);
+        if (lookup.state() == LookupState.UNRESOLVED) return denyLoading(player);
+        if (lookup.state() == LookupState.UNREGISTERED) return true;
+        City city = CityManager.get(level.getServer().overworld()).getCity(lookup.terminal().cityId());
+        if (city == null) return true;
         return CityManager.get(level.getServer().overworld())
                 .allowsTerritoryAction(city, player.getUUID(), true);
     }
@@ -165,7 +147,8 @@ public final class TransportSubLevelProtection {
         }
         LevelPlot plot = serverSubLevel.getPlot();
         if (plot == null) {
-            return null;
+            // It is still a physical vessel; the permission check must fail closed.
+            return serverSubLevel;
         }
         BoundingBox3ic bounds = plot.getBoundingBox();
         if (bounds != null && !bounds.contains(pos.getX(), pos.getY(), pos.getZ())) {
@@ -186,44 +169,32 @@ public final class TransportSubLevelProtection {
      */
     @Nullable
     public static City registeredCity(ServerSubLevel sublevel, ServerLevel level) {
-        RegisteredTerminal terminal = registeredTerminal(sublevel, level);
+        RegisteredTerminal terminal = registeredTerminal(sublevel, level).terminal();
         if (terminal == null) {
             return null;
         }
         return CityManager.get(level.getServer().overworld()).getCity(terminal.cityId());
     }
 
-    /**
-     * Полный регистрационный контекст sublevel'а: терминал с городом,
-     * токен грантов пульта и позиция терминала в координатах plot'а.
-     *
-     * <p>Дельты блоков считаются именно от этой позиции, поэтому в
-     * кэш уходит она же, — иначе проверка грантов не переживёт
-     * вылетов скана. Ссылка на BlockEntity в кэш не записывается:
-     * она нужна только живому скану, чтобы старый терминал мог
-     * сгенерировать токен прямо при переключении пульта.
-     */
-    @Nullable
-    private static RegisteredTerminal registeredTerminal(ServerSubLevel sublevel, ServerLevel level) {
-        CityManager cityManager = CityManager.get(level.getServer().overworld());
-        CachedTerminal cached = CITY_CACHE.get(sublevel);
-        long now = level.getGameTime();
-        if (cached != null && cached.cityId() != null && cached.token() != null) {
-            return new RegisteredTerminal(cached.cityId(), cached.token(), cached.terminalPos(), null);
+    /** Read only the plot's own chunks. Never enter the vanilla chunk pipeline. */
+    private static TerminalLookup registeredTerminal(ServerSubLevel sublevel, ServerLevel level) {
+        CityManager cities = CityManager.get(level.getServer().overworld());
+        TerminalLookup lookup = scanForTerminal(sublevel, cities);
+        if (lookup.state() == LookupState.FOUND && lookup.terminal().blockEntity() != null) {
+            RegisteredTerminal terminal = lookup.terminal();
+            var binding = new TransportTerminalBinding(sublevel.getUniqueId(), terminal.cityId(),
+                    terminal.token(), terminal.terminalPos().subtract(sublevel.getPlot().getCenterBlock()));
+            sublevel.setUserDataTag(binding.store(sublevel.getUserDataTag()));
+        } else if (lookup.state() == LookupState.UNREGISTERED) {
+            sublevel.setUserDataTag(TransportTerminalBinding.clear(sublevel.getUserDataTag()));
         }
-        if (cached != null && cached.cityId() == null
-                && now - cached.cachedAt() < NEGATIVE_TTL_TICKS) {
-            return null;
-        }
+        return lookup;
+    }
 
-        RegisteredTerminal found = scanForTerminal(sublevel, cityManager);
-        CITY_CACHE.put(sublevel, new CachedTerminal(
-                found == null ? null : found.cityId(),
-                found == null ? null : found.token(),
-                found == null ? null : found.terminalPos(),
-                now
-        ));
-        return found;
+    private static boolean denyLoading(ServerPlayer player) {
+        player.displayClientMessage(Component.translatable(
+                "message.createcityexpansioncore.transport_protection.loading"), true);
+        return false;
     }
 
     /**
@@ -246,10 +217,10 @@ public final class TransportSubLevelProtection {
             return true;
         }
         CityManager cityManager = CityManager.get(level.getServer().overworld());
-        RegisteredTerminal terminal = registeredTerminal(sublevel, level);
-        if (terminal == null) {
-            return true;
-        }
+        TerminalLookup lookup = registeredTerminal(sublevel, level);
+        if (lookup.state() == LookupState.UNRESOLVED) return denyLoading(player);
+        RegisteredTerminal terminal = lookup.terminal();
+        if (terminal == null) return true;
         City city = cityManager.getCity(terminal.cityId());
         if (city == null) {
             return true;
@@ -272,7 +243,7 @@ public final class TransportSubLevelProtection {
      *
      * <p>Игрок должен быть участником города конструкции. Для
      * терминалов старых миров токен генерируется здесь и пишется в
-     * NBT живого BlockEntity — следующий скан кэширует конструкцию
+     * NBT живого BlockEntity — следующий поиск сохраняет привязку
      * уже с токеном. Блок вне sublevel'а даёт NOT_PHYSICAL: caller
      * уходит на статический путь участков, чужая конструкция без
      * терминала — UNREGISTERED.
@@ -287,10 +258,10 @@ public final class TransportSubLevelProtection {
             return TransportGrantStatus.NOT_PHYSICAL;
         }
         CityManager cityManager = CityManager.get(level.getServer().overworld());
-        RegisteredTerminal terminal = registeredTerminal(sublevel, level);
-        if (terminal == null) {
-            return TransportGrantStatus.UNREGISTERED;
-        }
+        TerminalLookup lookup = registeredTerminal(sublevel, level);
+        if (lookup.state() == LookupState.UNRESOLVED) return TransportGrantStatus.UNRESOLVED;
+        RegisteredTerminal terminal = lookup.terminal();
+        if (terminal == null) return TransportGrantStatus.UNREGISTERED;
         City city = cityManager.getCity(terminal.cityId());
         if (city == null) {
             return TransportGrantStatus.UNREGISTERED;
@@ -298,9 +269,13 @@ public final class TransportSubLevelProtection {
         if (!city.hasMember(player.getUUID())) {
             return TransportGrantStatus.NOT_MEMBER;
         }
+        if (terminal.token() == null && terminal.blockEntity() == null) {
+            return TransportGrantStatus.UNRESOLVED;
+        }
         UUID token = terminal.token() != null
                 ? terminal.token()
                 : terminal.blockEntity().ensureGrantToken();
+        if (terminal.token() == null) registeredTerminal(sublevel, level);
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
                 level.getBlockState(pos).getBlock());
         boolean granted = cityManager.toggleTransportAccess(
@@ -308,53 +283,59 @@ public final class TransportSubLevelProtection {
         return granted ? TransportGrantStatus.GRANTED : TransportGrantStatus.REVOKED;
     }
 
-    /** Committed edits only. Never invoke the volume fallback from the per-block lifecycle. */
+    /** Committed edits only; terminal discovery never loads or generates chunks. */
     public static void onBlockChanged(ServerLevel level, BlockPos pos, ResourceLocation previous,
                                       ResourceLocation next, CityManager cities) {
         if (!cities.hasTransportAccessGrants()) return;
         ServerSubLevel sublevel = containingSubLevel(level, pos);
         if (sublevel == null) return;
-        CachedTerminal cached = CITY_CACHE.get(sublevel);
-        RegisteredTerminal terminal = cached != null && cached.cityId() != null && cached.token() != null
-                ? new RegisteredTerminal(cached.cityId(), cached.token(), cached.terminalPos(), null)
-                : scanLoadedTerminals(sublevel, cities);
+        RegisteredTerminal terminal = registeredTerminal(sublevel, level).terminal();
         if (terminal == null || terminal.token() == null) return;
-        CITY_CACHE.put(sublevel, new CachedTerminal(terminal.cityId(), terminal.token(), terminal.terminalPos(), level.getGameTime()));
         cities.onTransportBlockChanged(cities.getCity(terminal.cityId()), terminal.token(),
                 pos.subtract(terminal.terminalPos()), previous, next);
     }
 
-    @Nullable
-    private static RegisteredTerminal scanForTerminal(ServerSubLevel sublevel, CityManager cityManager) {
-        RegisteredTerminal found = scanLoadedTerminals(sublevel, cityManager);
-        if (found != null) return found;
+    private static TerminalLookup scanForTerminal(ServerSubLevel sublevel, CityManager cities) {
         LevelPlot plot = sublevel.getPlot();
-        if (plot == null) {
-            return null;
-        }
-        Block terminal = com.example.examplemod.CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL.get();
+        if (plot == null) return new TerminalLookup(LookupState.UNRESOLVED, null);
 
-        // Запасной путь: поблочный скан через embedded accessor в
-        // пределах bbox plot'а (если он посчитан).
-        EmbeddedPlotLevelAccessor accessor = plot.getEmbeddedLevelAccessor();
-        BoundingBox3ic bounds = plot.getBoundingBox();
-        if (accessor != null && bounds != null && bounds.volume() > 0 && bounds.volume() <= MAX_SCAN_VOLUME) {
-            BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
-                for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
-                    for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
-                        cursor.set(x, y, z);
-                        found = terminalOf(
-                                accessor.getBlockEntity(cursor), terminal, cityManager);
-                        if (found != null) {
-                            return found;
-                        }
-                    }
+        // Sable serializes userDataTag with the vessel. Positions are plot-relative,
+        // and the UUID prevents a copied/split vessel inheriting someone else's binding.
+        var binding = TransportTerminalBinding.read(sublevel.getUserDataTag(), sublevel.getUniqueId());
+        if (binding != null && cities.getCity(binding.cityId()) != null) {
+            BlockPos pos = binding.localPos().offset(plot.getCenterBlock());
+            var holder = plot.getChunkHolder(plot.toLocal(new ChunkPos(pos)));
+            LevelChunk chunk = holder == null ? null : holder.getChunk();
+            if (chunk == null || (chunk.getBlockEntitiesPos().contains(pos)
+                    && !chunk.getBlockEntities().containsKey(pos))) {
+                // Keep known protection while the terminal chunk / its BE is unavailable.
+                return TerminalLookup.found(new RegisteredTerminal(
+                        binding.cityId(), binding.token(), pos, null));
+            }
+            RegisteredTerminal live = terminalOf(chunk.getBlockEntities().get(pos),
+                    com.example.examplemod.CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL.get(), cities);
+            if (live != null) return TerminalLookup.found(live);
+            // The terminal chunk is present and its old terminal is gone/changed.
+            // Do not trust a positive cache forever after committed removal.
+        }
+
+        RegisteredTerminal discovered = scanLoadedTerminals(sublevel, cities);
+        if (discovered != null) return TerminalLookup.found(discovered);
+
+        // Sable loads a plot synchronously. Do not declare it unregistered while its
+        // bounds, holders or block entities are still being initialized. Empty slots
+        // in a sparse plot are legitimate: never probe them via Level.getChunk().
+        var holders = plot.getLoadedChunks();
+        boolean complete = plot.getBoundingBox() != null && holders != null && !holders.isEmpty();
+        if (holders != null) {
+            for (var holder : holders) {
+                LevelChunk chunk = holder == null ? null : holder.getChunk();
+                if (chunk == null || !chunk.getBlockEntities().keySet().containsAll(chunk.getBlockEntitiesPos())) {
+                    complete = false;
                 }
             }
         }
-
-        return null;
+        return new TerminalLookup(complete ? LookupState.UNREGISTERED : LookupState.UNRESOLVED, null);
     }
 
     /** Loaded block entities are enough for lifecycle cleanup, including after a server restart. */
@@ -382,7 +363,7 @@ public final class TransportSubLevelProtection {
             Block terminal,
             CityManager cityManager
     ) {
-        if (blockEntity == null
+        if (blockEntity == null || blockEntity.isRemoved()
                 || blockEntity.getBlockState().getBlock() != terminal
                 || !(blockEntity instanceof TransportRegistrationTerminalBlockEntity terminalBe)) {
             return null;
