@@ -1737,6 +1737,7 @@
   "message.createcityexpansioncore.access_control_remote.transport_granted": "Transport open: any player may right-click this construct.",
   "message.createcityexpansioncore.access_control_remote.transport_revoked": "Transport closed: right-clicking is member-only again.",
   "message.createcityexpansioncore.access_control_remote.transport_not_member": "Only a member of the construct's city may manage its access.",
+  "message.createcityexpansioncore.transport_protection.loading": "Construct protection data is still loading. Please try again shortly.",
   "message.createcityexpansioncore.access_control_remote.transport_unregistered": "This construct is not registered: it has no transport registration terminal linked to an existing city.",
   "gui.createcityexpansioncore.world_map.shipment.title": "Shipment route",
   "gui.createcityexpansioncore.world_map.shipment.progress": "Received %s of %s · in transit %s",

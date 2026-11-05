@@ -1737,6 +1737,7 @@
   "message.createcityexpansioncore.access_control_remote.transport_granted": "Транспорт открыт: любой игрок может взаимодействовать с этой конструкцией по ПКМ.",
   "message.createcityexpansioncore.access_control_remote.transport_revoked": "Транспорт закрыт: взаимодействие по ПКМ снова только для участников города.",
   "message.createcityexpansioncore.access_control_remote.transport_not_member": "Доступом транспорта может управлять только участник города конструкции.",
+  "message.createcityexpansioncore.transport_protection.loading": "Данные защиты конструкции ещё загружаются. Повторите действие немного позже.",
   "message.createcityexpansioncore.access_control_remote.transport_unregistered": "Конструкция не стоит на учёте: внутри неё нет терминала регистрации, связанного с существующим городом.",
   "gui.createcityexpansioncore.world_map.shipment.title": "Маршрут доставки",
   "gui.createcityexpansioncore.world_map.shipment.progress": "Принято %s из %s · в пути %s",

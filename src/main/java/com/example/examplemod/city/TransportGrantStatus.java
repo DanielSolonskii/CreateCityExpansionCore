@@ -17,6 +17,9 @@ public enum TransportGrantStatus {
     /** Конструкция есть, но зарегистрированного терминала города в ней нет. */
     UNREGISTERED,
 
+    /** Plot or terminal data is not ready; do not fall through to static city access. */
+    UNRESOLVED,
+
     /** Переключить грант может только участник города конструкции. */
     NOT_MEMBER,
 
