@@ -599,7 +599,7 @@ dependencies = [
 
 [[package]]
 name = "create-server-launcher"
-version = "0.1.13"
+version = "0.1.15"
 dependencies = [
  "base64 0.22.1",
  "discord-rich-presence",

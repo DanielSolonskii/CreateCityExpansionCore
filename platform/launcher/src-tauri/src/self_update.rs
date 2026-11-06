@@ -148,8 +148,18 @@ pub fn launcher_update_install(app:tauri::AppHandle,runtime:tauri::State<'_,Runt
     cmd.spawn().map_err(|_|"Не удалось запустить helper; Launcher не изменён")?;s.busy=true;app.exit(0);Ok(())
 }
 fn check_target(target:&Path)->Result<(),String>{
-    safe(target)?;let base=PathBuf::from(std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA отсутствует")?).join("RE-CREATED Launcher");
-    if target!=base.join("create-server-launcher.exe"){return Err("Self-update доступен только установленному Launcher".into());}Ok(())
+    // Use current_exe(), not the default NSIS directory: /D may select another drive.
+    // The signed installer, readiness and rollback all keep this exact target.
+    safe(target)?;
+    if !target.is_absolute() || target.file_name().and_then(|s|s.to_str())!=Some("create-server-launcher.exe") ||
+       target.components().any(|c|matches!(c,std::path::Component::ParentDir)) {
+        return Err("Небезопасный путь установленного Launcher".into());
+    }
+    let parent=target.parent().filter(|p|p.parent().is_some()).ok_or("Небезопасный каталог установки")?;
+    if target.starts_with(root()?) || target.starts_with(crate::game::root()?) || !parent.is_dir() {
+        return Err("Launcher должен быть установлен отдельно от игровых данных и updater".into());
+    }
+    Ok(())
 }
 fn idle_game()->Result<Option<File>,String>{
     let dir=crate::game::root()?;safe(&dir)?;
@@ -205,6 +215,17 @@ fn rollback(dir:&Path,job:&Job,error:&str)->Result<(),String>{
 }
 
 #[cfg(test)] mod tests{
+    #[test]fn custom_install_directory_is_supported_but_unsafe_targets_are_rejected(){
+        let dir=std::env::temp_dir().join(format!("Launcher custom location {}",uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        assert!(check_target(&dir.join("create-server-launcher.exe")).is_ok());
+        assert!(check_target(Path::new("create-server-launcher.exe")).is_err());
+        assert!(check_target(&dir.join("unrelated.exe")).is_err());
+        assert!(check_target(&dir.join("../create-server-launcher.exe")).is_err());
+        assert!(check_target(&root().unwrap().join("create-server-launcher.exe")).is_err());
+        assert!(check_target(&crate::game::root().unwrap().join("create-server-launcher.exe")).is_err());
+        fs::remove_dir(dir).unwrap();
+    }
     use super::*;use ed25519_dalek::{Signer,SigningKey};
     #[test] fn incomplete_helper_requires_manual_retry_only_for_same_release(){
         let root=std::env::temp_dir().join(format!("self-update-attempt-{}",uuid::Uuid::new_v4()));

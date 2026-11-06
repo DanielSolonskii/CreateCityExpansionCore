@@ -2,16 +2,69 @@
   "schemaVersion": 1,
   "savedData": {
     "createcityexpansioncore_economy": {
-      "FormatVersion": {"min": 0, "max": 16},
-      "CargoCommerce.Version": {"min": 1, "max": 2, "optional": true}
+      "FormatVersion": {
+        "min": 0,
+        "max": 16
+      },
+      "CargoCommerce.Version": {
+        "min": 1,
+        "max": 2,
+        "optional": true
+      }
     },
-    "ccec_cargo_points": {"Version": {"min": 1, "max": 1}},
-    "ccec_cargo_trains": {"Version": {"min": 1, "max": 1}},
-    "ccec_cargo_delivery_receipts": {"Version": {"min": 1, "max": 1}},
-    "ccec_cargo_lines": {"Version": {"min": 1, "max": 1}},
-    "ccec_cargo_schedules": {"Version": {"min": 1, "max": 1}},
-    "ccec_cargo_warehouses": {"Version": {"min": 1, "max": 1}},
-    "ccec_cargo_shipments": {"Version": {"min": 1, "max": 2}},
-    "ccec_cargo_ownership": {"Version": {"min": 1, "max": 1}}
+    "ccec_cargo_points": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_trains": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_delivery_receipts": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_lines": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_schedules": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_warehouses": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_shipments": {
+      "Version": {
+        "min": 1,
+        "max": 2
+      }
+    },
+    "ccec_cargo_ownership": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    },
+    "ccec_cargo_charters": {
+      "Version": {
+        "min": 1,
+        "max": 1
+      }
+    }
   }
 }

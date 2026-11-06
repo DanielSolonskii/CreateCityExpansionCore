@@ -1,6 +1,6 @@
 [package]
 name = "create-server-launcher"
-version = "0.1.13"
+version = "0.1.15"
 description = "Desktop launcher for RE:CREATED"
 authors = ["RE:CREATED Team"]
 edition = "2021"

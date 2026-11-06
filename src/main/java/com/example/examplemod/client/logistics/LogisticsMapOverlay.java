@@ -22,13 +22,25 @@ public final class LogisticsMapOverlay {
     private static final Map<View,CompoundTag> HITS=new LinkedHashMap<>();
     private static CompoundTag state=new CompoundTag(),fullState=new CompoundTag(),selection,focusLocation,route;
     private static UUID focus,pending;
+
+    private static final Map<UUID,double[]> trainMotion=new HashMap<>();
+    private static double[] trainPosition(CompoundTag marker,long now){
+        var loc=marker.getCompound("Location");var pos=BlockPos.of(loc.getLong("Pos"));
+        double x=pos.getX()+.5,z=pos.getZ()+.5;
+        if(!marker.getString("Kind").equals("train"))return new double[]{x,z};
+        var id=marker.getUUID("Id");var previous=trainMotion.get(id);int dimension=loc.getString("Dimension").hashCode();
+        if(previous==null||previous[5]!=dimension||Math.hypot(x-previous[2],z-previous[3])>256){previous=new double[]{x,z,x,z,now,dimension};trainMotion.put(id,previous);}
+        double t=Math.clamp((now-previous[4])/1000.0,0,1);double px=previous[0]+(previous[2]-previous[0])*t,pz=previous[1]+(previous[3]-previous[1])*t;
+        if(previous[2]!=x||previous[3]!=z){previous[0]=px;previous[1]=pz;previous[2]=x;previous[3]=z;previous[4]=now;}
+        return new double[]{px,pz};
+    }
     private static boolean enabled,visible,session;
     private static ResourceLocation mapDimension;
     private static int hash,barX,barY;private static long sent,received;
     private static boolean fitRoute;
     private static final DispatchMotion.Transition deliveredBar=new DispatchMotion.Transition(0);
     private LogisticsMapOverlay() {}
-    public static void deactivate(){enabled=visible=session=false;HITS.clear();selection=null;}
+    public static void deactivate(){trainMotion.clear();enabled=visible=session=false;HITS.clear();selection=null;}
     public static boolean isSession(){return session;}
     public static void reset(){deactivate();state=new CompoundTag();fullState=new CompoundTag();route=focusLocation=null;pending=focus=null;mapDimension=null;hash=0;sent=received=0;}
     /**
@@ -43,12 +55,13 @@ public final class LogisticsMapOverlay {
         refresh();
     }
     public static void openRoute(LogisticsCenterScreen parent,CompoundTag values,CompoundTag preview){open(parent,new CompoundTag(),values,preview);}
+    public static void reviewRoute(LogisticsCenterScreen parent,net.minecraft.client.gui.screens.Screen form,CompoundTag values,CompoundTag preview){openRoute(parent,values,preview);var mc=Minecraft.getInstance();if(mc.screen instanceof PolishedWorldMapScreen map)map.returnToCommunity(form);}
     public static void open(LogisticsCenterScreen parent,CompoundTag selected){open(parent,selected,null,null);}
     private static void open(LogisticsCenterScreen parent,CompoundTag selected,CompoundTag requestedRoute,CompoundTag initial){var mc=Minecraft.getInstance();if(mc.player==null)return;enabled=true;session=true;visible=false;selection=null;focus=selected.hasUUID("Id")?selected.getUUID("Id"):null;focusLocation=selected.contains("Location")?selected.getCompound("Location").copy():null;route=requestedRoute==null?null:requestedRoute.copy();fitRoute=true;state=initial==null?new CompoundTag():initial.copy();fullState=new CompoundTag();hash=0;
         ResourceLocation dimension=focusLocation==null?mc.player.level().dimension().location():ResourceLocation.parse(focusLocation.getString("Dimension"));mapDimension=dimension;CityWorldMapSession.INSTANCE.awaitAnchor();var map=new PolishedWorldMapScreen(CityWorldMapSession.INSTANCE);map.planningDimension(dimension);map.returnToCommunity(parent);mc.setScreen(map);PacketDistributor.sendToServer(new RequestCityDirectoryPayload(dimension,RequestCityDirectoryPayload.NEW,0));refresh();}
     public static void accept(CompoundTag response){if(!enabled||!response.hasUUID("Request")||!response.getUUID("Request").equals(pending))return;if(!response.getBoolean("Unchanged")){fullState=com.example.examplemod.cargo.center.CenterDelta.apply(fullState,response);state=fullState.getCompound("Map").copy();}received=net.minecraft.Util.getMillis();if(response.contains("Hash"))hash=response.getInt("Hash");}
     private static void refresh(){var q=new CompoundTag();pending=UUID.randomUUID();q.putUUID("Request",pending);q.putString("Action","VIEW");q.putString("Section","map");q.putInt("Hash",hash);if(mapDimension!=null)q.putString("Dimension",mapDimension.toString());if(!session)q.putBoolean("RailsOnly",true);if(focus!=null)q.putUUID("Focus",focus);if(route!=null)q.put("MapRoute",route.copy());PacketDistributor.sendToServer(new CenterRequest(q));sent=net.minecraft.Util.getMillis();}
-    public static void render(GuiGraphics g,CityMapPanel map,ResourceLocation dimension,int left,int top,int width,int height,int mx,int my,boolean active){var viewport=new View(left,top,width,height);visible=enabled&&active;HITS.clear();if(!visible)return;if(net.minecraft.Util.getMillis()-sent>(session?3000:15000))refresh();
+    public static void render(GuiGraphics g,CityMapPanel map,ResourceLocation dimension,int left,int top,int width,int height,int mx,int my,boolean active){var viewport=new View(left,top,width,height);visible=enabled&&active;HITS.clear();if(!visible)return;if(net.minecraft.Util.getMillis()-sent>(session?1000:15000))refresh();
         /*
          * A normal World Map borrows only the rail feed. The chips, markers and object card are
          * logistics-center controls: showing them here would pretend the atlas is the center.
@@ -60,7 +73,7 @@ public final class LogisticsMapOverlay {
         for(Tag raw:state.getList("Markers",10)){
             var marker=(CompoundTag)raw;var location=marker.getCompound("Location");String kind=marker.getString("Kind");
             if(!LAYERS.contains(kind)||!location.getString("Dimension").equals(dimension.toString()))continue;
-            var pos=BlockPos.of(location.getLong("Pos"));int x=map.worldToScreenX(pos.getX()+.5),y=map.worldToScreenY(pos.getZ()+.5);if(!viewport.contains(x,y))continue;
+            var pos=BlockPos.of(location.getLong("Pos"));var smooth=trainPosition(marker,net.minecraft.Util.getMillis());int x=map.worldToScreenX(map.reducedMotion()?pos.getX()+.5:smooth[0]),y=map.worldToScreenY(map.reducedMotion()?pos.getZ()+.5:smooth[1]);if(!viewport.contains(x,y))continue;
             var hit=new View(x-10,y-11,24,25);boolean hovered=hit.contains(mx,my),selected=selection!=null&&selection.hasUUID("Id")&&selection.getUUID("Id").equals(marker.getUUID("Id"));
             int color=marker.getString("Status").equals("LAST_OBSERVED")?BRASS:kind.equals("train")?BRASS:TEAL;
             surface(g,x-9,y-10,22,23,selected?0xff294b45:PANEL);if(hovered||selected){g.hLine(x-8,x+10,y-10,BRASS);g.hLine(x-8,x+10,y+12,BRASS);}icon(g,x-4,y-6,kindIcon(kind),color);HITS.put(hit,marker);

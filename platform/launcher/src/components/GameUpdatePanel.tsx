@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { GameStatus, UpdateProgress } from "../services/gameGateway";
-const steps = ["Проверка сборки", "Загрузка", "Проверка SHA-256", "Установка", "Готово"];
+const steps = ["Проверка сборки", "Загрузка", "Проверка файлов", "Установка", "Готово"];
 const phases = ["CHECKING", "DOWNLOADING", "VERIFYING", "APPLYING", "READY"];
 export const mb = (bytes: number) => `${(Math.max(0, bytes) / 1048576).toFixed(1)} МБ`;
 export function GameUpdatePanel({ progress: p, game, onRetry, onClose }: {
@@ -10,7 +10,7 @@ export function GameUpdatePanel({ progress: p, game, onRetry, onClose }: {
   const [speed, setSpeed] = useState(0);
   useEffect(() => {
     const now = performance.now(), elapsed = (now - sample.current.at) / 1000;
-    setSpeed(p.phase === "DOWNLOADING" && elapsed > 0 && p.downloadedBytes >= sample.current.bytes ? (p.downloadedBytes - sample.current.bytes) / elapsed : 0);
+    setSpeed(previous => p.phase === "DOWNLOADING" && elapsed > 0 && p.downloadedBytes >= sample.current.bytes ? previous * .7 + (p.downloadedBytes - sample.current.bytes) / elapsed * .3 : 0);
     sample.current = { bytes: p.downloadedBytes, at: now };
   }, [p.downloadedBytes, p.phase]);
   const failed = p.phase === "FAILED" || game.state === "FAILED";
@@ -23,7 +23,7 @@ export function GameUpdatePanel({ progress: p, game, onRetry, onClose }: {
       <button className="text-button" onClick={onClose}>Скрыть</button></header>
     {p.version && <span className="version-badge">{p.version}</span>}
     <ol className="update-steps">{steps.map((s, i) => <li key={s} className={i === stage ? "current" : i < stage ? "done" : ""} aria-current={i === stage ? "step" : undefined}>{i < stage ? "✓" : i + 1} · {s}</li>)}</ol>
-    <div role="progressbar" aria-label="Прогресс текущего этапа" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.max(0, Math.min(100, percent)))} className="update-meter"><span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
+    <div role="progressbar" aria-label="Прогресс текущего этапа" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.phase === "VERIFYING" || p.phase === "APPLYING" ? undefined : Math.round(Math.max(0, Math.min(100, percent)))} className={`update-meter ${p.phase === "VERIFYING" || p.phase === "APPLYING" ? "is-indeterminate" : ""}`}><span style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
     <p role={failed ? "alert" : "status"}>{failed ? game.message || p.message : running ? "Обновление файлов заблокировано, пока работает игра." : p.message || "Получаем список файлов…"}</p>
     {p.phase === "CHECKING" && <p>Проверено {p.checkedFiles} / {p.totalFiles || "…"} файлов</p>}
     {p.phase === "CHECKING" && !!p.cachedFiles && <p>Из кэша ассетов: {p.cachedFiles} · код проверяется по SHA-256</p>}

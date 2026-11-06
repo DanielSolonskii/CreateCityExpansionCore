@@ -1,4 +1,19 @@
-# Platform STATE — 04.11.2026
+# Platform STATE — 07.11.2026
+
+## Актуальное обновление
+
+- Windows Launcher **0.1.15**, independent sequence **15**, APPROVED, optional self-update; актуальная Companion-база с боковой навигацией и отдельным профилем. Исходники platform/launcher синхронизированы с новым standalone checkout, затем дополнены локальной кастомизацией профиля и анимациями. Отсутствующие Rust-модули social_links/presence/presence_ipc и memory API восстановлены из исходной платформы; прежний native compile blocker устранён.
+- Ошибочно опубликованный 0.1.14 содержал старый UI из импортированной копии. Его заменяет forward-release 0.1.15, а не downgrade. Выбор исходников по одному package version недопустим.
+- Финальные frontend build / 80 tests и Rust release/NSIS build PASS. Визуальная и полная installer/game E2E-приёмка не выполнялась по просьбе пользователя не продолжать проверки.
+- NSIS 0.1.15: 5574300 bytes, SHA-256 f0bd6abe63f2d139fc7eabbff195a955998186c05d513cd89c32f7cb200ba56c. Публичный установщик опубликован штатным signed publisher.
+- Игровой канал **alpha-0.1.38 / sequence 39** опубликован после успешного серверного deploy. Сервер предупреждён за минуту через ccec maintenance announce 60; создан свежий backup мира. Backend/bot/migrations не развёртывались, macOS не обновлялся.
+- Полный текущий отчёт, границы проверки и сохранённый backup: [CURRENT_STATE](../CURRENT_STATE.md).
+
+Ниже сохранён исторический аудит 04.11.2026: его native-blocker и старые версии относятся к той дате и не являются текущим статусом.
+
+---
+
+## Исторический аудит 04.11.2026
 
 **Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
 

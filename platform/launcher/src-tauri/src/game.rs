@@ -165,6 +165,7 @@ impl GameRuntime {
             ("auth_access_token", "0".into()), ("clientid", "0".into()), ("auth_xuid", "0".into()), ("user_type", "legacy".into()),
         ];
         let settings=crate::settings::load()?;
+        crate::settings::validate_memory(settings.memory_gb)?;
         let attempt=self.telemetry.lock().unwrap().clone();
         if let Some(a)=&attempt{a.event("UPDATE_READY","OK",0);}
         let mut arguments = vec!["-Xms1G".to_string(), format!("-Xmx{}G",settings.memory_gb)];

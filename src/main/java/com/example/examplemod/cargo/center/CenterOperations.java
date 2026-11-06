@@ -23,6 +23,7 @@ public final class CenterOperations {
     static void require(boolean result){if(!result)throw new IllegalArgumentException("Operation denied or equipment unavailable");}
     public static void execute(ServerPlayer actor,CompoundTag q){
         var s=actor.getServer();String action=q.getString("Action");var a=q.getCompound("Values");UUID selected=q.hasUUID("Selected")?q.getUUID("Selected"):null;String kind=q.getString("Kind");
+        if(selected!=null&&Set.of("ACCESS","ACL_ADD","ACL_REMOVE","REMOVE","POINT_UNBIND","STATION_REMOVE","LINE_SCHEDULE","LINE_CHARTER").contains(action)&&CargoCharters.get(s).locks(s,kind,selected))throw new IllegalArgumentException("shipment_in_use");
         if(Set.of("TRAIN_REGISTER","POINT_CREATE").contains(action))CargoTrainRegistry.AccessMode.valueOf(a.getString("Access"));
         switch(action){
             case "PICK_RECEIVER"->{require(selected!=null);CenterEquipmentSelection.begin(actor,selected);}
@@ -47,6 +48,7 @@ public final class CenterOperations {
             case "OFFER_CLOSE"->{require(selected!=null&&manage(actor,"offer",selected));require(com.example.examplemod.economy.EconomyManager.get(actor.serverLevel()).cargo().close(selected));}
             case "BUY","SEND"->{require(q.getBoolean("Confirmed")&&selected!=null);CargoFulfillment.confirm(actor,q,action.equals("BUY"));}
             case "SHIPMENT_CANCEL"->{require(q.getBoolean("Confirmed")&&selected!=null);CargoFulfillment.cancel(actor,selected);}
+            case "LINE_CHARTER"->{require(selected!=null);CargoCharters.get(s).authorize(actor,selected,Boolean.parseBoolean(a.getString("Enabled")),a.getString("Return").equals("RETURN"));}
             case "LINE_CREATE"->{var lines=CargoLineRegistry.get(s);UUID first=id(a,"FirstStation"),last=id(a,"LastStation");var stops=List.of(new CargoLineRegistry.Stop(lines.stations().get(first),first),new CargoLineRegistry.Stop(lines.stations().get(last),last));lines.create(actor,a.getString("Name"),owner(a.getString("Owner")),stops,Set.of(id(a,"Train")),CargoLineRegistry.Mode.valueOf(a.getString("Mode")),number(a,"Tariff"),a.getString("Terms"));}
             case "LINE_EDIT","LINE_STOP_ADD","LINE_STOP_REMOVE","LINE_TRAIN_ADD","LINE_TRAIN_REMOVE"->{var lines=CargoLineRegistry.get(s);var line=lines.find(selected).orElseThrow();require(CargoLineRegistry.manages(actor,line));var stops=new ArrayList<>(line.stops());var trains=new HashSet<>(line.trains());
                 if(action.equals("LINE_STOP_ADD")){UUID station=id(a,"Station");stops.add(stops.size()-1,new CargoLineRegistry.Stop(lines.stations().get(station),station));}

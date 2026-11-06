@@ -17,7 +17,7 @@ public final class CargoNavigation {
         if(leg==null)return null;var line=CargoLineRegistry.get(s).find(leg.line()).orElse(null);if(line==null)return null;
         if(shipment!=null){var order=com.example.examplemod.economy.EconomyManager.get(s.overworld()).cargo().order(shipment.id()).orElse(null);var planned=leg;
             if(order!=null&&order.fees().stream().filter(f->f.line().equals(planned.line())).anyMatch(f->!f.recipient().equals(CargoLineRegistry.access(s,line).owner())))return null;}
-        UUID train=CargoLineRegistry.get(s).availableTrain(s,line,customer,point,leg.next());if(train==null)return null;
+        UUID train=shipment!=null&&line.mode()==CargoLineRegistry.Mode.CHARTER&&CargoCharters.get(s).assigned(s,shipment,leg)?leg.train():CargoLineRegistry.get(s).availableTrain(s,line,customer,point,leg.next());if(train==null)return null;
         return new Dispatch(train,CargoLineRegistry.access(s,line).owner(),customer,line.id(),leg.next());
     }
     public static boolean serviceAllowed(MinecraftServer s,UUID lineId,OwnerRef customer,OwnerRef carrier,UUID train){var line=CargoLineRegistry.get(s).find(lineId).orElse(null);return line!=null&&line.enabled()&&line.trains().contains(train)&&CargoLineRegistry.access(s,line).owner().equals(carrier)&&CargoOwners.permits(s,customer,CargoLineRegistry.access(s,line));}

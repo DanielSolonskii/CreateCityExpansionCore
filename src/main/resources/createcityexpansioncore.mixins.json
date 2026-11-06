@@ -22,7 +22,9 @@
     "TelemetryDisconnectMixin"
   ],
   "client": [
-    "ClientTlsConnectionMixin"
+    "ClientTlsConnectionMixin",
+    "PlayerTabPresentationMixin",
+    "BossHealthOverlayAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

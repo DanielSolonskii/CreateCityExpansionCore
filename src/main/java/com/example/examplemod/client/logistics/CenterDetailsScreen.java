@@ -12,15 +12,18 @@ public final class CenterDetailsScreen extends Screen implements CenterResponseS
     private CompoundTag row;
     private final java.util.UUID id;
     private int left, panelWidth, scroll, contentHeight;
+    private ActionButton actions;
     public CenterDetailsScreen(LogisticsCenterScreen parent, CompoundTag row) {
         super(tr("details")); this.parent=parent; this.row=row.copy();this.id=row.getUUID("Id");
     }
     @Override protected void init() {
         panelWidth=Math.min(500,width-24);left=(width-panelWidth)/2;
-        addRenderableWidget(new ActionButton(left,height-38,panelWidth,24,tr("back"),this::onClose));
-        parent.selectForDetails(id);
+        addRenderableWidget(new ActionButton(left,height-38,70,24,tr("back"),this::onClose));
+        addRenderableWidget(new ActionButton(left+78,height-38,70,24,tr("map"),()->LogisticsMapOverlay.open(parent,row)));
+        actions=addRenderableWidget(new ActionButton(left+156,height-38,panelWidth-156,24,tr("actions"),()->minecraft.setScreen(new CenterActionsScreen(parent,parent.snapshot()))));
+        actions.active=false;parent.selectForDetails(id);
     }
-    @Override public void tick(){super.tick();parent.tick();}
+    @Override public void tick(){super.tick();parent.tick();var selected=parent.snapshot().getCompound("SelectedRow");actions.active=selected.hasUUID("Id")&&selected.getUUID("Id").equals(id)&&!parent.snapshot().getList("Forms",10).isEmpty();}
     @Override public void accept(CompoundTag response){parent.accept(response);var current=parent.snapshot().getCompound("SelectedRow");row=current.hasUUID("Id")&&current.getUUID("Id").equals(id)?current.copy():new CompoundTag();}
     @Override public void render(GuiGraphics g,int mx,int my,float dt) {
         g.fillGradient(0,0,width,height,BG,0xff14272c);
@@ -32,15 +35,17 @@ public final class CenterDetailsScreen extends Screen implements CenterResponseS
         surface(g,left,top,panelWidth,Math.max(10,bottom-top),PANEL);
         g.enableScissor(left+8,top+6,left+panelWidth-8,bottom-5);
         if(row.isEmpty())y=wrapped(g,text("object_unavailable"),y,MUTED);
-        else for(var field:fields(row)){
+        else {y=CenterVisualContent.render(g,row,left+14,y,panelWidth-30);var details=row.copy();if(row.getString("Kind").equals("warehouse"))details.remove("Stock");if(row.getString("Kind").equals("line"))details.remove("Details");for(var field:fields(details)){
             icon(g,left+14,y,field.icon(),MUTED);var label=Component.literal(field.label());g.drawWordWrap(font,label,left+33,y,panelWidth-49,MUTED);
             y+=font.wordWrapHeight(label,panelWidth-49)+6;y=wrapped(g,field.value(),y,TEXT)+10;
+        }
         }
         contentHeight=y+scroll-top+16;
         scroll=Math.min(scroll,CenterPresentation.scrollLimit(contentHeight,bottom-top));
         g.disableScissor();
         if(contentHeight>bottom-top){int track=bottom-top-12,thumb=Math.max(14,track*(bottom-top)/contentHeight);int sy=top+6+(track-thumb)*scroll/Math.max(1,contentHeight-(bottom-top));g.fill(left+panelWidth-4,sy,left+panelWidth-2,sy+thumb,TEAL);}
         super.render(g,mx,my,dt);
+        if(my>=top+6&&my<bottom-5)CenterVisualContent.tooltip(g,row,left+14,top+12-scroll,panelWidth-30,mx,my);
     }
     private int wrapped(GuiGraphics g,String value,int y,int color) {
         if(value.isBlank())return y;

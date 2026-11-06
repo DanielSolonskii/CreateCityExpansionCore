@@ -68,6 +68,13 @@ public final class CenterEquipmentCheck {
         require(CargoWarehouseRegistry.load(loaded.save(new CompoundTag(),null),null).find(detached.id()).orElseThrow().equals(detached),"detached state survives repeated saves");
     }
     private static void schedules()throws Exception {
+        require(CargoSchedulePlan.serves(List.of("A","B"),"A","B",true),"cyclic service visits requested pair");
+        require(CargoSchedulePlan.serves(List.of("B","A"),"A","B",true),"cycle boundary is traversable");
+        require(CargoSchedulePlan.serves(List.of("A","X","B"),"A","B",true),"intermediate stops do not hide service");
+        require(!CargoSchedulePlan.serves(List.of("A","X"),"A","B",true),"unrelated running schedule cannot carry this leg");
+        require(!CargoSchedulePlan.serves(List.of("A","B"),"A","B",false),"finite timetable cannot promise repeat departures");
+        require(!CargoSchedulePlan.serves(List.of("A","B*"),"A","B",true),"ambiguous destinations do not prove exact service");
+        require(!CargoSchedulePlan.serves(List.of(),"A","B",true),"empty timetable unavailable");
         require(CargoSchedulePlan.cycle(List.of("А","Б"),15).equals(List.of("А","Б")),"two stops cycle without duplicated endpoints");
         require(CargoSchedulePlan.cycle(List.of("А","Б","В"),15).equals(List.of("А","Б","В","Б")),"return route includes intermediate stop");
         require(CargoSchedulePlan.cycle(List.of("А","Б","В","Г"),15).equals(List.of("А","Б","В","Г","В","Б")),"long return route is ordered");
@@ -153,5 +160,5 @@ public final class CenterEquipmentCheck {
         for(int i=0;i<method.instructions.size();i++)if(method.instructions.get(i) instanceof MethodInsnNode call){if(call.name.equals("manages"))manage=i;if(call.name.equals("requireUnused"))guard=i;if(call.owner.equals("java/util/Map")&&call.name.equals("put"))update=i;}
         require(manage>=0&&guard>manage&&update>guard,"receiver mutation has authorization and active shipment guard before update");
     }
-    public static void run()throws Exception {bindings();schedules();localization();guardContracts();System.out.println("PASS: "+checks+" equipment cards, detach, schedule and localization checks");}
+    public static void run()throws Exception {CargoCharterCheck.run();bindings();schedules();localization();guardContracts();System.out.println("PASS: "+checks+" equipment cards, detach, schedule and localization checks");}
 }

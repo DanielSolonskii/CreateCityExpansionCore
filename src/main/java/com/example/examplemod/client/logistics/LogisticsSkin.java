@@ -19,6 +19,9 @@ public final class LogisticsSkin {
     public static java.util.List<CenterText.Field> fields(CompoundTag row){return CenterText.fields(row,key->Component.translatable(key).getString());}
     public static String result(String value){
         if(value.equals("ok"))return text("success");
+        for(String code:java.util.List.of("charter_permission","charter_busy","charter_not_ready","charter_dispatch_blocked"))if(value.contains(code))return text("error."+code);
+        for(String code:java.util.List.of("source_unavailable","payer_denied","receiver_unavailable","quantity_invalid","offer_changed","offer_denied","source_denied","stock_unavailable","route_unavailable","quote_expired","quote_changed"))if(value.contains("delivery_"+code))return text("delivery_error."+code);
+
         for(String code:java.util.List.of("rate_limit","no_route","shipment_not_cancellable","shipment_refund_unavailable","shipment_cancel_denied","shipment_cancel_pending","schedule_permission","schedule_station_missing","schedule_disconnected","schedule_station_name","schedule_train_missing","schedule_conductor","schedule_existing","schedule_train_moving","schedule_conditions"))if(value.contains(code))return text("error."+code);
         if(value.contains("Insufficient CR"))return text("error.funds");if(value.contains("Quote"))return text("error.quote");
         if(value.contains("active_shipment")||value.contains("shipment_in_use"))return text("error.active_shipment");return text("error.denied");
@@ -50,15 +53,15 @@ public final class LogisticsSkin {
     public static final class ActionButton extends AbstractWidget {
         private final Runnable action;
         private final int symbol;
-        private float hover;private long lastFrame;
+        private float hover;private long lastFrame,entered;private boolean engaged;
         public ActionButton(int x,int y,int w,int h,Component label,Runnable action){this(x,y,w,h,label,action,-1);}
         public ActionButton(int x,int y,int w,int h,Component label,Runnable action,int symbol){super(x,y,w,h,label);this.action=action;this.symbol=symbol;}
         @Override protected void renderWidget(GuiGraphics g,int mx,int my,float dt){
-            long now=net.minecraft.Util.getMillis();float step=Math.min(1,(now-lastFrame)/110f);lastFrame=now;hover+=(active&&isHoveredOrFocused()?1-hover:-hover)*step;
+            long now=net.minecraft.Util.getMillis();boolean over=active&&isHoveredOrFocused();if(over&&!engaged)entered=now;engaged=over;float step=Math.min(1,(now-lastFrame)/110f);lastFrame=now;hover+=(active&&isHoveredOrFocused()?1-hover:-hover)*step;
             surface(g,getX(),getY(),width,height,!active?0xff152027:blend(0xff1b3033,0xff28564c,hover));if(isFocused())g.hLine(getX()+4,getX()+width-5,getY()+height-2,TEAL);
             var font=Minecraft.getInstance().font;int color=!active?MUTED:TEXT;
             if(symbol<0)g.drawCenteredString(font,fit(getMessage().getString(),width-12),getX()+width/2,getY()+(height-8)/2,color);
-            else{icon(g,getX()+10,getY()+(height-13)/2,symbol,!active?MUTED:symbol==9||symbol==10?BRASS:TEAL);var lines=font.split(getMessage(),Math.max(16,width-44));int count=Math.min(2,lines.size());for(int i=0;i<count;i++)g.drawString(font,lines.get(i),getX()+31,getY()+(height-count*font.lineHeight)/2+i*font.lineHeight,color,false);}
+            else{icon(g,getX()+10,getY()+(height-13)/2,symbol,!active?MUTED:symbol==9||symbol==10?BRASS:TEAL);if(engaged&&now-entered<480){int frame=(int)((now-entered)/80);int dx=frame<3?frame:5-frame;g.fill(getX()+11+dx*3,getY()+(height-13)/2+14,getX()+13+dx*3,getY()+(height-13)/2+15,TEAL);}var lines=font.split(getMessage(),Math.max(16,width-44));int count=Math.min(2,lines.size());for(int i=0;i<count;i++)g.drawString(font,lines.get(i),getX()+31,getY()+(height-count*font.lineHeight)/2+i*font.lineHeight,color,false);}
         }
         @Override public void onClick(double x,double y){action.run();}
         @Override public boolean keyPressed(int key,int scan,int mods){if(active&&isFocused()&&(key==257||key==32)){action.run();return true;}return super.keyPressed(key,scan,mods);}

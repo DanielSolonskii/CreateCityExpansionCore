@@ -10,6 +10,8 @@ export function LauncherUpdate({ onRequired }: { onRequired: (required: boolean)
   const [busy, setBusy] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const started = useRef(false);
   const locked = useRef(false);
   const candidate = useRef<Update | null>(null);
@@ -18,13 +20,15 @@ export function LauncherUpdate({ onRequired }: { onRequired: (required: boolean)
     if (locked.current) return;
     locked.current = true;
     setBusy(true);
+    setFailed(false);
     try {
       const next = await invoke<Update>("launcher_update_check");
       candidate.current = next; verified.current = false;
       setUpdate(next); setMessage(next.message); setDownloaded(false); setWaiting(false);
-      onRequired(next.available);
+      onRequired(next.available && next.mandatory);
+      if (next.available) setExpanded(true);
       if (next.available && next.automatic !== false) await apply();
-    } catch (error) { setMessage(String(error)); }
+    } catch (error) { setFailed(true); setExpanded(true); setMessage(String(error)); }
     finally { locked.current = false; setBusy(false); }
   }
   async function apply() {
@@ -42,6 +46,7 @@ export function LauncherUpdate({ onRequired }: { onRequired: (required: boolean)
       setMessage("Устанавливаем Launcher. Он автоматически откроется снова…");
       await invoke("launcher_update_install");
     } catch (error) {
+      setFailed(true); setExpanded(true);
       setWaiting(false); setMessage(String(error));
       onRequired(Boolean(candidate.current?.available && candidate.current.mandatory));
     }
@@ -54,7 +59,7 @@ export function LauncherUpdate({ onRequired }: { onRequired: (required: boolean)
         setBuild(await invoke<Build>("launcher_build_info"));
         await invoke("launcher_update_ready");
         await check();
-      } catch { setMessage("Не удалось подтвердить обновление; рабочая версия сохранена"); }
+      } catch { setFailed(true); setExpanded(true); setMessage("Не удалось подтвердить обновление; рабочая версия сохранена"); }
     })();
     // Startup only. Native side independently verifies all update inputs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,10 +78,16 @@ export function LauncherUpdate({ onRequired }: { onRequired: (required: boolean)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waiting]);
   if (!build) return null;
-  return <section aria-label="Обновление Launcher" style={{ position: "fixed", top: 78, left: 0, right: 0, zIndex: 12, minHeight: 48, padding: "6px 18px", fontSize: 12, background: "#161a20", color: "#dce3e8", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-    <span title={build.buildId}>Launcher {build.version} · {build.buildId}</span>
-    <span role="status" style={{ flex: 1 }}>{message}</span>
-    {update?.available ? <button style={{ padding: "7px 12px", fontSize: 14, cursor: "pointer", background: "#7d4c2e", border: "1px solid #bd804d", borderRadius: 4 }} disabled={busy || waiting} onClick={() => void install()}>{waiting ? "Ожидаем закрытия Minecraft" : downloaded ? "Повторить установку" : "Повторить автообновление"}</button>
-      : <button style={{ padding: "7px 12px", fontSize: 14, cursor: "pointer", background: "#28332f", border: "1px solid #64776c", borderRadius: 4 }} disabled={busy} onClick={() => void check()}>Проверить Launcher</button>}
+  return <section aria-label="Обновление Launcher" className={`launcher-update ${expanded ? "is-expanded" : ""} ${failed ? "has-error" : ""}`}>
+    <button className="launcher-update__summary" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>
+      <span className={busy ? "status-light is-busy" : "status-light"} />
+      <span>Launcher {build.version}</span><span>{busy ? "Обновляем…" : update?.available ? "Доступно обновление" : failed ? "Нет связи" : "О приложении"}</span>
+    </button>
+    {expanded && <div className="launcher-update__body">
+      <small>Сборка {build.buildId}</small><p role="status">{message}</p>
+      {update?.available ? <button className="text-button" disabled={busy || waiting} onClick={() => { setFailed(false); void install(); }}>{waiting ? "Ожидаем закрытия Minecraft" : downloaded ? "Повторить установку" : "Повторить автообновление"}</button>
+        : <button className="text-button" disabled={busy} onClick={() => void check()}>Проверить Launcher</button>}
+      <button className="text-button" onClick={() => setExpanded(false)}>Скрыть</button>
+    </div>}
   </section>;
 }

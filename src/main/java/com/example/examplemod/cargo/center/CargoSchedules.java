@@ -27,6 +27,19 @@ public final class CargoSchedules extends SavedData {
         if(train.runtime.getSchedule()==null)return "NO_SCHEDULE";
         return train.runtime.paused?"PAUSED":"RUNNING";
     }
+    /** Read-only readiness: a service must actually visit this directed pair. */
+    public static boolean serves(MinecraftServer server,Train train,UUID from,UUID to) {
+        var schedule=train.runtime.getSchedule();
+        if(schedule==null||train.runtime.paused||train.manualTick||(!train.hasForwardConductor()&&!train.hasBackwardConductor()))return false;
+        var a=CargoRailConnections.station(server,from);var b=CargoRailConnections.station(server,to);
+        if(a==null||b==null)return false;
+        for(String name:List.of(a.station().name,b.station().name))if(RailwaySavedData.load(server).getTrackNetworks().values().stream().flatMap(g->g.getPoints(EdgePointType.STATION).stream()).filter(station->station.name.equals(name)).count()!=1)return false;
+        var destinations=new ArrayList<String>();
+        for(var entry:schedule.entries)if(entry.instruction instanceof DestinationInstruction)
+            destinations.add(entry.instruction.getData().getString("Text"));
+        // Exact destinations are intentionally conservative: ambiguous globs cannot prove service.
+        return CargoSchedulePlan.serves(destinations,CargoSchedulePlan.filter(a.station().name),CargoSchedulePlan.filter(b.station().name),schedule.cyclic);
+    }
     public void apply(ServerPlayer actor,UUID lineId,int seconds) {
         var server=actor.getServer();var registry=CargoLineRegistry.get(server);
         var line=registry.find(lineId).orElseThrow();

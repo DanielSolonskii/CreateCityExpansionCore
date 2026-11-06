@@ -5,6 +5,7 @@ import { errorMessage } from "../services/accountApi";
 import { deviceGateway, type DeviceEnrollment } from "../services/deviceGateway";
 import { QRCodeSVG } from "qrcode.react";
 import "../phone-verification.css";
+import { useOverlay } from "./useOverlay";
 
 export function LoginModal({
   open,
@@ -18,6 +19,7 @@ export function LoginModal({
   onRegister: () => void;
 }) {
   const [username, setUsername] = useState(() => authGateway.getRememberedUsername());
+  const overlay = useOverlay<HTMLDivElement>(open, onClose);
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -74,7 +76,7 @@ export function LoginModal({
   }
 
   return (
-    <div className={`login-layer ${open ? "is-open" : ""}`} aria-hidden={!open}>
+    <div ref={overlay} className={`login-layer ${open ? "is-open" : ""}`} aria-hidden={!open}>
       <button className="login-backdrop" onClick={onClose} aria-label="Закрыть вход" tabIndex={open ? 0 : -1} />
       <section className="login-modal" role="dialog" aria-modal="true" aria-label="Вход в RE:CREATED">
         <button className="login-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>

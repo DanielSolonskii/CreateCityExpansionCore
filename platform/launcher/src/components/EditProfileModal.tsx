@@ -1,6 +1,7 @@
 import { AtSign, Building2, Check, Pencil, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { authGateway, type ProfileSettings } from "../services/authGateway";
+import { useOverlay } from "./useOverlay";
 
 export function EditProfileModal({
   open,
@@ -16,6 +17,7 @@ export function EditProfileModal({
   onSaved: (settings: ProfileSettings) => void;
 }) {
   const [displayName, setDisplayName] = useState(initialSettings.displayName);
+  const overlay = useOverlay<HTMLDivElement>(open, onClose);
   const [telegram, setTelegram] = useState(initialSettings.telegram);
   const [city, setCity] = useState(initialSettings.city);
   const [saving, setSaving] = useState(false);
@@ -45,7 +47,7 @@ export function EditProfileModal({
   }
 
   return (
-    <div className={`login-layer ${open ? "is-open" : ""}`} aria-hidden={!open}>
+    <div ref={overlay} className={`login-layer ${open ? "is-open" : ""}`} aria-hidden={!open}>
       <button className="login-backdrop" onClick={onClose} aria-label="Закрыть редактор профиля" tabIndex={open ? 0 : -1} />
       <section className="login-modal edit-profile-modal" role="dialog" aria-modal="true" aria-label="Изменение профиля">
         <button className="login-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>

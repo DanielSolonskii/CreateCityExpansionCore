@@ -1,6 +1,7 @@
 import {PlayerAvatar} from "./PlayerAvatar";
-import { Building2, Check, Clock3, Copy, LogOut, Pencil, UserRoundCog, X } from "lucide-react";
+import { Building2, Check, Clock3, Copy, LogOut, Pencil, X } from "lucide-react";
 import { useState } from "react";
+import { useOverlay } from "./useOverlay";
 import type { LauncherProfile } from "../types/launcher";
 
 export function ProfilePopover({
@@ -17,11 +18,16 @@ export function ProfilePopover({
   onEdit: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const overlay = useOverlay<HTMLElement>(open, onClose);
 
-  function copyAccountId() {
-    void navigator.clipboard?.writeText(profile.accountId);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
+  async function copyAccountId() {
+    setCopied(false); setCopyError("");
+    try {
+      await navigator.clipboard.writeText(profile.accountId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch { setCopyError("Не удалось скопировать ID. Выделите его вручную."); }
   }
 
   return (
@@ -32,7 +38,7 @@ export function ProfilePopover({
         aria-label="Закрыть профиль"
         tabIndex={open ? 0 : -1}
       />
-      <section className={`profile-popover ${open ? "is-open" : ""}`} aria-hidden={!open}>
+      <section ref={overlay} role="dialog" aria-modal="true" aria-label="Профиль игрока" className={`profile-popover ${open ? "is-open" : ""}`} aria-hidden={!open}>
         <div className="profile-popover__hero">
           <div className="profile-popover__gear" aria-hidden="true" />
           <button className="profile-close" onClick={onClose} aria-label="Закрыть"><X size={17} /></button>
@@ -40,9 +46,6 @@ export function ProfilePopover({
           <div className="profile-identity">
             <span className="eyebrow">ПРОФИЛЬ ИГРОКА</span>
             <h2>{profile.displayName}</h2><small>{profile.subtitle}</small>
-            <button className="account-id" onClick={copyAccountId}>
-              {profile.accountId} {copied ? <Check size={12} /> : <Copy size={12} />}
-            </button>
           </div>
         </div>
 
@@ -62,9 +65,12 @@ export function ProfilePopover({
         </div>
 
         <div className="profile-actions">
-          <button onClick={onEdit}><Pencil size={15} /> Изменить профиль</button>
-          <button onClick={onLogout}><UserRoundCog size={15} /> Сменить аккаунт</button>
+          <button onClick={onEdit}><Pencil size={15} /> Оформление профиля</button>
         </div>
+        <details className="profile-technical"><summary>Данные аккаунта</summary>
+          <button className="account-id" aria-label="Скопировать ID аккаунта" onClick={() => void copyAccountId()}>{profile.accountId} {copied ? <Check size={14} /> : <Copy size={14} />}</button>
+          {copied && <small role="status">ID скопирован</small>}{copyError && <small role="alert">{copyError}</small>}
+        </details>
         <button className="profile-logout" onClick={onLogout}><LogOut size={15} /> Выйти из профиля</button>
       </section>
     </>

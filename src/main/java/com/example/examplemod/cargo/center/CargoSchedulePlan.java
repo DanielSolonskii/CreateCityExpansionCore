@@ -16,6 +16,18 @@ public final class CargoSchedulePlan {
         for(int i=stops.size()-2;i>0;i--)result.add(stops.get(i));
         return List.copyOf(result);
     }
+    public static boolean serves(List<String> destinations,String from,String to,boolean cyclic) {
+        // A finite timetable may already have passed the origin. Only repeating service is reusable.
+        if(!cyclic||destinations.size()<2)return false;
+        for(int i=0;i<destinations.size();i++)if(destinations.get(i).equals(from)){
+            for(int step=1;step<destinations.size();step++){
+                String name=destinations.get((i+step)%destinations.size());
+                if(name.equals(to))return true;
+                if(name.equals(from))break;
+            }
+        }
+        return false;
+    }
     public static CompoundTag shape(CompoundTag value) {var copy=value.copy();copy.remove("Progress");return copy;}
     /** Create uses glob syntax, so punctuation in a real station name must be escaped. */
     public static String filter(String name) {

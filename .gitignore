@@ -56,3 +56,7 @@ repo/
 /tools/**/server-evidence.json
 /platform/client-baselines/
 /platform/launcher/release-candidates/
+
+# Local signed-channel snapshots fetched during release operations
+/platform/launcher/current-alpha.json
+/platform/launcher/test-current.json

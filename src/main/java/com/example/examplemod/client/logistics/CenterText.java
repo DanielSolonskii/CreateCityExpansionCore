@@ -69,7 +69,7 @@ public final class CenterText {
     }
     public static List<Field> fields(CompoundTag row,Function<String,String> language) {
         var fields=new ArrayList<Field>();
-        add(fields,"owner",row.getString("OwnerName"),8,language);
+        add(fields,"owner",row.getString("OwnerName"),8,language);if(!row.getString("Dispatch").isBlank())add(fields,"dispatch",value(row.getString("Dispatch"),language),2,language);
         add(fields,"state",value(row.getString("Status"),language),13,language);
         if(row.contains("Access"))add(fields,"field.Access",value(row.getString("Access"),language),8,language);
         if(row.contains("Automatic"))add(fields,"automatic",value(row.getString("Automatic"),language),11,language);

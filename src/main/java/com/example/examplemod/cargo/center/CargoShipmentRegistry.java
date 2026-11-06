@@ -45,6 +45,7 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         public int delivered(){return parcels.values().stream().filter(p->p.getBoolean("Delivered")).mapToInt(p->p.getInt("Units")).sum();}
         public int recovered(){return parcels.values().stream().filter(p->p.getBoolean("Recovered")).mapToInt(p->p.getInt("Units")).sum();}
         public boolean cancellationResolved(){return cancellationRequested&&packaged()==quantity&&(long)delivered()+recovered()==quantity;}
+        public int boardedUnits(UUID train,UUID station,int hop){return parcels.values().stream().filter(p->!p.getBoolean("Recovered")&&(Arrays.stream(p.getIntArray("Hops")).anyMatch(i->i==hop)||(p.hasUUID("Train")&&train.equals(p.getUUID("Train"))&&p.hasUUID("BoardStation")&&station.equals(p.getUUID("BoardStation"))))).mapToInt(p->p.getInt("Units")).sum();}
         public int hopUnits(int hop){return parcels.values().stream().filter(p->Arrays.stream(p.getIntArray("Hops")).anyMatch(i->i==hop)).mapToInt(p->p.getInt("Units")).sum();}
         public boolean physicalComplete(){return stage!=Stage.FAILED&&stage!=Stage.BLOCKED&&stage!=Stage.CANCELLED&&delivered()==quantity&&packaged()==quantity;}
         public boolean canCancel(CargoCommerceBook.Order order,boolean payerManages){return ShipmentCancellation.allowed(order,stage,packagingClaimed,parcels.size(),payerManages);}

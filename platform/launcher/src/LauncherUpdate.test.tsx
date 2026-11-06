@@ -20,7 +20,8 @@ describe("Launcher self-update", () => {
     expect(commands.filter(c=>c==="launcher_update_download")).toHaveLength(1);
     expect(commands.indexOf("launcher_update_ready")).toBeLessThan(commands.indexOf("launcher_update_check"));
     expect(commands.indexOf("launcher_update_download")).toBeLessThan(commands.indexOf("launcher_update_install"));
-    expect(screen.getByText("Launcher 0.1.1 · test")).toBeTruthy();
+    expect(screen.getByText("Launcher 0.1.1")).toBeTruthy();
+    expect(screen.getByText("Сборка test")).toBeTruthy();
   });
   it("never offers install after failed verification", async () => {
     invoke.mockImplementation((command: string) => {
@@ -58,9 +59,11 @@ describe("Launcher self-update", () => {
   it("does not loop automatically after an aborted helper installation", async () => {
     const original=invoke.getMockImplementation()!;
     invoke.mockImplementation((command:string)=>command==="launcher_update_check" ? Promise.resolve({available:true,version:"0.1.2",mandatory:false,automatic:false,message:"Нужен ручной повтор"}) : original(command));
-    render(<LauncherUpdate onRequired={vi.fn()} />);
+    const required=vi.fn();
+    render(<LauncherUpdate onRequired={required} />);
     await screen.findByText("Нужен ручной повтор");
     expect(invoke).not.toHaveBeenCalledWith("launcher_update_download");
+    expect(required).toHaveBeenLastCalledWith(false);
     fireEvent.click(screen.getByText("Повторить автообновление"));
     await waitFor(()=>expect(invoke).toHaveBeenCalledWith("launcher_update_install"));
   });

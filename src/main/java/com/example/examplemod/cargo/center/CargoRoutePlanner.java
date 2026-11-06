@@ -19,8 +19,13 @@ public final class CargoRoutePlanner {
     }
     public static Optional<Route> plan(MinecraftServer s,OwnerRef requester,UUID from,UUID destination,Preference preference){
         if(from.equals(destination))return Optional.of(new Route(List.of(),0));
+        return plan(s,requester,from,destination,preference,"ANY");
+    }
+    public static Optional<Route> plan(MinecraftServer s,OwnerRef requester,UUID from,UUID destination,Preference preference,String service){
+        if(from.equals(destination))return Optional.of(new Route(List.of(),0));
+        if(!Set.of("ANY","REGULAR","CHARTER").contains(service))throw new IllegalArgumentException("delivery_route_unavailable");
         var registry=CargoLineRegistry.get(s);var edges=new ArrayList<Leg>();
-        for(var line:registry.all())for(int i=0;i<line.stops().size()-1;i++){var a=line.stops().get(i);var b=line.stops().get(i+1);
+        for(var line:registry.all())if(service.equals("ANY")||line.mode().name().equals(service))for(int i=0;i<line.stops().size()-1;i++){var a=line.stops().get(i);var b=line.stops().get(i+1);
             if(!equipment(s,a.point(),a.station())||!equipment(s,b.point(),b.station()))continue;
             UUID train=registry.availableTrain(s,line,requester,a.point(),b.point());if(train!=null)edges.add(new Leg(line.id(),a.point(),b.point(),train,line.tariff()));}
         return shortest(edges,from,destination,preference);

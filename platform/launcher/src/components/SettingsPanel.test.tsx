@@ -1,9 +1,10 @@
 import {render,screen,fireEvent,waitFor,cleanup} from "@testing-library/react";
-import {afterEach,it,expect,vi} from "vitest";
+import {afterEach,beforeEach,it,expect,vi} from "vitest";
 import {SettingsPanel} from "./SettingsPanel";
-const api=vi.hoisted(()=>({load:vi.fn(),save:vi.fn(),openFolder:vi.fn()}));
+const api=vi.hoisted(()=>({load:vi.fn(),save:vi.fn(),openFolder:vi.fn(),memory:vi.fn()}));
 vi.mock("../services/launcherSettings",()=>({launcherSettings:api}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
+beforeEach(()=>{api.memory.mockResolvedValue({totalGb:16,maxGb:12,recommendedGb:6});});
 it("loads native settings, saves real launch options and opens the actual folder",async()=>{
   api.load.mockResolvedValue({memoryGb:6,width:1600,height:900,hideAfterLaunch:true});api.save.mockResolvedValue(undefined);api.openFolder.mockResolvedValue(undefined);
   render(<SettingsPanel open onClose={()=>{}}/>);

@@ -28,7 +28,7 @@ public final class CargoMapView {
             }
         }
         UUID focus=request.hasUUID("Focus")?request.getUUID("Focus"):null;
-        if(request.contains("MapRoute")){var route=request.getCompound("MapRoute");UUID from=CenterOperations.id(route,"SourcePoint"),to=CenterOperations.id(route,"DestinationPoint");if(visible.contains(from)&&visible.contains(to)){var found=CargoRoutePlanner.plan(s,requester,from,to,CargoRoutePlanner.Preference.valueOf(route.getString("Preference")));if(found.isPresent()){result.putLong("Price",found.get().price());for(var leg:found.get().legs())appendLeg(s,rails,seen,dimension,leg.line(),leg.from(),leg.next(),true);routeStops(s,result,found.get().legs());result.putBoolean("RouteFound",true);}else result.putBoolean("Blocked",true);}}
+        if(request.contains("MapRoute")){var route=request.getCompound("MapRoute");UUID from=CenterOperations.id(route,"SourcePoint"),to=CenterOperations.id(route,"DestinationPoint");if(visible.contains(from)&&visible.contains(to)){var found=CargoRoutePlanner.plan(s,requester,from,to,CargoRoutePlanner.Preference.valueOf(route.getString("Preference")),route.contains("Service")?route.getString("Service"):"ANY");if(found.isPresent()){result.putLong("Price",found.get().price());for(var leg:found.get().legs())appendLeg(s,rails,seen,dimension,leg.line(),leg.from(),leg.next(),true);routeStops(s,result,found.get().legs());result.putBoolean("RouteFound",true);}else result.putBoolean("Blocked",true);}}
         else if(focus!=null){var line=CargoLineRegistry.get(s).find(focus).orElse(null);if(line!=null&&CargoOwners.permits(s,requester,CargoLineRegistry.access(s,line)))for(int i=1;i<line.stops().size();i++)appendLeg(s,rails,seen,dimension,line.id(),line.stops().get(i-1).point(),line.stops().get(i).point(),true);
             var shipment=CargoShipmentRegistry.get(s).find(focus).orElse(null);if(shipment!=null&&(shipment.owner().operates(s,actor.getUUID())||shipment.creator().equals(actor.getUUID()))){for(var leg:shipment.route())appendLeg(s,rails,seen,dimension,leg.line(),leg.from(),leg.next(),true);routeStops(s,result,shipment.route());var summary=new CompoundTag();summary.putString("Name",shipment.type().getHoverName().getString());summary.putString("Status",shipment.stage().name());summary.putInt("Quantity",shipment.quantity());summary.putInt("Packaged",shipment.packaged());summary.putInt("Delivered",shipment.delivered());var book=com.example.examplemod.economy.EconomyManager.get(s.overworld()).cargo().order(shipment.id()).orElse(null);if(book!=null){summary.putString("OrderState",book.state().name());summary.putLong("TotalCr",book.total());}result.put("Shipment",summary);}}
         /*
@@ -41,6 +41,19 @@ public final class CargoMapView {
         for(var line:allLines){
             if(!CargoOwners.permits(s,requester,CargoLineRegistry.access(s,line)))continue;
             for(int i=1;i<line.stops().size();i++)appendLeg(s,rails,seen,dimension,line.id(),line.stops().get(i-1).point(),line.stops().get(i).point(),false);
+        }
+        // Atlas rails are physical Create infrastructure, independent of cargo line registration.
+        for(var graph:RailwaySavedData.load(s).getTrackNetworks().values())for(var nodeLocation:graph.getNodes()){var node=graph.locateNode(nodeLocation);if(node==null)continue;
+            if(rails.size()>=2048)break;
+            for(var entry:graph.getConnectionsFrom(node).entrySet()){
+                if(rails.size()>=2048)break;
+                var other=entry.getKey();if(!node.getLocation().dimension.equals(other.getLocation().dimension))continue;
+                for(Tag raw:CargoRailConnections.geometry(s,new CargoRailConnections.Path(graph.id,List.of(node,other)))){
+                    if(rails.size()>=2048)break;var sample=((CompoundTag)raw).copy();
+                    if(!dimension.isEmpty()&&!sample.getString("Dimension").equals(dimension))continue;
+                    if(seen.add(key(sample)))rails.add(sample);
+                }
+            }
         }
         result.put("Markers",markers);result.put("Rails",rails);result.putBoolean("Limited",markers.size()>=256||rails.size()>=2048);return result;
     }
