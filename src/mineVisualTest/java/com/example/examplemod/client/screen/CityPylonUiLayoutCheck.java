@@ -446,8 +446,7 @@ public final class CityPylonUiLayoutCheck {
                         + countOccurrences(screen2, "managementBody("));
         require(screen2.contains("CityPylonUiLayout.managementBody(contentTop, CONTENT_BODY_BOTTOM, managementRows())"),
                 "the shared frame is built from the content bounds and the real tab row count");
-        require(screen2.contains("RAIL_ROW_TOP") && screen2.contains("railActionY(body)"),
-                "the railway body hangs off the shared frame from both ends");
+        require(!screen2.contains("RAIL_ROW_TOP"), "retired railway management body is absent");
 
         System.out.println("PASS: " + checks + " city pylon navigation layout checks");
     }
@@ -528,33 +527,6 @@ public final class CityPylonUiLayoutCheck {
             }
         }
 
-        // The railway body is the deepest one; its action rows hang off the body's bottom edge, which is
-        // the panel's content bottom, so nothing can be pushed off the panel when the nav wraps.
-        for (int rows : new int[]{ 1, 2 }) {
-            CityPylonUiLayout.ManagementBody body =
-                    CityPylonUiLayout.managementBody(75, 258, rows);
-            int actionY = body.bottom() - 22 - 6;
-            int lowest = actionY + 22;
-            require(actionY > body.top(),
-                    "the railway action row starts below the body top (rows=" + rows + ")");
-            require(lowest == body.bottom() - 6,
-                    "the railway action row ends above the content bottom (rows=" + rows + ")");
-            require(lowest <= 75 + 258 + 12,
-                    "the deepest railway action row stays inside the panel (rows=" + rows
-                            + "): " + lowest + " <= " + (75 + 258 + 12));
-
-            // The row window shrinks when the navigation wraps, but always keeps at least one row.
-            int rowTop = body.top() + 27;
-            int listBottom = actionY - 6;
-            int visible31 = Math.max(1, (listBottom - rowTop) / 31);
-            require(visible31 >= 1,
-                    "the railway list always shows at least one row (rows=" + rows + ")");
-            require(rowTop + visible31 * 31 <= listBottom,
-                    "the last visible railway row stays inside the clip (rows=" + rows + "): "
-                            + (rowTop + visible31 * 31) + " <= " + listBottom);
-            require(rowTop > body.top(),
-                    "the railway rows start below the body top (rows=" + rows + ")");
-        }
     }
 
     /** Independent re-implementation of "do tabs [from, to) fit on one row", used to cross-check flow(). */

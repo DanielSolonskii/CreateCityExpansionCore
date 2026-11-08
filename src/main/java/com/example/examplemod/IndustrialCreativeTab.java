@@ -36,7 +36,8 @@ public final class IndustrialCreativeTab {
 
     private static final List<ItemLike> TIER1_DERIVED = List.of(
             CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
-            CreateCityExpansionCore.DISPATCHER_KEY.get()
+            CreateCityExpansionCore.INCOMPLETE_ACCESS_CONTROL_REMOTE.get(),
+            CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );
 
     /*
@@ -121,32 +122,16 @@ public final class IndustrialCreativeTab {
     );
 
     private static final List<ItemLike> ECONOMY_INFRASTRUCTURE = List.of(
+            com.example.examplemod.cargo.CargoBlocks.ROUTER_ITEM.get(),
+            com.example.examplemod.cargo.CargoBlocks.TICKER_ITEM.get(),
             CreateCityExpansionCore.CITY_PYLON_ITEM.get(),
-            CreateCityExpansionCore.CONTRACT_INTAKE_ITEM.get(),
-            CreateCityExpansionCore.CONTRACT_DISPATCH_TERMINAL_ITEM.get(),
-            CreateCityExpansionCore.WAREHOUSE_GATEWAY_ITEM.get(),
-            CreateCityExpansionCore.RAILWAY_TRACK_MARKER_ITEM.get(),
-            // Загрузчик чанка держит удалённый завод живым, поэтому идёт сразу за разметкой пути:
-            // это инфраструктура, которой в первую очередь пользуется железнодорожная сеть.
-            CreateCityExpansionCore.CHUNK_LOADER_ITEM.get()
+            CreateCityExpansionCore.CHUNK_LOADER_ITEM.get(),
+            CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL_ITEM.get()
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(
             CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get(),
-            CreateCityExpansionCore.REFRACTORY_BLOCK_ITEM.get(),
-            CreateCityExpansionCore.COKE_OVEN_CHAMBER_ITEM.get(),
-            CreateCityExpansionCore.COKE_BATTERY_CONTROLLER_ITEM.get(),
-            CreateCityExpansionCore.COKE_BATTERY_INPUT_PORT_ITEM.get(),
-            CreateCityExpansionCore.COKE_BATTERY_OUTPUT_PORT_ITEM.get(),
-            CreateCityExpansionCore.BLAST_FURNACE_CORE_ITEM.get(),
-            CreateCityExpansionCore.BLAST_FURNACE_CONTROLLER_ITEM.get(),
-            CreateCityExpansionCore.BLAST_FURNACE_INPUT_PORT_ITEM.get(),
-            CreateCityExpansionCore.BLAST_FURNACE_OUTPUT_PORT_ITEM.get()
-            ,CreateCityExpansionCore.STEEL_CONVERTER_CONTROLLER_ITEM.get()
-            ,CreateCityExpansionCore.STEEL_CONVERTER_FLUID_INPUT_ITEM.get()
-            ,CreateCityExpansionCore.STEEL_CONVERTER_ITEM_INPUT_ITEM.get()
-            ,CreateCityExpansionCore.STEEL_CONVERTER_OUTPUT_ITEM.get()
-            ,CreateCityExpansionCore.STEELMAKING_BLOWER_PORT_ITEM.get()
+            CreateCityExpansionCore.REFRACTORY_BLOCK_ITEM.get()
     );
 
     public static void populate(

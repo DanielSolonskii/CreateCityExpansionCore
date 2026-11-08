@@ -1,4 +1,6 @@
 //! Signed release reconciliation. File ownership is explicit, never directory sweeping.
+mod cache;
+mod download;
 use ed25519_dalek::{Signature, VerifyingKey};
 use reqwest::{blocking::Client, redirect::Policy, Url};
 use serde::{Deserialize, Serialize};
@@ -11,6 +13,7 @@ pub struct Progress {
     pub phase: String, pub version: Option<String>, pub checked_files: u64,
     pub total_files: u64, pub completed_files: u64, pub changed_files: u64,
     pub downloaded_bytes: u64, pub total_bytes: u64, pub message: String,
+    pub cached_files:u64,pub verified_bytes:u64,
 }
 pub type SharedProgress = Arc<Mutex<Progress>>;
 #[derive(Clone, Deserialize, Serialize)]
@@ -63,7 +66,7 @@ fn is_link(meta: &fs::Metadata) -> bool {
     #[cfg(windows)] { use std::os::windows::fs::MetadataExt; if meta.file_attributes() & 0x400 != 0 { return true; } }
     false
 }
-fn safe(root: &Path, relative: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe(root: &Path, relative: &str) -> Result<PathBuf, String> {
     if relative.split('/').any(|p| p.is_empty() || p == "." || p == "..") || relative.contains(['\\', ':']) { return Err("Небезопасный путь обновления".into()); }
     let mut current = root.to_path_buf();
     if is_link(&fs::symlink_metadata(&current).map_err(|_| "Instance недоступен")?) { return Err("Instance является ссылкой/junction".into()); }
@@ -91,34 +94,8 @@ fn matches(path: &Path, entry: &Entry) -> Result<bool, String> {
         _ => Err("Управляемый путь не является обычным файлом".into()),
     }
 }
-// Bounded parallel disk reads, never a metadata-only integrity cache. Every managed
-// byte still gets SHA-256 checked. Results retain manifest order for stable staging.
-fn scan_files(root: &Path, entries: &[Entry], progress: &SharedProgress, workers: usize) -> Result<Vec<Entry>, String> {
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    let next = AtomicUsize::new(0);
-    let results = Mutex::new(Vec::new());
-    std::thread::scope(|scope| {
-        for _ in 0..workers.clamp(1, 4).min(entries.len().max(1)) {
-            let next = &next; let results = &results;
-            scope.spawn(move || loop {
-                let index = next.fetch_add(1, Ordering::Relaxed);
-                let Some(entry) = entries.get(index) else { break; };
-                let result = (|| {
-                    let destination = safe(root, &entry.path)?;
-                    if entry.mode == "seed" && destination.exists() { return Ok(false); }
-                    matches(&destination, entry).map(|found| !found)
-                })();
-                results.lock().unwrap().push((index, result));
-                progress.lock().unwrap().checked_files += 1;
-            });
-        }
-    });
-    let mut results = results.into_inner().unwrap();
-    results.sort_by_key(|(index, _)| *index);
-    let mut pending = Vec::new();
-    for (index, result) in results { if result? { pending.push(entries[index].clone()); } }
-    Ok(pending)
-}
+#[cfg(test)]
+fn scan_files(root:&Path,entries:&[Entry],progress:&SharedProgress,workers:usize)->Result<Vec<Entry>,String>{cache::scan(root,entries,progress,workers,&cache::Proof::new(root,true))}
 fn authenticated(envelope: &Envelope, settings: &Settings) -> Result<Manifest, String> {
     let canonical = serde_json::to_vec(&envelope.manifest).map_err(|_| "Некорректный manifest")?;
     let key = VerifyingKey::from_bytes(&settings.key).map_err(|_| "Некорректный release key")?;
@@ -184,23 +161,29 @@ fn recover(root: &Path, settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 fn phase(progress: &SharedProgress, value: &str, message: &str) { let mut p = progress.lock().unwrap(); p.phase = value.into(); p.message = message.into(); }
-pub fn reconcile(root: &Path, settings: &Settings, progress: &SharedProgress) -> Result<String, String> {
-    let result = reconcile_inner(root, settings, progress);
-    if let Err(error) = &result { phase(progress, "FAILED", error); }
-    result
+pub fn reconcile(root:&Path,settings:&Settings,progress:&SharedProgress)->Result<String,String>{Ok(prepare(root,settings,progress,true)?.version)}
+pub(crate) fn prepare(root:&Path,settings:&Settings,progress:&SharedProgress,full:bool)->Result<cache::Proof,String>{
+    let mut proof=cache::Proof::new(root,full);
+    match reconcile_inner(root,settings,progress,&proof){Ok(version)=>{proof.version=version;proof.save(root);Ok(proof)},Err(error)=>{phase(progress,"FAILED",&error);Err(error)}}
 }
-fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress) -> Result<String, String> {
+fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress, proof:&cache::Proof) -> Result<String, String> {
     *progress.lock().unwrap() = Progress { phase: "CHECKING".into(), message: "Проверка обновлений".into(), ..Progress::default() };
     if !secure_url(&settings.manifest_url) { return Err("Release URL должен использовать HTTPS".into()); }
     let state = safe(root, ".recreated")?;
     fs::create_dir_all(&state).map_err(|_| "Не удалось подготовить updater state")?;
     recover(root, settings)?;
-    let client = Client::builder().redirect(Policy::none()).connect_timeout(Duration::from_secs(10)).timeout(Duration::from_secs(180)).build().map_err(|_| "Updater HTTP недоступен")?;
-    let response = client.get(settings.manifest_url.clone()).header("Cache-Control", "no-cache").send().map_err(|_| "Не удалось получить manifest")?;
-    if !response.status().is_success() { return Err(format!("Manifest недоступен (HTTP {})", response.status().as_u16())); }
-    if response.content_length().is_some_and(|n| n > 16 * 1024 * 1024) { return Err("Manifest слишком большой".into()); }
-    let mut bytes = Vec::new(); response.take(16 * 1024 * 1024 + 1).read_to_end(&mut bytes).map_err(|_| "Manifest download failed")?;
-    if bytes.len() > 16 * 1024 * 1024 { return Err("Manifest слишком большой".into()); }
+    let client = Client::builder().pool_max_idle_per_host(8).tcp_keepalive(Duration::from_secs(30)).redirect(Policy::none()).connect_timeout(Duration::from_secs(12)).timeout(Duration::from_secs(90)).build().map_err(|_| "Updater HTTP недоступен")?;
+    let mut bytes=Vec::new();
+    for attempt in 0..4 {
+        let result=(||->Result<Vec<u8>,String>{
+            let response=crate::network::blocking_send(client.get(settings.manifest_url.clone()).header("Cache-Control","no-cache")).map_err(|_|"Нет связи с сервером обновлений")?;
+            if !response.status().is_success(){return Err(format!("Manifest: HTTP {}",response.status().as_u16()))}
+            if response.content_length().is_some_and(|n|n>16*1024*1024){return Err("Manifest слишком большой".into())}
+            let mut data=Vec::new();response.take(16*1024*1024+1).read_to_end(&mut data).map_err(|_|"Загрузка manifest прервана")?;
+            if data.len()>16*1024*1024{return Err("Manifest слишком большой".into())}Ok(data)
+        })();
+        match result {Ok(data)=>{bytes=data;break},Err(error)=>{if attempt==3{return Err(error)}std::thread::sleep(Duration::from_millis(500*(attempt+1)));}}
+    }
     let envelope: Envelope = serde_json::from_slice(&bytes).map_err(|_| "Некорректный signed manifest")?;
     let manifest = authenticated(&envelope, settings)?;
     let receipt = safe(root, ".recreated/receipt.json")?;
@@ -215,7 +198,7 @@ fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress) 
     }
     { let mut p = progress.lock().unwrap(); p.version = Some(manifest.version.clone()); p.total_files = manifest.files.len() as u64; }
     let workers = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(4);
-    let pending = scan_files(root, &manifest.files, progress, workers)?;
+    let pending = cache::scan(root, &manifest.files, progress, workers, proof)?;
     let current: HashSet<_> = manifest.files.iter().map(|e| e.path.to_ascii_lowercase()).collect();
     let stale: Vec<_> = previous_manifest.iter().flat_map(|m| m.files.iter()).filter(|e| e.mode == "managed" && !current.contains(&e.path.to_ascii_lowercase())).cloned().collect();
     let staging = safe(root, ".recreated/staging")?;
@@ -223,24 +206,16 @@ fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress) 
     fs::create_dir_all(staging.join("backup")).map_err(|_| "Не удалось подготовить staging")?;
     { let mut p = progress.lock().unwrap(); p.total_bytes = pending.iter().map(|e| e.size).sum(); p.changed_files = pending.len() as u64; }
     phase(progress, "DOWNLOADING", "Загрузка файлов");
-    for (index, entry) in pending.iter().enumerate() {
-        let staged = staging.join(format!("{index}.part"));
-        let mut response = client.get(&entry.url).send().map_err(|_| "Не удалось скачать release-файл")?;
-        if !response.status().is_success() || response.content_length().is_some_and(|n| n != entry.size) { return Err("Неверный размер/HTTP release-файла".into()); }
-        let mut output = File::create(&staged).map_err(|_| "Не удалось создать staging file")?;
-        let mut hash = Sha256::new(); let mut size = 0; let mut buffer = [0; 65536];
-        loop {
-            let n = response.read(&mut buffer).map_err(|_| "Release download interrupted")?; if n == 0 { break; }
-            size += n as u64; if size > entry.size { return Err("Release file exceeds declared size".into()); }
-            output.write_all(&buffer[..n]).map_err(|_| "Недостаточно места/ошибка записи release")?;
-            hash.update(&buffer[..n]); progress.lock().unwrap().downloaded_bytes += n as u64;
-        }
-        output.sync_all().map_err(|_| "Не удалось сохранить staging")?;
-        if size != entry.size || format!("{:x}", hash.finalize()) != entry.sha256 { return Err("SHA-256 release-файла не совпадает; установка отклонена".into()); }
-        progress.lock().unwrap().completed_files += 1;
+    let downloads=safe(root,".recreated/downloads")?;
+    fs::create_dir_all(&downloads).map_err(|_|"Не удалось создать кэш докачки")?;
+    download::batch(root,&client,&pending,progress)?;
+    for (index,entry) in pending.iter().enumerate(){
+        let cached=safe(root,&format!(".recreated/downloads/{}.part",entry.sha256))?;
+        let staged=staging.join(format!("{index}.part"));
+        fs::hard_link(&cached,&staged).or_else(|_|fs::copy(&cached,&staged).map(|_|())).map_err(|_|"Не удалось подготовить скачанный файл")?;
     }
     phase(progress, "VERIFYING", "Проверка SHA-256");
-    for (i, entry) in pending.iter().enumerate() { if !matches(&staging.join(format!("{i}.part")), entry)? { return Err("Staged hash mismatch".into()); } }
+    for(i,entry)in pending.iter().enumerate(){let p=staging.join(format!("{i}.part"));let before=cache::stamp(&p)?;if !matches(&p,entry)?||before!=cache::stamp(&p)?{return Err("Staged hash mismatch".into());}proof.remember(entry,before);}
     let mut changes = Vec::new();
     for entry in pending.iter().filter(|e| e.mode == "managed").chain(stale.iter()) {
         let destination = safe(root, &entry.path)?;
@@ -265,7 +240,7 @@ fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress) 
                 match fs::hard_link(staging.join(format!("{i}.part")), &destination) {
                     Ok(_) => {}, Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}, Err(_) => return Err("Не удалось создать config seed".into()),
                 }
-            } else { fs::rename(staging.join(format!("{i}.part")), destination).map_err(|_| "Не удалось атомарно заменить release-файл")?; }
+            } else { fs::rename(staging.join(format!("{i}.part")), &destination).map_err(|_| "Не удалось атомарно заменить release-файл")?; proof.relocated(entry,&destination)?; }
         }
         for entry in &stale { let target = safe(root, &entry.path)?; if target.exists() { fs::remove_file(target).map_err(|_| "Не удалось удалить owned obsolete файл")?; } }
         atomic_bytes(&receipt, &serde_json::to_vec(&envelope).unwrap())?;
@@ -279,6 +254,7 @@ fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress) 
     }
     fs::remove_file(journal_file).map_err(|_| "Не удалось завершить update commit")?;
     fs::remove_dir_all(staging).map_err(|_| "Не удалось убрать updater staging")?;
+    for entry in &pending { let p=safe(root,&format!(".recreated/downloads/{}.part",entry.sha256))?; if p.exists(){let _=fs::remove_file(p);} }
     phase(progress, "READY", "Сборка готова");
     Ok(manifest.version)
 }

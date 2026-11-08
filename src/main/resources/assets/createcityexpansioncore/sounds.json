@@ -295,94 +295,10 @@
       }
     ]
   },
-  "rail.station_bind": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:rail/station_bind",
-        "volume": 0.697
-      }
-    ]
-  },
-  "rail.shipment_complete": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:rail/shipment_complete",
-        "volume": 0.697
-      }
-    ]
-  },
   "economy.listing_create": {
     "sounds": [
       {
         "name": "createcityexpansioncore:economy/listing_create",
-        "volume": 0.527
-      }
-    ]
-  },
-  "economy.trade_complete": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:economy/trade_complete",
-        "volume": 0.612
-      }
-    ]
-  },
-  "contract.accept": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:contract/accept",
-        "volume": 0.612
-      }
-    ]
-  },
-  "contract.delivery_tick": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:contract/delivery_tick_01",
-        "volume": 0.27
-      },
-      {
-        "name": "createcityexpansioncore:contract/delivery_tick_02",
-        "volume": 0.27
-      },
-      {
-        "name": "createcityexpansioncore:contract/delivery_tick_03",
-        "volume": 0.27
-      },
-      {
-        "name": "createcityexpansioncore:contract/delivery_tick_04",
-        "volume": 0.27
-      }
-    ]
-  },
-  "contract.confirmed": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:contract/confirmed",
-        "volume": 0.654
-      }
-    ]
-  },
-  "warehouse.input_tick": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:warehouse/input_tick_01",
-        "volume": 0.247
-      },
-      {
-        "name": "createcityexpansioncore:warehouse/input_tick_02",
-        "volume": 0.247
-      },
-      {
-        "name": "createcityexpansioncore:warehouse/input_tick_03",
-        "volume": 0.247
-      }
-    ]
-  },
-  "warehouse.batch": {
-    "sounds": [
-      {
-        "name": "createcityexpansioncore:warehouse/batch",
         "volume": 0.527
       }
     ]

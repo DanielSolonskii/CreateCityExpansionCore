@@ -26,13 +26,12 @@ public final class CityPylonWorkspace extends Screen {
     private final CityPylonOverviewScreen overview;
     private final Map<Screen,int[]> initializedPages=new WeakHashMap<>();
     private Screen page;
-    private MarketScreen market;
-    private LogisticsScreen logistics;
+
     private CityPylonWorkspaceLayout geometry;
     private int section;
     private boolean pointerCaptured;
-    private static final String[] SECTIONS={"overview","marketplace","logistics","management","map"};
-    private static final Item[] ICONS={Items.COMPASS,Items.EMERALD,Items.MINECART,Items.WRITABLE_BOOK,Items.FILLED_MAP};
+    private static final String[] SECTIONS={"overview","management","map"};
+    private static final Item[] ICONS={Items.COMPASS,Items.WRITABLE_BOOK,Items.FILLED_MAP};
 
     private CityPylonWorkspace(CityPylonScreen root) {
         super(Component.translatable("gui.createcityexpansioncore.city.pylon"));
@@ -47,9 +46,9 @@ public final class CityPylonWorkspace extends Screen {
         if(next instanceof CityPylonScreen pylon&&pylon.getMenu().hasCity()) {
             boolean fresh=session==null||session.root.getMenu()!=pylon.getMenu();
             if(fresh)session=new CityPylonWorkspace(pylon);
-            boolean fromMap=event.getCurrentScreen() instanceof PolishedWorldMapScreen||event.getCurrentScreen() instanceof WorldMapScreen;
+            boolean fromMap=event.getCurrentScreen() instanceof PolishedWorldMapScreen;
             if(fresh)session.show(session.overview);
-            else if(!fromMap||session.root.workspaceSection()==3&&session.section!=3)
+            else if(!fromMap||session.root.workspaceSection()==1&&session.section!=1)
                 session.show(session.root.workspaceSection()==0?session.overview:session.root);
             if(event.getCurrentScreen()==session)event.setCanceled(true);else event.setNewScreen(session);
         }else if(session!=null&&session.valid()&&isPage(next)
@@ -60,8 +59,7 @@ public final class CityPylonWorkspace extends Screen {
     }
     private static boolean isPage(Screen screen) {
         return screen instanceof CityPylonPageScreen||screen instanceof CityRoleScreen
-                ||screen instanceof CityColorPaletteScreen||screen instanceof CityRemoveMemberConfirmScreen
-                ||screen instanceof RailwayLineEditorScreen;
+                ||screen instanceof CityColorPaletteScreen||screen instanceof CityRemoveMemberConfirmScreen;
     }
     public static boolean isEmbedded(Screen screen) {
         return session!=null&&session.valid()&&(session.page==screen||session.root==screen)&&Minecraft.getInstance().screen==session;
@@ -90,22 +88,15 @@ public final class CityPylonWorkspace extends Screen {
     }
     private void show(Screen next) {
         pointerCaptured=false;
-        if(next instanceof MarketScreen){if(market==null)market=(MarketScreen)next;next=market;section=1;}
-        else if(next instanceof LogisticsScreen){logistics=(LogisticsScreen)next;section=2;}
-        else if(next==root)section=3;
+        if(next==root)section=1;
         else if(next==overview)section=0;
         if(page!=next)page.setFocused(null);
         page=next;if(minecraft!=null)layout();
     }
-    private void navigate(int index) {
-        if(index==4){minecraft.setScreen(new PolishedWorldMapScreen(root));return;}
-        switch(index) {
-            case 0->{root.workspaceSelect(0);show(overview);}
-            case 1->show(market==null?new MarketScreen(root):market);
-            case 2->show(logistics==null?new LogisticsScreen(root):logistics);
-            case 3->{root.workspaceSelect(2);show(root);}
-            default->{}
-        }
+    private void navigate(int index){
+        if(index==2){minecraft.setScreen(new PolishedWorldMapScreen(root));return;}
+        if(index==0){root.workspaceSelect(0);show(overview);}
+        else if(index==1){root.workspaceSelect(2);show(root);}
     }
     @Override public void tick() {
         if(!valid()){minecraft.setScreen(null);return;}
@@ -130,18 +121,18 @@ public final class CityPylonWorkspace extends Screen {
         g.fill(fx+1,fy+30,fx+sidebar,fy+fh-1,METAL);
         g.fill(fx+sidebar,fy+30,fx+sidebar+1,fy+fh-1,LINE);
         int cityY=fy+(fh<240?36:44);
-        g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),sidebar-26),fx+13,cityY,TEXT,false);
+        if(sidebar>=60)g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),sidebar-26),fx+13,cityY,TEXT,false);
         if(fh>=240)g.drawString(font,Component.translatable("gui.createcityexpansioncore.workspace.level",root.getMenu().getCityLevel()),fx+13,cityY+17,MUTED,false);
-        for(int i=0;i<5;i++) {
+        for(int i=0;i<SECTIONS.length;i++) {
             int y=geometry.navY(i),h=geometry.navHeight();boolean selected=section==i;
             boolean hover=in(mx,my,fx+7,y,sidebar-14,h);
             rounded(g,fx+7,y,sidebar-14,h,4,selected?0xFF383123:hover?PANEL:METAL);
             if(selected)g.fill(fx+7,y+4,fx+9,y+h-4,BRASS);
-            if(h>=20)g.renderItem(new ItemStack(ICONS[i]),fx+14,y+(h-16)/2);
+            if(h>=18||sidebar<60)g.renderItem(new ItemStack(ICONS[i]),fx+14,y+(h-16)/2);
             int tx=fx+(h>=20?36:14);
-            g.drawString(font,fit(font,navLabel(i),sidebar-(tx-fx)-12),tx,y+(h-8)/2,selected?TEXT:MUTED,false);
+            if(sidebar>=60)g.drawString(font,fit(font,navLabel(i),sidebar-(tx-fx)-12),tx,y+(h-8)/2,selected?TEXT:MUTED,false);
         }
-        if(page!=overview)g.drawString(font,Component.translatable("gui.createcityexpansioncore.common.back"),fx+13,fy+fh-20,MUTED,false);
+        if(sidebar>=60&&page!=overview)g.drawString(font,Component.translatable("gui.createcityexpansioncore.common.back"),fx+13,fy+fh-20,MUTED,false);
         g.drawString(font,fit(font,navLabel(section),fw-sidebar-30),fx+sidebar+13,fy+fh-15,MUTED,false);
         g.enableScissor(geometry.x(),geometry.y(),geometry.x()+geometry.width(),geometry.y()+geometry.height());
         g.pose().pushPose();g.pose().translate(geometry.originX(),geometry.originY(),0);g.pose().scale(geometry.scale(),geometry.scale(),1);
@@ -152,18 +143,28 @@ public final class CityPylonWorkspace extends Screen {
             else page.render(g,px,py,pt);
             g.flush();
         }finally{rendering=false;g.pose().popPose();g.disableScissor();}
+        if(canCollect())button(g,font,fx+7,fy+fh-52,sidebar-14,20,
+                Component.translatable("gui.createcityexpansioncore.pylon.collect"),false,
+                in(mx,my,fx+7,fy+fh-52,sidebar-14,20));
     }
-    private Component navLabel(int index) {return Component.translatable(index==2?"gui.createcityexpansioncore.freight.title":"gui.createcityexpansioncore.city.tab."+SECTIONS[index]);}
+    private boolean canCollect(){return section==3&&minecraft.player!=null
+            &&minecraft.player.getUUID().equals(root.getMenu().getOwner());}
+    private Component navLabel(int index) {return Component.translatable("gui.createcityexpansioncore.city.tab."+SECTIONS[index]);}
     private static boolean in(double x,double y,int left,int top,int w,int h) {return x>=left&&x<left+w&&y>=top&&y<top+h;}
     @Override public boolean mouseClicked(double x,double y,int button) {
         int fx=geometry.frameX(),fy=geometry.frameY();
         if(button==0) {
+            if(canCollect() && in(x,y,fx+7,fy+geometry.frameHeight()-52,geometry.sidebarWidth()-14,20)) {
+                minecraft.gameMode.handleInventoryButtonClick(root.getMenu().containerId,
+                        com.example.examplemod.menu.CityPylonMenu.RETRIEVE_PYLON);
+                return true;
+            }
             if(in(x,y,fx+geometry.frameWidth()-29,fy+3,26,24)){root.onClose();return true;}
             if(PlayerProfileLayout.workspaceEntry(fx,fy,geometry.frameWidth()).contains(x,y)) {
                 PlayerProfileScreen.open(this,minecraft.player.getUUID());return true;
             }
             if(x>=fx+7&&x<fx+geometry.sidebarWidth()-7) {
-                for(int i=0;i<5;i++)if(in(x,y,fx+7,geometry.navY(i),geometry.sidebarWidth()-14,geometry.navHeight())){navigate(i);return true;}
+                for(int i=0;i<SECTIONS.length;i++)if(in(x,y,fx+7,geometry.navY(i),geometry.sidebarWidth()-14,geometry.navHeight())){navigate(i);return true;}
                 if(y>=fy+geometry.frameHeight()-26&&y<fy+geometry.frameHeight()-4&&page!=overview){onClose();return true;}
             }
         }

@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class BridgeService {
-    public static final Set<String> TYPES=Set.of("SESSION_START","SESSION_END","SESSION_CHECKPOINT","PLAYER_JOIN","PLAYER_LEAVE","CITY_CREATED","CITY_JOIN","CITY_LEAVE","CITY_LEVEL_CHANGED","CITY_PLOT_CLAIMED","CITY_COLOR_CHANGED","TERRITORY_CHANGED","PROJECT_ADDED","PROJECT_REMOVED","ECONOMY_ACTION","RAILWAY_ACTION");
+    public static final Set<String> TYPES=Set.of("UI_SURFACE","CLIENT_QUALITY","CLIENT_CONTEXT","MAP_QUALITY","UI_ACTION","PROJECT_ACTION","SESSION_REASON","ACTIVITY","SERVER_QUALITY","FRIEND_ACCEPTED","SESSION_START","SESSION_END","SESSION_CHECKPOINT","PLAYER_JOIN","PLAYER_LEAVE","CITY_CREATED","CITY_JOIN","CITY_LEAVE","CITY_LEVEL_CHANGED","CITY_PLOT_CLAIMED","CITY_COLOR_CHANGED","TERRITORY_CHANGED","PROJECT_ADDED","PROJECT_REMOVED","ECONOMY_ACTION","RAILWAY_ACTION");
     public record Event(UUID id,UUID minecraftUuid,String type,UUID subjectId,String detail,Instant occurredAt,long durationSeconds){}
     public record Batch(UUID id,String serverId,UUID bootId,Instant startedAt,long revision,Instant observedAt,boolean online,long uptimeSeconds,List<UUID> players,int maxPlayers,String minecraftVersion,String ccecVersion,String serverVersion,long droppedEvents,List<Event> events){}
     public record Status(String state,long uptimeSeconds,int playerCount,int maxPlayers,String minecraftVersion,String ccecVersion,String serverVersion,Instant observedAt,long droppedEvents){}
@@ -36,7 +36,7 @@ public class BridgeService {
             ||b.startedAt().isAfter(now.plusSeconds(60))||b.observedAt().isBefore(b.startedAt())||b.observedAt().isAfter(now.plusSeconds(60))
             ||b.players()==null||b.players().size()>100||b.players().stream().anyMatch(Objects::isNull)||new HashSet<>(b.players()).size()!=b.players().size()||b.maxPlayers()<1||b.maxPlayers()>1000||(!b.online()&&!b.players().isEmpty())
             ||!version(b.minecraftVersion(),64)||!version(b.ccecVersion(),64)||!version(b.serverVersion(),128)||b.events()==null||b.events().size()>50)throw bad();
-        for(Event e:b.events())if(e==null||e.id()==null||e.minecraftUuid()==null||e.type()==null||!TYPES.contains(e.type())||!detail(e)||e.occurredAt()==null||e.occurredAt().isBefore(b.startedAt())||e.occurredAt().isAfter(now.plusSeconds(60))||e.durationSeconds()<0||e.durationSeconds()>31536000||(e.type().startsWith("SESSION_")&&e.subjectId()==null))throw bad();
+        for(Event e:b.events())if(e==null||e.id()==null||e.minecraftUuid()==null||e.type()==null||!TYPES.contains(e.type())||!detail(e)||e.occurredAt()==null||e.occurredAt().isBefore(b.startedAt())||e.occurredAt().isAfter(now.plusSeconds(60))||e.durationSeconds()<0||e.durationSeconds()>31536000||(Set.of("SESSION_START","SESSION_END","SESSION_CHECKPOINT").contains(e.type())&&e.subjectId()==null))throw bad();
         String hash=Secrets.hash(b.toString());
         var boots=db.query("SELECT server_id,started_at FROM server_bridge_boot WHERE boot_id=? FOR UPDATE",(r,n)->Map.entry(r.getString(1),r.getTimestamp(2).toInstant()),b.bootId());
         if(boots.isEmpty()){
@@ -56,7 +56,7 @@ public class BridgeService {
             if(!existing.isEmpty()){if(!existing.getFirst().equals(Map.entry(eh,b.bootId())))throw new AccountFailure(409,"TELEMETRY_CONFLICT");continue;}
             UUID user=platform(e.minecraftUuid());
             db.update("INSERT INTO telemetry_event(id,boot_id,platform_user_id,minecraft_uuid,type,subject_id,detail,occurred_at,received_at,duration_seconds,request_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?)",e.id(),b.bootId(),user,e.minecraftUuid(),e.type(),e.subjectId(),e.detail(),ts(e.occurredAt()),ts(now),e.durationSeconds(),eh);
-            if(e.type().startsWith("SESSION_")){
+            if(Set.of("SESSION_START","SESSION_END","SESSION_CHECKPOINT").contains(e.type())){
                 var session=db.query("SELECT minecraft_uuid,boot_id FROM telemetry_session WHERE id=? FOR UPDATE",(r,n)->Map.entry(r.getObject(1,UUID.class),r.getObject(2,UUID.class)),e.subjectId());
                 if(session.isEmpty())db.update("INSERT INTO telemetry_session(id,boot_id,platform_user_id,minecraft_uuid,started_at,ended_at,duration_seconds) VALUES(?,?,?,?,?,?,?)",e.subjectId(),b.bootId(),user,e.minecraftUuid(),ts(e.occurredAt().minusSeconds(e.durationSeconds())),e.type().equals("SESSION_END")?ts(e.occurredAt()):null,e.durationSeconds());
                 else {

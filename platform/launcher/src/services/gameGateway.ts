@@ -6,7 +6,7 @@ export const stopped: GameStatus = { state: "STOPPED", pid: null, message: "Го
 export interface UpdateProgress {
   phase: "" | "CHECKING" | "DOWNLOADING" | "VERIFYING" | "APPLYING" | "READY" | "FAILED";
   version: string | null; checkedFiles: number; totalFiles: number; completedFiles: number;
-  changedFiles: number; downloadedBytes: number; totalBytes: number; message: string;
+  changedFiles: number; downloadedBytes: number; totalBytes: number; message: string; cachedFiles?:number;verifiedBytes?:number;
 }
 export const idleUpdate: UpdateProgress = { phase: "", version: null, checkedFiles: 0, totalFiles: 0,
   completedFiles: 0, changedFiles: 0, downloadedBytes: 0, totalBytes: 0, message: "" };

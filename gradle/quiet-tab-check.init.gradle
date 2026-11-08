@@ -1,0 +1,11 @@
+// Run: gradlew --init-script gradle/quiet-tab-check.init.gradle checkQuietTab
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    project.tasks.register('checkQuietTab', JavaExec) {
+        dependsOn project.tasks.named('mineVisualTestClasses')
+        classpath = project.sourceSets.mineVisualTest.runtimeClasspath
+        mainClass = 'com.example.examplemod.hud.QuietTabCheck'
+        javaLauncher = project.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+        workingDir = project.projectDir
+    }
+}

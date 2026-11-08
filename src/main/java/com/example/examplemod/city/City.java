@@ -276,10 +276,6 @@ public class City {
 
     public int getTradeReputation() { return tradeReputation; }
 
-    public void adjustTradeReputation(int delta) {
-        tradeReputation = Math.max(0, Math.min(10_000, tradeReputation + delta));
-    }
-
     void restoreTradeReputation(int value) {
         tradeReputation = Math.max(0, Math.min(10_000, value));
     }

@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-11-04",
+  "baseCommit": "ff4959ec8267291c36dc245357c27fba28cf8216",
+  "discovery": "git tracked + non-ignored untracked Markdown; basename contains README or STATE, case-insensitive",
+  "hashPolicy": "SHA-256 of UTF-8 Markdown with CRLF normalized to LF; all other text is preserved",
+  "summary": {
+    "requestedDocs": 23,
+    "existingAtBase": 20,
+    "newDocs": 3,
+    "archivalDocs": 8,
+    "missingLinks": 0,
+    "absoluteFileLinks": 0
+  },
+  "requestedDocs": [
+    {
+      "path": "CURRENT_STATE.md",
+      "present": true,
+      "sha256": "0d62b2582fdea5fa473bdc7406a3dd92f2cad246d916249379f491811e807768",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "README.md",
+      "present": true,
+      "sha256": "bb03ec855d2489e472bf786677e0ca94503da9a9a727301463f059b79dc26efe",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "README_DEV.md",
+      "present": true,
+      "sha256": "e7fb24d50cfe3ffe4426a3ee5aefee7de140d3ba7a0d3adcaef359bca44cde17",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "art/city_pylon/README_RU.md",
+      "present": true,
+      "sha256": "14882a0f7dc680119e83b9862d0733268c80f950a579f543b3d17b34e592add7",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "art/industrial_mine/README.md",
+      "present": true,
+      "sha256": "5851ecb7c08070dccb7755915351dd6a57b3fc6d6be37504602e9f8f0516feb6",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "docs/STATE-2026-10-25.md",
+      "present": true,
+      "sha256": "24822badf88e0170cf9263b023e5a71f4b65a2502cb259384059614927148cd8",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": true,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "docs/audit-2026-10-14/README.md",
+      "present": true,
+      "sha256": "a227ed09e0fba9080302dca6092f110e4c4d448bbf816dad726ee2f6636e0d09",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": true,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "docs/audit-2026-10-14/STATE_RU.md",
+      "present": true,
+      "sha256": "3d017a5c0720dd8ff70c9a6e4a7601f2df71c1c71796a2c6242188ca54f104b1",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": true,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "docs/audit-2026-11-02/README.md",
+      "present": true,
+      "sha256": "fca53436556d3b640102f2232c7fe2a47f8f7f46bdd6a1f1ccbf420b02da8233",
+      "existedAtBase": false,
+      "changedSinceBase": true,
+      "dated": true,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "docs/audit-2026-11-04/README.md",
+      "present": true,
+      "sha256": "aa22711683d4c15e773d8b899741bdfb9f70c526febf4258e22c47715f6d9dd7",
+      "existedAtBase": false,
+      "changedSinceBase": true,
+      "dated": true,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/README.md",
+      "present": true,
+      "sha256": "b24a0dfe01d8c20b0d3789ba25a0f70b28eb097325cb6f5e7d319d235a6ba7c7",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/STATE.md",
+      "present": true,
+      "sha256": "947bebd25a7a237892948c3bb78d750f576d03ecb56fb62c073bbee2a123155f",
+      "existedAtBase": false,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/backend/README.md",
+      "present": true,
+      "sha256": "cbd051986fc6ba6763d7eff1395d90934057d342c4dbeb56562b61df50b7e08f",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/infra/README.md",
+      "present": true,
+      "sha256": "229a41caf825ad2a5d3db68aff492860378e35a6d314b32969e3a37ac62a6a93",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/launcher/README.md",
+      "present": true,
+      "sha256": "805c09b89615984da77aaecf8e384d450a40aa892d6a53a05800020f6540d8ec",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/launcher/docs/source-readme.md",
+      "present": true,
+      "sha256": "db3fb49b12d6ae6841b82ee04dfb0e08ff8122d5705646efc90b36201f3eb6df",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "platform/telegram-bot/README.md",
+      "present": true,
+      "sha256": "f7467f43ce9febf2e1f3f26b63c4625f082b3fe0ea73fd813ccbd5c32914cc5b",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "src/main/java/com/example/examplemod/devtools/README.md",
+      "present": true,
+      "sha256": "c8f97ca6a51af04e48a4506da46671c7d95efe6fbfb9f633c78c7254a0660ed1",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "tools/community-platform/README.md",
+      "present": true,
+      "sha256": "766e7c42163c156ea3e9788938e57524c3b08deb779d0f7a65009552cee8f6ae",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "tools/ftb-campaign/README_RU.md",
+      "present": true,
+      "sha256": "c2c0784b9fb80153b2d3e46ef50bdf40a0cb4d53a7d2588be458187936083b10",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    },
+    {
+      "path": "tools/menu-platform/telegram-bot/README.md",
+      "present": true,
+      "sha256": "0add73555ceccde8691fa8fc41dcb17b3ea465b215be78b6004f40a1e2e5b127",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "tools/telemetry-fix/README.md",
+      "present": true,
+      "sha256": "ac5c587b7e11aa0c9c7017986ebfdf6fc1bbbe4828f6459613a2a4a0e469af96",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": true,
+      "currentDateMarker": true
+    },
+    {
+      "path": "tools/yuushya-quiet/README.md",
+      "present": true,
+      "sha256": "1b5b314602cbd75cefdfd4d072f554cb3a4c6e84e19ca0fb88209b7412cc6249",
+      "existedAtBase": true,
+      "changedSinceBase": true,
+      "dated": false,
+      "archival": false,
+      "currentDateMarker": true
+    }
+  ],
+  "coverage": {
+    "unchangedExistingDocs": [],
+    "absentDocs": [],
+    "missingCurrentDateMarker": [],
+    "unlabelledHistoricalDocs": []
+  },
+  "missingLinks": [],
+  "absoluteFileLinks": []
+}

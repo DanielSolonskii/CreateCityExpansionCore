@@ -1,0 +1,20 @@
+{
+  "jar": "E:\\CreateCityExpansionCore_MERGED\\createcityexpansioncore-template-1.21.1\\build\\libs\\createcityexpansioncore-1.0.2.13.jar",
+  "version": "1.0.2.13",
+  "bytes": 4942361,
+  "sha256": "E8E751B1897D148D37D89292B5B3BE20F4421990ED444415253033BEF48F73AC",
+  "ponderAssetMatchesSource": true,
+  "newClassesPresent": [
+    "com/example/examplemod/economy/FreightCarriers.class",
+    "com/example/examplemod/economy/FreightRoadCharges.class",
+    "com/example/examplemod/economy/FreightTransportBudget.class",
+    "com/example/examplemod/client/screen/FreightRouteLayout.class"
+  ],
+  "ruEnResourcesPresent": true,
+  "compileJava": "BUILD SUCCESSFUL",
+  "check": "BUILD SUCCESSFUL",
+  "buildOffline": "BUILD SUCCESSFUL",
+  "configurationCache": false,
+  "inGameRuntimeTested": false,
+  "deployed": false
+}

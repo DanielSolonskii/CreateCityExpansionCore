@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "createcityexpansioncore:block/cargo_router" }
+  }
+}

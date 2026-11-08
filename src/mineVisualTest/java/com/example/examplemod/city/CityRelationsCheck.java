@@ -1,7 +1,5 @@
 package com.example.examplemod.city;
 
-import com.example.examplemod.railway.OwnedRailwayNetwork;
-import com.example.examplemod.railway.RailwayOwnershipTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
@@ -58,24 +56,13 @@ public final class CityRelationsCheck {
         require(!restored.allowsTerritoryAction(restored.getCity(a.getId()),b.getOwner(),true),"revocation applies immediately");
         restored.setTerritoryAccess(a.getId(),b.getId(),a.getOwner(),true);
         restored.setTerritoryAccess(b.getId(),a.getId(),b.getOwner(),true);
-        require(CityAccessPolicy.canAccess(restored, a.getId(), a.getId(), CityAccessPolicy.Service.FREIGHT, false),
+        require(CityAccessPolicy.canAccess(restored, a.getId(), a.getId(), CityAccessPolicy.Service.SERVICE, false),
                 "own city always has access");
-        require(CityAccessPolicy.canAccess(restored, a.getId(), b.getId(), CityAccessPolicy.Service.RAILWAY_PRIVATE, true),
+        require(CityAccessPolicy.canAccess(restored, a.getId(), b.getId(), CityAccessPolicy.Service.SERVICE, true),
                 "trusted city can use opted-in private service");
         require(!CityAccessPolicy.canAccess(restored, a.getId(), UUID.randomUUID(), CityAccessPolicy.Service.SERVICE, true),
                 "unknown city has no access");
-        require(CityAccessPolicy.tariffBasisPoints(restored, a.getId(), b.getId()) == 10_000,
-                "relations add no implicit tariff discount");
-        require(CityAccessPolicy.tariffBasisPoints(restored, a.getId(), a.getId()) == 0,
-                "own infrastructure remains free");
-
-        OwnedRailwayNetwork privateNetwork = new OwnedRailwayNetwork(UUID.randomUUID(),
-                RailwayOwnershipTypes.OwnerType.CITY, a.getId(), "Alpha Rail", RailwayOwnershipTypes.Access.PRIVATE, 100);
-        require(com.example.examplemod.railway.RailwayRoutePlanner.allowsNetwork(privateNetwork,
-                RailwayOwnershipTypes.OwnerType.CITY, b.getId(), restored), "trusted city passes private railway guard");
-        restored.setTrusted(a.getId(), b.getId(), false);
-        require(!com.example.examplemod.railway.RailwayRoutePlanner.allowsNetwork(privateNetwork,
-                RailwayOwnershipTypes.OwnerType.CITY, b.getId(), restored), "revoked trust blocks private railway");
+        restored.setTrusted(a.getId(),b.getId(),false);
         UUID resident = UUID.randomUUID();
         City oldCity = restored.getCity(a.getId());
         oldCity.addMember(resident, CityMember.Role.RESIDENT);

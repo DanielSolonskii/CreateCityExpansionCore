@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "createcityexpansioncore:block/transport_registration_terminal" },
+    "facing=east": { "model": "createcityexpansioncore:block/transport_registration_terminal", "y": 90 },
+    "facing=south": { "model": "createcityexpansioncore:block/transport_registration_terminal", "y": 180 },
+    "facing=west": { "model": "createcityexpansioncore:block/transport_registration_terminal", "y": 270 }
+  }
+}

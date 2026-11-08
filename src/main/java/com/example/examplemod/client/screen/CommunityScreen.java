@@ -17,7 +17,7 @@ public final class CommunityScreen extends Screen {
     private Runnable membershipAction;private Component membershipQuestion;
     private CommunityRequestPayload.Action lastAction=CommunityRequestPayload.Action.VIEW;
     private CommunityScreen(Screen parent){super(tr("title"));this.parent=parent;}
-    public static void open(Screen parent){SocialHubScreen.show(parent,new CommunityScreen(parent),SocialHubScreen.Section.HOME);}
+    public static void open(Screen parent){CommunityDashboard.open(parent);}
     public static void openOwnCity(Screen parent){var v=new CommunityScreen(parent);v.section=3;v.ownCityOnReply=true;v.ownCityMode=true;SocialHubScreen.show(parent,v,SocialHubScreen.Section.CITY);}
     public static void openRelations(Screen parent){var v=new CommunityScreen(parent);v.section=3;v.ownCityOnReply=true;v.ownCityMode=true;v.relationsMode=true;SocialHubScreen.show(parent,v,SocialHubScreen.Section.CITY);}
     public static void openCity(Screen parent,UUID id){var v=new CommunityScreen(parent);v.section=3;v.city=id;SocialHubScreen.show(parent,v,SocialHubScreen.Section.CITY);}
@@ -77,7 +77,7 @@ public final class CommunityScreen extends Screen {
             UUID cityId=t.getUUID("City");int bx=r.x()+8,by=y+45;button(g,new CommunityLayout.Rect(bx,by,110,23),tr("open_city"),()->{city=cityId;section(3);request(CommunityRequestPayload.Action.VIEW,null,null,0);},pending==null,false,mx,my);
             if(t.getBoolean("Incoming")){button(g,new CommunityLayout.Rect(bx+118,by,106,23),tr("decline"),()->respond(t,false),pending==null,false,mx,my);button(g,new CommunityLayout.Rect(bx+232,by,106,23),tr("accept"),()->respond(t,true),pending==null,true,mx,my);}else button(g,new CommunityLayout.Rect(bx+118,by,106,23),tr("revoke"),()->{city=cityId;request(CommunityRequestPayload.Action.REVOKE,t.getUUID("Target"),t.getUUID("Token"),0);},pending==null,false,mx,my);y+=84;
         }
-        for(Tag raw:state.getList("Projects",Tag.TAG_COMPOUND)){var t=(CompoundTag)raw;row(g,y,Component.literal(t.getString("Title")),Component.translatable("gui.createcityexpansioncore.project.status."+t.getString("Status").toLowerCase(Locale.ROOT)),this::openMap,mx,my);y+=49;}
+        for(Tag raw:state.getList("Projects",Tag.TAG_COMPOUND)){var t=(CompoundTag)raw;row(g,y,Component.literal(t.getString("Title")),Component.translatable("gui.createcityexpansioncore.projects.status."+t.getString("Status").toLowerCase(Locale.ROOT)),this::openMap,mx,my);y+=49;}
         if(state.getList("Invites",10).isEmpty()&&state.getList("Projects",10).isEmpty())g.drawWordWrap(font,tr("calm"),layout.body().x()+12,y+10,layout.body().width()-24,MUTED);
     }
     private void openMap(){com.example.examplemod.client.CityWorldMapSession.INSTANCE.awaitAnchor();PacketDistributor.sendToServer(new RequestCityWorldMapPayload());minecraft.setScreen(SocialHubScreen.retainMap(new PolishedWorldMapScreen(com.example.examplemod.client.CityWorldMapSession.INSTANCE)));}

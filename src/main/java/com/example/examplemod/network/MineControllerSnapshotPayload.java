@@ -17,8 +17,6 @@ import java.util.Optional;
 
 public record MineControllerSnapshotPayload(
         MineControllerSnapshot snapshot,
-        Optional<String> railwayStationName,
-        boolean railwayStationAvailable,
         boolean openScreen
 ) implements CustomPacketPayload {
 
@@ -80,9 +78,7 @@ public record MineControllerSnapshotPayload(
         buffer.writeLong(snapshot.actualExtraction());
         buffer.writeBoolean(snapshot.energyIntegrationPending());
         buffer.writeUtf(snapshot.actionMessage(), 1024);
-        buffer.writeBoolean(payload.railwayStationName().isPresent());
-        payload.railwayStationName().ifPresent(name -> buffer.writeUtf(name, 128));
-        buffer.writeBoolean(payload.railwayStationAvailable());
+
         buffer.writeBoolean(payload.openScreen());
     }
 
@@ -133,9 +129,6 @@ public record MineControllerSnapshotPayload(
         long actualExtraction = buffer.readLong();
         boolean energyIntegrationPending = buffer.readBoolean();
         String actionMessage = buffer.readUtf(1024);
-        Optional<String> railwayStationName = buffer.readBoolean()
-                ? Optional.of(buffer.readUtf(128)) : Optional.empty();
-        boolean railwayStationAvailable = buffer.readBoolean();
 
         MineControllerSnapshot snapshot =
                 new MineControllerSnapshot(
@@ -167,7 +160,7 @@ public record MineControllerSnapshotPayload(
                         actionMessage
                 );
         return new MineControllerSnapshotPayload(
-                snapshot, railwayStationName, railwayStationAvailable, buffer.readBoolean());
+                snapshot, buffer.readBoolean());
     }
 
     @Override

@@ -46,6 +46,10 @@ public final class CityTerritoryCheck {
         restartSafety();
         relocation();
         outline();
+        interactionGrants();
+        transportGrants();
+        grantReplacementLifecycle();
+        grantLifecycleApiContract();
 
         System.out.println("PASS: " + checks + " city territory claim checks");
     }
@@ -708,6 +712,248 @@ public final class CityTerritoryCheck {
         require(twice.getClaimedPlots().equals(second.getCityByName("Restart").getClaimedPlots()),
                 "a second restart changes nothing");
         require(third.getCityAt(OVERWORLD, 75, 60) == twice, "protection still resolves after two restarts");
+    }
+
+    // ------------------------------------------------- пульт управления доступом
+
+    private static final ResourceLocation CHEST = ResourceLocation.parse("minecraft:chest");
+    private static final ResourceLocation FURNACE = ResourceLocation.parse("minecraft:furnace");
+
+    private static void interactionGrants() {
+        CityManager manager = new CityManager();
+        UUID owner = UUID.randomUUID();
+        City city = manager.createCity("Access", owner, OVERWORLD, new BlockPos(0, 64, 0));
+        BlockPos target = new BlockPos(10, 64, 20);
+
+        require(manager.interactionGrant(city, target) == null,
+                "no grant exists before the remote is used");
+        require(!manager.allowsInteraction(city, OVERWORLD, target, CHEST),
+                "an unknown block is guarded by the ordinary rights path");
+        require(!manager.allowsInteraction(null, OVERWORLD, target, CHEST),
+                "a null city is never granted");
+        require(!manager.allowsInteraction(city, null, target, CHEST),
+                "a null dimension is never granted");
+
+        // Выдача: чужой игрок получает право только на взаимодействие.
+        manager.addInteractionGrant(city, OVERWORLD, target, CHEST);
+        require(manager.interactionGrant(city, target) != null,
+                "the grant is stored after the remote is used");
+        require(manager.allowsInteraction(city, OVERWORLD, target, CHEST),
+                "the granted block accepts right-click from any player");
+        require(!manager.allowsInteraction(city, NETHER, target, CHEST),
+                "a grant is bound to the dimension it was given in");
+
+        // Грант заменяется, а не дублируется: на предприятии пульт переиспользуют.
+        manager.addInteractionGrant(city, OVERWORLD, target, FURNACE);
+        require(manager.allowsInteraction(city, OVERWORLD, target, FURNACE),
+                "a replaced block id re-grants the position");
+        require(!manager.allowsInteraction(city, OVERWORLD, target, CHEST),
+                "the replaced block no longer matches the old grant id");
+
+        // Стёршийся grant: блок заменили — разрешение снимается первой проверкой.
+        manager.addInteractionGrant(city, OVERWORLD, target, CHEST);
+        require(!manager.allowsInteraction(city, OVERWORLD, target, FURNACE),
+                "a stale grant fails the check for the new block");
+        require(manager.interactionGrant(city, target) == null,
+                "the stale grant is purged by the first protection check");
+
+        // Повторное использование пульта закрывает блок.
+        manager.addInteractionGrant(city, OVERWORLD, target, CHEST);
+        require(manager.removeInteractionGrant(city, target),
+                "reusing the remote removes the grant");
+        require(!manager.removeInteractionGrant(city, target),
+                "removing an already guarded block is a no-op");
+        require(!manager.allowsInteraction(city, OVERWORLD, target, CHEST),
+                "the block is guarded again after revocation");
+
+        // Сохранение: гранты переживают перезапуск вместе с городом.
+        manager.addInteractionGrant(city, OVERWORLD, target, CHEST);
+        CompoundTag saved = manager.save(new CompoundTag(), null);
+        CityManager restored = CityManager.load(saved, null);
+        City reloaded = restored.getCityByName("Access");
+        require(reloaded != null, "precondition: the city survives persistence");
+        require(restored.interactionGrant(reloaded, target) != null,
+                "access grants survive a save/load round trip");
+        require(restored.allowsInteraction(reloaded, OVERWORLD, target, CHEST),
+                "the reloaded grant works for protection");
+
+        // Удаление города не оставляет грантов ни в памяти, ни в сохранении.
+        City removed = restored.removeCityByOwner(owner);
+        require(removed != null, "precondition: the city is removable");
+        CompoundTag afterRemoval = restored.save(new CompoundTag(), null);
+        require(afterRemoval.getList("InteractionGrants", Tag.TAG_COMPOUND).isEmpty(),
+                "city removal cleans its access grants");
+        CityManager reopened = CityManager.load(afterRemoval, null);
+        require(!reopened.allowsInteraction(null, OVERWORLD, target, CHEST),
+                "a deleted city grants nothing");
+    }
+
+    // ------------------------------------------------- транспортные гранты пульта
+
+    private static void transportGrants() {
+        CityManager manager = new CityManager();
+        UUID owner = UUID.randomUUID();
+        City city = manager.createCity("Transport", owner, OVERWORLD, new BlockPos(0, 64, 0));
+        UUID token = UUID.randomUUID();
+        BlockPos delta = new BlockPos(3, 1, -2);
+
+        require(!manager.allowsTransportAccess(city, token, delta, CHEST),
+                "a transport block is guarded before the remote touches it");
+        require(!manager.allowsTransportAccess(null, token, delta, CHEST),
+                "a null city is never granted for a transport block");
+        require(!manager.allowsTransportAccess(city, null, delta, CHEST),
+                "a null token is never granted");
+        require(!manager.allowsTransportAccess(city, token, null, CHEST),
+                "a null delta is never granted");
+        require(!manager.toggleTransportAccess(null, token, delta, CHEST),
+                "the remote cannot toggle grants without a city");
+
+        // Выдача: пульт открывает блок конструкции для взаимодействия всем.
+        require(manager.toggleTransportAccess(city, token, delta, CHEST),
+                "the remote opens a transport block");
+        require(manager.allowsTransportAccess(city, token, delta, CHEST),
+                "the opened transport block accepts interaction from any player");
+
+        // Привязка к токену терминала: чужой терминал ничего не открывает.
+        require(!manager.allowsTransportAccess(city, UUID.randomUUID(), delta, CHEST),
+                "another terminal token reads nothing from the grant");
+
+        // Тумблер: повторное использование закрывает блок.
+        require(!manager.toggleTransportAccess(city, token, delta, CHEST),
+                "reusing the remote re-guards the block");
+        require(!manager.allowsTransportAccess(city, token, delta, CHEST),
+                "the re-guarded block is protected again");
+
+        // Стершийся грант: на дельте другой блок — разрешение снимается проверкой.
+        manager.toggleTransportAccess(city, token, delta, CHEST);
+        require(!manager.allowsTransportAccess(city, token, delta, FURNACE),
+                "a stale transport grant fails the check for the replaced block");
+        require(!manager.allowsTransportAccess(city, token, delta, CHEST),
+                "the stale transport grant is purged by the first check");
+
+        // Повторная выдача после очистки, закрытие и открытие для сохранения.
+        require(manager.toggleTransportAccess(city, token, delta, CHEST),
+                "a guarded block can be re-opened after the purge");
+        require(!manager.toggleTransportAccess(city, token, delta, CHEST),
+                "the open block can be re-guarded");
+        manager.toggleTransportAccess(city, token, delta, CHEST);
+
+        // Персистентность: дельты переживают перезапуск вместе с городом.
+        CompoundTag saved = manager.save(new CompoundTag(), null);
+        CityManager restored = CityManager.load(saved, null);
+        City reloaded = restored.getCityByName("Transport");
+        require(reloaded != null, "precondition: the transport city survives persistence");
+        require(restored.allowsTransportAccess(reloaded, token, delta, CHEST),
+                "transport grants survive a save/load round trip");
+
+        // Удаление города не оставляет транспортных грантов ни в памяти, ни в сохранении.
+        City removed = restored.removeCityByOwner(owner);
+        require(removed != null, "precondition: the transport city is removable");
+        CompoundTag afterRemoval = restored.save(new CompoundTag(), null);
+        require(afterRemoval.getList("TransportGrants", Tag.TAG_COMPOUND).isEmpty(),
+                "city removal cleans its transport grants");
+        CityManager reopened = CityManager.load(afterRemoval, null);
+        require(!reopened.allowsTransportAccess(null, token, delta, CHEST),
+                "a deleted city grants no transport blocks");
+    }
+
+    /** Real ledger transitions; native event/mixin execution remains a runtime acceptance test. */
+    private static void grantReplacementLifecycle() {
+        CityManager manager = new CityManager();
+        UUID owner = UUID.randomUUID(), token = UUID.randomUUID(), otherToken = UUID.randomUUID();
+        City city = manager.createCity("Lifecycle", owner, OVERWORLD, new BlockPos(0, 64, 0));
+        BlockPos target = new BlockPos(10, 64, 20), neighbour = target.east(), delta = new BlockPos(3, 1, -2);
+        ResourceLocation air = ResourceLocation.parse("minecraft:air");
+        require(!manager.hasBlockAccessGrants(), "world-change hook returns cheaply when no grants exist");
+        manager.addInteractionGrant(city, OVERWORLD, target, CHEST);
+        manager.addInteractionGrant(city, OVERWORLD, neighbour, CHEST);
+        manager.toggleTransportAccess(city, token, delta, CHEST);
+        manager.toggleTransportAccess(city, otherToken, delta, CHEST);
+        require(manager.hasBlockAccessGrants() && manager.hasTransportAccessGrants(), "stored grants enable lifecycle lookup");
+
+        // Effective final type is unchanged for facing/open updates or a cancelled replacement.
+        manager.onBlockChanged(OVERWORLD, target, CHEST, CHEST);
+        manager.onTransportBlockChanged(city, token, delta, CHEST, CHEST);
+        require(manager.allowsInteraction(city, OVERWORLD, target, CHEST)
+                        && manager.allowsTransportAccess(city, token, delta, CHEST),
+                "unchanged final type retains ordinary and transport grants");
+        manager.onBlockChanged(NETHER, target, CHEST, air);
+        require(manager.allowsInteraction(city, OVERWORLD, target, CHEST), "another dimension cannot revoke this grant");
+
+        manager.onBlockChanged(OVERWORLD, target, CHEST, air);
+        manager.onBlockChanged(OVERWORLD, target, air, CHEST);
+        manager.onTransportBlockChanged(city, token, delta, CHEST, air);
+        manager.onTransportBlockChanged(city, token, delta, air, CHEST);
+        boolean ordinaryRevoked = !manager.allowsInteraction(city, OVERWORLD, target, CHEST);
+        boolean transportRevoked = !manager.allowsTransportAccess(city, token, delta, CHEST);
+        require(ordinaryRevoked && transportRevoked,
+                "same-ID break/replacement must revoke both grants: ordinary=" + ordinaryRevoked + ", transport=" + transportRevoked);
+        require(manager.allowsInteraction(city, OVERWORLD, neighbour, CHEST), "adjacent static grant survives cleanup");
+        require(manager.allowsTransportAccess(city, otherToken, delta, CHEST), "another terminal token survives cleanup");
+        var restored = CityManager.load(manager.save(new CompoundTag(), null), null);
+        var restoredCity = restored.getCityByName("Lifecycle");
+        require(!restored.allowsInteraction(restoredCity, OVERWORLD, target, CHEST)
+                        && !restored.allowsTransportAccess(restoredCity, token, delta, CHEST),
+                "restart never restores a revoked same-ID grant");
+        require(restored.allowsTransportAccess(restoredCity, otherToken, delta, CHEST),
+                "relocation without a block replacement preserves saved token/delta identity");
+        manager.removeInteractionGrant(city, neighbour);
+        manager.toggleTransportAccess(city, otherToken, delta, CHEST);
+        require(!manager.hasBlockAccessGrants(), "last revocation removes empty containers from the cheap hook gate");
+    }
+
+    /** Exact bytecode/API wiring, not an execution of a Minecraft placement or Sable assembly. */
+    private static void grantLifecycleApiContract() {
+        String notify = "(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/chunk/LevelChunk;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;II)V";
+        var level = bytecode("net/minecraft/world/level/Level.class");
+        require(level.methods.stream().anyMatch(m -> m.name.equals("markAndNotifyBlock") && m.desc.equals(notify)),
+                "NeoForge exposes the exact committed block notification descriptor");
+        require(level.fields.stream().anyMatch(f -> f.name.equals("restoringBlockSnapshots") && f.desc.equals("Z")),
+                "NeoForge exposes its placement rollback flag");
+        var mixin = bytecode("com/example/examplemod/mixin/LevelBlockGrantMixin.class");
+        var handler = mixin.methods.stream().filter(m -> m.name.equals("ccec$clearBlockGrants")).findFirst().orElseThrow();
+        require(calls(handler, "com/example/examplemod/event/CityProtectionEvents", "onBlockChanged"),
+                "committed notification reaches the production lifecycle callback");
+        require(java.util.stream.StreamSupport.stream(handler.instructions.spliterator(), false)
+                        .anyMatch(i -> i instanceof org.objectweb.asm.tree.FieldInsnNode f && f.name.equals("restoringBlockSnapshots")),
+                "mixin explicitly guards canceled-placement restoration");
+        try (var stream = CityTerritoryCheck.class.getClassLoader().getResourceAsStream("createcityexpansioncore.mixins.json")) {
+            require(stream != null && new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("\"LevelBlockGrantMixin\""), "lifecycle mixin is registered in the shipped config");
+            java.nio.file.Path root = java.nio.file.Path.of("").toAbsolutePath();
+            while (root != null && !java.nio.file.Files.isRegularFile(root.resolve("build.gradle"))) root = root.getParent();
+            if (root == null) throw new AssertionError("repository root not found for optional API contract");
+            try (var jar = new java.util.jar.JarFile(root.resolve("libs/sable-neoforge-1.21.1-2.0.6.jar").toFile())) {
+                var assembly = bytecode(jar.getInputStream(jar.getJarEntry("dev/ryanhcode/sable/api/SubLevelAssemblyHelper.class")));
+                var move = assembly.methods.stream().filter(m -> m.name.equals("moveBlocks")).findFirst().orElseThrow();
+                require(!calls(move, "net/minecraft/world/level/Level", "markAndNotifyBlock")
+                                && calls(move, "dev/ryanhcode/sable/api/SubLevelAssemblyHelper", "markAndNotifyBlock"),
+                        "assembly moves use their own notification and preserve transport grants");
+                var accessor = bytecode(jar.getInputStream(jar.getJarEntry("dev/ryanhcode/sable/sublevel/plot/EmbeddedPlotLevelAccessor.class")));
+                var set = accessor.methods.stream().filter(m -> m.name.equals("setBlock")).findFirst().orElseThrow();
+                require(calls(set, "net/minecraft/world/level/Level", "setBlock"),
+                        "ordinary sublevel edits use the hooked world setBlock lifecycle");
+            }
+        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
+    }
+
+    private static boolean calls(org.objectweb.asm.tree.MethodNode method, String owner, String name) {
+        for (var instruction : method.instructions)
+            if (instruction instanceof org.objectweb.asm.tree.MethodInsnNode call && call.owner.equals(owner) && call.name.equals(name)) return true;
+        return false;
+    }
+
+    private static org.objectweb.asm.tree.ClassNode bytecode(String resource) {
+        return bytecode(CityTerritoryCheck.class.getClassLoader().getResourceAsStream(resource));
+    }
+
+    private static org.objectweb.asm.tree.ClassNode bytecode(java.io.InputStream stream) {
+        if (stream == null) throw new AssertionError("missing class for bytecode contract");
+        try (stream) {
+            var node = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(stream).accept(node, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+            return node;
+        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
     }
 
     // ------------------------------------------------------------------- перенос пилона

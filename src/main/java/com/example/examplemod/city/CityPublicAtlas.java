@@ -40,7 +40,7 @@ public final class CityPublicAtlas {
         request(player,new RequestCityDirectoryPayload(player.serverLevel().dimension().location(),payload.token(),payload.offset()),false);
     }
     public static void request(ServerPlayer player, RequestCityDirectoryPayload request) { request(player,request,true); }
-    private static void request(ServerPlayer player, RequestCityDirectoryPayload request, boolean railway) {
+    private static void request(ServerPlayer player, RequestCityDirectoryPayload request, boolean sendDirectory) {
         if (!allow(player)) return;
         var manager = CityManager.get(player.getServer().overworld());
         View current = view(player);
@@ -73,9 +73,8 @@ public final class CityPublicAtlas {
         }
         var directory = new CityDirectoryPayload(current.token, current.anchor, current.dimension,
                 request.offset(), current.cities.size(), current.dimensions, CityDirectoryPager.page(current.cities, request.offset()));
-        if(railway) PacketDistributor.sendToPlayer(player,directory);
+        if(sendDirectory) PacketDistributor.sendToPlayer(player,directory);
         else PacketDistributor.sendToPlayer(player,new MinimapDirectoryPayload(directory));
-        if (railway && request.offset()==0) com.example.examplemod.railway.RailwayNetworkHandlers.sendAtlasMap(player, current.anchor, current.dimension);
     }
     public static void edit(ServerPlayer player, SetCityIdentityPayload request) {
         if (!allow(player)) return;

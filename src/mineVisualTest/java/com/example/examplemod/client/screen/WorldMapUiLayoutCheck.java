@@ -21,7 +21,7 @@ public final class WorldMapUiLayoutCheck {
     private static final int SCREEN_HEIGHT = 380;
 
     /** Realistic measured widths: a short mode name and the longest global one, per language. */
-    private static int[] modeLabels() { return new int[] { 38, 75, 50, 58 }; }
+    private static int[] modeLabels() { return new int[] { 38, 58 }; }
     private static int[] globalLabels() { return new int[] { 40, 44, 52, 50, 64, 72, 30, 50 }; }
 
     public static void main(String[] args) {
@@ -149,7 +149,7 @@ public final class WorldMapUiLayoutCheck {
                 "a short global action is narrower than a long one at 1280");
         require(WorldMapUiLayout.globalButtonWidth(854, modes, globals, 0) == WorldMapUiLayout.compactWidth(),
                 "a compact global action falls back to its glyph instead of truncating the label");
-        require(WorldMapUiLayout.MODE_COUNT == 4, "all four modes exist, including the disabled one");
+        require(WorldMapUiLayout.MODE_COUNT == 2, "city mode and disabled energy mode remain");
         require(WorldMapUiLayout.MODE_ENERGY == WorldMapUiLayout.MODE_COUNT - 1,
                 "the disabled mode keeps its slot instead of vanishing");
         require(WorldMapUiLayout.GLOBAL_ACTIONS == 8,
@@ -234,47 +234,6 @@ public final class WorldMapUiLayoutCheck {
                         && WorldMapUiLayout.SECTION < WorldMapUiLayout.LARGE,
                 "the spacing scale is strictly increasing");
         require(WorldMapUiLayout.EDGE == WorldMapUiLayout.NORMAL, "the screen edge uses the normal step");
-
-        // ---------------------------------------- railway classes are distinguishable, not just coloured
-        CityMapPanel.RailClass own = CityMapPanel.classifyRail(true, true, 0L, true);
-        CityMapPanel.RailClass free = CityMapPanel.classifyRail(false, true, 0L, true);
-        CityMapPanel.RailClass paid = CityMapPanel.classifyRail(false, true, 25L, true);
-        CityMapPanel.RailClass priv = CityMapPanel.classifyRail(false, false, 0L, true);
-        CityMapPanel.RailClass offline = CityMapPanel.classifyRail(true, true, 25L, false);
-        require(own == CityMapPanel.RailClass.OWN, "our own network is recognised as ours");
-        require(free == CityMapPanel.RailClass.PUBLIC_FREE, "a foreign network without a tariff is free public");
-        require(paid == CityMapPanel.RailClass.PUBLIC_PAID, "a foreign network with a tariff is paid public");
-        require(priv == CityMapPanel.RailClass.PRIVATE, "an inaccessible network stays private");
-        require(offline == CityMapPanel.RailClass.OFFLINE,
-                "an offline section is reported as offline whatever its access is");
-        require(CityMapPanel.classifyRail(true, true, 99L, true) == CityMapPanel.RailClass.OWN,
-                "our own network stays ours even if it charges a tariff");
-        require(CityMapPanel.classifyRail(false, true, 1L, true) == CityMapPanel.RailClass.PUBLIC_PAID,
-                "any positive tariff counts as paid");
-
-        // Every class is separable by width as well as by colour, so the map survives greyscale.
-        require(CityMapPanel.railInnerWidth(paid) > CityMapPanel.railInnerWidth(free),
-                "paid track is heavier than free track");
-        require(CityMapPanel.railInnerWidth(own) >= CityMapPanel.railInnerWidth(free),
-                "our own track is at least as heavy as free public track");
-        require(CityMapPanel.railInnerWidth(priv) < CityMapPanel.railInnerWidth(free),
-                "private track is the lightest, never louder than a usable line");
-        require(CityMapPanel.railInnerWidth(paid) > CityMapPanel.railInnerWidth(priv),
-                "paid track is clearly heavier than private track");
-        int[] colors = { CityMapPanel.railInnerColor(own), CityMapPanel.railInnerColor(free),
-                CityMapPanel.railInnerColor(paid), CityMapPanel.railInnerColor(priv) };
-        for (int index = 0; index < colors.length; index++) {
-            for (int other = index + 1; other < colors.length; other++) {
-                require(colors[index] != colors[other],
-                        "rail classes " + index + " and " + other + " use different colours");
-            }
-            require((colors[index] >>> 24) == 0xFF, "rail class " + index + " is opaque so it reads on terrain");
-        }
-        for (CityMapPanel.RailClass kind : CityMapPanel.RailClass.values()) {
-            require((CityMapPanel.railOutlineColor(kind) >>> 24) >= 0xE0,
-                    "every rail class paints an opaque outline under the line");
-            require(CityMapPanel.railInnerWidth(kind) >= 1, "every rail class keeps a visible inner line");
-        }
 
         System.out.println("PASS: " + checks + " City hub / World Map responsive layout checks");
     }

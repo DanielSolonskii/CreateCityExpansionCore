@@ -9,9 +9,10 @@ import java.util.*;
 /** Additive save; existing profile, city and economy formats are unchanged. */
 public final class SocialSavedData extends SavedData {
     public final SocialBook book=new SocialBook();
-    private final Set<UUID> nearbySharing=new HashSet<>();
-    public boolean sharesNearby(UUID player){return nearbySharing.contains(player);}
-    public void shareNearby(UUID player,boolean enabled){if(enabled?nearbySharing.add(player):nearbySharing.remove(player))setDirty();}
+    private final Set<UUID> nearbySharing=new HashSet<>(), hidden=new HashSet<>(), preferences=new HashSet<>();
+    public boolean sharesNearby(UUID player){return !hidden.contains(player);}
+    public void shareNearby(UUID player,boolean enabled){preferences.add(player);if(enabled){nearbySharing.add(player);hidden.remove(player);}else{nearbySharing.remove(player);hidden.add(player);}setDirty();}
+    public void migrateNearby(UUID player,boolean oldExplicitChoice){if(!preferences.contains(player)){if(oldExplicitChoice)shareNearby(player,nearbySharing.contains(player));else{preferences.add(player);setDirty();}}}
     public static SocialSavedData get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(new Factory<>(SocialSavedData::new,SocialSavedData::load,null),"ccec_social");
     }
@@ -39,6 +40,8 @@ public final class SocialSavedData extends SavedData {
             b.dialogs.put(pair,history);
         }catch(IllegalArgumentException ignored){}
         for(Tag raw:root.getList("NearbySharing",Tag.TAG_INT_ARRAY))try{data.nearbySharing.add(net.minecraft.nbt.NbtUtils.loadUUID(raw));}catch(IllegalArgumentException ignored){}
+        for(Tag raw:root.getList("NearbyHidden",Tag.TAG_INT_ARRAY))try{data.hidden.add(NbtUtils.loadUUID(raw));}catch(IllegalArgumentException ignored){}
+        for(Tag raw:root.getList("NearbyPreferences",Tag.TAG_INT_ARRAY))try{data.preferences.add(NbtUtils.loadUUID(raw));}catch(IllegalArgumentException ignored){}
         // Normalize incompatible relationships after a damaged/hand-edited save.
         b.friends.removeIf(p->b.blocks.contains(new SocialBook.Edge(p.first(),p.second()))||b.blocks.contains(new SocialBook.Edge(p.second(),p.first())));
         b.requests.removeIf(e->b.friends.contains(SocialBook.Pair.of(e.from(),e.to()))||b.blocks.contains(e)||b.blocks.contains(new SocialBook.Edge(e.to(),e.from())));
@@ -46,13 +49,13 @@ public final class SocialSavedData extends SavedData {
     }
     private static CompoundTag edge(UUID a,UUID b,String kind) {var t=new CompoundTag();t.putUUID("A",a);t.putUUID("B",b);t.putString("Kind",kind);return t;}
     @Override public CompoundTag save(CompoundTag root,HolderLookup.Provider lookup) {
-        root.putInt("Version",1);root.putLong("Sequence",book.sequence);var edges=new ListTag();
+        root.putInt("Version",2);root.putLong("Sequence",book.sequence);var edges=new ListTag();
         book.friends.forEach(p->edges.add(edge(p.first(),p.second(),"friend")));
         book.requests.forEach(e->edges.add(edge(e.from(),e.to(),"request")));book.blocks.forEach(e->edges.add(edge(e.from(),e.to(),"block")));
         book.read.forEach((e,v)->{var t=edge(e.from(),e.to(),"read");t.putLong("Value",v);edges.add(t);});root.put("Edges",edges);
         var revisions=new ListTag();book.revisions.forEach((id,v)->{var t=new CompoundTag();t.putUUID("Id",id);t.putLong("Value",v);revisions.add(t);});root.put("Revisions",revisions);
         var dialogs=new ListTag();book.dialogs.forEach((p,messages)->{var t=edge(p.first(),p.second(),"dialog");var list=new ListTag();
             for(var m:messages){var tag=new CompoundTag();tag.putLong("Id",m.id());tag.putUUID("Nonce",m.nonce());tag.putUUID("Sender",m.sender());tag.putLong("Time",m.time());tag.putString("Text",m.text());list.add(tag);}t.put("Messages",list);dialogs.add(t);});
-        root.put("Dialogs",dialogs);var sharing=new ListTag();nearbySharing.forEach(id->sharing.add(net.minecraft.nbt.NbtUtils.createUUID(id)));root.put("NearbySharing",sharing);return root;
+        root.put("Dialogs",dialogs);var sharing=new ListTag();nearbySharing.forEach(id->sharing.add(net.minecraft.nbt.NbtUtils.createUUID(id)));root.put("NearbySharing",sharing);var hiddenTags=new ListTag();hidden.forEach(id->hiddenTags.add(NbtUtils.createUUID(id)));root.put("NearbyHidden",hiddenTags);var configured=new ListTag();preferences.forEach(id->configured.add(NbtUtils.createUUID(id)));root.put("NearbyPreferences",configured);return root;
     }
 }

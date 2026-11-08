@@ -43,7 +43,9 @@ public final class SocialService {
             result=book.apply(actor,r.target(),r.action(),r.revision(),r.text(),r.before(),System.currentTimeMillis(),r.request());
             if(result.equals("ok")) {
                 data.setDirty();
-                if(r.action()==SocialBook.Action.READ)com.example.examplemod.community.CommunityInbox.get(s).readPeer(actor,r.target(),"message");
+                if(r.action()==SocialBook.Action.CANCEL||r.action()==SocialBook.Action.BLOCK||r.action()==SocialBook.Action.DECLINE){var inbox=com.example.examplemod.community.CommunityInbox.get(s);inbox.resolvePeer(actor,r.target(),"friend_request","friend_request_closed");inbox.resolvePeer(r.target(),actor,"friend_request","friend_request_closed");if(r.action()==SocialBook.Action.BLOCK){var notices=com.example.examplemod.community.CommunityData.get(s);notices.outbox.removeIf(n->n.kind().equals("MESSAGE")&&((n.owner().equals(actor)&&n.peer().equals(r.target()))||(n.owner().equals(r.target())&&n.peer().equals(actor))));notices.setDirty();}}
+
+                if(r.action()==SocialBook.Action.READ)for(var message:book.dialogs.getOrDefault(SocialBook.Pair.of(actor,r.target()),List.of()))if(message.sender().equals(r.target())&&message.id()<=r.before())com.example.examplemod.community.CommunityInbox.get(s).read(actor,message.nonce());
                 if(r.action()==SocialBook.Action.ACCEPT||r.action()==SocialBook.Action.DECLINE)com.example.examplemod.community.CommunityInbox.get(s).readPeer(actor,r.target(),"friend_request");
                 if(r.action()==SocialBook.Action.REQUEST||r.action()==SocialBook.Action.SEND||r.action()==SocialBook.Action.ACCEPT)com.example.examplemod.community.CommunityInbox.get(s).add(r.target(),r.request(),r.action()==SocialBook.Action.REQUEST?"friend_request":r.action()==SocialBook.Action.SEND?"message":"friend_accepted",actor,null,null,PlayerNames.name(s,actor),System.currentTimeMillis());
                 if(r.action()==SocialBook.Action.SEND||r.action()==SocialBook.Action.REQUEST||r.action()==SocialBook.Action.ACCEPT) {

@@ -12,7 +12,7 @@ public final class FriendMinimapLayer {
     public static void render(GuiGraphics g,CityMapPanel panel,MinimapLayout.View view){
         var mc=Minecraft.getInstance();if(mc.getConnection()==null||mc.player==null)return;long now=net.minecraft.Util.getMillis();var clusters=new ArrayList<Cluster>();
         for(var friend:NearbySceneClient.friends()){
-            if(mc.getConnection().getPlayerInfo(friend.id())==null||Math.hypot(friend.x(now)-mc.player.getX(),friend.z(now)-mc.player.getZ())>256)continue;
+            if(mc.getConnection().getPlayerInfo(friend.id())==null)continue;
             int x=panel.worldToScreenX(friend.x(now)),y=panel.worldToScreenY(friend.z(now));
             if(x<view.x()+8||y<view.y()+8||x>=view.x()+view.size()-8||y>=view.y()+view.size()-8)continue;
             Cluster group=null;for(var c:clusters)if(Math.hypot(c.x-x,c.y-y)<15){group=c;break;}

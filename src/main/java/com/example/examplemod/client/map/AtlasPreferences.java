@@ -15,6 +15,8 @@ public final class AtlasPreferences {
     public int territoryMode;
     public boolean plotGrid;
     public boolean positioned, grid, minimap, reducedMotion;
+    /** True once the atlas has written a layer mask that actually knew about the TRACKS layer. */
+    public boolean tracksPreference;
     public final int[] overlays = {-1, -1, -1, -1};
     public final List<Pin> pins = new ArrayList<>();
     public static final int MAX_PINS = 64;
@@ -55,6 +57,7 @@ public final class AtlasPreferences {
             result.territoryMode=Math.clamp(Integer.parseInt(values.getProperty(prefix+"territoryMode","0")),0,2);
             result.plotGrid=Boolean.parseBoolean(values.getProperty(prefix+"plotGrid","false"));
             result.minimap = Boolean.parseBoolean(values.getProperty(prefix + "minimap", "false"));
+            result.tracksPreference = Boolean.parseBoolean(values.getProperty(prefix + "tracksPreference", "false"));
             for (int i = 0; i < result.overlays.length; i++) result.overlays[i] = Integer.parseInt(values.getProperty(prefix + "layers." + i, "-1"));
             if (!Double.isFinite(result.centerX) || !Double.isFinite(result.centerZ)
                     || !Double.isFinite(result.zoom)) result.positioned = false;
@@ -83,6 +86,7 @@ public final class AtlasPreferences {
         values.setProperty(prefix+"territoryMode",Integer.toString(territoryMode));
         values.setProperty(prefix+"plotGrid",Boolean.toString(plotGrid));
         values.setProperty(prefix + "minimap", Boolean.toString(minimap));
+        values.setProperty(prefix + "tracksPreference", Boolean.toString(tracksPreference));
         for (int i = 0; i < overlays.length; i++) values.setProperty(prefix + "layers." + i, Integer.toString(overlays[i]));
         StringBuilder coordinates = new StringBuilder();
         for (Pin pin : pins.stream().limit(MAX_PINS).toList()) coordinates.append(pin.x()).append(',').append(pin.z()).append(';');

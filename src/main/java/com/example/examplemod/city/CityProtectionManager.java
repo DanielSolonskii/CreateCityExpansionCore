@@ -1,6 +1,10 @@
 package com.example.examplemod.city;
 
+import com.example.examplemod.city.City;
+import com.example.examplemod.city.CityManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -28,6 +32,17 @@ public class CityProtectionManager {
         City city = cityManager.getCityAt(level.dimension().location(), pos);
 
         if (city == null) {
+            return true;
+        }
+
+        /*
+         * Сначала проверяются точечные разрешения пульта доступа: открытый
+         * блок принимает ПКМ любого игрока, включая не-члена города.
+         * Право ломать и ставить это разрешение не меняет.
+         */
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
+                level.getBlockState(pos).getBlock());
+        if (cityManager.allowsInteraction(city, level.dimension().location(), pos, blockId)) {
             return true;
         }
 

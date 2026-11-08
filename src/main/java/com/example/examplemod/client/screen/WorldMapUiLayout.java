@@ -61,10 +61,8 @@ final class WorldMapUiLayout {
     static final int GLOBAL_ACTIONS = 8;
 
     static final int MODE_CITIES = 0;
-    static final int MODE_RAILWAY = 1;
-    static final int MODE_LOGISTICS = 2;
-    static final int MODE_ENERGY = 3;
-    static final int MODE_COUNT = 4;
+    static final int MODE_ENERGY = 1;
+    static final int MODE_COUNT = 2;
 
     record Rect(int x, int y, int width, int height) {
         int right() { return x + width; }

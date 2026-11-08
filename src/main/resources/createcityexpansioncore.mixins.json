@@ -3,8 +3,18 @@
   "minVersion": "0.8",
   "package": "com.example.examplemod.mixin",
   "compatibilityLevel": "JAVA_21",
+  "plugin": "com.example.examplemod.mixin.TransportMixinPlugin",
   "mixins": [
+    "PackagerCargoReceiptMixin",
+    "GlobalStationCargoMixin",
     "CarriageBogeyAccessor",
+    "LevelBlockGrantMixin",
+    "ContraptionInteractionPacketMixin",
+    "TrainRelocationPacketMixin",
+    "StationBlockEntityMixin",
+    "simulated.AssemblePacketMixin",
+    "simulated.PhysicsAssemblerBlockMixin",
+    "simulated.SingleTransportTerminalMixin",
     "ServerLoginAdmissionMixin",
     "ConfigurationAdmissionAssertionMixin",
     "PrivateMinecraftTcpMixin",
@@ -12,7 +22,9 @@
     "TelemetryDisconnectMixin"
   ],
   "client": [
-    "ClientTlsConnectionMixin"
+    "ClientTlsConnectionMixin",
+    "PlayerTabPresentationMixin",
+    "BossHealthOverlayAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -4,13 +4,6 @@ import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.network.CityMapTilePayload;
 import com.example.examplemod.network.CityPylonStatePayload;
 import com.example.examplemod.network.CityRelationsStatePayload;
-import com.example.examplemod.network.EconomyStatePayload;
-import com.example.examplemod.network.RailwayMapPayload;
-import com.example.examplemod.network.RailwayStatePayload;
-import com.example.examplemod.railway.RailwayOwnershipSnapshot;
-import com.example.examplemod.railway.RailwayStationSnapshot;
-import com.example.examplemod.railway.RailwayTrainCandidate;
-import com.example.examplemod.railway.RailwayTrainSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 
@@ -60,12 +53,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
 
     private final List<CityProjectSnapshot> projects = new ArrayList<>();
     private final List<CityMapTilePayload> mapTiles = new ArrayList<>();
-    private final List<RailwayStationSnapshot> stations = new ArrayList<>();
-    private final List<RailwayTrainSnapshot> trains = new ArrayList<>();
-    private final List<RailwayTrainCandidate> trainCandidates = new ArrayList<>();
-    private final List<RailwayOwnershipSnapshot> ownership = new ArrayList<>();
-    private RailwayMapPayload railwayMap;
-    private EconomyStatePayload economyState;
+
     private CityRelationsStatePayload relationsState;
 
     private CityWorldMapSession() {
@@ -78,12 +66,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
         this.dimensionId = dimension;
         this.projects.clear();
         this.mapTiles.clear();
-        this.stations.clear();
-        this.trains.clear();
-        this.trainCandidates.clear();
-        this.ownership.clear();
-        this.railwayMap = null;
-        this.economyState = null;
+
         this.relationsState = null;
     }
 
@@ -98,12 +81,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
         this.dimensionId = null;
         this.projects.clear();
         this.mapTiles.clear();
-        this.stations.clear();
-        this.trains.clear();
-        this.trainCandidates.clear();
-        this.ownership.clear();
-        this.railwayMap = null;
-        this.economyState = null;
+
         this.relationsState = null;
     }
 
@@ -224,38 +202,6 @@ public final class CityWorldMapSession implements WorldMapDataSource {
     }
 
     @Override
-    public List<RailwayStationSnapshot> getRailwayStations() {
-        return List.copyOf(this.stations);
-    }
-
-    @Override
-    public List<RailwayTrainSnapshot> getRailwayTrains() {
-        return List.copyOf(this.trains);
-    }
-
-    @Override
-    public List<RailwayTrainCandidate> getRailwayTrainCandidates() {
-        return List.copyOf(this.trainCandidates);
-    }
-
-    @Override
-    public List<RailwayOwnershipSnapshot> getRailwayOwnership() {
-        return List.copyOf(this.ownership);
-    }
-
-    @Override
-    public RailwayMapPayload drainRailwayMap() {
-        RailwayMapPayload drained = this.railwayMap;
-        this.railwayMap = null;
-        return drained;
-    }
-
-    @Override
-    public EconomyStatePayload getEconomyState() {
-        return this.economyState;
-    }
-
-    @Override
     public CityRelationsStatePayload getRelationsState() {
         return this.relationsState;
     }
@@ -295,37 +241,6 @@ public final class CityWorldMapSession implements WorldMapDataSource {
             return;
         }
         this.mapTiles.add(payload);
-    }
-
-    @Override
-    public void applyRailwayState(RailwayStatePayload payload) {
-        if (!accepts(payload.pylonPos())) {
-            return;
-        }
-        this.stations.clear();
-        this.stations.addAll(payload.stations());
-        this.trains.clear();
-        this.trains.addAll(payload.trains());
-        this.trainCandidates.clear();
-        this.trainCandidates.addAll(payload.candidates());
-        this.ownership.clear();
-        this.ownership.addAll(payload.ownership());
-    }
-
-    @Override
-    public void acceptRailwayMap(RailwayMapPayload payload) {
-        if (!accepts(payload.pylonPos())) {
-            return;
-        }
-        this.railwayMap = payload;
-    }
-
-    @Override
-    public void applyEconomyState(EconomyStatePayload payload) {
-        if (!accepts(payload.pylonPos())) {
-            return;
-        }
-        this.economyState = payload;
     }
 
     @Override

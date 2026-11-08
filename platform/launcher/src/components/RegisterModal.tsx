@@ -3,11 +3,13 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { accountApi, AccountError, errorMessage, type Registration } from "../services/accountApi";
 import { QRCodeSVG } from "qrcode.react";
 import "../phone-verification.css";
+import { useOverlay } from "./useOverlay";
 
 export function RegisterModal({ open, onClose, onLogin, onSuccess }: {
   open: boolean; onClose: () => void; onLogin: () => void; onSuccess: (username: string) => void;
 }) {
   const [username, setUsername] = useState("");
+  const overlay = useOverlay<HTMLDivElement>(open, onClose);
   const [password, setPassword] = useState("");
   const [alphaKey, setAlphaKey] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -88,7 +90,7 @@ export function RegisterModal({ open, onClose, onLogin, onSuccess }: {
   }
 
   return (
-    <div className={`login-layer ${open ? "is-open" : ""}`} aria-hidden={!open}>
+    <div ref={overlay} className={`login-layer ${open ? "is-open" : ""}`} aria-hidden={!open}>
       <button className="login-backdrop" onClick={onClose} aria-label="Закрыть регистрацию" tabIndex={open ? 0 : -1} />
       <section className="login-modal register-modal" role="dialog" aria-modal="true" aria-label="Регистрация в RE:CREATED">
         <button className="login-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>

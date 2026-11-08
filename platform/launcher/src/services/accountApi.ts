@@ -24,7 +24,7 @@ const messages: Record<string, string> = {
   INVALID_DEVICE: "Доверие устройству отозвано или истекло. Войдите заново и подтвердите устройство.",
   DEVICE_EXPIRED: "Запрос устройства истёк. Выполните вход заново, чтобы получить новый QR.",
   DEVICE_LIMIT: "Слишком много устройств. Отзовите ненужные в Telegram: Аккаунт → Устройства.",
-  NOT_CONFIGURED: "Адрес Backend не настроен. Для VDS требуется публичный HTTPS endpoint.",
+  NOT_CONFIGURED: "В этой сборке лаунчера не настроено подключение к серверу. Обновите лаунчер.",
   INVALID_ENDPOINT: "Нужен HTTPS адрес Backend; HTTP разрешён только для localhost.",
   NETWORK_ERROR: "Backend недоступен. Проверьте подключение и повторите попытку.",
   INVALID_RESPONSE: "Backend вернул неожиданный ответ. Повторите попытку позже.",
@@ -72,10 +72,12 @@ export interface WireResponse { status: number; body: unknown }
 export type Transport = (request: WireRequest, signal?: AbortSignal) => Promise<WireResponse>;
 export function createTransport(base: string): Transport {
   return async (request, signal) => {
-    const origin = validateEndpoint(base);
+    // Windows uses its own release-pinned HTTPS endpoint; Vite env is only for browser transport.
+    const native = "__TAURI_INTERNALS__" in window;
+    const origin = native ? "" : validateEndpoint(base);
     signal?.throwIfAborted();
     try {
-      if ("__TAURI_INTERNALS__" in window) {
+      if (native) {
         const response = await invoke<WireResponse>("account_request", { request });
         signal?.throwIfAborted();
         return response;
