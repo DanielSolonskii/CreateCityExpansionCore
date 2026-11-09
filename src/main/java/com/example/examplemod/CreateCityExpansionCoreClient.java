@@ -18,6 +18,7 @@ import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.CityMapPeersPayload;
 import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.client.map.GeologyWideScanOverlay;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.network.SyncCityMemberRemovalPayload;
@@ -164,6 +165,10 @@ public class CreateCityExpansionCoreClient {
     ) {
         CreateCityExpansionCore.GEOLOGY_ANALYSIS_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> MagneticAnalyzerScreen.open(payload));
+        };
+
+        CreateCityExpansionCore.GEOLOGY_WIDE_SCAN_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> GeologyWideScanOverlay.accept(payload));
         };
 
         CreateCityExpansionCore.MINE_CONTROLLER_SNAPSHOT_HANDLER = (payload, context) -> {

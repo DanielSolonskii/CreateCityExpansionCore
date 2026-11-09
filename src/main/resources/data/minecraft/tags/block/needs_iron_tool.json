@@ -1,7 +1,6 @@
 {
   "replace": false,
   "values": [
-    "createcityexpansioncore:reinforced_concrete",
-    "createcityexpansioncore:refractory_block"
+    "createcityexpansioncore:reinforced_concrete"
   ]
 }

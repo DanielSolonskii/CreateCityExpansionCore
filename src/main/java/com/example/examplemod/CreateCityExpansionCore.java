@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.item.MagneticAnalyzerItem;
+import com.example.examplemod.item.MagneticAnalyzerMode;
 import com.example.examplemod.item.CityPylonItem;
 import com.example.examplemod.item.MineControllerItem;
 import com.example.examplemod.item.AccessControlRemoteItem;
@@ -46,6 +47,7 @@ import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.ChangeCityRolePayload;
 import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.network.GeologyWideScanPayload;
 import com.example.examplemod.command.GeologyCommand;
 import com.example.examplemod.item.ModItems;
 import com.example.examplemod.item.IndustrialMaterials;
@@ -77,6 +79,7 @@ import net.minecraft.core.BlockPos;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.MenuType;
@@ -180,6 +183,15 @@ public class CreateCityExpansionCore {
     public static PayloadHandler<GeologyAnalysisPayload> GEOLOGY_ANALYSIS_HANDLER =
             (payload, context) -> {};
 
+    /*
+     * Широкий спектр анализатора: сервер отправляет контуры
+     * залежей, клиентское состояние принимает overlay карты
+     * (см. GeologyWideScanOverlay). До замены — no-op, чтобы
+     * тип канала был известен при handshake.
+     */
+    public static PayloadHandler<GeologyWideScanPayload> GEOLOGY_WIDE_SCAN_HANDLER =
+            (payload, context) -> {};
+
     public static PayloadHandler<MineControllerSnapshotPayload> MINE_CONTROLLER_SNAPSHOT_HANDLER =
             (payload, context) -> {};
 
@@ -234,6 +246,35 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
     public static final DeferredRegister.Items ITEMS =
             DeferredRegister.createItems(
                     MODID
+            );
+
+    /*
+     * =========================================
+     * DATA COMPONENTS
+     * =========================================
+     */
+
+    /*
+     * Компоненты предметов. Режим спектра магнитного
+     * анализатора живёт в самом предмете: переживает
+     * выкладывание и перезапуск, синхронизирован в сеть
+     * для тултипа.
+     */
+    public static final DeferredRegister<DataComponentType<?>>
+            DATA_COMPONENTS =
+            DeferredRegister.create(
+                    Registries.DATA_COMPONENT_TYPE,
+                    MODID
+            );
+
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<MagneticAnalyzerMode>>
+            ANALYZER_MODE =
+            DATA_COMPONENTS.register(
+                    "analyzer_mode",
+                    () -> DataComponentType.<MagneticAnalyzerMode>builder()
+                            .persistent(MagneticAnalyzerMode.CODEC)
+                            .networkSynchronized(MagneticAnalyzerMode.STREAM_CODEC)
+                            .build()
             );
 
     /*
@@ -361,7 +402,8 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                             .title(Component.translatable(
                                     "itemGroup." + MODID
                             ))
-                            .icon(() -> IndustrialMaterials.STEEL_PLATE.get()
+                            .icon(() -> CreateCityExpansionCore.CITY_PYLON_ITEM
+                                    .get()
                                     .getDefaultInstance())
                             .displayItems(
                                     (parameters, output) ->
@@ -553,18 +595,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     "reinforced_concrete",
                     REINFORCED_CONCRETE
             );
-    public static final DeferredBlock<Block> REFRACTORY_BLOCK = BLOCKS.registerSimpleBlock(
-            "refractory_block",
-            BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BROWN).strength(3.5F)
-                    .requiresCorrectToolForDrops().sound(net.minecraft.world.level.block.SoundType.DEEPSLATE_TILES)
-    );
-    public static final DeferredItem<BlockItem> REFRACTORY_BLOCK_ITEM = ITEMS.registerSimpleBlockItem(
-            "refractory_block", REFRACTORY_BLOCK
-    );
-
-public static final DeferredItem<Item> QUICKLIME = ITEMS.registerSimpleItem("quicklime", new Item.Properties());
-
-public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
+    public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
             BLOCKS.register(
                     "mine_gateway",
                     () -> new MineGatewayBlock(
@@ -677,7 +708,7 @@ public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
          * <clinit>, регистрация предметов не произойдёт,
          * и рецепты упадут с «Unknown registry key».
          */
-        IndustrialMaterials.INDUSTRIAL_COKE.getClass();
+        IndustrialMaterials.IRON_ORE_RAW.getClass();
         com.example.examplemod.cargo.CargoBlocks.init();
 
         com.example.examplemod.auth.AuthenticationBootstrap.setup(modEventBus, modContainer);
@@ -700,6 +731,10 @@ modEventBus.addListener(
         );
 
         ITEMS.register(
+                modEventBus
+        );
+
+        DATA_COMPONENTS.register(
                 modEventBus
         );
 
@@ -1992,6 +2027,12 @@ registrar.playToServer(
                 GeologyAnalysisPayload.TYPE,
                 GeologyAnalysisPayload.STREAM_CODEC,
                 (payload, context) -> GEOLOGY_ANALYSIS_HANDLER.handle(payload, context)
+        );
+
+        registrar.playToClient(
+                GeologyWideScanPayload.TYPE,
+                GeologyWideScanPayload.STREAM_CODEC,
+                (payload, context) -> GEOLOGY_WIDE_SCAN_HANDLER.handle(payload, context)
         );
 
         registrar.playToClient(

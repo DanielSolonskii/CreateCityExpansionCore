@@ -1,7 +1,9 @@
 package com.example.examplemod.geology;
 
 import com.example.examplemod.item.MagneticAnalyzerItem;
+import com.example.examplemod.item.MagneticAnalyzerMode;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.network.GeologyWideScanPayload;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -59,6 +61,10 @@ public final class MagneticAnalyzerContractCheck {
         macroCellBoundary();
         nearbyRingIsDerivedAndSufficient();
         payloadSchemaIsSymmetric();
+        wideSpectrumToggleExists();
+        wideNearbySuperset();
+        wideScanPayloadRoundTrip();
+        spectrumModeCodecRoundTrip();
 
         System.out.println("PASS: " + checks + " magnetic analyzer contract checks");
     }
@@ -716,8 +722,7 @@ public final class MagneticAnalyzerContractCheck {
      * Отдельный генератор здесь давал бы другие экземпляры с
      * другими центрами, и сравнение по ссылке всегда было бы
      * ложным.
-     */
-    private static final GeologyManager GEOLOGY = new GeologyManager(
+     */    private static final GeologyManager GEOLOGY = new GeologyManager(
             ResourceLocation.fromNamespaceAndPath("minecraft", "overworld")
     );
 
@@ -749,6 +754,131 @@ public final class MagneticAnalyzerContractCheck {
     }
 
     private record RecordComponent(String name) {
+    }
+
+    /**
+     * Широкий спектр должен существовать как отдельный режим
+     * предмета и тултип обязан его показывать.
+     */
+    private static void wideSpectrumToggleExists() {
+        require(MagneticAnalyzerMode.values().length == 2,
+                "the analyzer has exactly two spectrum modes");
+        require(MagneticAnalyzerMode.NARROW.next() == MagneticAnalyzerMode.WIDE
+                && MagneticAnalyzerMode.WIDE.next() == MagneticAnalyzerMode.NARROW,
+                "the two spectrum modes form a toggle pair");
+        require(String.valueOf(MagneticAnalyzerMode.WIDE.getSerializedName())
+                        .equals("wide"),
+                "the wide mode is serialized under its stable name");
+    }
+
+    /**
+     * Радиус широкого спектра обязан действительно объёмать
+     * узкий: выбор 1000 содержит выбор 200 на той же пробе.
+     */
+    private static void wideNearbySuperset() {
+        GeologicalDeposit deposit = firstDeposit();
+        require(deposit != null, "a deposit is available for the wide checks");
+        int radius = Math.max(
+                deposit.getShape().radiusX(),
+                deposit.getShape().radiusZ()
+        );
+        BlockPos probe = new BlockPos(
+                deposit.getCenterX() + radius + 30,
+                64,
+                deposit.getCenterZ()
+        );
+        List<GeologicalDeposit> narrow = nearbyOf(
+                probe,
+                GeologySurvey.SCAN_RADIUS_BLOCKS
+        );
+        List<GeologicalDeposit> wide = nearbyOf(
+                probe,
+                1000
+        );
+        require(wide.size() >= narrow.size(),
+                "the wide lookup returns at least as many deposits");
+        require(wide.containsAll(narrow),
+                "the wide lookup is a superset of the narrow lookup");
+        require(wide.contains(deposit),
+                "the wide lookup still finds the nearby deposit");
+    }
+
+    /**
+     * Пейлоад широкого спектра перевозится туда и обратно без
+     * потери полей: обрезка, счётчик находок, контуры.
+     */
+    private static void wideScanPayloadRoundTrip() {
+        GeologicalDeposit deposit = firstDeposit();
+        require(deposit != null, "a deposit is available for the payload checks");
+        var shape = deposit.getShape();
+        var contour = new GeologyWideScanPayload.Contour(
+                shape.centerX(),
+                shape.centerZ(),
+                shape.radiusX(),
+                shape.radiusZ(),
+                (float) shape.rotationRadians(),
+                deposit.getResourceId()
+        );
+        GeologyWideScanPayload payload = new GeologyWideScanPayload(
+                ResourceLocation.fromNamespaceAndPath("minecraft", "overworld"),
+                new BlockPos(10, 64, 20),
+                7,
+                true,
+                List.of(contour)
+        );
+
+        var buffer = new net.minecraft.network.FriendlyByteBuf(
+                io.netty.buffer.Unpooled.buffer()
+        );
+        GeologyWideScanPayload.STREAM_CODEC.encode(buffer, payload);
+        GeologyWideScanPayload back = GeologyWideScanPayload.STREAM_CODEC.decode(buffer);
+
+        require(back.foundTotal() == payload.foundTotal(),
+                "the found count survives the trip");
+        require(back.truncated() == payload.truncated(),
+                "the truncation flag survives the trip");
+        require(back.dimension().equals(payload.dimension()),
+                "the dimension survives the trip");
+        require(back.origin().equals(payload.origin()),
+                "the scan origin survives the trip");
+        require(back.contours().size() == 1,
+                "the contour list survives the trip");
+        GeologyWideScanPayload.Contour shaded = back.contours().get(0);
+        require(shaded.centerX() == shape.centerX()
+                && shaded.centerZ() == shape.centerZ(),
+                "the contour centre survives the trip");
+        require(shaded.radiusX() == shape.radiusX()
+                && shaded.radiusZ() == shape.radiusZ(),
+                "the contour radii survive the trip");
+        require(shaded.resourceId().equals(deposit.getResourceId()),
+                "the contour resource survives the trip");
+        require(Math.abs(shaded.rotationRadians() - shape.rotationRadians())
+                        < 1.0e-6,
+                "the contour rotation survives the trip");
+    }
+
+    /**
+     * Режим спектра возится через data component: и
+     * сохранение (NBTOps-кодек), и синхронизация (stream codec).
+     */
+    private static void spectrumModeCodecRoundTrip() {
+        for (MagneticAnalyzerMode mode : MagneticAnalyzerMode.values()) {
+            var nbt = MagneticAnalyzerMode.CODEC
+                    .encodeStart(net.minecraft.nbt.NbtOps.INSTANCE, mode)
+                    .getOrThrow();
+            var parsed = MagneticAnalyzerMode.CODEC
+                    .parse(net.minecraft.nbt.NbtOps.INSTANCE, nbt)
+                    .getOrThrow();
+            require(parsed == mode,
+                    "the persistent codec round-trips " + mode);
+
+            var buffer = new net.minecraft.network.FriendlyByteBuf(
+                    io.netty.buffer.Unpooled.buffer()
+            );
+            MagneticAnalyzerMode.STREAM_CODEC.encode(buffer, mode);
+            require(MagneticAnalyzerMode.STREAM_CODEC.decode(buffer) == mode,
+                    "the network codec round-trips " + mode);
+        }
     }
 
     private MagneticAnalyzerContractCheck() {

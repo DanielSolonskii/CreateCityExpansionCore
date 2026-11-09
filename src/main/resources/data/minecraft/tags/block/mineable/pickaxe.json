@@ -4,7 +4,6 @@
     "createcityexpansioncore:transport_registration_terminal",
     "createcityexpansioncore:cargo_ticker",
     "createcityexpansioncore:cargo_router",
-    "createcityexpansioncore:reinforced_concrete",
-    "createcityexpansioncore:refractory_block"
+    "createcityexpansioncore:reinforced_concrete"
   ]
 }

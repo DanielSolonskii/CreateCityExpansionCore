@@ -100,15 +100,33 @@ public final class RecipeWorkbenchScreen extends Screen {
         });};
     }
     private void load(JsonObject json){document=json.deepCopy();normalizeGrid();draft=RecipeWorkbenchFiles.JSON.toJson(document);refreshSlots();if(editor!=null)editor.setValue(draft);}
-    private boolean grid(){return document.has("pattern")&&document.has("key")&&document.getAsJsonArray("pattern").size()<=3
-            &&document.getAsJsonArray("pattern").asList().stream().allMatch(e->e.getAsString().length()<=3);}
+    private boolean grid(){return document.has("pattern")&&document.has("key")&&document.getAsJsonArray("pattern").size()<=maxLines()
+            &&document.getAsJsonArray("pattern").asList().stream().allMatch(e->e.getAsString().length()<=maxLines());}
     private void normalizeGrid(){
-        if(!grid())return;var pattern=document.getAsJsonArray("pattern");var old=document.getAsJsonObject("key");var keys=new JsonObject();var rows=new JsonArray();
-        for(int row=0;row<3;row++){String line=row<pattern.size()?pattern.get(row).getAsString():"";StringBuilder next=new StringBuilder();
-            for(int col=0;col<3;col++){char source=col<line.length()?line.charAt(col):' ';char key=(char)('A'+row*3+col);
-                if(source!=' '&&old.has(String.valueOf(source))){keys.add(String.valueOf(key),old.get(String.valueOf(source)).deepCopy());next.append(key);}else next.append(' ');}
-            rows.add(next.toString());}
-        document.add("pattern",rows);document.add("key",keys);
+        if(!grid())return;var pattern=document.getAsJsonArray("pattern");var old=document.getAsJsonObject("key");var keys=new JsonObject();
+        while(pattern.size()>maxLines())pattern.remove(pattern.size()-1);
+        for(int i=0;i<pattern.size();i++){String line=pattern.get(i).getAsString();if(line.length()>maxLines())pattern.set(i,new JsonPrimitive(line.substring(0,maxLines())));}
+        Set<String> used=new HashSet<>();
+        for(var row:pattern)for(char source:row.getAsString().toCharArray()){
+            if(source==' ')continue;String s=String.valueOf(source);
+            if(used.contains(s))continue;
+            if(old.has(s)){keys.add(s,old.get(s).deepCopy());used.add(s);}}
+        document.add("key",keys);
+    }
+    private void cleanupKeys(){var key=document.getAsJsonObject("key");Set<String> used=new HashSet<>();
+        for(var row:document.getAsJsonArray("pattern"))for(char c:row.getAsString().toCharArray())if(c!=' ')used.add(String.valueOf(c));
+        for(var iterator=key.entrySet().iterator();iterator.hasNext();)if(!used.contains(iterator.next().getKey()))iterator.remove();}
+    private char keyFor(JsonObject ingredient,JsonObject key){
+        for(var entry:key.entrySet())if(entry.getValue().isJsonObject()&&entry.getValue().getAsJsonObject().equals(ingredient))return entry.getKey().charAt(0);
+        String pool="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        for(int i=0;i<pool.length();i++){char c=pool.charAt(i);if(!key.has(String.valueOf(c)))return c;}
+        return '?';
+    }
+    private void shapeButtonsInit(){if(!mechanical())return;int x=width/2+8,y=104+gridRows()*gridStepY()+6;
+        button("+ Строка",x,y,52,()->{if(parse()){var pattern=document.getAsJsonArray("pattern");if(pattern.size()<9){pattern.add(" ".repeat(Math.max(1,gridCols())));normalizeGrid();refreshSlots();sync();}}});
+        button("− Строка",x+56,y,52,()->{if(parse()){var pattern=document.getAsJsonArray("pattern");if(pattern.size()>1){pattern.remove(pattern.size()-1);normalizeGrid();refreshSlots();sync();}}});
+        button("Шире",x+112,y,40,()->{if(parse()){var pattern=document.getAsJsonArray("pattern");for(int i=0;i<pattern.size();i++)pattern.set(i,new JsonPrimitive(pattern.get(i).getAsString()+" "));normalizeGrid();refreshSlots();sync();}});
+        button("Уже",x+156,y,40,()->{if(parse()){var pattern=document.getAsJsonArray("pattern");if(gridCols()>1)for(int i=0;i<pattern.size();i++)pattern.set(i,new JsonPrimitive(pattern.get(i).getAsString().substring(0,Math.max(1,pattern.get(i).getAsString().length()-1))));normalizeGrid();refreshSlots();sync();}});
     }
     private void refreshSlots(){slots.clear();if(sequence()){
         if(document.has("ingredient"))collect(document.get("ingredient"));
@@ -116,6 +134,13 @@ public final class RecipeWorkbenchScreen extends Screen {
         if(document.has("results"))collect(document.get("results"));
     }else collect(document);activeSlot=Math.min(activeSlot,Math.max(0,slots.size()-1));}
     private boolean sequence(){return document.has("type")&&document.get("type").getAsString().equals("create:sequenced_assembly");}
+    private boolean mechanical(){return document.has("type")&&document.get("type").getAsString().equals("create:mechanical_crafting");}
+    private int maxLines(){return mechanical()?9:3;}
+    private int gridRows(){try{return document.getAsJsonArray("pattern").size();}catch(Exception e){return 0;}}
+    private int gridCols(){try{int m=0;for(var row:document.getAsJsonArray("pattern"))m=Math.max(m,row.getAsString().length());return m;}catch(Exception e){return 0;}}
+    private int stepX(){return mechanical()?18:20;}
+    private int gridStepY(){return mechanical()?18:24;}
+    private int gridBox(){return mechanical()?16:18;}
     private boolean outputSlot(JsonObject slot){
         if(document.get("result")==slot)return true;
         if(document.has("results")&&document.get("results").isJsonArray())
@@ -153,14 +178,20 @@ public final class RecipeWorkbenchScreen extends Screen {
         if(editing){var found=filtered();page=Math.min(page,Math.max(0,found.size()-4));
             for(int i=page;i<Math.min(found.size(),page+4);i++){var entry=found.get(i);int y=100+(i-page)*21;
                 button((entry.disabled()?"[ОТКЛ] ":"")+entry.id()+" ["+typeName(entry.type())+"]",12,y,Math.max(130,width/2-40),()->{recipeId=entry.id().toString();id.setValue(recipeId);load(entry.json());status="Источник: "+entry.id().getNamespace()+". Сохранение создаст override или восстановит отключённый рецепт.";});}
-        }else{
+        }else if(!mechanical()){
             button("+ ингредиент",12,102,125,()->{if(!parse())return;if(document.has("ingredients")){document.getAsJsonArray("ingredients").add(JsonParser.parseString("{\"item\":\"minecraft:stone\"}"));refreshSlots();sync();}else status="Для этого типа измените pattern/key или ingredient в JSON.";});
             button("− ингредиент",12,126,125,()->{if(!parse())return;if(document.has("ingredients")){var a=document.getAsJsonArray("ingredients");if(a.size()>1)a.remove(a.size()-1);refreshSlots();sync();}});
             button("Слоты из JSON",12,150,125,()->{if(parse())status="Слоты обновлены из JSON";});
         }
-        int editorY=210, editorH=Math.max(50,height-355);
+        shapeButtonsInit();
+        int editorY=mechanical()?Math.max(210,104+gridRows()*gridStepY()+32):210;
+        int editorH=Math.max(50,height-145-editorY);
         if(sequence())button("Настроить этапы сборки",width/2+8,160,210,()->{
             retain();if(parse())minecraft.setScreen(new SequenceRecipeScreen(this,document,json->{load(json);status="Этапы обновлены в черновике. Сохраните рецепт для применения.";}));
+        });
+        String docType=document.has("type")?document.get("type").getAsString():"";
+        if(FluidRecipeDraft.supportsInput(docType)||FluidRecipeDraft.supportsResult(docType))button("Жидкости",width/2+8,160,120,()->{
+            retain();if(parse())minecraft.setScreen(new FluidRecipeScreen(this,document,json->{load(json);status="Жидкости обновлены в черновике. Сохраните рецепт для применения.";}));
         });
         editor=addRenderableWidget(new MultiLineEditBox(font,12,editorY,width-24,editorH,Component.empty(),Component.literal("JSON рецепта")));
         editor.setCharacterLimit(131072);editor.setValue(draft);
@@ -205,16 +236,18 @@ public final class RecipeWorkbenchScreen extends Screen {
                 return true;
             }}
         int start=width/2+8;
-        if(grid()&&x>=start&&x<start+60&&y>=104&&y<176){
-            if(!parse())return true;int row=(int)(y-104)/24,col=(int)(x-start)/20;
-            char key=(char)('A'+row*3+col);var pattern=document.getAsJsonArray("pattern");char[] line=pattern.get(row).getAsString().toCharArray();
-            if(sample.isEmpty()){line[col]=' ';document.getAsJsonObject("key").remove(String.valueOf(key));}
-            else{line[col]=key;var ingredient=new JsonObject();ingredient.addProperty("item",BuiltInRegistries.ITEM.getKey(sample.getItem()).toString());document.getAsJsonObject("key").add(String.valueOf(key),ingredient);}
-            pattern.set(row,new JsonPrimitive(new String(line)));refreshSlots();
-            var selected=document.getAsJsonObject("key").get(String.valueOf(key));if(selected!=null)activeSlot=slots.indexOf(selected.getAsJsonObject());
+        if(grid()&&x>=start&&x<start+gridCols()*stepX()&&y>=104&&y<104+gridRows()*gridStepY()){
+            if(!parse())return true;int row=(int)(y-104)/gridStepY(),col=(int)(x-start)/stepX();
+            var pattern=document.getAsJsonArray("pattern");var key=document.getAsJsonObject("key");
+            var line=new StringBuilder(pattern.get(row).getAsString());while(line.length()<=col)line.append(' ');
+            if(sample.isEmpty()){line.setCharAt(col,' ');cleanupKeys();}
+            else{var ingredient=new JsonObject();ingredient.addProperty("item",BuiltInRegistries.ITEM.getKey(sample.getItem()).toString());
+                char c=keyFor(ingredient,key);line.setCharAt(col,c);key.add(String.valueOf(c),ingredient);}
+            pattern.set(row,new JsonPrimitive(line.toString()));refreshSlots();
+            var selected=document.getAsJsonObject("key").get(String.valueOf(line.charAt(col)));if(selected!=null)activeSlot=slots.indexOf(selected.getAsJsonObject());
             sync();return true;
         }
-        if(grid()&&x>=start+90&&x<start+108&&y>=128&&y<146){
+        if(grid()&&x>=start+gridCols()*stepX()+30&&x<start+gridCols()*stepX()+48&&y>=128&&y<146){
             if(!parse())return true;var result=document.getAsJsonObject("result");activeSlot=slots.indexOf(result);
             if(!sample.isEmpty()){result.addProperty("id",BuiltInRegistries.ITEM.getKey(sample.getItem()).toString());sync();}return true;
         }
@@ -261,14 +294,18 @@ public final class RecipeWorkbenchScreen extends Screen {
         g.drawString(font,editing?(filter.isEmpty()?"Поместите предмет в фильтр для поиска рецептов":"Найдено: "+filtered().size()+" · колёсико или полоса прокрутки"):"Тип: "+typeName(document.get("type").getAsString()),12,187,0xffc5d7df);
         if(editing&&filtered().size()>4){int x=width/2-22;g.fill(x,100,x+8,182,0xff34414b);
             int y=100+(int)Math.round(70d*page/(filtered().size()-4));g.fill(x,y,x+8,y+12,0xffdfbd77);}
-        g.drawString(font,"Образцы → слоты; Предмет / тег: перебор тегов. Количества, жидкости и шансы — в JSON.",12,198,0xff9ab0bd);
+        g.drawString(font,"Образцы → слоты; Предмет / тег: перебор тегов. Жидкости — кнопка «Жидкости»; форма механики — кнопки под сеткой.",12,198,0xff9ab0bd);
         if(editing){g.drawString(font,"Фильтр",width-70,92,0xffbbbbbb);g.fill(width-38,103,width-16,126,0xff7b6950);g.renderItem(filter,width-35,106);}
         if(grid()){
-            for(int i=0;i<9;i++){int x=width/2+8+i%3*20,y=104+i/3*24;var ingredient=document.getAsJsonObject("key").get(String.valueOf((char)('A'+i)));
-                g.fill(x-1,y-1,x+18,y+18,ingredient!=null&&slots.indexOf(ingredient.getAsJsonObject())==activeSlot?0xffad873d:0xff53616c);
-                if(ingredient!=null){g.renderItem(stack(ingredient.getAsJsonObject()),x,y);if(ingredient.getAsJsonObject().has("tag"))g.drawString(font,"#",x+10,y+9,0xffffff66);}}
-            int x=width/2+98;g.fill(x-1,127,x+18,146,0xffad873d);g.renderItem(stack(document.getAsJsonObject("result")),x,128);
-            g.drawString(font,"→",width/2+77,133,0xffffffff);
+            var rows=document.getAsJsonArray("pattern");
+            for(int r=0;r<rows.size();r++){String line=rows.get(r).getAsString();
+                for(int c=0;c<line.length();c++){int x=width/2+8+c*stepX(),y=104+r*gridStepY();
+                    var ingredient=document.getAsJsonObject("key").get(String.valueOf(line.charAt(c)));
+                    if(line.charAt(c)==' ')ingredient=null;
+                    g.fill(x-1,y-1,x+gridBox(),y+gridBox(),ingredient!=null&&slots.indexOf(ingredient.getAsJsonObject())==activeSlot?0xffad873d:0xff53616c);
+                    if(ingredient!=null){g.renderItem(stack(ingredient.getAsJsonObject()),x,y);if(ingredient.getAsJsonObject().has("tag"))g.drawString(font,"#",x+10,y+9,0xffffff66);}}}
+            int x=width/2+8+gridCols()*stepX()+30;g.fill(x-1,127,x+18,146,0xffad873d);g.renderItem(stack(document.getAsJsonObject("result")),x,128);
+            g.drawString(font,"→",width/2+8+gridCols()*stepX()+8,133,0xffffffff);
         }else{
             boolean hasOutput=slots.stream().anyMatch(this::outputSlot);
             if(hasOutput)g.drawString(font,"→",width/2+77,133,0xffffffff);

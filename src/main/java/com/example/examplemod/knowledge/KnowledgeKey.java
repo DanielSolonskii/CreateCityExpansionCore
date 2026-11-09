@@ -12,7 +12,7 @@ import org.lwjgl.glfw.GLFW;
 import com.example.examplemod.client.screen.KnowledgeBaseScreen;
 
 /**
- * Клавиша открытия базы знаний (по умолчанию K, переназначается в настройках).
+ * Клавиша открытия базы знаний (по умолчанию P, переназначается в настройках).
  * Работает только в игре, без открытого экрана; когда экран уже открыт, IS_DOWN
  * возвращает false автоматически из-за KeyConflictContext.IN_GAME — это защищает
  * ввод в чате и в полях GUI.
@@ -22,7 +22,7 @@ public final class KnowledgeKey {
             "key.createcityexpansioncore.open_knowledge_base",
             KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_K,
+            GLFW.GLFW_KEY_P,
             "key.categories.createcityexpansioncore");
 
     private KnowledgeKey() {
@@ -32,7 +32,7 @@ public final class KnowledgeKey {
         event.register(OPEN);
     }
 
-    /** Клавиша задержки-открытия из тултипа (та же K). */
+    /** Клавиша задержки-открытия из тултипа (та же P). */
     public static KeyMapping hold() {
         return OPEN;
     }

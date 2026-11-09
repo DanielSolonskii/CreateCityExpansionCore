@@ -65,16 +65,12 @@ public final class IndustrialCreativeTab {
      * =========================================
      *
      * Порядок соответствует цепочке производства:
-     * кокс -> заготовка -> плита / балка ->
+     * плита / балка (сталь через тег c:ingots/steel) ->
      * крепёж / арматура -> рельсы / шпалы ->
      * бетон / керамика / шина.
      */
 
     private static final List<ItemLike> TIER2 = List.of(
-            IndustrialMaterials.INDUSTRIAL_COKE.get(),
-            IndustrialMaterials.CRUSHED_LIMESTONE.get(),
-            CreateCityExpansionCore.QUICKLIME.get(),
-            IndustrialMaterials.STEEL_BILLET.get(),
             IndustrialMaterials.STEEL_PLATE.get(),
             IndustrialMaterials.STRUCTURAL_BEAM.get(),
             IndustrialMaterials.INDUSTRIAL_FASTENER_PACK.get(),
@@ -130,8 +126,7 @@ public final class IndustrialCreativeTab {
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(
-            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get(),
-            CreateCityExpansionCore.REFRACTORY_BLOCK_ITEM.get()
+            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get()
     );
 
     public static void populate(
