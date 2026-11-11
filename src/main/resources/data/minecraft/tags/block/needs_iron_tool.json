@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
+    "createcityexpansioncore:customs_buffer",
     "createcityexpansioncore:reinforced_concrete",
     "createcityexpansioncore:refractory_block"
   ]

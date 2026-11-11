@@ -57,11 +57,15 @@ public final class CargoTickerBlockEntity extends StockCheckingBlockEntity {
                 .map(entry -> new StockEntry(entry.stack, entry.count)).toList());
     }
 
-    /** Remote access is only through the matching registration and Create's current network permission. */
+    /** Registration delegates stock visibility to current city/company members while native owner authority stays valid. */
     public Optional<List<StockEntry>> warehouseStock(ServerPlayer player, UUID warehouseId) {
         var w = CargoWarehouseRegistry.get(player.getServer()).find(warehouseId).orElse(null);
         if (w == null || !CargoWarehouseRegistry.permits(player, w)
-                || CargoWarehouseRegistry.ticker(player.getServer(), w) != this || !behaviour.mayInteract(player)) return Optional.empty();
+                || CargoWarehouseRegistry.ticker(player.getServer(), w) != this) return Optional.empty();
+        var owner=CargoWarehouseRegistry.access(player.getServer(),w).owner();
+        boolean delegated=(owner.kind()==com.example.examplemod.cargo.center.OwnerRef.Kind.CITY||owner.kind()==com.example.examplemod.cargo.center.OwnerRef.Kind.COMPANY)
+            &&owner.operates(player.getServer(),player.getUUID())&&CargoWarehouseRegistry.nativeAuthorized(player.getServer(),w);
+        if(!behaviour.mayInteract(player)&&!delegated)return Optional.empty();
         return Optional.of(getAccurateSummary().getStacks().stream().filter(e -> !e.stack.isEmpty() && e.count > 0)
                 .map(e -> new StockEntry(e.stack, e.count)).toList());
     }

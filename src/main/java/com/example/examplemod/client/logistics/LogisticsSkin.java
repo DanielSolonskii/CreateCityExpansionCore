@@ -26,6 +26,12 @@ public final class LogisticsSkin {
     public static java.util.List<CenterText.Field> fields(CompoundTag row){return CenterText.fields(row,key->Component.translatable(key).getString());}
     public static String result(String value){
         if(value.equals("ok"))return text("success");
+        var codeMatcher=java.util.regex.Pattern.compile("(?:company|master|trade|rail|fleet)_[a-z_]+").matcher(value);
+        if(codeMatcher.find()){
+            String code=codeMatcher.group();for(String prefix:java.util.List.of("ccec.company.error.","ccec.center.error.","ccec.master.error.","ccec.rail.error.")){
+                String key=prefix+code;if(net.minecraft.client.resources.language.I18n.exists(key))return Component.translatable(key).getString();
+            }
+        }
         for(String code:java.util.List.of("setup_permission","setup_expired","setup_selection_changed","setup_postbox_invalid","setup_receiver_invalid"))if(value.equals("denied: "+code)||value.equals(code))return text("error."+code);
         for(String code:java.util.List.of("charter_permission","charter_busy","charter_not_ready","charter_dispatch_blocked"))if(value.contains(code))return text("error."+code);
         for(String code:java.util.List.of("source_unavailable","payer_denied","receiver_unavailable","quantity_invalid","offer_changed","offer_denied","source_denied","stock_unavailable","route_unavailable","quote_expired","quote_changed"))if(value.contains("delivery_"+code))return text("delivery_error."+code);

@@ -4,6 +4,15 @@ package com.example.examplemod.client.logistics;
 public final class CenterActionCatalog {
     private CenterActionCatalog() {}
     public static int group(String action) {
+        if(action.startsWith("COMPANY_")){
+            if(action.equals("COMPANY_CREATE")||action.endsWith("ASSET_REGISTER"))return 0;
+            if(action.contains("CANCEL")||action.endsWith("_END")||action.endsWith("_REMOVE"))return 4;
+            if(action.contains("INVITE")||action.contains("EMPLOYEE")||action.contains("SALARY"))return 3;
+            if(action.contains("SHARE")||action.contains("CONTRACT")||action.contains("DEPOSIT")||action.contains("WITHDRAW"))return 1;
+        }
+        if(action.endsWith("_CLOSE")||action.endsWith("_DISABLE")||action.endsWith("_ABANDON"))return 4;
+        if(action.equals("ROAD_REGISTER")||action.equals("FLEET_PUBLISH")||action.equals("MASTER_BIND"))return 0;
+        if(action.equals("DEBT_PAY")||action.equals("CONTRACT_SUPPLY"))return 1;
         if(action.equals("REMOVE")||action.endsWith("_REMOVE")||action.equals("POINT_UNBIND")||action.equals("SHIPMENT_CANCEL"))return 4;
         if(action.equals("ACCESS")||action.startsWith("ACL_"))return 3;
         if(action.equals("TRAIN_REGISTER")||action.equals("POINT_CREATE")||action.equals("WAREHOUSE_REGISTER")||action.equals("LINE_CREATE"))return 0;
@@ -11,6 +20,12 @@ public final class CenterActionCatalog {
         return 2;
     }
     public static int icon(String action) {
+        if(action.startsWith("ROAD_"))return 3;
+        if(action.startsWith("FLEET_"))return 2;
+        if(action.startsWith("MASTER_"))return 13;
+        if(action.equals("DEBT_PAY")||action.contains("SHARE")||action.contains("DEPOSIT")||action.contains("WITHDRAW")||action.equals("COMPANY_TAX"))return 6;
+        if(action.contains("CONTRACT"))return 7;
+        if(action.startsWith("COMPANY_"))return 12;
         if(action.equals("LINE_SCHEDULE"))return 11;
         if(action.equals("REMOVE")||action.equals("SHIPMENT_CANCEL"))return 9;
         if(action.endsWith("_REMOVE")||action.equals("POINT_UNBIND"))return 10;

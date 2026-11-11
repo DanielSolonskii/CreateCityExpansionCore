@@ -31,7 +31,7 @@ public final class CommunityScreen extends Screen {
     public static void accept(CommunityStatePayload p){SocialHubScreen.acceptCommunity(p);var v=SocialHubScreen.find(CommunityScreen.class,s->s.pending!=null&&p.data().hasUUID("Request")&&s.pending.equals(p.data().getUUID("Request")));if(v==null)return;
         v.pending=null;v.last=net.minecraft.Util.getMillis();v.result=p.data().getString("Result");if(v.result.equals("busy"))return;v.state=p.data();v.page=v.state.getInt("Page");v.memberPage=v.state.getInt("MemberPage");v.relationsPage=v.state.getInt("RelationsPage");if(v.ownCityOnReply){v.ownCityOnReply=false;if(v.state.hasUUID("OwnCity"))v.city=v.state.getUUID("OwnCity");}
         if((v.rolePicker||v.section==3&&v.member!=null)&&v.state.hasUUID("City"))v.city=v.state.getUUID("City");
-        if(v.ownCityMode&&!v.state.hasUUID("OwnCity")){v.city=null;v.member=null;v.rolePicker=false;}
+        if(v.ownCityMode&&!v.state.hasUUID("OwnCity")&&v.state.getList("Memberships",10).isEmpty()){v.city=null;v.member=null;v.rolePicker=false;}
         if(v.result.equals("ok")&&v.lastAction==CommunityRequestPayload.Action.KICK){v.rolePicker=false;v.member=null;v.scroll=0;}
         if(!v.lastActionView){CommunityFx.sound(v.result.equals("ok")?"success":"error");v.transition=v.last;}v.lastActionView=true;
     }
@@ -89,6 +89,17 @@ public final class CommunityScreen extends Screen {
     private void openMap(){com.example.examplemod.client.CityWorldMapSession.INSTANCE.awaitAnchor();PacketDistributor.sendToServer(new RequestCityWorldMapPayload());minecraft.setScreen(SocialHubScreen.retainMap(new PolishedWorldMapScreen(com.example.examplemod.client.CityWorldMapSession.INSTANCE)));}
     private void respond(CompoundTag t,boolean accept){city=t.getUUID("City");request(accept?CommunityRequestPayload.Action.ACCEPT:CommunityRequestPayload.Action.DECLINE,null,t.getUUID("Token"),0);}
     private void cities(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;
+        var memberships=state.getList("Memberships",10);
+        if(ownCityMode&&(memberships.size()>1||!state.hasUUID("OwnCity"))) {
+            for(Tag raw:memberships) {
+                var entry=(CompoundTag)raw;
+                var label=Component.literal(entry.getString("Name"));
+                if(entry.getBoolean("Additional"))label.append(" · ").append(Component.translatable("role.createcityexpansioncore.operator_manager"));
+                button(g,layout.row(y,26),label,()->{city=entry.getUUID("Id");member=null;memberPage=scroll=0;rolePicker=false;request(CommunityRequestPayload.Action.VIEW,null,null,0);},pending==null,false,mx,my);
+                y+=34;
+            }
+        }
+        if(city==null&&ownCityMode&&!memberships.isEmpty())return;
         if(city!=null&&!state.hasUUID("City")&&pending==null){label(g,SocialHubScreen.tr("unavailable"),layout.body().x()+12,y,layout.body().width()-24,MUTED);return;}
         if(city==null&&ownCityMode&&!state.hasUUID("OwnCity")){
             label(g,SocialHubScreen.tr("no_city_title"),layout.body().x()+12,y,layout.body().width()-24,ACCENT);y+=26;g.drawWordWrap(font,SocialHubScreen.tr(foundingHelp?"found_city":"no_city_body"),layout.body().x()+12,y,layout.body().width()-24,TEXT);y+=font.wordWrapHeight(SocialHubScreen.tr(foundingHelp?"found_city":"no_city_body"),layout.body().width()-24)+18;
@@ -118,7 +129,7 @@ public final class CommunityScreen extends Screen {
         if(state.getInt("RelationsTotal")>16){int half=(layout.body().width()-34)/2;int px=layout.body().x()+12;button(g,new CommunityLayout.Rect(px,y,half,24),Component.literal("‹"),()->{relationsPage--;scroll=0;request(CommunityRequestPayload.Action.RELATIONS,null,null,0);},pending==null&&relationsPage>0,false,mx,my);button(g,new CommunityLayout.Rect(px+half+10,y,half,24),Component.literal("›"),()->{relationsPage++;scroll=0;request(CommunityRequestPayload.Action.RELATIONS,null,null,0);},pending==null&&(relationsPage+1)*16<state.getInt("RelationsTotal"),false,mx,my);}
     }
     private void roles(GuiGraphics g,double mx,double my){if(!state.getBoolean("Manage")){label(g,tr("result.permission"),layout.body().x()+12,layout.body().y()+18,layout.body().width()-24,MUTED);return;}int y=layout.body().y()+12-scroll;label(g,tr("role_title"),layout.body().x()+12,y,layout.body().width()-24,ACCENT);y+=26;
-        for(var role:CityMember.Role.values()){if(role==CityMember.Role.OWNER||role==CityMember.Role.ADMIN&&!state.getBoolean("Owner"))continue;var r=layout.row(y,54);boolean selected=chosenRole==role.ordinal();rounded(g,r.x(),r.y(),r.width(),r.height(),4,selected?RAISED:INSET);if(selected)g.fill(r.x()+1,r.y()+7,r.x()+3,r.bottom()-7,ACCENT);label(g,Component.translatable("role.createcityexpansioncore."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+9,r.width()-20,TEXT);g.drawWordWrap(font,tr("rights."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+25,r.width()-20,MUTED);hits.add(new Hit(r,()->{chosenRole=role.ordinal();transition=net.minecraft.Util.getMillis();CommunityFx.sound("click");},pending==null,true));y+=61;}
+        for(var role:CityMember.Role.values()){if(role==CityMember.Role.OPERATOR_MANAGER||role==CityMember.Role.OWNER||role==CityMember.Role.ADMIN&&!state.getBoolean("Owner"))continue;var r=layout.row(y,54);boolean selected=chosenRole==role.ordinal();rounded(g,r.x(),r.y(),r.width(),r.height(),4,selected?RAISED:INSET);if(selected)g.fill(r.x()+1,r.y()+7,r.x()+3,r.bottom()-7,ACCENT);label(g,Component.translatable("role.createcityexpansioncore."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+9,r.width()-20,TEXT);g.drawWordWrap(font,tr("rights."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+25,r.width()-20,MUTED);hits.add(new Hit(r,()->{chosenRole=role.ordinal();transition=net.minecraft.Util.getMillis();CommunityFx.sound("click");},pending==null,true));y+=61;}
         button(g,layout.row(y,26),tr("assign_role"),()->{request(CommunityRequestPayload.Action.ROLE,member,null,chosenRole);rolePicker=false;scroll=0;},pending==null&&chosenRole>=0,true,mx,my);y+=34;membershipActions(g,y,mx,my);
     }
     private void confirmMembership(Component text,Runnable action){membershipQuestion=text;membershipAction=action;}

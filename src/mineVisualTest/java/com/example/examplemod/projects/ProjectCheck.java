@@ -225,7 +225,7 @@ public final class ProjectCheck {
         var load=EconomyManager.class.getDeclaredMethod("load",CompoundTag.class,HolderLookup.Provider.class);load.setAccessible(true);
         EconomyManager migrated=(EconomyManager)load.invoke(null,old,null);
         require(migrated.wallet(player)==1234&&migrated.treasury(city)==5678&&migrated.projects().all().isEmpty(),"v7 save loads with unchanged balances and no projects");
-        CompoundTag round=migrated.save(new CompoundTag(),null);require(round.getInt("FormatVersion")==16&&round.contains("PersonalBank")&&round.getCompound("CargoCommerce").getInt("Version")==2&&round.getCompound("FreightLogistics").equals(retired)&&round.getCompound("Commerce").equals(retired),"v16 retains cargo escrow, cancellation state and inert historical data verbatim");
+        CompoundTag round=migrated.save(new CompoundTag(),null);require(round.getInt("FormatVersion")==17&&round.contains("PersonalBank")&&round.getCompound("CargoCommerce").getInt("Version")==3&&round.getCompound("FreightLogistics").equals(retired)&&round.getCompound("Commerce").equals(retired),"v17 retains cargo escrow, cancellation state and inert historical data verbatim");
         var payer=com.example.examplemod.cargo.center.OwnerRef.player(player);var payee=com.example.examplemod.cargo.center.OwnerRef.player(UUID.randomUUID());UUID cargoOrder=UUID.randomUUID();
         migrated.cargo().reserve(cargoOrder,payer,payee,cargoOrder,null,1,34,java.util.List.of());migrated.cargo().markAttempted(cargoOrder);
         EconomyManager pending=(EconomyManager)load.invoke(null,migrated.save(new CompoundTag(),null),null);

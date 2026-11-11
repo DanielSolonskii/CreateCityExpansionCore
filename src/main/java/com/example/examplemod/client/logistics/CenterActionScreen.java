@@ -30,8 +30,22 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
     public CenterActionScreen(LogisticsCenterScreen parent,CompoundTag schema,CompoundTag snapshot){
         super(tr("action."+schema.getString("Action")));this.parent=parent;this.schema=schema.copy();this.snapshot=snapshot.copy();this.row=snapshot.getCompound("SelectedRow").copy();
     }
-    private boolean purchase(){return Set.of("BUY","SEND").contains(schema.getString("Action"));}
-    private List<CompoundTag> fields(){var result=new ArrayList<CompoundTag>();for(Tag raw:schema.getList("Fields",10)){var field=(CompoundTag)raw;String key=field.getString("Key");int step=Set.of("Stock","Quantity").contains(key)?0:Set.of("Destination","Owner").contains(key)?1:2;if(!purchase()||step==wizardStep)result.add(field);}return result;}
+    private boolean purchase(){return Set.of("BUY","SEND","CONTRACT_SUPPLY").contains(schema.getString("Action"));}
+    private boolean road(){return schema.getString("Action").equals("ROAD_REGISTER");}
+    public boolean busy(){return pending!=null||uncertain;}
+    public String quoteError(){return error;}
+    public boolean canConfirmPrepared(){return (purchase()||road())&&quote!=null&&quote.hasUUID("Token")&&!busy()&&quote.getList("Checks",10).stream().noneMatch(raw->((CompoundTag)raw).getString("Status").equals("BLOCKED"));}
+    public void confirmPrepared(){if(canConfirmPrepared())submit();}
+    public void requestPreference(String preference){
+        if(!purchase()||busy()||!Set.of("CHEAPEST","NO_TOLLS","FASTEST").contains(preference))return;
+        values.put("Preference",preference);invalidateQuote();wizardStep=2;rebuildWidgets();submit();
+    }
+    private List<CompoundTag> fields(){var result=new ArrayList<CompoundTag>();for(Tag raw:schema.getList("Fields",10)){var field=(CompoundTag)raw;String key=field.getString("Key");
+        if(schema.getString("Action").equals("COMPANY_PROPOSE")){
+            String decision=values.getOrDefault("Decision","DIRECTOR");
+            if(key.equals("Player")&&!Set.of("DIRECTOR","ISSUE_SHARES").contains(decision)||key.equals("City")&&!decision.equals("CITY")||key.equals("Amount")&&!Set.of("ISSUE_SHARES","DIVIDEND").contains(decision)||key.equals("Terms")&&!decision.equals("CHARTER"))continue;
+        }
+        int step=Set.of("Stock","Quantity").contains(key)?0:Set.of("Destination","Owner","Source").contains(key)?1:2;if(!purchase()||step==wizardStep)result.add(field);}return result;}
     private boolean receiver(){return schema.getString("Action").equals("WAREHOUSE_RECEIVER");}
     private List<CompoundTag> visibleOptions(){return options.getOrDefault(dropdown,List.of()).stream().filter(t->name(t).toLowerCase(Locale.ROOT).contains(dropQuery.toLowerCase(Locale.ROOT))).toList();}
     private void invalidateQuote(){quote=null;error="";if(errorButton!=null)errorButton.visible=false;if(confirmButton!=null&&purchase())confirmButton.setMessage(tr(wizardStep<2?"wizard.next":"calculate"));}
@@ -64,11 +78,13 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
             if(kind.equals("choice")||kind.equals("enum")){
                 var list=new ArrayList<CompoundTag>();
                 if(kind.equals("enum"))for(String value:field.getString("Source").split("\\|")){var t=new CompoundTag();t.putString("Value",value);t.putString("Name",text("value."+value));list.add(t);}
-                else {String source=field.getString("Source");for(Tag value:Set.of("Allowed","BoundRouters","BoundStations").contains(source)?row.getList(source,10):snapshot.getCompound("Choices").getList(source,10))list.add(((CompoundTag)value).copy());}
+                else {String source=field.getString("Source");for(Tag value:Set.of("Allowed","BoundRouters","BoundStations").contains(source)?row.getList(source,10):snapshot.getCompound("Choices").getList(source,10)){
+                    var option=((CompoundTag)value).copy();if(source.equals("Assets")){String selectedKind=values.getOrDefault("AssetKind","TRAIN");String expected=Set.of("WAREHOUSE","PRODUCTION","STORE").contains(selectedKind)?"WAREHOUSE":selectedKind;if(!option.getString("Value").startsWith(expected+"/"))continue;}list.add(option);
+                }}
                 options.put(key,list);String initial=key.equals("Owner")?row.getString("OwnerValue"):key.equals("Enabled")&&row.contains("Enabled",1)?Boolean.toString(row.getBoolean("Enabled")):row.getString(key);
                 if(!values.containsKey(key))values.put(key,list.stream().filter(v->v.getString("Value").equals(initial)).map(v->v.getString("Value")).findFirst().orElse(list.isEmpty()?"":list.getFirst().getString("Value")));
             }else{
-                var edit=new EditBox(font,left+16,y,formWidth-32,20,tr("field."+key));edit.setMaxLength(key.equals("Terms")?256:key.equals("Name")?64:96);
+                var edit=new EditBox(font,left+16,y,formWidth-32,20,fieldLabel(field));edit.setMaxLength(key.equals("Terms")||key.equals("Memo")?256:key.equals("Name")?64:96);
                 String initial=key.equals("Tariff")?Long.toString(row.getLong("Tariff")):row.getString(key);
                 edit.setValue(values.getOrDefault(key,initial.isEmpty()&&kind.equals("number")?field.getString("Source"):initial));
                 edit.setResponder(value->{values.put(key,value);invalidateQuote();});values.putIfAbsent(key,edit.getValue());
@@ -79,7 +95,7 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
         errorButton=null;if(!error.isEmpty())errorButton=addRenderableWidget(new ActionButton(left+formWidth-90,height-68,90,20,tr("error.explain"),()->minecraft.setScreen(new CenterErrorScreen(this,error))));
         var cancel=addRenderableWidget(new ActionButton(left,height-38,96,24,tr(pending!=null&&uncertain||purchase()&&wizardStep>0?"back":"cancel"),()->{if(pending==null&&purchase()&&wizardStep>0){wizardStep--;quote=null;error="";offset=0;rebuildWidgets();}else onClose();}));cancel.active=pending==null||uncertain;
         Component label=purchase()?(quote==null?tr(wizardStep<2?"wizard.next":"calculate"):Component.literal(text("confirm_price")+" "+quote.getLong("Total")+" CR")):tr("confirm");
-        confirmButton=addRenderableWidget(new ActionButton(left+108,height-38,formWidth-108,24,label,this::submit).primary());confirmButton.active=pending==null&&!uncertain;
+        confirmButton=addRenderableWidget(new ActionButton(left+108,height-38,formWidth-108,24,label,this::submit).primary());confirmButton.active=pending==null&&!uncertain&&(quote==null||canConfirmPrepared());
         if(receiver()){
             var pick=addRenderableWidget(new ActionButton(left+16,top+20,formWidth-32,24,tr(equipment==null?"pick.start":"pick.again"),()->{error="";sent=net.minecraft.Util.getMillis();pending=parent.mutate("PICK_RECEIVER",new CompoundTag());rebuildWidgets();},10));pick.active=pending==null;
             confirmButton.active&=equipment!=null;
@@ -90,13 +106,13 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
         for(Tag raw:fields()){
             var field=(CompoundTag)raw;String key=field.getString("Key"),kind=field.getString("Kind"),value=values.getOrDefault(key,"").trim();
             if((kind.equals("choice")||kind.equals("enum"))&&options.getOrDefault(key,List.of()).stream().noneMatch(option->option.getString("Value").equals(value))){showError(text("field."+key)+": "+text("missing_choice"));return;}
-            if(kind.equals("number")&&!CenterPresentation.validNumber(key,value)){showError(text("field."+key)+": "+text("invalid_number"));return;}
+            if(kind.equals("number")&&!(key.equals("TaxBps")?CenterPresentation.validPercent(value):CenterPresentation.validNumber(field,value))){showError(fieldLabel(field).getString()+": "+text("invalid_number"));return;}
             if(key.equals("WaitSeconds")){long seconds=Long.parseLong(value);if(seconds<10||seconds>300){showError(text("error.schedule_conditions"));return;}}
             if(key.equals("Name")&&value.isBlank()){showError(text("required_name"));return;}
         }
         if(purchase()&&wizardStep<2){wizardStep++;offset=0;error="";rebuildWidgets();return;}
-        var payload=new CompoundTag();values.forEach((key,value)->payload.putString(key,value.trim()));String action=schema.getString("Action");
-        error="";sent=net.minecraft.Util.getMillis();pending=parent.mutate(purchase()&&quote==null?"QUOTE_"+action:action,payload,quote==null?null:quote.getUUID("Token"));rebuildWidgets();
+        var payload=new CompoundTag();values.forEach((key,value)->payload.putString(key,key.equals("TaxBps")?Long.toString(CenterPresentation.percentBasisPoints(value.trim())):value.trim()));String action=schema.getString("Action");
+        error="";sent=net.minecraft.Util.getMillis();pending=parent.mutate(road()&&quote==null?"ROAD_PREVIEW":purchase()&&quote==null?"QUOTE_"+action:action,payload,quote==null||!quote.hasUUID("Token")?null:quote.getUUID("Token"));rebuildWidgets();
     }
     public void accept(CompoundTag response){
         parent.accept(response);
@@ -106,7 +122,9 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
         if(response.getString("Result").equals("ok")){
             if(response.getBoolean("PickingEquipment")){LogisticsClient.awaitEquipment(this);minecraft.setScreen(null);return;}
             if(response.contains("RoutePreview")){var routeValues=new CompoundTag();values.forEach(routeValues::putString);LogisticsMapOverlay.openRoute(parent,routeValues,response.getCompound("RoutePreview"));return;}
-            if(response.contains("Quote")){quote=response.getCompound("Quote").copy();wizardStep=3;offset=0;error="";rebuildWidgets();return;}
+            if(response.contains("Quote")){quote=response.getCompound("Quote").copy();wizardStep=3;offset=0;error="";rebuildWidgets();
+                if(minecraft.screen instanceof CargoNavigatorScreen navigator)navigator.updateQuote(quote);else minecraft.setScreen(new CargoNavigatorScreen(parent,this,quote));return;}
+            if(purchase()&&response.hasUUID("OrderId"))parent.focusObject("shipment",response.getUUID("OrderId"));
             minecraft.setScreen(parent);return;
         }
         quote=null;if(purchase())wizardStep=2;error=result(response.getString("Result"));rebuildWidgets();
@@ -124,7 +142,7 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
         surface(g,left,top,formWidth,Math.max(12,height-76-top),PANEL);
         g.enableScissor(left,top,width-left,height-76);int i=0;
         for(Tag raw:fields()){
-            var field=(CompoundTag)raw;String key=field.getString("Key");int y=top+9+i++*42-offset;g.drawString(font,fit(text("field."+key),formWidth-60),left+16,y,MUTED,false);icon(g,left+formWidth-29,y-2,13,MUTED);
+            var field=(CompoundTag)raw;String key=field.getString("Key");int y=top+9+i++*42-offset;g.drawString(font,fit(fieldLabel(field).getString(),formWidth-60),left+16,y,MUTED,false);icon(g,left+formWidth-29,y-2,13,MUTED);
             if(options.containsKey(key)){boolean hover=mx>=left+16&&mx<width-left-16&&my>=y+15&&my<y+35;surface(g,left+16,y+15,formWidth-32,20,hover&&pending==null?0xff233e49:0xff1a2937);String name=options.get(key).stream().filter(v->v.getString("Value").equals(values.get(key))).map(LogisticsSkin::name).findFirst().orElse(text("no_options"));g.drawString(font,fit(name,formWidth-64),left+24,y+21,options.get(key).isEmpty()?BRASS:TEXT,false);g.hLine(width-left-30,width-left-24,y+22,TEAL);g.hLine(width-left-29,width-left-25,y+23,TEAL);g.hLine(width-left-28,width-left-26,y+24,TEAL);}
         }
         int y=top+10+i*42-offset;String hintKey="hint."+schema.getString("Action");Component hint=net.minecraft.client.resources.language.I18n.exists("ccec.center."+hintKey)?tr(hintKey):tr("confirm_hint");
@@ -139,8 +157,10 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
         else if(pending!=null){g.drawString(font,text("sync"),left,height-57,TEAL,false);int progress=reducedMotion()?0:(int)((net.minecraft.Util.getMillis()%1100)/1100.0*(formWidth-24));g.fill(left+progress,height-44,left+progress+(reducedMotion()?formWidth:24),height-43,TEAL);}
     }
     private Component fieldHint(CompoundTag field){
+        if(!field.getString("HintKey").isBlank())return Component.translatable(field.getString("HintKey"));
         String key="field_hint."+field.getString("Key");return I18n.exists("ccec.center."+key)?tr(key):tr("ui.field_help");
     }
+    private Component fieldLabel(CompoundTag field){return field.getString("LabelKey").isBlank()?tr("field."+field.getString("Key")):Component.translatable(field.getString("LabelKey"));}
     private void showError(String message){error=message;rebuildWidgets();}
     private void renderStepper(GuiGraphics g){
         int active=Math.min(3,wizardStep);
@@ -186,7 +206,7 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
         if(list.isEmpty())g.drawString(font,text("no_options"),left+24,y+31,BRASS,false);
         for(int n=dropScroll;n<Math.min(list.size(),dropScroll+optionCount());n++){int dy=y+32+(n-dropScroll)*23;g.fill(left+18,dy-3,width-left-18,dy+18,mx>=left+18&&mx<width-left-18&&my>=dy-3&&my<dy+18||n==dropCursor?0xff294b45:PANEL);g.drawString(font,fit(name(list.get(n)),formWidth-52),left+24,dy,TEXT,false);}g.disableScissor();
     }
-    private void choose(int index){var list=visibleOptions();if(index>=0&&index<list.size()){values.put(dropdown,list.get(index).getString("Value"));invalidateQuote();}dropdown=null;}
+    private void choose(int index){var list=visibleOptions();if(index>=0&&index<list.size()){if("AssetKind".equals(dropdown))values.remove("Asset");values.put(dropdown,list.get(index).getString("Value"));invalidateQuote();}dropdown=null;rebuildWidgets();}
     @Override public boolean mouseClicked(double x,double y,int button){
         if(button!=0)return super.mouseClicked(x,y,button);
         if(dropdown!=null){

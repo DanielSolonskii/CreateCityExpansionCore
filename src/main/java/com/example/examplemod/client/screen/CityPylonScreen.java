@@ -2718,7 +2718,7 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                     case BUILDER ->
                             0xFF55AAFF;
 
-                    case ENGINEER -> 0xFF78B7C5;
+                    case ENGINEER, OPERATOR_MANAGER -> 0xFF78B7C5;
                     case TREASURER -> 0xFFB9A16A;
                     case RESIDENT ->
                             0xFF777777;
@@ -2857,6 +2857,7 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                             tr("role.createcityexpansioncore.builder");
 
                     case ENGINEER -> tr("role.createcityexpansioncore.engineer");
+                    case OPERATOR_MANAGER -> tr("role.createcityexpansioncore.operator_manager");
                     case TREASURER -> tr("role.createcityexpansioncore.treasurer");
                     case RESIDENT ->
                             tr("role.createcityexpansioncore.resident");

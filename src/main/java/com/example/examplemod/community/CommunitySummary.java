@@ -10,8 +10,17 @@ import java.util.*;
 /** Small recipient-scoped projection; no city/member directory or financial data. */
 public final class CommunitySummary {
     private CommunitySummary(){}
+    static void memberships(ServerPlayer player,CompoundTag out,CityManager manager) {
+        var list=new ListTag();
+        for(var city:manager.getMemberCities(player.getUUID())) {
+            var row=new CompoundTag();row.putUUID("Id",city.getId());row.putString("Name",city.getName());
+            row.putBoolean("Additional",!city.hasPrimaryMember(player.getUUID()));list.add(row);
+        }
+        out.put("Memberships",list);
+    }
     public static CompoundTag build(ServerPlayer p,CompoundTag out,boolean includeInbox,int page){
         var s=p.getServer();var cities=CityManager.get(s.overworld());var own=cities.getMemberCity(p.getUUID());var inbox=CommunityInbox.get(s);var social=com.example.examplemod.social.SocialSavedData.get(s).book;
+        memberships(p,out,cities);
         out.putString("SelfName",PlayerNames.name(p));out.putString("OwnRole",own==null?"":own.getMember(p.getUUID()).getRole().name());
         if(own!=null){out.putUUID("OwnCity",own.getId());out.putString("OwnName",own.getName());out.putInt("OwnColor",own.getColorRgb());out.putInt("OwnMembers",own.getMemberCount());}
         out.putInt("Unread",(int)social.dialogs.keySet().stream().filter(pair->pair.includes(p.getUUID())&&social.unread(p.getUUID(),pair.other(p.getUUID()))>0).count());

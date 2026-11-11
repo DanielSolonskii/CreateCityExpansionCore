@@ -789,8 +789,25 @@ tasks.register('checkDispatchPresentation', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkDispatchPresentation') }
 
+// Use only the pinned nested helper, never a second full Create jar, in plain headless graph tests.
+def prepareRailHeadlessLibraries = tasks.register('prepareRailHeadlessLibraries', Copy) {
+    from { zipTree(configurations.devRuntimeMods.files.find { it.name.startsWith('create-') }) }
+    include 'META-INF/jarjar/Registrate-*.jar'
+    includeEmptyDirs = false
+    eachFile { details -> details.relativePath = new org.gradle.api.file.RelativePath(true, details.name) }
+    into layout.buildDirectory.dir('logistics-implementation/native-libs')
+}
+
 // Keep existing domain checks in the standard build; a test source alone is not CI coverage.
 [
+    checkCompanies: 'com.example.examplemod.economy.CompanyCheck',
+    checkMasterCityTrade: 'com.example.examplemod.cargo.center.MasterCityTradeCheck',
+    checkLogisticsNavigator: 'com.example.examplemod.client.logistics.LogisticsNavigatorCheck',
+    checkRailEconomy: 'com.example.examplemod.cargo.center.RailEconomyCheck',
+    checkLegacyRailLeases: 'com.example.examplemod.cargo.center.LegacyRailLeasesCheck',
+    checkRailTravelScope: 'com.example.examplemod.cargo.center.RailTravelScopeCheck',
+    checkRailNative: 'com.example.examplemod.cargo.center.RailNativeCheck',
+    checkRailJourneys: 'com.example.examplemod.cargo.center.RailJourneyCheck',
     checkSocial: 'com.example.examplemod.social.SocialCheck',
     checkEconomyCompatibility: 'com.example.examplemod.economy.EconomyCompatibilityCheck',
     checkDailyRewards: 'com.example.examplemod.daily.DailyRewardsCheck',
@@ -800,6 +817,18 @@ tasks.named('check') { dependsOn tasks.named('checkDispatchPresentation') }
     tasks.register(taskName, JavaExec) {
         dependsOn tasks.named('mineVisualTestClasses')
         classpath = sourceSets.mineVisualTest.runtimeClasspath
+        if (taskName in ['checkRailNative', 'checkRailJourneys']) {
+            // Native graph integration needs Catnip from the pinned Ponder compile API.
+            // This remains a plain headless Java process; the game's runtime classpath is unchanged.
+            classpath += configurations.compileClasspath.filter { it.name.startsWith('ponder-neoforge-') }
+            dependsOn prepareRailHeadlessLibraries
+            classpath += fileTree(layout.buildDirectory.dir('logistics-implementation/native-libs')) { include '*.jar' }
+            doFirst {
+                def receipt = layout.buildDirectory.file('logistics-implementation/rail-test-classpath.txt').get().asFile
+                receipt.parentFile.mkdirs()
+                receipt.text = classpath.asPath
+            }
+        }
         mainClass = checkClass
         javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
         workingDir = layout.buildDirectory.dir("checks/${taskName}").get().asFile

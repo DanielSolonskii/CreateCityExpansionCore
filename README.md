@@ -6,6 +6,8 @@
 
 ## Состав репозитория
 
+**Deploy CCEC на сервер и клиент Windows/macOS:** `./Deploy.ps1` из корня. Проверка без публикации: `./Deploy.ps1 -DryRun`. [Инструкция](platform/docs/quick-deploy.md).
+
 | Проект | Назначение | Документация |
 | --- | --- | --- |
 | CCEC, `src/` | Minecraft-мод, клиентские экраны и серверная логика | [Состояние](CURRENT_STATE.md), [разработка](README_DEV.md), [игроку](GUIDE_RU.md) |

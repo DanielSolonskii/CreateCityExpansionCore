@@ -578,20 +578,31 @@ public class City {
      * =========================================
      */
 
+    private java.util.function.Supplier<Map<UUID,String>> operatorMembers = Map::of;
+
+    void operatorMembers(java.util.function.Supplier<Map<UUID,String>> source) { operatorMembers=source; }
+
+    /** Persisted membership, independent of temporary server operator privileges. */
+    public List<CityMember> getPrimaryMembers() { return List.copyOf(members); }
+    public boolean hasPrimaryMember(UUID player) { return members.stream().anyMatch(m->m.getPlayerId().equals(player)); }
+    public boolean isOperatorMember(UUID player) { return player!=null&&operatorMembers.get().containsKey(player); }
+    public boolean canManageInfrastructure(UUID player) { return isAdmin(player)||isOperatorMember(player); }
+
     public List<CityMember> getMembers() {
-        return members;
+        var result=new ArrayList<>(members);
+        operatorMembers.get().forEach((id,name)->{
+            if(!hasPrimaryMember(id))result.add(new CityMember(id,CityMember.Role.OPERATOR_MANAGER,name));
+        });
+        return List.copyOf(result);
     }
 
     public int getMemberCount() {
-        return members.size();
+        return getMembers().size();
     }
 
     public boolean hasMember(UUID player) {
 
-        return members.stream()
-                .anyMatch(member ->
-                        member.getPlayerId().equals(player)
-                );
+        return hasPrimaryMember(player)||isOperatorMember(player);
     }
 
     public CityMember getMember(UUID player) {
@@ -601,7 +612,8 @@ public class City {
                         member.getPlayerId().equals(player)
                 )
                 .findFirst()
-                .orElse(null);
+                .orElseGet(()->isOperatorMember(player)
+                        ?new CityMember(player,CityMember.Role.OPERATOR_MANAGER,operatorMembers.get().get(player)):null);
     }
 
     /*
@@ -612,7 +624,7 @@ public class City {
 
     public void addMember(UUID player) {
 
-        if (!hasMember(player)) {
+        if (!hasPrimaryMember(player)) {
 
             members.add(
                     new CityMember(
@@ -634,7 +646,8 @@ public class City {
             CityMember.Role role
     ) {
 
-        if (!hasMember(player)) {
+        if(role==CityMember.Role.OPERATOR_MANAGER)return;
+        if (!hasPrimaryMember(player)) {
 
             /*
              * Нельзя назначить OWNER через
@@ -686,6 +699,7 @@ public class City {
     /** Same SavedData owner field and roles; no second ownership or economy system. */
     public boolean transferOwnership(UUID actor,UUID target) {
         if(actor==null||target==null||!owner.equals(actor)||actor.equals(target))return false;
+        if(!hasPrimaryMember(target))return false;
         CityMember next=getMember(target),previous=getMember(owner);if(next==null||previous==null)return false;
         previous.setRole(CityMember.Role.ADMIN);next.setRole(CityMember.Role.OWNER);owner=target;return true;
     }
@@ -713,7 +727,7 @@ public class City {
          * OWNER нельзя назначить через
          * управление участниками.
          */
-        if (role == CityMember.Role.OWNER) {
+        if (role == CityMember.Role.OWNER || role == CityMember.Role.OPERATOR_MANAGER || !hasPrimaryMember(player)) {
             return;
         }
 
@@ -760,6 +774,7 @@ public class City {
      */
 
     public boolean canBuild(UUID player) {
+        if(isOperatorMember(player))return true;
 
         CityMember member =
                 getMember(player);

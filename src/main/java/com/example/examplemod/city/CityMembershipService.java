@@ -9,8 +9,8 @@ import java.util.*;
 public final class CityMembershipService {
     public enum Action { LEAVE, KICK, TRANSFER }
     private CityMembershipService(){}
-    public static boolean mayKick(City city,UUID actor,UUID target){return city!=null&&actor!=null&&target!=null&&!actor.equals(target)&&city.hasMember(target)&&!city.isOwner(target)&&city.isAdmin(actor)&&(city.isOwner(actor)||!city.isAdmin(target));}
-    public static boolean mayTransfer(City city,UUID actor,UUID target){return city!=null&&actor!=null&&target!=null&&city.isOwner(actor)&&!actor.equals(target)&&city.hasMember(target);}
+    public static boolean mayKick(City city,UUID actor,UUID target){return city!=null&&actor!=null&&target!=null&&!actor.equals(target)&&city.hasPrimaryMember(target)&&!city.isOwner(target)&&city.isAdmin(actor)&&(city.isOwner(actor)||!city.isAdmin(target));}
+    public static boolean mayTransfer(City city,UUID actor,UUID target){return city!=null&&actor!=null&&target!=null&&city.isOwner(actor)&&!actor.equals(target)&&city.hasPrimaryMember(target);}
     public static boolean atPylon(ServerPlayer p,City city){return city!=null&&p.containerMenu instanceof CityPylonMenu m&&m.getPylonPos().equals(city.getPylonPos())&&p.level().dimension().location().equals(city.getPylonDimension())&&p.distanceToSqr(city.getPylonPos().getX()+.5,city.getPylonPos().getY()+.5,city.getPylonPos().getZ()+.5)<=64&&p.serverLevel().getBlockEntity(city.getPylonPos()) instanceof com.example.examplemod.block.CityPylonBlockEntity;}
     public static String change(ServerPlayer p,Action action,UUID expectedCity,UUID requestedTarget,UUID request){
         if(p instanceof net.neoforged.neoforge.common.util.FakePlayer||expectedCity==null||request==null)return "permission";

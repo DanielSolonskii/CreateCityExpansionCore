@@ -38,6 +38,11 @@ public abstract class TrainRelocationPacketMixin {
         if (train == null) {
             return;
         }
+        if(com.example.examplemod.cargo.center.PublicFleetRegistry.get(player.server).hasJob(train.id)
+                ||com.example.examplemod.cargo.center.CargoCharters.get(player.server).locks(player.server,"train",train.id)){
+            player.displayClientMessage(net.minecraft.network.chat.Component.translatable("ccec.center.error.active_shipment"),true);
+            ci.cancel();return;
+        }
         if (TransportProtection.canModifyTrain(player, train)) {
             return;
         }

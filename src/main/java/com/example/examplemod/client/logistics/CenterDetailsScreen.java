@@ -21,7 +21,7 @@ public final class CenterDetailsScreen extends Screen implements CenterResponseS
         com.example.examplemod.client.CommunityFx.load();panelWidth=Math.min(620,width-24);left=(width-panelWidth)/2;
         int secondary=Math.min(90,(panelWidth-28)/3);
         addRenderableWidget(new ActionButton(left,height-38,secondary,24,tr("back"),this::onClose));
-        addRenderableWidget(new ActionButton(left+secondary+8,height-38,secondary,24,tr("map"),()->LogisticsMapOverlay.open(parent,row))).hint(tr("map_hint"));
+        addRenderableWidget(new ActionButton(left+secondary+8,height-38,secondary,24,tr(row.hasUUID("OpenId")?"ui.open_linked":"map"),()->{if(row.hasUUID("OpenId")&&!row.getString("OpenKind").isBlank()){parent.focusObject(row.getString("OpenKind"),row.getUUID("OpenId"));minecraft.setScreen(parent);}else LogisticsMapOverlay.open(parent,row);})).hint(tr(row.hasUUID("OpenId")?"ui.open_linked":"map_hint"));
         actions=addRenderableWidget(new ActionButton(left+secondary*2+16,height-38,panelWidth-secondary*2-16,24,tr("actions"),()->minecraft.setScreen(new CenterActionsScreen(parent,parent.snapshot()))).primary());
         actions.active=false;parent.selectForDetails(id);
     }

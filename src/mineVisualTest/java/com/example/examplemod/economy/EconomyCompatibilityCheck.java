@@ -26,9 +26,11 @@ public final class EconomyCompatibilityCheck {
             var loaded=EconomyManager.fromStorage(new DimensionDataStorage(dir.toFile(),null,null));
             require(loaded.wallet(buyer)==880&&loaded.cargo().order(order).orElseThrow().total()==120,"production v15 wallets and real Cargo escrow retained");
             var migrated=loaded.save(new CompoundTag(),null);
-            require(migrated.getInt("FormatVersion")==16&&migrated.getCompound("CargoCommerce").getInt("Version")==2,"metadata matches current persisted versions");
+            require(migrated.getInt("FormatVersion")==17&&migrated.getCompound("CargoCommerce").getInt("Version")==3,"metadata matches current persisted versions");
             require(migrated.getCompound("Commerce").equals(opaque)&&migrated.getCompound("FreightLogistics").equals(opaque),"retired production tags remain opaque and untouched");
-            var future=production.copy();future.putInt("FormatVersion",17);future.putString("UnknownMoney","preserve");write(file,future);
+            var previous=production.copy();previous.putInt("FormatVersion",16);previous.getCompound("CargoCommerce").putInt("Version",2);previous.remove("Companies");previous.remove("CompanyAccounts");previous.remove("RoadTolls");previous.remove("MasterCityTrade");write(file,previous);
+            var v16=EconomyManager.fromStorage(new DimensionDataStorage(dir.toFile(),null,null));require(v16.wallet(buyer)==880&&v16.cargo().order(order).orElseThrow().total()==120&&v16.companies().all().isEmpty(),"previous v16 world keeps wallets, escrow and empty additive books");
+            var future=production.copy();future.putInt("FormatVersion",18);future.putString("UnknownMoney","preserve");write(file,future);
             var storage=new DimensionDataStorage(dir.toFile(),null,null);boolean rejected=false;
             try{EconomyManager.fromStorage(storage);}catch(IllegalStateException expected){rejected=true;}
             require(rejected,"native storage rejects future financial data outside its catch-and-replace loader");

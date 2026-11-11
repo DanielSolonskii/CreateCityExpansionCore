@@ -8,7 +8,7 @@ public final class CityAuthority {
     public static boolean review(City c,UUID id){return c!=null&&(c.isAdmin(id)||role(c,id)==CityMember.Role.ENGINEER);}
     public static CityMember.Role role(City c,UUID id){return c==null||c.getMember(id)==null?null:c.getMember(id).getRole();}
     public static boolean assign(City c,UUID actor,UUID target,CityMember.Role next){
-        return c!=null&&c.isAdmin(actor)&&!actor.equals(target)&&c.hasMember(target)&&!c.isOwner(target)&&next!=CityMember.Role.OWNER
+        return c!=null&&c.isAdmin(actor)&&!actor.equals(target)&&c.hasPrimaryMember(target)&&!c.isOwner(target)&&next!=CityMember.Role.OWNER&&next!=CityMember.Role.OPERATOR_MANAGER
             &&(c.isOwner(actor)||!c.isAdmin(target)&&next!=CityMember.Role.ADMIN);
     }
 }

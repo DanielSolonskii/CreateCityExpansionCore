@@ -9,6 +9,7 @@ param(
   [switch]$Offline,
   [ValidatePattern('^(?!-)[a-zA-Z0-9_.@:-]+$')][string]$SshTarget = 'root@186.246.28.214',
   [ValidatePattern('^/opt/create-server/backups/server-deploy-[a-f0-9]{32}$')][string]$Backup,
+  [switch]$ClientFirst,
   [switch]$RestoreWorld
 )
 $ErrorActionPreference = 'Stop'
@@ -46,7 +47,7 @@ try {
       if ($Offline) { Write-Host 'Offline: server candidates shown; actual VDS diff requires online dry-run.' }
       return
     }
-    if ($Action -eq 'publish' -and ($plan.server.files.Count + $plan.server.remove.Count -gt 0)) {
+    if ($Action -eq 'publish' -and !$ClientFirst -and ($plan.server.files.Count + $plan.server.remove.Count -gt 0)) {
       $receiptPath = Join-Path $prepared 'server-deployed.json'
       if (!(Test-Path -LiteralPath $receiptPath)) { throw 'Run explicit server-deploy first for this client+server candidate' }
       $receipt = Get-Content -Raw -LiteralPath $receiptPath | ConvertFrom-Json

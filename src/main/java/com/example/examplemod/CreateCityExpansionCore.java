@@ -2135,6 +2135,9 @@ registrar.playToClient(
                 com.example.examplemod.cargo.CargoBlocks.ROUTER_ENTITY.get(),
                 (router, side) -> router.inputHandler()
         );
+        event.registerBlockEntity(Capabilities.ItemHandler.BLOCK,
+                com.example.examplemod.cargo.CargoBlocks.CUSTOMS_BUFFER_ENTITY.get(),
+                (buffer,side)->buffer.inventory());
 
         event.registerBlockEntity(
                 Capabilities.ItemHandler.BLOCK,

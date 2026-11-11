@@ -1,0 +1,62 @@
+{
+  "format": "java_block",
+  "atlas_size": [
+    128,
+    128
+  ],
+  "front": "north (-Z)",
+  "models": {
+    "cargo_router": {
+      "elements": 50,
+      "groups": [
+        "housing",
+        "frame",
+        "fasteners",
+        "trim",
+        "ports",
+        "identity",
+        "routing_table",
+        "indicators"
+      ],
+      "source": "cargo_router/cargo_router.bbmodel",
+      "runtime": "assets/createcityexpansioncore/models/block/cargo_router.json",
+      "texture_sha256": "541a183cc010d6a5f353872c7d8a20e1a2b058be264a75f35caa84a5d4866651"
+    },
+    "cargo_ticker": {
+      "elements": 60,
+      "groups": [
+        "housing",
+        "frame",
+        "fasteners",
+        "trim",
+        "identity",
+        "ports",
+        "monitor",
+        "keyboard",
+        "paper_tray",
+        "rear_details"
+      ],
+      "source": "cargo_ticker/cargo_ticker.bbmodel",
+      "runtime": "assets/createcityexpansioncore/models/block/cargo_ticker.json",
+      "texture_sha256": "541a183cc010d6a5f353872c7d8a20e1a2b058be264a75f35caa84a5d4866651"
+    },
+    "chunk_loader": {
+      "elements": 63,
+      "groups": [
+        "housing",
+        "frame",
+        "fasteners",
+        "trim",
+        "identity",
+        "anchor_feet",
+        "ports",
+        "rear_details",
+        "core",
+        "stabilizers"
+      ],
+      "source": "chunk_loader/chunk_loader.bbmodel",
+      "runtime": "assets/createcityexpansioncore/models/block/chunk_loader.json",
+      "texture_sha256": "541a183cc010d6a5f353872c7d8a20e1a2b058be264a75f35caa84a5d4866651"
+    }
+  }
+}

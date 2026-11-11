@@ -10,16 +10,18 @@ final class CommunityBot {
     private static final Map<Long,Pending> replies=new LinkedHashMap<>(){protected boolean removeEldestEntry(Map.Entry<Long,Pending> e){return size()>1000;}};
     static boolean handle(JsonNode update,long actor,BackendClient backend,TelegramClient telegram)throws IOException,InterruptedException {
         boolean callback=update.has("callback_query");var event=callback?update.path("callback_query"):update.path("message");String data=event.path("data").asText();
+        if(callback) replies.remove(actor);
         if(callback&&data.startsWith("community:")){
             telegram.answer(event.path("id").asText());String[] parts=data.split(":");if(parts.length!=3)return true;UUID notice;try{notice=UUID.fromString(parts[2]);}catch(IllegalArgumentException invalid){return true;}
-            String action=parts[1];if(action.equals("reply")){replies.put(actor,new Pending(notice,System.currentTimeMillis()+300000));telegram.send(actor,"Напишите ответ одним сообщением (до 500 символов). /cancel — отмена. Права и дружбу проверит игровой сервер.",null);return true;}
+            String action=parts[1];if(action.equals("reply")){replies.put(actor,new Pending(notice,System.currentTimeMillis()+300000));telegram.send(actor,"✉️ Ответ игроку\n\nНапишите сообщение до 500 символов.\n/cancel — отменить ответ. Переход в меню также отменит ввод.",null);return true;}
             if(!Set.of("accept","decline","mute").contains(action))return true;
             submit(update,actor,notice,action.toUpperCase(Locale.ROOT),"",backend,telegram);return true;
         }
         if(!callback&&replies.containsKey(actor)){
             var pending=replies.get(actor);String text=event.path("text").asText();if(pending.expires()<System.currentTimeMillis()){replies.remove(actor);return false;}
-            if(text.equals("/cancel")){replies.remove(actor);telegram.send(actor,"Ответ отменён.",null);return true;}
-            if(text.startsWith("/"))return false;
+            if(text.trim().startsWith("/") || text.trim().matches("(?i)[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}-?[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}")) {
+                replies.remove(actor); return false;
+            }
             if(text.isBlank()||text.length()>500){telegram.send(actor,"Нужно текстовое сообщение до 500 символов. /cancel — отмена.",null);return true;}
             submit(update,actor,pending.notice(),"REPLY",text,backend,telegram);replies.remove(actor);return true;
         }return false;

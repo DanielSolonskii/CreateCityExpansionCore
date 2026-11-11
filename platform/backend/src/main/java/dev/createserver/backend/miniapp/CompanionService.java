@@ -56,7 +56,8 @@ public class CompanionService {
         String state="UNKNOWN";Instant observed=s==null?null:s.observedAt();List<CityView> cities=new ArrayList<>();
         if(s!=null){
             var latest=db.query("SELECT boot_id FROM server_bridge_boot WHERE server_id=? ORDER BY started_at DESC,boot_id DESC LIMIT 1",(r,n)->r.getObject(1,UUID.class),game.serverId());
-            boolean fresh=!s.observedAt().isBefore(clock.instant().minusSeconds(120))&&!latest.isEmpty()&&bridge.status().state().equals("ONLINE");
+            boolean fresh=!s.observedAt().isBefore(clock.instant().minusSeconds(120))&&!latest.isEmpty()
+                &&s.bootId().equals(latest.getFirst())&&bridge.status().state().equals("ONLINE");
             state=fresh?"CURRENT":"STALE";
             for(City c:s.cities())for(Member m:c.members())if(m.minecraftUuid().equals(mc)){
                 List<String> names=new ArrayList<>();for(Member member:c.members()){

@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 import tools.jackson.databind.JsonNode;
 
 public final class BotHandler {
-    private final String botUsername, launcherUrl;
+    private final String botUsername, launcherUrl, macLauncherUrl;
     private final BackendClient backend;
     private final TelegramClient telegram;
     private final ReportAdminPanel reports;
@@ -19,12 +19,17 @@ public final class BotHandler {
     private final Map<Long, Boolean> freshMenus = new LinkedHashMap<>(128, .75f, true) {
         @Override protected boolean removeEldestEntry(Map.Entry<Long, Boolean> entry) { return size() > 10_000; }
     };
-    private static final Set<String> ACTIONS = Set.of("home", "account", "server", "launcher", "notifications", "help", "code", "devices");
+    private static final Set<String> ACTIONS = Set.of("home", "account", "server", "launcher", "notifications", "help", "code", "devices",
+        "launcher_windows", "launcher_macos", "help_start", "help_code", "help_login", "help_game", "help_access");
     public BotHandler(String username, String launcherUrl, BackendClient backend, TelegramClient telegram) {
         this(username,launcherUrl,backend,telegram,Set.of());
     }
     public BotHandler(String username,String launcherUrl,BackendClient backend,TelegramClient telegram,Set<Long> admins) {
-        this.botUsername = username; this.launcherUrl = launcherUrl; this.backend = backend; this.telegram = telegram;
+        this(username, launcherUrl, null, backend, telegram, admins);
+    }
+    public BotHandler(String username, String launcherUrl, String macLauncherUrl, BackendClient backend, TelegramClient telegram, Set<Long> admins) {
+        this.botUsername = username; this.launcherUrl = launcherUrl; this.macLauncherUrl = macLauncherUrl;
+        this.backend = backend; this.telegram = telegram;
         this.reports=new ReportAdminPanel(admins,backend,telegram);
         this.broadcasts=new BroadcastPanel(admins,backend,telegram);
     }
@@ -38,6 +43,8 @@ public final class BotHandler {
         long userId = sender.path("id").asLong(), chatId = message.path("chat").path("id").asLong();
         if (!message.path("chat").path("type").asText().equals("private") || sender.path("is_bot").asBoolean() ||
                 userId <= 0 || chatId != userId || message.has("forward_origin")) return;
+        // Community input and broadcast composition must never remain active together.
+        if(callback && event.path("data").asText().startsWith("community:")) broadcasts.leave(userId);
         if(CommunityBot.handle(update,userId,backend,telegram))return;
         if (callback) {
             String data = event.path("data").asText();
@@ -93,7 +100,7 @@ public final class BotHandler {
                 try {
                     int status = backend.accept(data.substring(7), userId, username);
                     checkService(status);
-                    reply = status == 200 ? "Регистрация подтверждена. Можно вернуться в Launcher."
+                    reply = status == 200 ? "✅ Аккаунт подтверждён\n\nМожно вернуться в Launcher: войдите в аккаунт и нажмите «Играть»."
                         : status == 409 ? "Подтверждение недоступно или Telegram уже привязан. Проверьте Launcher."
                         : "Подтверждение недействительно или истекло. Снова откройте QR или введите код. Если срок истёк, обновите QR/код в Launcher.";
                 } catch (IOException exception) {
@@ -114,7 +121,7 @@ public final class BotHandler {
                 show(chatId, "home", null);
                 return;
             }
-            boolean known = ACTIONS.contains(action);
+            boolean known = ACTIONS.contains(action) || PlayerPanel.handles(action);
             if (known) telegram.answer(event.path("id").asText());
             else telegram.answer(event.path("id").asText(), "Эта кнопка устарела. Открываю главное меню.");
             if (messageId <= 0) return;
@@ -126,10 +133,17 @@ public final class BotHandler {
         }
         if (message.path("message_id").asLong() > 0) freshMenus.put(chatId, true);
         String text = message.path("text").asText().trim();
+        // Commands and registration codes take priority over a pending post composer.
+        if (text.startsWith("/") || text.matches("(?i)[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}-?[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}"))
+            broadcasts.leave(userId);
         try {
             BotPage draft=broadcasts.message(userId,update.path("update_id").asLong(),message);
             if(draft!=null){showPage(chatId,draft);return;}
         }catch(IOException failure){showPage(chatId,new BotPage("Не удалось подготовить предпросмотр. Проверьте список черновиков: пост мог быть сохранён. Игрокам ничего не отправлено без подтверждения.",List.of(List.of(Map.of("text","📣 Рассылки","callback_data","broadcast:home")))));return;}
+        if(text.matches("(?i)/cancel(?:@"+Pattern.quote(botUsername)+")?")) {
+            broadcasts.leave(userId);
+            show(chatId,"home","Ввод отменён. Выберите раздел меню."); return;
+        }
         if(text.matches("(?i)/admin(?:@"+Pattern.quote(botUsername)+")?")) {
             if(!reports.admin(userId)){showNotice(chatId,"Нет доступа.");return;}
             try{showPage(chatId,reports.page(userId,"admin:home","command"));}
@@ -141,7 +155,7 @@ public final class BotHandler {
                 String id=UUID.fromString(preview.path("deviceId").asText()).toString();
                 String username=preview.path("username").asText(),label=preview.path("label").asText();
                 if(!username.matches("[a-z][a-z0-9_]{2,31}") || label.length()>64) throw new IOException("Invalid preview");
-                showPage(chatId,new BotPage("RE:CREATED\n\nРазрешить вход в аккаунт "+username+" с устройства «"+label+"»?\nПодтверждайте только свой запрос.",List.of(
+                showPage(chatId,new BotPage("🔐 Подтверждение входа\n\nАккаунт: "+username+"\nУстройство: "+label+"\n\nРазрешите вход, если запрос открыли вы. После подтверждения вернитесь в Launcher.",List.of(
                     List.of(Map.of("text","Подтвердить устройство","callback_data","trust:"+id)))));
             } catch(IOException | IllegalArgumentException exception) { showNotice(chatId,"Подтверждение устройства недоступно. Откройте свежий QR в Launcher своего аккаунта."); }
             return;
@@ -172,8 +186,8 @@ public final class BotHandler {
         BackendClient.Account account;
         try { account = backend.account(chatId); }
         catch (IOException exception) {
-            if (Set.of("help", "launcher", "code").contains(action)) {
-                showPage(chatId, BotPage.render(action, null, launcherUrl));
+            if (action.startsWith("help") || action.startsWith("launcher") || action.equals("code")) {
+                showPage(chatId, BotPage.render(action, null, launcherUrl, macLauncherUrl));
             } else {
                 showPage(chatId, new BotPage("RE:CREATED\n\nСервис аккаунтов временно недоступен. Попробуйте позже.", List.of(
                     List.of(BotPage.button("↻ Повторить", "home")),
@@ -181,15 +195,23 @@ public final class BotHandler {
             }
             return;
         }
-        BotPage page = BotPage.render(action, account, launcherUrl);
-        boolean home=!Set.of("account","server","notifications","help","launcher","code","devices").contains(action)
-            || (Set.of("account","server","notifications").contains(action) && (account==null || !account.active()));
+        BotPage page = BotPage.render(action, account, launcherUrl, macLauncherUrl);
+        boolean home=action.equals("home") || ((PlayerPanel.handles(action)||Set.of("server","devices").contains(action))
+            && (account==null || !account.active()));
         if(home) {
             String summary;
             try{summary=ServerPanel.summary(backend);}catch(IOException unavailable){summary="⚪ Статус сервера временно недоступен";}
             var keys=new ArrayList<>(page.keyboard());
             if(reports.admin(chatId))keys.add(List.of(Map.of("text","🛠 Администрирование","callback_data","admin:home")));
             page=new BotPage(page.text()+"\n\n"+summary,keys);
+        }
+        if(PlayerPanel.handles(action) && account!=null && account.active()) {
+            try{page=PlayerPanel.page(backend,chatId,action);}
+            catch(IOException unavailable){page=new BotPage(action.startsWith("pref:")
+                ? "🔔 Настройки уведомлений\n\nНе удалось подтвердить сохранение. Изменение могло примениться. Обновите настройки и проверьте состояние."
+                : "Данные игрока временно недоступны\n\nПопробуйте обновить раздел позже.",List.of(
+                    List.of(BotPage.button("↻ Обновить",action.startsWith("pref:")?"preferences":action)),
+                    List.of(BotPage.button("← Главное меню","home"))));}
         }
         if(action.equals("server") && account!=null && account.active()) {
             try{page=ServerPanel.page(backend,null);}catch(IOException unavailable){page=BotPage.notice("🎮 Сервер\n\nДанные временно недоступны. Попробуйте позже.");}
@@ -219,7 +241,10 @@ public final class BotHandler {
     private void showPage(long chatId, BotPage page) throws IOException, InterruptedException {
         Long id = menus.get(chatId);
         var keyboard = new ArrayList<>(page.keyboard());
-        keyboard.add(List.of(BotPage.button("↓ Меню вниз", "here")));
+        boolean confirmation = keyboard.stream().flatMap(List::stream)
+            .map(button -> button.getOrDefault("callback_data", ""))
+            .anyMatch(data -> data.startsWith("verify:") || data.startsWith("trust:") || data.startsWith("drop:") || data.startsWith("revoke:"));
+        if (!confirmation) keyboard.add(List.of(BotPage.button("↓ Меню вниз", "here")));
         page = new BotPage(page.text(), keyboard);
         if (id == null || freshMenus.containsKey(chatId) || !telegram.editPage(chatId, id, page)) {
             // Replace the anchor only after Telegram accepts the new message.

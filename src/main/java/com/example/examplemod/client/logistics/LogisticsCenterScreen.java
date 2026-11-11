@@ -13,10 +13,10 @@ import static com.example.examplemod.client.logistics.LogisticsSkin.*;
 
 /** Native dispatch workspace. Browsing is read-only; server forms own every mutation. */
 public final class LogisticsCenterScreen extends Screen implements CenterResponseScreen {
-    private static final String[] IDS = {"dashboard", "map", "trains", "lines", "points", "warehouses", "trade", "shipments", "access"};
+    private static final String[] IDS = {"dashboard", "map", "trains", "lines", "points", "warehouses", "trade", "shipments", "access", "companies", "fleet", "roads", "debts", "trade_contracts", "master_city"};
     private static final String[] TASKS = {"buy", "send", "track", "network"};
     private record Navigation(int section, ActionButton button) {}
-    private boolean networkMode, openNetwork, guideChecked;
+    private boolean networkMode, openNetwork, guideChecked, operator;
     private int section, sidebar, scroll, page, detailScroll, detailContentHeight, navScroll, dashboardScroll;
     private UUID selected, lastRequest;
     private CompoundTag state = new CompoundTag();
@@ -34,7 +34,7 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
     public void focusObject(String kind, UUID id) {
         query = ""; reverse = onlyProblems = false; page = scroll = detailScroll = dashboardScroll = 0;
         state = new CompoundTag(); received = 0;
-        section = switch (kind) { case "train" -> 2; case "line" -> 3; case "point", "station" -> 4; case "warehouse" -> 5; case "offer" -> 6; case "shipment" -> 7; default -> 0; };
+        section = switch (kind) { case "train" -> 2; case "line" -> 3; case "point", "station" -> 4; case "warehouse" -> 5; case "offer" -> 6; case "shipment" -> 7; case "company" -> 9; case "fleet" -> 10; case "road" -> 11; case "debt" -> 12; case "trade_contract" -> 13; case "master_city" -> 14; default -> kind.startsWith("company_")?9:0; };
         selected = id;
         if (section == 2 || section == 3 || section == 4 || section == 8) networkMode = true;
     }
@@ -47,12 +47,7 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
                 layout.compact() ? Component.literal(networkMode ? "II" : "I") : tr(networkMode ? "mode.network" : "mode.player"),
                 () -> { networkMode = !networkMode; navScroll = 0; selectSection(0); rebuildWidgets(); });
         addRenderableWidget(mode.hint(tr("mode.help")).narration(tr(networkMode ? "mode.network" : "mode.player")));
-        for (int target : navigation()) {
-            var button = new ActionButton(6, 70, sidebar - 12, layout.navigationStep() - 3,
-                    layout.compact() ? Component.empty() : tr("tab." + IDS[target]), () -> selectSection(target), target);
-            button.hint(tr("nav_hint." + IDS[target])).narration(tr("tab." + IDS[target]));
-            addWidget(button); navigationButtons.add(new Navigation(target, button));
-        }
+        rebuildNavigation();
         var help = layout.help();
         addRenderableWidget(new ActionButton(help.x(), help.y(), help.width(), help.height(),
                 layout.compact() ? Component.literal("?") : tr("ui.help"), this::openGuide)
@@ -153,6 +148,17 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
         }
     }
 
+    private static int sectionIcon(int target){return switch(target){case 9->12;case 10->2;case 11->3;case 12->6;case 13->7;case 14->13;default->target;};}
+    private void rebuildNavigation(){
+        for(var entry:navigationButtons)removeWidget(entry.button());navigationButtons.clear();
+        for(int target:navigation()){
+            var button=new ActionButton(6,70,sidebar-12,layout.navigationStep()-3,
+                layout.compact()?Component.empty():tr("tab."+IDS[target]),()->selectSection(target),sectionIcon(target));
+            button.hint(tr("nav_hint."+IDS[target])).narration(tr("tab."+IDS[target]));
+            addWidget(button);navigationButtons.add(new Navigation(target,button));
+        }
+    }
+
     private void ensureNavigationVisible() {
         int[] nav = navigation();
         for (int i = 0; i < nav.length; i++) if (nav[i] == section) {
@@ -190,6 +196,7 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
         if (!data.getString("Section").equals(IDS[section]) && !data.getBoolean("Open")) return;
         if (!data.getBoolean("Unchanged")) { state = com.example.examplemod.cargo.center.CenterDelta.apply(state, data); page = state.getInt("Page"); }
         else if (data.contains("Hash")) state.putInt("Hash", data.getInt("Hash"));
+        if(state.contains("Operator")&&operator!=state.getBoolean("Operator")){operator=state.getBoolean("Operator");rebuildNavigation();ensureNavigationVisible();}
         received = net.minecraft.Util.getMillis(); pending = false; readTimedOut = false;
         lastResult = !data.getString("Result").equals("ok") || data.getBoolean("Mutation") ? result(data.getString("Result")) : "";
         updateControls();
@@ -221,9 +228,13 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
         scroll = page = detailScroll = dashboardScroll = 0; state = new CompoundTag(); received = 0; lastResult = "";
         sectionChanged = net.minecraft.Util.getMillis(); ensureNavigationVisible(); updateControls(); refresh();
     }
-    private int[] navigation() { return networkMode ? new int[]{0, 2, 3, 4, 5, 8, 1, 6, 7} : new int[]{0, 6, 5, 7, 1}; }
+    private int[] navigation() {
+        int[] base=networkMode?new int[]{0,2,10,3,11,4,5,9,12,8,1,6,13,7}:new int[]{0,6,13,5,7,9,10,12,1};
+        if(!operator)return base;
+        int[] withOperator=java.util.Arrays.copyOf(base,base.length+1);withOperator[base.length]=14;return withOperator;
+    }
     private void openMap() { LogisticsMapOverlay.open(this, state.getCompound("SelectedRow")); }
-    private void openGuide() { guideChecked = true; minecraft.setScreen(new CenterGuideScreen(this)); }
+    private void openGuide() { guideChecked = true; minecraft.setScreen(state.contains("Guide")?new EconomicHelpScreen(this,state.getCompound("Guide")):new CenterGuideScreen(this)); }
     private void openDetails(CompoundTag row) { minecraft.setScreen(new CenterDetailsScreen(this, row)); }
 
     @Override public void render(GuiGraphics g, int mx, int my, float dt) {

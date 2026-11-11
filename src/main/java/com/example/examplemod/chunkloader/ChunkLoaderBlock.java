@@ -113,6 +113,7 @@ public final class ChunkLoaderBlock extends BaseEntityBlock {
         return BlockBehaviour.Properties.of()
                 .mapColor(MapColor.METAL)
                 .strength(4.0F)
+                .noOcclusion()
                 .requiresCorrectToolForDrops()
                 // Refuses a piston outright: the block stays where its owner put it and its ticket stays valid.
                 .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK);

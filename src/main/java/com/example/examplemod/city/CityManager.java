@@ -44,8 +44,31 @@ public class CityManager extends SavedData {
         return List.copyOf(this.migratedCities);
     }
 
-    private final Map<UUID, City> cities =
-            new HashMap<>();
+    private final Map<UUID, City> cities = new HashMap<>() {
+        @Override public City put(UUID id,City city) {
+            city.operatorMembers(()->operatorMembers(city));
+            return super.put(id,city);
+        }
+    };
+    private UUID operatorCityId;
+    private java.util.function.Supplier<Map<UUID,String>> operatorRoster = Map::of;
+
+    void operatorRoster(java.util.function.Supplier<Map<UUID,String>> roster) { operatorRoster=roster; }
+    private UUID resolveOperatorCity() {
+        if(operatorCityId==null) {
+            var matches=cities.values().stream().filter(c->c.getName().equalsIgnoreCase("Моржеград")).toList();
+            if(matches.size()==1){operatorCityId=matches.getFirst().getId();setDirty();}
+        }
+        return operatorCityId;
+    }
+    private Map<UUID,String> operatorMembers(City city) {
+        return city.getId().equals(resolveOperatorCity())?operatorRoster.get():Map.of();
+    }
+    public UUID getOperatorCityId() { return resolveOperatorCity(); }
+    public List<City> getMemberCities(UUID player) {
+        return cities.values().stream().filter(c->c.hasMember(player))
+                .sorted(java.util.Comparator.comparing(City::getName).thenComparing(City::getId)).toList();
+    }
     public static final int MAX_CLAIMED_PLOTS = 25;
     private final Map<UUID, Set<UUID>> territoryAccess = new HashMap<>();
     private final Map<UUID, Set<UUID>> trustedCities = new HashMap<>();
@@ -98,6 +121,7 @@ public class CityManager extends SavedData {
 
         CityManager manager =
                 new CityManager();
+        manager.operatorCityId=tag.hasUUID("OperatorCity")?tag.getUUID("OperatorCity"):null;
 
         ListTag cityList =
                 tag.getList(
@@ -216,7 +240,7 @@ public class CityManager extends SavedData {
 
                 if (
                         roleId < 0
-                                || roleId >= roles.length
+                                || roleId >= CityMember.Role.OPERATOR_MANAGER.ordinal()
                 ) {
                     roleId =
                             CityMember.Role.RESIDENT.ordinal();
@@ -506,6 +530,9 @@ public class CityManager extends SavedData {
             CompoundTag tag,
             HolderLookup.Provider registries
     ) {
+        resolveOperatorCity();
+        if(operatorCityId!=null)tag.putUUID("OperatorCity",operatorCityId);
+        else tag.remove("OperatorCity");
 
         ListTag cityList =
                 new ListTag();
@@ -614,7 +641,7 @@ public class CityManager extends SavedData {
 
             for (
                     CityMember member
-                    : city.getMembers()
+                    : city.getPrimaryMembers()
             ) {
 
                 CompoundTag memberTag =
@@ -762,6 +789,8 @@ public class CityManager extends SavedData {
                         DATA_NAME
                 );
         manager.activeBuildProjects = id -> com.example.examplemod.economy.EconomyManager.get(level).projects().hasActive(id);
+        manager.operatorRoster=()->OperatorCityRoster.current(level.getServer());
+        manager.resolveOperatorCity();
         return manager;
     }
 
@@ -1550,8 +1579,8 @@ public class CityManager extends SavedData {
     // =========================================================
     // GET CITY BY MEMBER
     //
-    // Ищет игрока среди ВСЕХ участников городов.
-    // Нужно для запрета нахождения в нескольких городах.
+    // Основной город по обычному, сохраняемому членству.
+    // Дополнительная OP-роль не мешает вступлению в обычный город.
     // =========================================================
 
     public City getCityByMember(
@@ -1564,7 +1593,7 @@ public class CityManager extends SavedData {
         ) {
 
             if (
-                    city.hasMember(player)
+                    city.hasPrimaryMember(player)
             ) {
 
                 return city;

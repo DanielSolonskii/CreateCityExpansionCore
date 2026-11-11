@@ -30,7 +30,7 @@ public final class CargoCancellationCheck {
         for(int n=0;n<10;n++)require(!b.settleCancellation(id,n,0,h->0)&&a.balance(payer)==943&&a.total()==943,"missing physical units retain all escrow");
         require(!b.settleCancellation(id,5,6,h->10)&&!b.settleCancellation(id,-1,11,h->10),"invalid physical totals do not pay");
         require(!b.settleCancellation(id,4,6,h->11)&&!b.settleCancellation(id,4,6,h->-1),"invalid hop proof cannot release escrow");
-        var save=b.save();require(save.getInt("Version")==2,"cancellation schema is explicit");
+        var save=b.save();require(save.getInt("Version")==3,"cancellation schema is explicit");
         b=new CargoCommerceBook(a);b.load(save);require(b.order(id).orElseThrow().state()==CargoCommerceBook.State.CANCELLING,"pending cancellation survives restart");
         a.balances.put(carrier,9999L);
         require(!b.settleCancellation(id,4,6,h->6)&&a.balance(payer)==943&&a.balance(seller)==0,"recipient capacity failure leaves every balance and escrow unchanged");
@@ -43,7 +43,7 @@ public final class CargoCancellationCheck {
         UUID same=UUID.randomUUID();b.reserve(same,payer,payer,same,null,10,100,List.of(new CargoCommerceBook.Fee(UUID.randomUUID(),0,payer,9)));b.markAttempted(same);b.requestCancellation(same);
         require(b.settleCancellation(same,4,6,h->4)&&a.total()==1000,"overlapping payer seller carrier credits aggregate once");
         var legacy=new CargoCommerceBook(a).save();legacy.putInt("Version",1);new CargoCommerceBook(a).load(legacy);
-        var future=legacy.copy();future.putInt("Version",3);boolean rejected=false;try{new CargoCommerceBook(a).load(future);}catch(IllegalArgumentException expected){rejected=true;}
+        var future=legacy.copy();future.putInt("Version",4);boolean rejected=false;try{new CargoCommerceBook(a).load(future);}catch(IllegalArgumentException expected){rejected=true;}
         require(rejected,"future commerce remains rejected");
         nativeStorage();
         System.out.println("PASS: "+checks+" Cargo cancellation conservation, replay and native storage checks");
@@ -52,7 +52,7 @@ public final class CargoCancellationCheck {
         net.minecraft.SharedConstants.tryDetectVersion();
         var directory=Files.createTempDirectory(Path.of("").toAbsolutePath(),"cargo-native-");
         try{
-            var raw=new CompoundTag();raw.putInt("Version",3);raw.putString("UnknownPhysicalCargo","retained");
+            var raw=new CompoundTag();raw.putInt("Version",4);raw.putString("UnknownPhysicalCargo","retained");
             var disk=new CompoundTag();disk.put("data",raw.copy());NbtUtils.addCurrentDataVersion(disk);
             var file=directory.resolve("ccec_cargo_shipments.dat");NbtIo.writeCompressed(disk,file);var bytes=Files.readAllBytes(file);
             var storage=new DimensionDataStorage(directory.toFile(),null,null);boolean rejected=false;
@@ -66,7 +66,7 @@ public final class CargoCancellationCheck {
             require(NbtIo.readCompressed(file,NbtAccounter.unlimitedHeap()).getCompound("data").equals(raw),"forced save retains future schema and unknown cargo");
             rejected=false;try{CargoShipmentRegistry.fromStorage(storage);}catch(IllegalStateException expected){rejected=true;}
             require(rejected,"repeated native lookup remains unavailable");
-            for(int version:new int[]{1,2}){var supported=new CompoundTag();supported.putInt("Version",version);disk.put("data",supported);NbtIo.writeCompressed(disk,file);require(CargoShipmentRegistry.fromStorage(new DimensionDataStorage(directory.toFile(),null,null)).all().isEmpty(),"native supported cargo version "+version+" loads");}
+            for(int version:new int[]{1,2,3}){var supported=new CompoundTag();supported.putInt("Version",version);disk.put("data",supported);NbtIo.writeCompressed(disk,file);require(CargoShipmentRegistry.fromStorage(new DimensionDataStorage(directory.toFile(),null,null)).all().isEmpty(),"native supported cargo version "+version+" loads");}
         }finally{
             net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
             if(!directory.toRealPath().startsWith(Path.of("").toRealPath()))throw new AssertionError("unsafe fixture cleanup");

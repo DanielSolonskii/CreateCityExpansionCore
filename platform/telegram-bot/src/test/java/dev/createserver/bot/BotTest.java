@@ -29,11 +29,27 @@ class BotTest {
     private int prepareStatus = 200;
     private int acceptStatus = 200;
     private int deviceStatus = 200;
+    private int companionStatus = 200;
+    private boolean news = true;
     private final String deviceId = "12345678-1234-1234-1234-123456789abc";
 
     @BeforeEach
     void startFakes() throws Exception {
         backend = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        backend.createContext("/api/internal/telegram/companion/123456789012", exchange -> {
+            assertThat(exchange.getRequestHeaders().getFirst("X-Bot-Service-Secret")).isEqualTo("fake-service-secret");
+            Object result;
+            if(exchange.getRequestURI().getPath().endsWith("/preferences")){
+                if(exchange.getRequestMethod().equals("POST")){
+                    String body=new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8);
+                    backendBodies.add(body);var patch=json.readTree(body);
+                    if(patch.path("field").asText().equals("news"))news=patch.path("enabled").asBoolean();
+                }
+                result=Map.of("news",news,"maintenance",true,"reports",true);
+            }else result=Map.of("account",Map.of("username","engineer","about","","cityState","UNKNOWN","cities",List.of(),"reports",List.of(),"devices",List.of()),"onlineState","UNKNOWN","minecraftLinked",true);
+            byte[] body=json.writeValueAsBytes(result);
+            exchange.sendResponseHeaders(companionStatus,body.length);exchange.getResponseBody().write(body);exchange.close();
+        });
         backend.createContext("/api/internal/bridge/status", exchange -> {
             assertThat(exchange.getRequestHeaders().getFirst("X-Bot-Service-Secret")).isEqualTo("fake-service-secret");
             byte[] body="{\"state\":\"UNKNOWN\"}".getBytes(StandardCharsets.UTF_8);
@@ -157,7 +173,7 @@ class BotTest {
     void welcomeContainsServerDescriptionAndLauncherButtonWithoutBackendMutation() throws Exception {
         handler().handle(json.readTree(update("/start", "private")));
         assertThat(messages).hasSize(1);
-        assertThat(messages.getFirst()).contains("RE:CREATED", "📥 Скачать Launcher", "🔑 Ввести код", "inline_keyboard");
+        assertThat(messages.getFirst()).contains("RE:CREATED", "📥 Скачать Launcher", "🔑 У меня есть код", "inline_keyboard");
         assertThat(backendBodies).isEmpty();
     }
 
@@ -262,21 +278,23 @@ class BotTest {
         lookupStatus = 200;
         var handler = handler();
         handler.handle(json.readTree(update("/start", "private")));
-        assertThat(messages.getFirst()).contains("👤 Аккаунт", "🎮 Сервер", "🔔 Уведомления", "📥 Launcher", "❓ Помощь").doesNotContain("Ввести код");
+        assertThat(messages.getFirst()).contains("👤 Мой профиль", "🎮 Сервер", "🏙 Мои города", "🔔 Уведомления", "📥 Скачать игру", "❓ Помощь").doesNotContain("У меня есть код");
         navigate(handler, "menu:v1:account", 1);
         assertThat(edits.getLast()).contains("Имя: engineer", "Статус: Активен", "Telegram: привязан").doesNotContain("password", "platformUserId");
         navigate(handler, "menu:v1:server", 1);
         assertThat(edits.getLast()).contains("Нет свежих данных").doesNotContain("25565", "Игроков: 0", "онлайн");
         navigate(handler, "menu:v1:notifications", 1);
-        assertThat(edits.getLast()).contains("Новости RE:CREATED", "прямо в этот чат");
+        assertThat(edits.getLast()).contains("Настройки уведомлений", "Выключить: Новости");
         navigate(handler, "menu:v1:launcher", 1);
-        assertThat(edits.getLast()).contains("https://example.com/launcher", "← Главное меню");
+        assertThat(edits.getLast()).contains("Windows", "macOS", "← Главное меню");
+        navigate(handler, "menu:v1:launcher_windows", 1);
+        assertThat(edits.getLast()).contains("https://example.com/launcher");
         navigate(handler, "menu:v1:help", 1);
-        assertThat(edits.getLast()).contains("Отсканируйте QR телефоном");
+        assertThat(edits.getLast()).contains("Не получается войти", "QR или код не работает");
         navigate(handler, "menu:v1:home", 1);
         handler.handle(json.readTree(update("/start", "private")));
         assertThat(messages).hasSize(1);
-        assertThat(edits).hasSize(7).allMatch(edit -> json.readTree(edit).path("message_id").asLong() == 1);
+        assertThat(edits).hasSize(8).allMatch(edit -> json.readTree(edit).path("message_id").asLong() == 1);
         assertThat(backendBodies).isEmpty();
     }
 
@@ -308,6 +326,8 @@ class BotTest {
         navigate(handler, "menu:v1:help", 1);
         assertThat(edits.getLast()).contains("❓ Помощь");
         navigate(handler, "menu:v1:launcher", 1);
+        assertThat(edits.getLast()).contains("Windows", "macOS");
+        navigate(handler, "menu:v1:launcher_windows", 1);
         assertThat(edits.getLast()).contains("https://example.com/launcher");
         lookupStatus = 200; accountBody = "{}";
         handler.handle(json.readTree(update("/start", "private")));
@@ -387,6 +407,7 @@ class BotTest {
         var handler = new BotHandler("create_test_bot", null, backendClient(), telegramClient());
         handler.handle(json.readTree(update("/start", "private")));
         navigate(handler, "menu:v1:launcher", 1);
+        navigate(handler, "menu:v1:launcher_windows", 1);
         assertThat(edits.getLast()).contains("Ссылка на скачивание пока не настроена").doesNotContain("\"url\"");
     }
 
@@ -489,5 +510,110 @@ class BotTest {
         assertThat(retired).hasSize(1);
         navigate(handler, "menu:v1:help", 3);
         assertThat(json.readTree(edits.getLast()).path("message_id").asLong()).isEqualTo(3);
+    }
+    @Test void platformDownloadsAndSituationalHelpRemainAvailableDuringBackendOutage() throws Exception {
+        var handler = new BotHandler("create_test_bot", "https://example.com/windows", "https://example.com/mac", backendClient(), telegramClient(), Set.of());
+        handler.handle(json.readTree(update("/start", "private")));
+        backend.stop(0);
+        navigate(handler, "menu:v1:launcher_macos", 1);
+        assertThat(edits.getLast()).contains("https://example.com/mac", "macOS").doesNotContain("https://example.com/windows");
+        navigate(handler, "menu:v1:launcher_windows", 1);
+        assertThat(edits.getLast()).contains("https://example.com/windows").doesNotContain("https://example.com/mac");
+        for (String topic : List.of("start", "code", "login", "game", "access")) {
+            navigate(handler, "menu:v1:help_" + topic, 1);
+            assertThat(edits.getLast()).contains("← Помощь", "Главное меню").doesNotContain("Сервис аккаунтов", "Статус сервера");
+        }
+        assertThat(backendBodies).isEmpty();
+    }
+    @Test void missingMacDownloadNeverFallsBackToWindowsAndConfigUsesExplicitOverride() throws Exception {
+        var handler=handler(); handler.handle(json.readTree(update("/start", "private")));
+        navigate(handler,"menu:v1:launcher_macos",1);
+        assertThat(edits.getLast()).contains("не настроена для macOS").doesNotContain("\"url\"", "https://example.com/launcher");
+        assertThat(BotMain.launcherUrl(Map.of("LAUNCHER_DOWNLOAD_URL","https://example.com/old","LAUNCHER_WINDOWS_DOWNLOAD_URL","https://example.com/new"))).isEqualTo("https://example.com/new");
+        assertThat(BotMain.launcherUrl(Map.of("LAUNCHER_DOWNLOAD_URL","https://example.com/old","LAUNCHER_WINDOWS_DOWNLOAD_URL",""))).isNull();
+        assertThat(BotMain.downloadUrl(Map.of(),"LAUNCHER_MACOS_DOWNLOAD_URL")).isNull();
+        for(String url:List.of("http://example.com", "https://secret:password@example.com/mac", "https://example.com/mac#fragment"))
+            assertThatThrownBy(()->BotMain.downloadUrl(Map.of("LAUNCHER_MACOS_DOWNLOAD_URL",url),"LAUNCHER_MACOS_DOWNLOAD_URL")).isInstanceOf(IllegalArgumentException.class).hasMessageNotContaining("password");
+    }
+    @Test void navigationAndCommandsCancelCommunityReplyBeforeNextText() throws Exception {
+        var handler=handler(); handler.handle(json.readTree(update("/start","private")));
+        for(String exit:List.of("/start", "/menu", "/help", "/cancel", "/cancel@create_test_bot", "callback")) {
+            navigate(handler,"community:reply:"+deviceId,1);
+            if(exit.equals("callback")) navigate(handler,"menu:v1:help",1);
+            else handler.handle(json.readTree(update(exit,"private")));
+            handler.handle(json.readTree(update("ordinary text","private")));
+            String page=edits.isEmpty()?messages.getLast():edits.getLast();
+            assertThat(page).contains("Не понял сообщение");
+        }
+        assertThat(backendBodies).isEmpty();
+    }
+    @Test void registrationCodeExitsReplyModeAndConfirmationHasNoMoveButton() throws Exception {
+        var handler=handler(); handler.handle(json.readTree(update("/start","private")));
+        navigate(handler,"community:reply:"+deviceId,1);
+        handler.handle(json.readTree(update("ABCDE-FGHJK","private")));
+        assertThat(backendBodies).hasSize(1);
+        assertThat(edits.getLast()).contains("Подтвердить регистрацию").doesNotContain("menu:v1:here");
+        navigate(handler,"verify:"+token,1);
+        assertThat(backendBodies).hasSize(2);
+        assertThat(edits.getLast()).contains("Аккаунт подтверждён").doesNotContain(token);
+    }
+    @Test void communityReplyCancelsBroadcastComposerAndCancelIsExplicit() throws Exception {
+        var handler=new BotHandler("create_test_bot",null,backendClient(),telegramClient(),Set.of(123456789012L));
+        navigate(handler,"broadcast:new",1);
+        navigate(handler,"community:reply:"+deviceId,1);
+        handler.handle(json.readTree(update("/cancel","private")));
+        assertThat(edits.getLast()).contains("Ввод отменён");
+        handler.handle(json.readTree(update("ordinary text","private")));
+        assertThat(edits.getLast()).contains("Не понял сообщение");
+        assertThat(backendBodies).isEmpty();
+    }
+    @Test void codeAndWhitespaceCommandCannotBecomeBroadcastDrafts() throws Exception {
+        var handler=new BotHandler("create_test_bot",null,backendClient(),telegramClient(),Set.of(123456789012L));
+        navigate(handler,"broadcast:new",1);
+        handler.handle(json.readTree(update("ABCDE-FGHJK","private")));
+        assertThat(backendBodies).hasSize(1);
+        assertThat(json.readTree(backendBodies.getFirst()).path("verificationCode").asText()).isEqualTo("ABCDE-FGHJK");
+        navigate(handler,"broadcast:new",1);
+        handler.handle(json.readTree(update("  /cancel  ","private")));
+        assertThat(edits.getLast()).contains("Ввод отменён");
+        assertThat(backendBodies).hasSize(1);
+    }
+    @Test void replyStillSubmitsOnceAndInvalidTextKeepsInputMode() throws Exception {
+        backend.createContext("/api/internal/community/action", exchange -> {
+            backendBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] body="{\"status\":\"QUEUED\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200,body.length); exchange.getResponseBody().write(body); exchange.close();
+        });
+        var handler=handler();
+        navigate(handler,"community:reply:"+deviceId,1);
+        handler.handle(json.readTree(update("x".repeat(501),"private")));
+        assertThat(backendBodies).isEmpty();
+        handler.handle(json.readTree(update("Hello neighbour","private")));
+        assertThat(backendBodies).hasSize(1);
+        assertThat(json.readTree(backendBodies.getFirst()).path("action").asText()).isEqualTo("REPLY");
+        assertThat(json.readTree(backendBodies.getFirst()).path("text").asText()).isEqualTo("Hello neighbour");
+        handler.handle(json.readTree(update("second text","private")));
+        assertThat(backendBodies).hasSize(1);
+    }
+    @Test void preferencesUseDesiredStateAndRejectStaleOrCrossUserButtons() throws Exception {
+        lookupStatus=200;var handler=handler();handler.handle(json.readTree(update("/start","private")));
+        navigate(handler,"menu:v1:pref:news:off",1);
+        navigate(handler,"menu:v1:pref:news:off",1);
+        assertThat(backendBodies).hasSize(2).allMatch(body->body.contains("\"enabled\":false"));
+        assertThat(edits.getLast()).contains("Включить: Новости");
+        navigate(handler,"menu:v1:pref:news:on",99);
+        assertThat(backendBodies).hasSize(2);
+        handler.handle(json.readTree("{\"callback_query\":{\"id\":\"cross\",\"data\":\"menu:v1:pref:news:on\",\"from\":{\"id\":999},\"message\":{\"message_id\":1,\"chat\":{\"id\":123456789012,\"type\":\"private\"}}}}"));
+        assertThat(backendBodies).hasSize(2);
+        accountStatus="DISABLED";navigate(handler,"menu:v1:pref:news:on",1);
+        assertThat(backendBodies).hasSize(2);assertThat(edits.getLast()).contains("аккаунт пока не активен");
+    }
+    @Test void failedPreferenceWriteNeverClaimsSuccessOrBlindlyRepeatsMutation() throws Exception {
+        lookupStatus=200;var handler=handler();handler.handle(json.readTree(update("/start","private")));
+        companionStatus=503;navigate(handler,"menu:v1:pref:news:off",1);
+        assertThat(edits.getLast()).contains("Изменение могло примениться","menu:v1:preferences").doesNotContain("menu:v1:pref:news:off");
+        assertThat(backendBodies).hasSize(1);
+        companionStatus=200;navigate(handler,"menu:v1:preferences",1);
+        assertThat(edits.getLast()).contains("Включить: Новости");assertThat(backendBodies).hasSize(1);
     }
 }
