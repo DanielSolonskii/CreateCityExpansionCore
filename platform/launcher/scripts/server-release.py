@@ -121,7 +121,7 @@ def save_formats(jar):
     if set(metadata) != {'schemaVersion', 'savedData'} or metadata['schemaVersion'] != 1 or not isinstance(metadata['savedData'], dict):
         raise RuntimeError('Invalid CCEC save compatibility metadata')
     for filename, headers in metadata['savedData'].items():
-        if not re.fullmatch(r'(createcityexpansioncore_economy|ccec_cargo_[a-z_]+)', filename) or not isinstance(headers, dict) or not headers:
+        if not re.fullmatch(r'(createcityexpansioncore_economy|ccec_cargo_[a-z_]+|ccec_public_fleet)', filename) or not isinstance(headers, dict) or not headers:
             raise RuntimeError('Invalid CCEC SavedData name/headers')
         for key, rule in headers.items():
             if not re.fullmatch(r'[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*)*', key) or not isinstance(rule, dict) or not {'min', 'max'} <= set(rule) <= {'min', 'max', 'optional'}:
