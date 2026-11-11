@@ -12,32 +12,34 @@ public final class CenterDetailsScreen extends Screen implements CenterResponseS
     private CompoundTag row;
     private final java.util.UUID id;
     private int left, panelWidth, scroll, contentHeight;
+    private final long opened=net.minecraft.Util.getMillis();
     private ActionButton actions;
     public CenterDetailsScreen(LogisticsCenterScreen parent, CompoundTag row) {
         super(tr("details")); this.parent=parent; this.row=row.copy();this.id=row.getUUID("Id");
     }
     @Override protected void init() {
-        panelWidth=Math.min(500,width-24);left=(width-panelWidth)/2;
-        addRenderableWidget(new ActionButton(left,height-38,70,24,tr("back"),this::onClose));
-        addRenderableWidget(new ActionButton(left+78,height-38,70,24,tr("map"),()->LogisticsMapOverlay.open(parent,row)));
-        actions=addRenderableWidget(new ActionButton(left+156,height-38,panelWidth-156,24,tr("actions"),()->minecraft.setScreen(new CenterActionsScreen(parent,parent.snapshot()))));
+        com.example.examplemod.client.CommunityFx.load();panelWidth=Math.min(620,width-24);left=(width-panelWidth)/2;
+        int secondary=Math.min(90,(panelWidth-28)/3);
+        addRenderableWidget(new ActionButton(left,height-38,secondary,24,tr("back"),this::onClose));
+        addRenderableWidget(new ActionButton(left+secondary+8,height-38,secondary,24,tr("map"),()->LogisticsMapOverlay.open(parent,row))).hint(tr("map_hint"));
+        actions=addRenderableWidget(new ActionButton(left+secondary*2+16,height-38,panelWidth-secondary*2-16,24,tr("actions"),()->minecraft.setScreen(new CenterActionsScreen(parent,parent.snapshot()))).primary());
         actions.active=false;parent.selectForDetails(id);
     }
     @Override public void tick(){super.tick();parent.tick();var selected=parent.snapshot().getCompound("SelectedRow");actions.active=selected.hasUUID("Id")&&selected.getUUID("Id").equals(id)&&!parent.snapshot().getList("Forms",10).isEmpty();}
     @Override public void accept(CompoundTag response){parent.accept(response);var current=parent.snapshot().getCompound("SelectedRow");row=current.hasUUID("Id")&&current.getUUID("Id").equals(id)?current.copy():new CompoundTag();}
     @Override public void render(GuiGraphics g,int mx,int my,float dt) {
-        g.fillGradient(0,0,width,height,BG,0xff14272c);
-        surface(g,left,12,panelWidth,42,PANEL);
-        icon(g,left+14,23,7,TEAL);
-        g.drawString(font,fit(row.isEmpty()?text("object_unavailable"):name(row),panelWidth-56),left+36,24,TEXT,false);
-        g.drawString(font,text("details"),left+36,39,MUTED,false);
+        background(g,width,height);
+        int symbol=switch(row.getString("Kind")){case "train"->2;case "line"->3;case "station","point"->4;case "warehouse"->5;case "offer"->6;default->7;};
+        header(g,left,12,panelWidth,Component.literal(row.isEmpty()?text("object_unavailable"):name(row)),tr("ui.object_details"),symbol);
         if(row.isEmpty())scroll=0;int top=64,bottom=height-48,y=top+12-scroll;
         surface(g,left,top,panelWidth,Math.max(10,bottom-top),PANEL);
         g.enableScissor(left+8,top+6,left+panelWidth-8,bottom-5);
         if(row.isEmpty())y=wrapped(g,text("object_unavailable"),y,MUTED);
-        else {y=CenterVisualContent.render(g,row,left+14,y,panelWidth-30);var details=row.copy();if(row.getString("Kind").equals("warehouse"))details.remove("Stock");if(row.getString("Kind").equals("line"))details.remove("Details");for(var field:fields(details)){
+        else {y=CenterVisualContent.render(g,row,left+14,y,panelWidth-30,opened,my>=top+6&&my<bottom-5?mx:Integer.MIN_VALUE,my);var details=row.copy();if(row.getString("Kind").equals("warehouse"))details.remove("Stock");if(row.getString("Kind").equals("line"))details.remove("Details");
+            g.hLine(left+14,left+panelWidth-16,y+2,EDGE);y+=16;
+            for(var field:fields(details)){
             icon(g,left+14,y,field.icon(),MUTED);var label=Component.literal(field.label());g.drawWordWrap(font,label,left+33,y,panelWidth-49,MUTED);
-            y+=font.wordWrapHeight(label,panelWidth-49)+6;y=wrapped(g,field.value(),y,TEXT)+10;
+            y+=font.wordWrapHeight(label,panelWidth-49)+6;y=wrapped(g,field.value(),y,TEXT)+12;
         }
         }
         contentHeight=y+scroll-top+16;
