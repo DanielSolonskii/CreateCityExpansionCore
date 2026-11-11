@@ -11,9 +11,15 @@ public record CityPylonWorkspaceLayout(int x, int y, int width, int height,
     }
 
     static CityPylonWorkspaceLayout calculate(int screenWidth, int screenHeight, boolean management, boolean center) {
-        int fw = Math.max(1, Math.min(center ? 720 : 760, screenWidth - 24));
-        int fh = Math.max(1, Math.min(center ? 520 : 420, screenHeight - 24));
+        return calculate(screenWidth, screenHeight, management, center, 0);
+    }
+
+    static CityPylonWorkspaceLayout calculate(int screenWidth, int screenHeight, boolean management, boolean center,
+            int rightInset) {
+        int fw = Math.max(1, Math.min(center ? (management ? 490 : 720) : 760, screenWidth - 24 - rightInset));
+        int fh = Math.max(1, Math.min(center ? (management ? 344 : 520) : 420, screenHeight - 24));
         int fx = (screenWidth-fw)/2, fy = (screenHeight-fh)/2;
+        if (rightInset > 0) fx = Math.min(fx,screenWidth-12-rightInset-fw);
         // UI-редактор (F7): каркас правится целиком — сайдбар, контент и
         // навигация выводятся из него, поэтому едут вместе с рамкой.
         var frame = UiEditLayout.apply("frame", fx, fy, fw, fh, WorldMapUiLayout.Rect::new);

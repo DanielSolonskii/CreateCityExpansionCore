@@ -517,20 +517,43 @@ public CityPylonScreen(
         workspaceSyncMapData();
         int left=this.contentLeft(),top=this.contentTop();
         CityPylonTheme.panel(graphics,left-6,top-5,440,260);
-        graphics.drawString(this.font,managementTabName(this.activeTab),left,top,CityPylonTheme.TEXT,false);
-        graphics.fill(left,top+16,left+CONTENT_WIDTH,top+17,CityPylonTheme.LINE);
-        renderManagementNav(graphics,left,CityPylonUiLayout.navTop(top),mouseX,mouseY);
+        if (workspaceProjects()) {
+            graphics.drawString(this.font,managementTabName(this.activeTab),left,top,CityPylonTheme.TEXT,false);
+            graphics.fill(left,top+16,left+CONTENT_WIDTH,top+17,CityPylonTheme.LINE);
+        } else {
+            drawWorkspaceTabs(graphics,left,top,mouseX,mouseY);
+        }
         switch(this.activeTab) {
             case 1->renderTerritory(graphics,left,top,mouseX,mouseY);
             case 2->renderMembers(graphics,left,top,mouseX,mouseY);
             case 3->renderProjects(graphics,left,top);
-            case 5->renderDevelopment(graphics,left,top,mouseX,mouseY);
 
             default->{}
         }
         if(this.activeTab==2&&this.inviteButton!=null&&this.inviteButton.visible)
             this.inviteButton.render(graphics,mouseX,mouseY,partialTick);
         flushDeferredTooltip(graphics,mouseX,mouseY);
+    }
+
+    private final SocialHubIcons.HoverMotion workspaceMotion = new SocialHubIcons.HoverMotion();
+
+    boolean workspaceProjects() { return this.activeTab == 3; }
+
+    private CityPylonUiLayout.Rect workspaceTab(int index, int left, int top) {
+        int w = (CONTENT_WIDTH - 6) / 2;
+        return workspaceControl("management.tab[" + (index+1) + "]",left + index*(w+6),
+                CityPylonUiLayout.navTop(top),w,CityPylonUiLayout.ROW_HEIGHT);
+    }
+
+    private void drawWorkspaceTabs(GuiGraphics graphics, int left, int top, int mx, int my) {
+        workspaceMotion.beginFrame();
+        for (int i=0;i<2;i++) {
+            var tab = workspaceTab(i,left,top);
+            var bounds = new WorldMapUiLayout.Rect(tab.x(),tab.y(),tab.width(),tab.height());
+            SocialHubIcons.paintButton(graphics,font,bounds,Component.literal(managementTabName(i+1)),
+                    i==0?SocialHubIcons.Icon.CITY:SocialHubIcons.Icon.FRIENDS,workspaceMotion,
+                    tab.contains(mx,my),true,this.activeTab==i+1,false);
+        }
     }
 
     int workspaceSection() { return this.activeTab == 0 ? 0 : 1; }
@@ -1164,7 +1187,17 @@ return super.mouseScrolled(
             }
         }
 
-        if (button == 0 && isManagementTab(this.activeTab)) {
+        boolean embedded = CityPylonWorkspace.isEmbedded(this);
+        if (embedded && button==0 && (this.activeTab==1 || this.activeTab==2)) {
+            for (int i=0;i<2;i++) {
+                if (workspaceTab(i,this.contentLeft(),this.contentTop()).contains(mouseX,mouseY)) {
+                    workspaceSelect(i+1);
+                    return true;
+                }
+            }
+        }
+
+        if (!embedded && button == 0 && isManagementTab(this.activeTab)) {
             CityPylonUiLayout.Rect[] cells = managementTabs(
                     this.contentLeft(), CityPylonUiLayout.navTop(this.contentTop()));
             for (int i = 0; i < MANAGEMENT_TABS.length; i++) {
@@ -2224,6 +2257,7 @@ default ->
      * <p>The members body reads this so a wrapped row pushes the body down with it.
      */
     private int managementRows() {
+        if (CityPylonWorkspace.isEmbedded(this)) return workspaceProjects() ? 0 : 1;
         return CityPylonUiLayout.rows(CONTENT_WIDTH, MANAGEMENT_TABS.length, managementLabelWidths());
     }
 

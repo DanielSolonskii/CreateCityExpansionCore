@@ -51,33 +51,69 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
     public void render(GuiGraphics g, int mx, int my, float pt) {
         motion.beginFrame();
         root.workspaceSyncMapData();
-        drawShortcut(g, tile("management",0,false), "management", SocialHubIcons.Icon.CITY, BRASS_TEXT, mx, my);
-        drawShortcut(g, tile("structures",1,false), "structures", SocialHubIcons.Icon.PROJECTS, COPPER, mx, my);
-        drawShortcut(g, tile("community",2,false), "community", SocialHubIcons.Icon.FRIENDS, GREEN, mx, my);
+        var management = tile("management",0,false);
+        var structures = tile("structures",1,false);
+        var community = tile("community",2,false);
+        drawShortcut(g,management,"management",SocialHubIcons.Icon.CITY,BRASS_TEXT,mx,my);
+        drawShortcut(g,structures,"structures",SocialHubIcons.Icon.PROJECTS,COPPER,mx,my);
+        drawShortcut(g,community,"community",SocialHubIcons.Icon.FRIENDS,GREEN,mx,my);
+        quickButton(g,quick(management,"territory",1),tr("quick.territory"),SocialHubIcons.Icon.CITY,mx,my);
+        quickButton(g,quick(management,"members",0),tr("quick.members"),SocialHubIcons.Icon.FRIENDS,mx,my);
+        drawCapacity(g,structures);
+        quickButton(g,quick(structures,"projects",0),tr("quick.projects"),SocialHubIcons.Icon.PROJECTS,mx,my);
+        quickButton(g,quick(community,"chats",1),tr("quick.chats"),SocialHubIcons.Icon.MESSAGES,mx,my);
+        quickButton(g,quick(community,"relations",0),tr("quick.relations"),SocialHubIcons.Icon.ALLIANCE,mx,my);
         drawStatistics(g, tile("statistics",0,true));
         drawDevelopment(g, tile("development",1,true));
         drawMinimap(g, tile("map",2,true), mx, my);
     }
 
+    private WorldMapUiLayout.Rect shortcutHeader(WorldMapUiLayout.Rect rect) {
+        return new WorldMapUiLayout.Rect(rect.x()+8,rect.y()+8,Math.max(1,rect.width()-16),
+                Math.max(1,rect.height()-79));
+    }
+
+    private WorldMapUiLayout.Rect quick(WorldMapUiLayout.Rect tile, String key, int fromBottom) {
+        return CityPylonWorkspace.pageControl(this,"center.quick."+key,tile.x()+9,
+                tile.bottom()-31-fromBottom*27,Math.max(1,tile.width()-18),23,WorldMapUiLayout.Rect::new);
+    }
+
+    private void quickButton(GuiGraphics g, WorldMapUiLayout.Rect bounds, Component label, SocialHubIcons.Icon icon,
+            int mx, int my) {
+        SocialHubIcons.paintButton(g,font,bounds,label,icon,motion,bounds.contains(mx,my),true,false,false);
+    }
+
+    private void drawCapacity(GuiGraphics g, WorldMapUiLayout.Rect tile) {
+        int count = menu.getProjects().size();
+        int limit = menu.getProjectCapacity();
+        Component capacity = Component.literal(count + " / " + limit);
+        int left = tile.x()+12;
+        int right = tile.right()-12;
+        int y = tile.bottom()-59;
+        int valueWidth = font.width(capacity);
+        line(g,tr("project_capacity"),left,y,right-left-valueWidth-6,MUTED);
+        g.drawString(font,capacity,right-valueWidth,y,COPPER,false);
+        if (right > left) {
+            g.fill(left,y+14,right,y+18,DEEP);
+            int filled = (int) ((right-left) * Math.min(1.0,count/(double)Math.max(1,limit)));
+            if (filled > 0) g.fill(left,y+14,left+filled,y+18,COPPER);
+        }
+    }
+
     private void drawShortcut(GuiGraphics g, WorldMapUiLayout.Rect rect, String key, SocialHubIcons.Icon icon,
             int accent, int mx, int my) {
-        boolean hovered = rect.contains(mx, my);
-        float hover = motion.amount(rect, hovered);
+        drawCard(g,rect,accent,false);
+        var header = shortcutHeader(rect);
+        boolean hovered = header.contains(mx,my);
+        float hover = motion.amount(header,hovered);
         g.pose().pushPose();
         try {
-            SocialHubIcons.scaleButton(g, rect, hover);
-            drawCard(g,rect,accent,hovered);
-            int y = rect.y() + Math.max(8,(rect.height()-68)/2);
-            g.pose().pushPose();
-            try {
-                g.pose().translate(rect.x()+14,y,0);
-                g.pose().scale(2,2,1);
-                icon.draw(g,0,0,hovered,hover);
-            } finally {
-                g.pose().popPose();
-            }
-            line(g,tr(key),rect.x()+14,y+40,rect.width()-26,TEXT);
-            line(g,tr(key+".hint"),rect.x()+14,y+54,rect.width()-26,MUTED);
+            SocialHubIcons.scaleButton(g,header,hover);
+            rounded(g,header.x(),header.y(),header.width(),header.height(),4,hovered?0xFF303D41:METAL);
+            int y = header.y()+Math.max(6,(header.height()-48)/2);
+            icon.draw(g,header.x()+8,y,hovered,hover);
+            line(g,tr(key),header.x()+8,y+21,header.width()-16,TEXT);
+            line(g,tr(key+".hint"),header.x()+8,y+34,header.width()-16,MUTED);
         } finally {
             g.pose().popPose();
         }
@@ -180,13 +216,20 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
     @Override
     public boolean mouseClicked(double x, double y, int button) {
         if (button != 0) return false;
+        var management = tile("management",0,false);
+        var structures = tile("structures",1,false);
+        var community = tile("community",2,false);
         if (tile("map",2,true).contains(x,y)) {
             minecraft.setScreen(new PolishedWorldMapScreen(root));
-        } else if (tile("management",0,false).contains(x,y)) {
+        } else if (quick(management,"members",0).contains(x,y)) {
             openManagement(2);
-        } else if (tile("structures",1,false).contains(x,y)) {
+        } else if (quick(management,"territory",1).contains(x,y) || shortcutHeader(management).contains(x,y)) {
+            openManagement(1);
+        } else if (quick(structures,"projects",0).contains(x,y) || shortcutHeader(structures).contains(x,y)) {
             openManagement(3);
-        } else if (tile("community",2,false).contains(x,y)) {
+        } else if (quick(community,"relations",0).contains(x,y)) {
+            CommunityScreen.openRelations(minecraft.screen);
+        } else if (quick(community,"chats",1).contains(x,y) || shortcutHeader(community).contains(x,y)) {
             SocialScreen.openDialogs(minecraft.screen);
         } else {
             return false;
