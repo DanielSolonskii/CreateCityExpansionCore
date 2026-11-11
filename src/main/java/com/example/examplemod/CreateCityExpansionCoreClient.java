@@ -98,6 +98,7 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(BuildGuideKeyMappings::register);
         modEventBus.addListener(CityWorldMapKey::register);
         modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
+        modEventBus.addListener(com.example.examplemod.client.uiedit.UiEditKey::register);
         modEventBus.addListener(ModFluidClientExtensions::register);
 
 /*
@@ -113,8 +114,8 @@ public class CreateCityExpansionCoreClient {
         );
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.PlayerProfileKey.class);
-
-}
+        NeoForge.EVENT_BUS.register(com.example.examplemod.client.uiedit.UiEditEvents.class);
+    }
     private void registerRenderers(
             EntityRenderersEvent.RegisterRenderers event
     ) {
