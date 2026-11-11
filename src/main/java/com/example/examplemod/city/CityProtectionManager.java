@@ -1,6 +1,10 @@
 package com.example.examplemod.city;
 
+import com.example.examplemod.city.City;
+import com.example.examplemod.city.CityManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -23,7 +27,7 @@ public class CityProtectionManager {
             BlockPos pos
     ) {
 
-        CityManager cityManager = CityManager.get(level);
+        CityManager cityManager = CityManager.get(level.getServer().overworld());
 
         City city = cityManager.getCityAt(level.dimension().location(), pos);
 
@@ -31,7 +35,18 @@ public class CityProtectionManager {
             return true;
         }
 
-        return city.hasMember(player.getUUID());
+        /*
+         * Сначала проверяются точечные разрешения пульта доступа: открытый
+         * блок принимает ПКМ любого игрока, включая не-члена города.
+         * Право ломать и ставить это разрешение не меняет.
+         */
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
+                level.getBlockState(pos).getBlock());
+        if (cityManager.allowsInteraction(city, level.dimension().location(), pos, blockId)) {
+            return true;
+        }
+
+        return cityManager.allowsTerritoryAction(city, player.getUUID(), false);
     }
 
     public static boolean canModify(
@@ -40,7 +55,7 @@ public class CityProtectionManager {
             BlockPos pos
     ) {
 
-        CityManager cityManager = CityManager.get(level);
+        CityManager cityManager = CityManager.get(level.getServer().overworld());
 
         City city = cityManager.getCityAt(level.dimension().location(), pos);
 
@@ -52,6 +67,6 @@ public class CityProtectionManager {
 
         // Если участок принадлежит городу —
         // проверяем права игрока.
-        return city.canBuild(player.getUUID());
+        return cityManager.allowsTerritoryAction(city, player.getUUID(), true);
     }
 }

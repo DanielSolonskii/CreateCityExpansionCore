@@ -12,6 +12,7 @@ public final class ProjectClientState {
     public static List<Project> records=List.of();
     public static List<Marker> markers=List.of();
     public static UUID city,created;
+    public static boolean finance,reviewer;
     public static boolean admin,op,cityRepresentative;
     public static int page,filter,total,serial;
     public static long wallet,treasury,maximum,serverLimit,serverAvailable,serverIssued,serverReserved;
@@ -23,7 +24,7 @@ public final class ProjectClientState {
     private static int ticks;
     private ProjectClientState(){}
     public static void begin(){clear();request(null);}
-    public static void clear(){records=List.of();markers=List.of();city=null;created=null;admin=op=cityRepresentative=false;serverLimit=serverAvailable=serverIssued=serverReserved=0;conflicts=new CompoundTag();cityMembers=Set.of();page=filter=total=0;wallet=treasury=maximum=0;names=new CompoundTag();result="loading";pending=null;ticks=0;serial++;}
+    public static void clear(){records=List.of();markers=List.of();city=null;created=null;admin=op=cityRepresentative=false;finance=reviewer=false;serverLimit=serverAvailable=serverIssued=serverReserved=0;conflicts=new CompoundTag();cityMembers=Set.of();page=filter=total=0;wallet=treasury=maximum=0;names=new CompoundTag();result="loading";pending=null;ticks=0;serial++;}
     public static boolean pending(){return pending!=null;}
     public static int typeFilter(){return filter/4;}
     public static int statusFilter(){return filter%4;}
@@ -34,7 +35,7 @@ public final class ProjectClientState {
     public static void accept(ProjectStatePayload payload) {
         var t=payload.data();if(pending==null||!t.hasUUID("Request")||!pending.command().request().equals(t.getUUID("Request")))return;
         pending=null;result=t.getString("Result");if(t.getBoolean("KeepState")){if(t.contains("Op"))op=t.getBoolean("Op");serial++;return;}
-        city=t.hasUUID("City")?t.getUUID("City"):null;admin=t.getBoolean("Admin");created=t.hasUUID("Created")?t.getUUID("Created"):null;
+        city=t.hasUUID("City")?t.getUUID("City"):null;admin=t.getBoolean("Admin");finance=t.getBoolean("Finance");reviewer=t.getBoolean("Reviewer");created=t.hasUUID("Created")?t.getUUID("Created"):null;
         op=t.getBoolean("Op");cityRepresentative=t.getBoolean("CityRepresentative");conflicts=t.getCompound("Conflicts");
         Set<UUID> members=new HashSet<>();for(Tag raw:t.getList("CityMembers",Tag.TAG_STRING))members.add(UUID.fromString(raw.getAsString()));cityMembers=Set.copyOf(members);
         serverLimit=t.getLong("ServerLimit");serverAvailable=t.getLong("ServerAvailable");serverIssued=t.getLong("ServerIssued");serverReserved=t.getLong("ServerReserved");

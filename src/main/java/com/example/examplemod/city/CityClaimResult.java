@@ -34,7 +34,9 @@ public enum CityClaimResult {
     OWNED_BY_OTHER_CITY,
 
     /** The plot touches the territory only at a corner, or not at all. */
-    NOT_ADJACENT;
+    NOT_ADJACENT,
+
+    LIMIT_REACHED;
 
     public boolean success() {
         return this == CLAIMED;

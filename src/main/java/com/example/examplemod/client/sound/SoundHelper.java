@@ -28,18 +28,14 @@ public final class SoundHelper {
      * Минимальный интервал между щелчками доставки для одного источника.
      * 250 мс — примерно 4 щелчка в секунду максимум.
      */
-    private static final long DELIVERY_TICK_INTERVAL_MS = 250L;
 
     /**
      * Минимальный интервал между щелчками склада для одного источника.
      */
-    private static final long WAREHOUSE_TICK_INTERVAL_MS = 300L;
 
     /** Минимальный интервал между relay-щелчками пилона. */
     private static final long PYLON_RELAY_INTERVAL_MS = 2400L;
 
-    private static final Map<BlockPos, Long> DELIVERY_LAST = new HashMap<>();
-    private static final Map<BlockPos, Long> WAREHOUSE_LAST = new HashMap<>();
     private static final Map<BlockPos, Long> PYLON_RELAY_LAST = new HashMap<>();
 
     private SoundHelper() {
@@ -130,26 +126,12 @@ public final class SoundHelper {
      *
      * @return true, если звук был проигран
      */
-    public static boolean playDeliveryTick(SoundEvent event, BlockPos pos) {
-        if (!acquire(DELIVERY_LAST, pos, DELIVERY_TICK_INTERVAL_MS)) {
-            return false;
-        }
-        playAt(event, pos, 1.0F, 1.0F);
-        return true;
-    }
 
     /**
      * Аналогично для склада.
      *
      * @return true, если звук был проигран
      */
-    public static boolean playWarehouseTick(SoundEvent event, BlockPos pos) {
-        if (!acquire(WAREHOUSE_LAST, pos, WAREHOUSE_TICK_INTERVAL_MS)) {
-            return false;
-        }
-        playAt(event, pos, 1.0F, 1.0F);
-        return true;
-    }
 
     /**
      * Редкий щелчок реле пилона.
@@ -190,8 +172,7 @@ public final class SoundHelper {
      * Сбросить rate limit. Вызывается при выходе из мира.
      */
     public static void clearRateLimits() {
-        DELIVERY_LAST.clear();
-        WAREHOUSE_LAST.clear();
+
         PYLON_RELAY_LAST.clear();
     }
 }

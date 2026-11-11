@@ -1,0 +1,18 @@
+.app-shell .profile-popover{width:min(460px,calc(100vw - 40px));max-height:calc(100dvh - 135px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.profile-popover .profile-identity h2{font-size:26px;line-height:1.45;overflow-wrap:anywhere}
+.profile-popover .eyebrow{font-size:12px;line-height:1.6}
+.profile-popover .profile-identity>small{font-size:14px;line-height:1.6}
+.profile-popover .account-id{font-size:13px;line-height:1.6;overflow-wrap:anywhere;text-align:left;word-break:break-word}
+.profile-popover .profile-auth-state strong{font-size:16px;line-height:1.5}
+.profile-popover .profile-auth-state small{font-size:14px;line-height:1.6;color:#a2b2aa}
+.profile-popover .profile-stats small{font-size:13px;letter-spacing:.04em;color:#9aaba1}
+.profile-popover .profile-stats strong{font-size:16px;line-height:1.5;white-space:normal;overflow-wrap:anywhere}
+.profile-popover .profile-details>div{font-size:15px;line-height:1.6;padding:12px 1px}
+.profile-popover .profile-details span{color:#a2aea7}
+.profile-popover .profile-actions{grid-template-columns:1fr;gap:10px}
+.profile-popover .profile-actions button,.profile-popover .profile-logout{font-family:"Manrope",sans-serif;font-size:16px;min-height:44px;line-height:1.4}
+.profile-popover .profile-logout{font-size:15px}
+.profile-official-note,.edit-profile-id{font-size:14px;line-height:1.6}
+.community-settings{margin-left:auto;display:flex;flex-direction:column;align-items:center;gap:9px;flex-shrink:0}
+.community-links>div{display:flex;gap:10px}.community-links button{display:flex;align-items:center;gap:5px;border:0;background:transparent;color:#a6b1ab;padding:3px;cursor:pointer;font:12px "Manrope",sans-serif}.community-links button:first-child:hover{color:#a2a9ff}.community-links button:last-child:hover{color:#65c6f5}.community-links small{position:absolute;bottom:100%;right:20px;padding:12px;background:#18201d;color:#f0c7b8;max-width:280px}.community-settings .settings-button{margin-left:0}
+@media(max-width:1100px){.launchbar{gap:14px;padding-inline:20px}.launchbar .build-info{min-width:140px;max-width:180px}.community-links button span{display:none}.community-links button{padding:6px}.play-wrap{flex-shrink:0;width:230px}}

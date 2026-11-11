@@ -1,0 +1,10 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('checkSequenceRecipe', JavaExec) {
+            dependsOn tasks.named('classes')
+            classpath = sourceSets.main.runtimeClasspath
+            mainClass = 'com.example.examplemod.devtools.SequenceRecipeCheck'
+            javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+        }
+    }
+}

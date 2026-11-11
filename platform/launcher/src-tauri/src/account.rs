@@ -72,7 +72,7 @@ pub async fn account_request(request: AccountRequest, runtime: tauri::State<'_, 
             client.post(url).json(&request.body.ok_or("Missing credentials")?)
         }
     };
-    let response = builder.header("Cache-Control", "no-store").send().await.map_err(|_| "Backend connection failed")?;
+    let response = crate::network::send(builder.header("Cache-Control", "no-store")).await.map_err(|_| "Backend connection failed")?;
     let status = response.status().as_u16();
     if response.content_length().is_some_and(|size| size > 32768) { return Err("Unexpected Backend response"); }
     let bytes = response.bytes().await.map_err(|_| "Backend connection failed")?;

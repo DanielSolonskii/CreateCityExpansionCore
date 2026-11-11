@@ -1,0 +1,21 @@
+{
+  "timeZone": "server",
+  "starter": [
+    {"type":"item", "item":"minecraft:golden_carrot", "count":16},
+    {"type":"item", "item":"minecraft:diamond", "count":8},
+    {"type":"book", "enchantment":"minecraft:mending", "level":1},
+    {"type":"item", "item":"minecraft:netherite_ingot"},
+    {"type":"trim"},
+    {"type":"book", "enchantment":"minecraft:mending", "level":1},
+    {"type":"book", "enchantment":"minecraft:efficiency", "level":5}
+  ],
+  "regular": [
+    {"type":"wood", "count":32},
+    {"type":"item", "item":"minecraft:golden_apple"},
+    {"type":"item", "item":"minecraft:emerald"},
+    {"type":"levels", "levels":10},
+    {"type":"item", "item":"minecraft:golden_carrot", "count":16},
+    {"type":"levels", "levels":5},
+    {"type":"chance", "item":"minecraft:netherite_ingot", "alternative":"minecraft:nether_star", "chance":0.1}
+  ]
+}

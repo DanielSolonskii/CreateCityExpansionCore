@@ -17,7 +17,7 @@ public class City {
 
     private final UUID id;
     private final String name;
-    private final UUID owner;
+    private UUID owner;
     private BlockPos pylonPos;
     private ResourceLocation pylonDimension;
     private boolean pylonActive;
@@ -275,10 +275,6 @@ public class City {
     }
 
     public int getTradeReputation() { return tradeReputation; }
-
-    public void adjustTradeReputation(int delta) {
-        tradeReputation = Math.max(0, Math.min(10_000, tradeReputation + delta));
-    }
 
     void restoreTradeReputation(int value) {
         tradeReputation = Math.max(0, Math.min(10_000, value));
@@ -687,6 +683,13 @@ public class City {
         if (removed) com.example.examplemod.auth.ServerTelemetryBridge.emit("CITY_LEAVE", player, id, "");
     }
 
+    /** Same SavedData owner field and roles; no second ownership or economy system. */
+    public boolean transferOwnership(UUID actor,UUID target) {
+        if(actor==null||target==null||!owner.equals(actor)||actor.equals(target))return false;
+        CityMember next=getMember(target),previous=getMember(owner);if(next==null||previous==null)return false;
+        previous.setRole(CityMember.Role.ADMIN);next.setRole(CityMember.Role.OWNER);owner=target;return true;
+    }
+
     /*
      * =========================================
      * ИЗМЕНЕНИЕ РОЛИ
@@ -766,6 +769,7 @@ public class City {
                 member.isOwner()
                         || member.isAdmin()
                         || member.isBuilder()
+                        || member.getRole() == CityMember.Role.ENGINEER
         );
     }
 

@@ -1,0 +1,18 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('compileCompanionBridge', JavaCompile) {
+            source = fileTree('tools/companion-bridge/src') { include '**/*.java' }
+            classpath = sourceSets.main.compileClasspath + files('build/libs/createcityexpansioncore-1.0.2.jar')
+            destinationDirectory = layout.buildDirectory.dir('companion-bridge/classes')
+            javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+            options.encoding = 'UTF-8'
+        }
+        tasks.register('companionBridgeJar', Jar) {
+            dependsOn 'compileCompanionBridge'
+            from layout.buildDirectory.dir('companion-bridge/classes')
+            from 'tools/companion-bridge/resources'
+            archiveFileName = 'recreated-companion-bridge-1.0.0.jar'
+            destinationDirectory = layout.buildDirectory.dir('companion-bridge')
+        }
+    }
+}

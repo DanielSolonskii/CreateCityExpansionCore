@@ -58,8 +58,6 @@ public final class MineControllerScreen extends Screen {
     private boolean commissionAllowed;
     private boolean commissionConfirmation;
     private long snapshotReceivedNanos;
-    private Optional<String> railwayStationName = Optional.empty();
-    private boolean railwayStationAvailable;
 
     public MineControllerScreen(MineControllerSnapshot snapshot) {
         super(Component.translatable(
@@ -70,39 +68,26 @@ public final class MineControllerScreen extends Screen {
     }
 
     public static void openOrUpdate(MineControllerSnapshot snapshot) {
-        openOrUpdate(snapshot, Optional.empty(), false);
-    }
-
-    public static void openOrUpdate(MineControllerSnapshot snapshot,
-                                    Optional<String> stationName, boolean stationAvailable) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof MineControllerScreen screen
                 && screen.snapshot.controllerPos().equals(snapshot.controllerPos())
                 && screen.snapshot.dimensionId().equals(snapshot.dimensionId())) {
             screen.applySnapshot(snapshot);
-            screen.railwayStationName = stationName;
-            screen.railwayStationAvailable = stationAvailable;
+
             return;
         }
         MineControllerScreen screen = new MineControllerScreen(snapshot);
-        screen.railwayStationName = stationName;
-        screen.railwayStationAvailable = stationAvailable;
+
         minecraft.setScreen(screen);
     }
 
     public static void updateIfOpen(MineControllerSnapshot snapshot) {
-        updateIfOpen(snapshot, Optional.empty(), false);
-    }
-
-    public static void updateIfOpen(MineControllerSnapshot snapshot,
-                                    Optional<String> stationName, boolean stationAvailable) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof MineControllerScreen screen
                 && screen.snapshot.controllerPos().equals(snapshot.controllerPos())
                 && screen.snapshot.dimensionId().equals(snapshot.dimensionId())) {
             screen.applySnapshot(snapshot);
-            screen.railwayStationName = stationName;
-            screen.railwayStationAvailable = stationAvailable;
+
         }
     }
 
@@ -574,14 +559,7 @@ public final class MineControllerScreen extends Screen {
                 ? tr("gui.createcityexpansioncore.mine.project_belongs_to_city")
                 : commissionCityId.isPresent() ? commissionCityName : commissionMessage;
         drawFitted(graphics, projectInfo, x + 12, top + 339, x + 168, TEXT_DIM);
-        String railwayInfo = railwayStationName
-                .map(name -> tr("gui.createcityexpansioncore.mine.railway_station",
-                        name, tr(railwayStationAvailable
-                                ? "status.createcityexpansioncore.railway.available"
-                                : "status.createcityexpansioncore.railway.missing")))
-                .orElse(tr("gui.createcityexpansioncore.mine.railway_station_none"));
-        drawFitted(graphics, railwayInfo, x + 12, top + 353, x + 168,
-                railwayStationAvailable ? GREEN : TEXT_DIM);
+
     }
 
     private void drawExtractionPanel(GuiGraphics graphics, float partialTick) {

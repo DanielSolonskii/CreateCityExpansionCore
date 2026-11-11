@@ -4,7 +4,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.Minecraft;
-import com.example.examplemod.client.screen.UiMotion;
 public class CityButton extends Button {
     public enum Style { CITY, INDUSTRIAL, DANGER }
 
@@ -12,8 +11,6 @@ public class CityButton extends Button {
     private final Style style;
     /** Optional leading icon. Null for every existing button, so those render unchanged. */
     private net.minecraft.world.item.ItemStack icon;
-    /** Smoothed hover, keyed by position: a fixed control never moves, so position is stable. */
-    private final UiMotion motion = new UiMotion();
 
     public void setIcon(net.minecraft.world.item.ItemStack icon) {
         this.icon = icon;
@@ -60,10 +57,6 @@ public class CityButton extends Button {
     ) {
 
         boolean hovered = this.isHoveredOrFocused();
-        // Keyed by position: this control never moves, so its coordinates are a stable identity.
-        // Lerping rather than switching keeps a sweep across a row of tabs from flickering.
-        float lit = motion.hover(getX() * 7919 + getY(), hovered,
-                motion.delta(net.minecraft.Util.getMillis()));
 
         int backgroundColor;
         int borderColor;
@@ -74,18 +67,18 @@ public class CityButton extends Button {
             case DANGER -> 0xFFFF5A4F;
         };
 
-        int resting = style == Style.INDUSTRIAL ? 0xFF101E25 : 0xFF292929;
-        int restingEdge = style == Style.INDUSTRIAL ? 0xFF34515E : 0xFF555555;
-        int lifted = style == Style.INDUSTRIAL ? 0xFF16323D : 0xFF3A3A3A;
         if (!this.active) {
             backgroundColor = 0xFF171D20;
             borderColor = 0xFF344148;
         } else if (selected) {
             backgroundColor = style == Style.INDUSTRIAL ? 0xFF17303A : 0xFF303030;
             borderColor = accent;
+        } else if (hovered) {
+            backgroundColor = style == Style.INDUSTRIAL ? 0xFF16323D : 0xFF3A3A3A;
+            borderColor = accent;
         } else {
-            backgroundColor = UiMotion.mix(resting, lifted, lit);
-            borderColor = UiMotion.mix(restingEdge, accent, lit);
+            backgroundColor = style == Style.INDUSTRIAL ? 0xFF101E25 : 0xFF292929;
+            borderColor = style == Style.INDUSTRIAL ? 0xFF34515E : 0xFF555555;
         }
 
         /*
@@ -111,16 +104,14 @@ public class CityButton extends Button {
         );
 
         /*
-         * Верхний блик. The resting state is opaque and the hovered state is a translucent accent
-         * tint, so the blend has to carry alpha as well -- an opaque mix would turn the reflection
-         * into a solid bar the moment the cursor arrives.
+         * Верхний блик
          */
         guiGraphics.fill(
                 this.getX() + 2,
                 this.getY() + 2,
                 this.getX() + this.width - 2,
                 this.getY() + 3,
-                this.active ? tint(0xFF27343A, accent & 0x66FFFFFF, lit) : 0xFF27343A
+                this.active && hovered ? (accent & 0x66FFFFFF) : 0xFF27343A
         );
 
         /*
@@ -169,20 +160,5 @@ public class CityButton extends Button {
                 textY,
                 textColor
         );
-    }
-
-    /**
-     * Blends two colours including their alpha channels.
-     *
-     * <p>{@link UiMotion#mix} always returns an opaque colour, which is right for surfaces but
-     * wrong for a glint that is meant to stay translucent.
-     */
-    private static int tint(int from, int to, float lit) {
-        float clamped = Math.max(0f, Math.min(1f, lit));
-        int alpha = (int) (((from >> 24) & 255) * (1 - clamped) + ((to >> 24) & 255) * clamped);
-        int red = (int) (((from >> 16) & 255) * (1 - clamped) + ((to >> 16) & 255) * clamped);
-        int green = (int) (((from >> 8) & 255) * (1 - clamped) + ((to >> 8) & 255) * clamped);
-        int blue = (int) ((from & 255) * (1 - clamped) + (to & 255) * clamped);
-        return alpha << 24 | red << 16 | green << 8 | blue;
     }
 }

@@ -111,7 +111,9 @@ public final class MapMarkerRenderer {
 
     public static AtlasGlyph glyph(ItemStack icon) {
         String path = BuiltInRegistries.ITEM.getKey(icon.getItem()).getPath();
+        if(path.endsWith("_postbox"))return AtlasGlyph.FREIGHT;
         return switch (path) {
+            case "barrel" -> AtlasGlyph.HUB;
             case "city_pylon" -> AtlasGlyph.CITY;
             case "compass", "player_head" -> AtlasGlyph.PLAYER;
             case "track_station" -> AtlasGlyph.STATION;

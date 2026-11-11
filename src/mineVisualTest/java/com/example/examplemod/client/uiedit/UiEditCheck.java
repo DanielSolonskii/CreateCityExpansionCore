@@ -329,7 +329,7 @@ public final class UiEditCheck {
 
         // 2. Экранные координаты: screen = origin + local * scale.
         UiEditModel.Bounds screen =
-                UiEditLayout.toScreen("TestScreen", new UiEditModel.Bounds(10, 20, 30, 40));
+                UiEditLayout.elementToScreen("TestScreen", "close", new UiEditModel.Bounds(10, 20, 30, 40));
         require(screen.x() == 120 && screen.y() == 90 && screen.w() == 60 && screen.h() == 80,
                 "local to screen transform");
 
@@ -341,13 +341,24 @@ public final class UiEditCheck {
         require(moved[0] == 15 && moved[1] == 17, "delta applied in layout units");
 
         // 4. Обратное преобразование — для коммита перетаскивания.
-        UiEditModel.Bounds back = UiEditLayout.toLayout("TestScreen",
+        UiEditModel.Bounds back = UiEditLayout.elementToLayout("TestScreen", "close",
                 new UiEditModel.Bounds(130, 84, 60, 80));
         require(back.x() == 15 && back.y() == 17 && back.w() == 30 && back.h() == 40,
                 "screen to layout transform");
-        require(UiEditLayout.toLayoutDelta("TestScreen", 4) == 2, "screen delta to layout");
-        require(UiEditLayout.toScreenDelta("TestScreen", 2) == 4, "layout delta to screen");
-        require(UiEditLayout.hasTransform("TestScreen"), "transform registered");
+        require(UiEditLayout.elementToScreenDelta("TestScreen", "close", 2) == 4, "layout delta to screen");
+        UiEditLayout.apply("frame", 10, 20, 30, 40, UiEditModel.Bounds::new);
+        UiEditLayout.apply("page.button", 10, 20, 30, 40, .5f, 200f, 100f, UiEditModel.Bounds::new);
+        var baseBounds = new UiEditModel.Bounds(10, 20, 30, 40);
+        require(UiEditLayout.elementToScreen("TestScreen", "frame", baseBounds).equals(baseBounds),
+                "workspace frame keeps screen coordinates");
+        require(UiEditLayout.elementToScreen("TestScreen", "page.button", baseBounds)
+                .equals(new UiEditModel.Bounds(205, 110, 15, 20)), "workspace page has its own origin and scale");
+        require(UiEditLayout.toScreen("TestScreen", baseBounds).equals(baseBounds),
+                "layout registration does not alter widget coordinates");
+        UiEditLayout.clearElements("page.");
+        require(!UiEditLayout.registeredFor("TestScreen").containsKey("page.button")
+                && UiEditLayout.registeredFor("TestScreen").containsKey("frame"),
+                "page switch invalidates page controls only");
 
         // 5. Файл — общий источник: что сохранили, то видит хук после reload.
         UiEditModel.ScreenOverrides working = UiEditLayout.overridesFor("PlayerProfile");

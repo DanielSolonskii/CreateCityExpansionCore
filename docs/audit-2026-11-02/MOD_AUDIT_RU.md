@@ -1,0 +1,145 @@
+# Аудит кода мода CCEC — 2 ноября 2026
+
+**Исторический отчёт; применимость уточнена 2026-11-04.** Анализ Freight/Railway и JAR 1.0.2.14 ниже относится к прежней ветке и не описывает действующую Cargo-систему. Сохранены исходные результаты проверок. [Актуальная Cargo-база, интеграция и ограничения](../audit-2026-11-04/README.md).
+
+Аудируемая база: `main`, `ff4959ec8267291c36dc245357c27fba28cf8216`, плюс существовавшие незакоммиченные изменения логистики. Версия на входе аудита: `1.0.2.13`; подготовленный выпуск: `1.0.2.14`; Minecraft `1.21.1`, NeoForge `21.1.251`, Java 21, Create `6.0.10-280`, Electro Energetics `1.1.2`. Итоговый коммит, проверки и хеш JAR фиксируются в общей квитанции этого аудита.
+
+Это инвентаризация всех основных доменов и углублённый review изменённого Freight pipeline, сохранений и границ доступа. Статусы ниже означают наличие реализации в текущем дереве. Они не означают игровую приёмку, отсутствие всех возможных дефектов или проверку production-сервера.
+
+## Выводы review
+
+В просмотренном логистическом diff не найдено подтверждённой новой ошибки уровня P1/P0. Исправления сохраняют существующие `EconomyManager`, `FreightLogistics`, `ShipmentToken`, Create Package и WorldMap. Финансовое намерение отмены хранится отдельно от оставшегося escrow; физический груз не восстанавливается из одной записи реестра.
+
+Обнаружен P1-дефект native SavedData boundary: отказ десериализатора Railway или Economy перехватывался Minecraft, после чего computeIfAbsent мог создать пустой реестр. Окончательная защита удерживает исходный raw NBT в кэше и отклоняет доступ уже после выхода из native loader; forced save также возвращает сохранённые данные. Для Railway это касается будущего формата, для экономики — ошибок codec, включая будущий формат. Проверены настоящие DimensionDataStorage/NbtIo с future 6/14, повторным доступом, byte-identical обычным сохранением, принудительной async-записью и последующей загрузкой поддерживаемых v5/v13.
+
+## Основание и границы
+
+- Авторитетная копия: `E:/CreateCityExpansionCore_MERGED/createcityexpansioncore-template-1.21.1`; пользовательское рабочее дерево сохранено.
+- GitNexus привязан явно к `CreateCityExpansionCore`. Свежий полный индекс на начало review: `2026-11-02T19:44:05.276Z`, HEAD `ff4959e`, 1496 файлов, 22144 узла, 72115 связей, 795 execution flows. Старые счётчики из `AGENTS.md` и октябрьских STATE не использовались как текущие.
+- Выполнены concept queries и `context` для `EconomyManager`, `acceptShipmentPackage`, `CityManager`, `ProjectManager`, `TransportProtection`, `GeologyManager`, `OnboardingServer`, `SequenceRecipeDraft`, `FreightRegionalNetwork`, `FreightNetworkService`, `AuthenticationBootstrap`, `CommunityService`. Пустой graph result не считался доказательством отсутствия: результаты сопоставлены с исходниками и литералами форматов/регистраций.
+- Просмотрены полный изменённый серверный economy pipeline, новые cancellation/recovery/commands и map geometry классы, клиентские изменения помощника/Logistics/WorldMap, регистрации и затронутые проверки. Главные домены за пределами diff проверены по серверным агрегатам, обработчикам, сохранениям, ресурсам и доступным проверкам; это не построчная верификация каждого файла.
+- В [MOD_SOURCE_INVENTORY.json](MOD_SOURCE_INVENTORY.json) сохранены список доменов и задач, хеши ключевых просмотренных исходников и raw graph evidence. Срез: 580 Java-файлов основного пакета, 70 файлов `mineVisualTest`, 50 основных recipe JSON, 7 JSON dependency overrides и 2 workbench recipe JSON. Это число файлов, а не тестовых сценариев.
+- Production, мир, базы данных, права пользователей и процесс Minecraft этим review не изменялись. Наличие процедур в коде не подтверждает их фактическое выполнение на сервере.
+
+## Что реализовано сейчас
+
+| Домен | Подтверждённая реализация | Основные исходники / доступная проверка |
+| --- | --- | --- |
+| Город и пилон | City SavedData, участники/роли, приглашения, перенос ownership, идентичность и цвета; пилон связывает городские рабочие разделы | `city/CityManager.java`, `city/City.java`, `city/CityMembershipService.java`; `checkCityIdentity`, `checkCityMembership`, invite/pylon layout checks |
+| Территория | Сетка 50×50 от мирового нуля, отрицательные координаты через floor division, привязка к измерению, связные участки и максимум 25 claims | `city/CityPlot.java:38`, `city/CityManager.java:49`, `:1415`; `checkCityTerritory`, `checkCityTerritoryDelivery` |
+| Права и отношения | Направленное TRUSTED и взаимное PARTNER; отдельное явное разрешение `territoryAccess` для гостевого города. Само доверие не является автоматическим разрешением изменять территорию. Private railway policy отдельно учитывает owner opt-in; скидок от дружбы нет | `city/CityManager.java:849`, `:872`, `:885`; `city/CityAccessPolicy.java:20`, `:28`; `checkCityRelations` |
+| Развитие города | Уровень I→II по зарегистрированной промышленной шахте основного ресурса и материальным взносам; ёмкость индустриальных проектов 1/2 | `city/City.java:480`, `:565`, `city/CityDevelopmentRequirements.java:43` |
+| Строительные проекты | Отдельный жизненный цикл городских и серверных проектов: черновик, публикация/финансирование, заявки, назначение, этапы, review/rework/accept/cancel; revision, journal, резерв, ограниченная серверная эмиссия | `projects/ProjectManager.java:55`, `:79`, `:190`, `projects/ProjectCodec.java:15`; `checkCityProjects`, `checkProjectLayout` |
+| Экономика и торговля | Кошельки, казны, escrow, частные объявления, обычные/community/exclusive контракты, Master Market, demand/supply, warehouse и procurement budget | `economy/EconomyManager.java`, `IndustrialContract.java`, `PrivateListing.java`, `MarketOffer.java`, `ExternalMarketState.java`; freight/trade checks |
+| Личный банк | Основной счёт, до восьми счетов накопления, переводы, запросы оплаты, revision/receipts и ограниченная история; использует существующие средства | `economy/BankBook.java`, `BankService.java`, `BankNetwork.java`; `checkPersonalBank` |
+| Freight Points | Постоянные SEND/RECEIVE/BOTH точки поверх Postbox, Packager, станции и нативного склада; registration/rebind, серверная проверка территории, оборудования и занятости | `economy/FreightPoint.java`, `FreightLogistics.java`, `FreightGuideService.java`; `checkFreightGuide`, `checkFreightReconciliation` |
+| Физическая доставка | Запечатанные Create Package, один token, проверка получателя/предмета/количества, атомарный приём и расчёт. Точки отказа и повторная печать не заменяют физическую коробку | `economy/EconomyManager.java:784`, `ContractPackageUnpackingHandler.java:26`, `FreightLogistics.java:550`; freight identity/handoff/arrival checks |
+| Отмена и возврат | Новые печати запрещаются сразу; существующие сохраняют путь и резерв. Частичные выплаты/возвраты, повторные запросы и перезагрузка учитываются receipts. Отправитель или OP возвращает только реально удерживаемую коробку | `economy/EconomyManager.java:479`, `:588`, `:648`, `:686`, `FreightCancellation.java`, `FreightParcelRecovery.java`, `FreightCommands.java`; `FreightCancellationCheck` входит в `checkFreightReconciliation` |
+| Перевозчики и дороги | Публикация состава, выбор владельцем доставки, цикл подъезда/погрузки/доставки для прямого рейса, дорожный лимит, резерв/фактические выплаты, разделение затрат по грузу | `economy/FreightCarriers.java:28`, `:75`, `FreightTransportBudget.java`, `FreightRoadCharges.java`; `checkFreightCarriers` |
+| Региональный транзит | Пользователь задаёт до четырёх упорядоченных хабов. Путь фиксируется на token; та же запечатанная коробка проходит Postbox→buffer→Postbox, меняя адрес и hop без промежуточной экономической приёмки | `economy/FreightRoutingBook.java:8`, `:17`, `FreightTransit.java:28`, `:75`; `checkRegionalFreight` |
+| Railway | Регистрация станций/составов, городские линии, Create schedules, PLAYER/CITY ownership сетей/секций, PUBLIC/PRIVATE, тарифы, planner CHEAPEST/FASTEST/BALANCED, selected route/reservation/guard, trip accounting | `railway/RailwayManager.java`, `RailwayRoutePlanner.java`, `RailwayTripAccountingService.java`; `checkRailwayOwnership`, `checkRailwayTripAccounting`, `checkTrainManagement` |
+| Защита транспорта | Городской регистрационный терминал внутри contraption/поезда или физической конструкции; серверные события и mixins охраняют взаимодействие, изменение и разборку. Сиденья/контролы оставлены публичными согласно текущей модели | `block/TransportProtection.java:55`, `:84`, `block/TransportSubLevelProtection.java`, `event/TransportProtectionEvents.java`, `mixin/*`; реальные Create/Simulated пути требуют игрового теста |
+| Пульт доступа | Статический interaction-only grant к блоку и транспортный grant по token терминала/локальному смещению; проверка инвалидирует grant при смене block ID. Неполный пульт зарегистрирован как промежуточный предмет sequenced assembly | `item/AccessControlRemoteItem.java`, `city/InteractionGrant.java`, `city/CityManager.java:905`, `:975`; grant assertions в `CityTerritoryCheck` |
+| Геология | Codec format 4, generator 2; детерминированные resource-specific залежи пяти генерируемых ресурсов, spatial lookup без загрузки чанков, общий authoritative reserve и starter guarantee | `geology/GeologySavedDataCodec.java:33`, `GeologyGenerator.java:43`, `:229`, `GeologyManager.java`, `GeologyStarterGuarantee.java`; `checkGeologyProcedural` |
+| Анализатор | Единый серверный scan для ПКМ по блоку и в воздухе, cooldown 60 ticks, survey/local potential и защищённое списание durability | `item/MagneticAnalyzerItem.java:53`, `geology/GeologySurvey.java`; `checkMagneticAnalyzerContract`, `checkMagneticAnalyzerUi` |
+| Industrial Mine | Мультиблок 10×3×10, 298 блоков и две клетки проводки; commissioning/выбор ресурса, EE power state, физический gateway output и общий reserve | `multiblock/MineMultiblock.java:20`, `:595`, `mine/IndustrialMineService.java:32`, `MineOutputMapping.java`; `checkMineVisualCoordinates` и geology/контрактные проверки |
+| Coke Battery | Мультиблок 11×6×17, вход/выход, EE; партия до 8 coal→coke за 200 ticks, 25 kW номинально | `coke/CokeBatteryMultiblock.java:18`, `CokeBatteryControllerBlockEntity.java:17`; компиляция, ресурсы; отдельной operational headless suite в основном `check` нет |
+| Blast Furnace | Мультиблок 11×13×11, рецептурный вход, 8000 mB hot metal за 300 ticks, 60 kW; возврат входа при неуспешной записи выхода | `blast/BlastFurnaceMultiblock.java:18`, `BlastFurnaceControllerBlockEntity.java:16`; компиляция, ресурсы; runtime/операционный тест остаётся |
+| Steel Converter | Мультиблок 9×9×11, 8000 mB hot metal→8 billets за 300 ticks, 80 kW, preflight и rollback партии | `steel/SteelConverterMultiblock.java:15`, `SteelConverterControllerBlockEntity.java:19`, `:97`; компиляция, ресурсы; runtime/операционный тест остаётся |
+| Рецепты | Материалы industrial tiers, нативные vanilla/Create codecs, dependency override pack; дополнительный приоритетный `recipe_workbench` pack | `src/main/resources/data/createcityexpansioncore/recipe`, `src/main/resources/datapacks`, `policy/RecipeWorkbenchPolicy.java`; `checkDependencyRecipeOverrides` |
+| Редактор рецептов | `/ccec recipes` только для локального OP-владельца integrated world; создание/редактирование/отключение, backup, проверка serializer, atomic write в выбранный проект и копия datapack в мир с reload | `devtools/RecipeWorkbench.java:15`, `RecipeWorkbenchFiles.java:56`, `:71`; отдельный `checkRecipeWorkbench` через init script |
+| Sequenced assembly editor | Четыре поддерживаемые операции, порядок этапов, отдельные черновики по типам, transitional item, loops, results; неизвестные JSON-поля/операции сохраняются | `devtools/SequenceRecipeDraft.java:8`, `:24`, `:34`, `SequenceRecipeScreen.java`; отдельный `checkSequenceRecipe` через init script |
+| WorldMap и UI | Terrain/LOD/cache, города/территории, railway и Freight overlays, context cards, Problem Center, selected shipment с остановками/прогрессом; маршрутная схема отделена от полученной геометрии рельсов | `client/map/CityMapPanel.java:766`, `:2938`, `client/screen/PolishedWorldMapScreen.java:802`, `client/map/ShipmentRouteGeometry.java`; map/layout/status/geometry checks |
+| Profile | Публичная проекция профиля, about и три showcase metrics, роли автора/исполнителя в завершённых проектах; редактирование только своего профиля | `profile/PlayerProfile.java`, `ProfileSavedData.java:24`, `ProfileService.java`; `checkPlayerProfile` |
+| Social | Друзья, запросы, block/read, ограниченные DM/история, настройки nearby sharing и клиентские social layers | `social/SocialBook.java:7`, `SocialSavedData.java`, `NearbySceneServer.java`; `checkNearbyScene`, `checkSocial` |
+| Community | Инвайты/роли/журнал, inbox, project workspaces с обсуждением, marks на карте, добровольный поиск команды и настройки уведомлений | `community/CommunityService.java`, `CommunityInbox.java`, `ProjectWorkspaceData.java`, `ProjectWorkspaceService.java`; `checkSocialHub`, `checkCommunityV2` |
+| Alliances | Объединения городов, приглашения, представители, предложения и большинство голосов, ограниченный чат; server authority и revision | `alliance/AllianceBook.java:7`, `:56`, `AllianceSavedData.java`; `checkAlliances` |
+| Daily rewards | Серверный календарь, starter/repeat цикл, item/XP, предварительное размещение в основном инвентаре, pending journal и квитанция в playerdata на диске | `daily/DailyRewardsService.java:41`, `:53`, `DailyRewardsData.java`; `checkDailyRewards` |
+| Onboarding | Семь presentation hints, seen/completed/skip с persistence, `/ccec guide`; ACK клиента не выдаёт деньги, награды или права | `onboarding/OnboardingProgress.java:4`, `OnboardingServer.java:15`, `OnboardingSavedData.java`; `checkOnboarding` |
+| Auth и телеметрия | Production startup policy, domain marker, REQUIRED fail-closed, admission/reserve/configuration proof, private transport bridge; unmarked integrated world использует local development identity | `auth/AuthenticationBootstrap.java:126`, `:166`, `AuthenticationStartupPolicy.java`, `ConnectionAdmissionRegistry.java`; admission/startup/report/telemetry checks |
+| HUD | Серверные vanilla bossbars территории/обслуживания, countdown; announce требует OP2, restart OP4; client map HUD | `hud/CcecServerHud.java:34`, `:61`, `MaintenanceCountdown.java`; `checkServerHud`, `checkMapHud` |
+| Chunkloader и политики | Глобальный лимит 3 loaders на UUID во всех измерениях, persistence ownership и отдельные NeoForge tickets; gameplay/kelp/map-access policies | `chunkloader/ChunkLoaderSavedData.java:46`, `ChunkLoaderTickets.java`, `policy/*`; `checkChunkLoader`, gameplay/kelp/map access checks |
+
+Пути в таблице, кроме явно полных `src/...`, начинаются от `src/main/java/com/example/examplemod/`.
+
+## Точные производственные параметры
+
+Шахта: 151 `Mine Frame`, 128 `Technical Block`, 16 `Drill Unit`, по одному Controller, Power Port и Gateway; ещё две позиции на внешнем среднем контуре должны быть воздухом для проводки. 120 Frame из старой документации считали только нижний и верхний слои и пропускали остальные 31 Frame. Канонический visual/member check проверяет 298 уникальных блоков во всех четырёх ориентациях (`MineVisualCoordinatesCheck.java:65`). 11×6×17 — геометрия Coke Battery.
+
+`MinePowerAccess.java:9–17`: рабочее напряжение 500–600 V, ток 17–26 A, номинальная нагрузка 10 kW, standby 120 W, минимальная рабочая мощность 8.5 kW, предел безопасной мощности 15 kW. Реальный `IndustrialMineService` читает EE device и классифицирует состояние; старый `phaseBManualTest` — тестовый hook, а не production gate. `MineProductionProfile` использует базу 5 reserve units/200 ticks, опорный local potential 3000 units/h, viable threshold 100 units/h. `MineOutputMapping` переводит железо с коэффициентом 2: 5 reserve units→10 raw iron, 10 raw iron→5 reserve units. Таблица mapping содержит также gold, но генератор сейчас генерирует iron/coal/limestone/copper/zinc; наличие mapping не означает генерацию золотой залежи.
+
+Для уровня II нужны промышленная шахта выбранного основного ресурса и 10000 основного материала: iron→`create:iron_sheet`, coal→`minecraft:coal`, copper→`create:copper_sheet`, zinc→`create:andesite_alloy`; дополнительно 5 `electroenergetics:transformer`, 64 `copper_wire_spool`, 32 `capacitor`, 64 `resistor`. Это `CityDevelopmentRequirements.forLevelTwo`, а не предположение по tier рецептов.
+
+## Углублённый review логистического изменения
+
+| Шов | Что проверено в коде | Что ещё требует игрового теста |
+| --- | --- | --- |
+| Request cancellation | Endpoints/issuer проверяются; CLI admin требует OP2, обычный игрок — city build rights. Повторный запрос не создаёт новый receipt | Роли в реальном меню, команды консоли/игрока, потеря членства при открытом GUI |
+| Escrow | Все credits проверяются до освобождения escrow; оплачиваются только реальные contributions. Неупакованный остаток возвращается, active tokens удерживают свою долю | Экономика длительного мира, overflow и несколько участников на физической доставке |
+| Fractional CR | Pending payouts используют monotonic floors, окончательный остаток распределяется при закрытии; receipt хранит выплаченное/возвращённое | Перезапуск сервера в каждом промежуточном состоянии |
+| Replay | Consumed token отклоняется до physical transaction; возврат и приём используют одну печать и не могут оба рассчитываться повторно | Ручное вскрытие/перепаковка и все Create package взаимодействия вне штатного пути |
+| Приём по прибытии | Проверяется фактический item коробки; транзакция помнит исходный package slot и target snapshot, rollback восстанавливает обе стороны | Реальный Postbox/поезд, заполненный target и повторная попытка |
+| Native unpack | Caller использует тот же `acceptShipmentPackage`; Chest/Barrel/Item Vault зарегистрированы и используют `FreightStorage.intake` | Все варианты Item Vault, направления Packager, совместимость runtime capability |
+| Физический возврат | Из основной руки, один token, исходный sender, точный item/amount; содержимое с компонентами размещается в 36 основных слотах, overflow сохраняет коробку | Чужой/полный inventory, admin recovery, компоненты и повторный пакет |
+| Expiry и тайм-аут | Pending cancellation не обнуляет unresolved cargo по deadline; нет автоматической генерации потерянного товара или денег | Однонаправленный маршрут, выгруженный source, остановка/ремонт поезда |
+| Маршрут и поезд | При выборе заново проверяются ownership/type/schedule/navigation/trip/busy/path; active cargo блокирует смену состава, тот же остановленный состав допускает ремонт | Изменение rails/topology, ручной schedule после показа quote, реальный restart active trip |
+| Дорожный бюджет | Direct assignment и payer выбираются одним селектором; budget не является вторым CR balance | Повторное использование состава, несколько заказов/перевозчиков в сети |
+| UI результата | Мутация ждёт адресный результат/новую revision, блокирует повторное нажатие, показывает отказ/timeout; история скрывает недоступные действия | Сеть с задержками, закрытие экрана, GUI Scale и клавиатурная навигация |
+| Карта | Отдельная geometry model, кадрирование всей цепи, остановки, прогресс; движение схемы не выдаётся за координаты груза | OpenGL, реальные label overlaps, малые viewport, reduced motion |
+
+Graph подтвердил два production callers `acceptShipmentPackage`: `ContractPackageUnpackingHandler.unpack` и `FreightLogistics.acceptArrivals`. Оба прочитаны вместе с транзакциями. Декларации/проверки добавлены к существующим агрегатам, параллельный денежный реестр не введён.
+
+На полном PDG-индексе выполнен `explain` с точными путями `EconomyManager.java`, `FreightParcelRecovery.java`, `EconomyNetworkHandlers.java`: у всех `findings: []`, `totalFindings: 0`, без сообщения об отсутствии слоя/unsupported/degraded. Это не доказательство безопасности: модель не отслеживает callbacks, property/field и implicit flows. Реальные payload permissions и физические транзакции дополнительно проверены по Java-исходникам.
+
+`pdg_query(controls, acceptShipmentPackage)` привязался точно к `EconomyManager.java:784–823` и вернул все 40 связей без truncation. Проверены validation/prepare/simulation/commit guards на строках 790–793, rollback при `!applied` на 817, consume только после успешного применения на 818, обход обычного complete/finish при pending cancellation на 811/815 и отдельный advance на 820. Общий file query возвращал лишь 200 из 1022 связей (`truncated: true`) и не использовался как полный clean check; полный ответ для нужного метода получен отдельно. Granularity — basic blocks, intra-procedural; плотные однострочные выражения сверены в source.
+
+## Сохранения и несовместимые версии
+
+| Данные | Текущий формат | Поведение |
+| --- | --- | --- |
+| Economy | 13 | `EconomyManager.java:1253` отказывает более новой версии. v12 груз/escrow сохраняются; cancellation receipts добавлены отдельно |
+| Bank | 1 | `BankBook.load` отказывает `Version > 1`; funded records не обнуляются как «плохие записи» |
+| Projects | 2 | `ProjectCodec.load` читает 1/2, прочее отвергает; `ProjectManager.load` сверяет оплаченные серверные проекты с issuance ledger |
+| Railway | 5 | Future-version→empty дефект исправлен явным отказом; regression check для format 6 прошёл |
+| Geology | 4 / generator 2 | Future/corrupt/dimension mismatch переводит в read-only unavailable с сохранением raw NBT; replacement deposits не генерируются |
+| Freight routing / carriers | 1 / 1 | Неизвестная новая версия отвергается; путь token и transport spending receipts сохраняются |
+| Alliances / membership receipts / community inbox / project workspace / daily rewards | 1 | Код содержит явные проверки supported version |
+| Social / Profile / Community preferences / Onboarding | 2 / 1 / 1 / 1 | Пишут Version, но загрузчики пока не отказывают по неизвестной новой Version; отдельная задача hardening перед будущим несовместимым форматом |
+| City / Chunkloader / player display names | Без отдельного schema discriminator | Структурные SavedData codecs; общего обещания future-version rejection для них давать нельзя |
+| Terrain | TerrainVersion 3 | Derived map cache, не денежный/ownership ledger; отдельная версия не является универсальным migration guard |
+
+**Существенное отличие от октябрьских документов:** переход geology 1–3→4 сознательно пересоздаёт залежи, включая ID, запасы и выработку старых мест (`GeologySavedDataCodec.java:77–115`, `GeologyGenerator.java:29–43`). Нельзя описывать его как сохранение всех remaining reserves. Future format при этом обрабатывается иначе: raw NBT сохраняется и добыча блокируется (`GeologyManager.java:145–153`, `:465–466`).
+
+## Ограничения реализации и дальнейшая работа
+
+1. **P1: довести ручную игровую приёмку Freight.** Нужны реальные Create Package/Postbox/Train/Vault, частичная доставка/отмена/возврат и restart. Текущие ledger/layout checks не покрывают взаимодействие движка и capabilities.
+2. **P1: судьба физически потерянной коробки.** Неразрешённая печать сохраняет escrow без автоматического тайм-аута. Нужен отдельный административный dispute resolution с явным финансовым исходом и журналом; нельзя возрождать товар по реестру при живой старой коробке. Это известная граница текущего поведения.
+3. **P2: защита совместимости SavedData.** Добавить future-version guards туда, где Version уже пишется, и определить версию/migration contract для City/Chunkloader до первого несовместимого изменения. Это профилактический hardening; кроме описанного Railway случая полное обнуление от существующей future-version ветки не установлено.
+4. **P2: проверка защиты транспорта.** Проверить живую загрузку mixins с Simulated и без него, mounted cargo/controls, разборку/перенос, размещение единственного терминала, grant token после полёта/пересборки и пульт с обеих сторон границы. Compile-only JAR/API совместимость не подтверждает раннюю загрузку plugin/mixin.
+5. **P2: полнота геометрии и масштаб сети.** Серверный лимит геометрии может обрезать railway segments. Нужны explicit completeness и отдельный запрос выбранной доставки; стоимость общих snapshot/обходов следует измерить на настоящей большой сети.
+6. **P2: систематизировать набор проверок.** На входе аудита DailyRewards/Onboarding/Social suites были вне основного Gradle `check`; основной исполнитель подключил их и получил зелёный targeted run: 25/235/340 проверок соответственно. Старый `CommunityCheck` не следует путать с подключёнными SocialHub/CommunityV2 suites. RecipeWorkbench/Sequence запускаются отдельными init scripts. Coke/Blast/Steel требуют отдельных operational tests. Не приравнивать «файл проверки есть» к «прошёл в общей сборке».
+7. **P2: доступность UI.** Проверить keyboard focus/narration, длинные имена, разные GUI scales, переподключение и запоздалые ответы. Headless geometry/layout assertions не подтверждают это.
+
+Regional Freight уже реализует физическую перевалку, но путь задаётся упорядоченным списком хабов. `FreightCarriers.tick` пропускает regional assignments: прямой commercial pickup/delivery не является автоматическим планировщиком отдельного состава на каждое плечо. Глобальный graph-derived товарный router, fleet balancing, offline simulation, traction/energy billing поездов и passenger tariffs не подтверждены как реализованные механики.
+
+## Проверки и остаточный риск
+
+На начало этого review существовал лог `.codex-logistics-polish-final-check.log`: `assemble check --offline --no-configuration-cache --console=plain`, BUILD SUCCESSFUL, 66 задач. Это историческая квитанция текущей логистической работы; финальная сборка после изменений аудита должна иметь свою квитанцию. Среди новых source-level checks: 54 cancellation scenarios и 15 shipment geometry scenarios. Наличие этих результатов подтверждено по логу и исходникам проверок; данный read-only reviewer не запускал повторный Gradle.
+
+Исправление Railway future-format guard проверено по свежему файлу и `.codex-project-audit-targeted.log`: BUILD SUCCESSFUL, 9 задач, 9 executed; `checkRailwayOwnership` — 10, `checkSocial` — 340, `checkDailyRewards` — 25, `checkOnboarding` — 235 проверок. Полный финальный build после всех изменений фиксируется общей квитанцией. Вердикт по логистическому diff: **READY по просмотренному коду и имеющимся headless checks**, с обязательной игровой приёмкой и указанными ограничениями; это не разрешение автоматически выкладывать JAR на живой сервер.
+
+Графовый risk общий для Economy/Map может быть HIGH/CRITICAL из-за общих агрегатов. Сам по себе счётчик blast radius не является находкой и не заменяет сценарий дефекта. Полнота graph change analysis, taint/PDG и итоговый список пройденных задач фиксируются основной квитанцией аудита.
+
+## Завершение 2026-11-03
+
+Исправлен P2 lifecycle поблочных разрешений: старый public grant мог пережить chest→air→chest до первого стороннего взаимодействия. Level.markAndNotifyBlock TAIL обрабатывает только подтверждённую серверную смену типа, исключает restoringBlockSnapshots и несовпадение фактического state. Сохранённые гранты отзываются по dimension/position и token/delta, без обхода мира; Sable assembly move использует собственный notify и обходит этот hook. Обычные facing/open updates сохраняют доступ. Родной execution mixin/placement остаётся игровой приёмкой.
+
+Red/green: `.codex-city-lifecycle-red.log` — ожидаемый assertion failure для обоих прежних grants; `.codex-city-lifecycle-green.log` — BUILD SUCCESSFUL, 2165 territory checks. Проверки включают изоляцию измерения/соседнего блока/другого token, save/load и bytecode/API wiring. Это не проверка живой отмены NeoForge placement event.
+
+Включена завершённая параллельная WorldMap работа: DispatchPalette/Motion/PresentationDraw, RouteRevealGeometry, переходы панелей/слоёв/terrain, бирюзовая выбранная цепочка и данные доставки. Итоговая полная сборка и хеш 1.0.2.14 приведены в VERIFICATION.json; первоначальные численность и graph evidence выше являются датированным начальным срезом.
+
+## Native SavedData: итоговая проверка перед публикацией
+
+Начальный тест прямого вызова Railway.load не охватывал перехват Exception в DimensionDataStorage.readSavedData. Отдельные red fixtures воспроизвели создание пустого реестра для Railway и экономики; native boundary исправлена до переключения клиентских каналов. Код возвращает unavailable registry с raw NBT внутри deserializer, а production get/fromStorage отказывает после computeIfAbsent. Economy loadForStorage удерживает исходное NBT и при ошибке вложенного codec. Нормальный поддерживаемый путь остаётся тем же load.
+
+Регрессии выполняют реальное чтение/запись файлов. Перед проверкой forced save исходный fixture файл удаляется; затем ожидается IOUtilities.waitUntilIOWorkerComplete и проверяется заново созданное NBT, включая неизвестные поля, ownership, деньги и груз. Успех не выводится из чтения прежнего файла или незавершённой async-задачи. Итого Railway — 16 проверок, cancellation suite — 60. Это native storage subsystem в headless JVM, без запуска игрового мира/GUI. Финальная квитанция заменяет промежуточный JAR предыдущего прогона.

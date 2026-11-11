@@ -11,9 +11,9 @@ import java.util.UUID;
 
 public record CityRelationsCommandPayload(BlockPos pylonPos, Action action, UUID targetCityId)
         implements CustomPacketPayload {
-    public enum Action { REQUEST_STATE, ADD_TRUST, REMOVE_TRUST }
+    public enum Action { REQUEST_STATE, ADD_TRUST, REMOVE_TRUST, ALLOW_TERRITORY, DENY_TERRITORY }
     public static final Type<CityRelationsCommandPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(
-            CreateCityExpansionCore.MODID, "city_relations_command"));
+            CreateCityExpansionCore.MODID, "city_relations_command_v2"));
     public static final StreamCodec<RegistryFriendlyByteBuf, CityRelationsCommandPayload> STREAM_CODEC =
             StreamCodec.of(CityRelationsCommandPayload::encode, CityRelationsCommandPayload::decode);
     private static void encode(RegistryFriendlyByteBuf buffer, CityRelationsCommandPayload value) {

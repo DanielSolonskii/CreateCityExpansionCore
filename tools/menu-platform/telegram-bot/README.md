@@ -1,10 +1,23 @@
-# Create Server Telegram bot — milestone 3
+# Create Server Telegram bot — архив milestone 3
+
+**Исторический срез. Навигация сверена 2026-11-04.** Результаты и версии ниже относятся к указанной прежней дате; действующая Cargo-база и интеграция CCEC 1.0.2.15 описаны в [актуальном аудите](../../../docs/audit-2026-11-04/README.md).
+
+**Архивный source-пакет; проверено 02.11.2026.** Здесь нет `build.gradle`,
+`settings.gradle` и Gradle wrapper. Команды сборки из этого каталога неприменимы.
+Текущий bot находится в [platform/telegram-bot](../../../platform/telegram-bot/README.md),
+общая платформа — [platform/README.md](../../../platform/README.md),
+актуальный статус — [аудит 02.11](../../../docs/audit-2026-11-02/README.md).
+
+Из 14 сохранённых Java source/test файлов 8 побайтово совпали с текущей платформой,
+6 различаются. Не переносить весь пакет поверх `platform/`: он не содержит новых
+Community/Companion/Broadcast компонентов. Далее сохранено описание исторического
+контракта milestone 3; оно не является полным описанием нынешнего bot.
 
 Java 21 / Gradle application, Telegram Bot API long polling. PostgreSQL, JPA
 и Redis dependencies отсутствуют; аккаунтные действия выполняются через backend.
 Реализованы /start, inline-меню, /help, /code и phone/deep-link verification.
 Навигация, registration и device confirmation редактируют одно menu-message;
-[текущий UX / admin / server bridge](../docs/telegram-menu-message-ux.md).
+[UX / admin / server bridge](../../../platform/docs/telegram-menu-message-ux.md).
 
 ## Environment
 
@@ -21,15 +34,16 @@ Bot должен быть создан через BotFather. У него не д
 getUpdates и webhook несовместимы. Webhook автоматически не меняется.
 Запускайте один polling worker.
 
-Из telegram-bot после задания environment variables:
+Сборка действующего проекта из корня репозитория (Java 21):
 
 ```powershell
-.\gradlew.bat test build
-.\gradlew.bat run
+.\platform\telegram-bot\gradlew.bat -p platform/telegram-bot test build
 ```
 
-Также создаётся application distribution в build/distributions.
-В Linux/macOS используются ./gradlew test build и ./gradlew run.
+Для application distribution используется `installDist`/`distZip`; результат
+пишется в `platform/telegram-bot/build/install` или `build/distributions`.
+`run` требует настроенного окружения и запускает реальный polling worker;
+локальные fake-server tests обходятся без живого Telegram token.
 
 ## Verification
 
@@ -46,7 +60,7 @@ BackendClient использует защищённый lookup по numeric Tele
 username и status. ACTIVE binding открывает меню аккаунта; другие состояния не
 выдаются за ACTIVE. Ошибка lookup не трактуется как отсутствие binding.
 Server bridge/telemetry v1 читает реальные status/counts и admin players/statistics
-из Backend; [контракт](../docs/server-bridge-telemetry.md). Репорты доставляются
+из Backend; [контракт](../../../platform/docs/server-bridge-telemetry.md). Репорты доставляются
 отдельными admin alerts. Release/restart subscriptions пока не реализованы.
 
 При communication error bot повторяет polling через 3 секунды, offset
@@ -101,4 +115,5 @@ password в Git, README, unit, argv или chat. На VDS использоват
 Tests: config validation/redaction, no-proxy default, hostile global proxy bypass,
 реальный локальный HTTPS CONNECT с fake CA (anonymous/authenticated), secret
 isolation, bounded wrong-auth failure. Backend protocol tests сохранены. Команда:
-`gradlew test build`. Реальный proxy/Telegram остаются отдельным runtime acceptance.
+`platform/telegram-bot/gradlew.bat -p platform/telegram-bot test build`
+из корня репозитория. Реальный proxy/Telegram остаются отдельным runtime acceptance.

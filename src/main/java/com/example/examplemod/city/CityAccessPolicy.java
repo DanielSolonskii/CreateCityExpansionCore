@@ -5,7 +5,7 @@ import java.util.UUID;
 /** Shared, server-side city access policy. Relations grant access only where an owner opted into this policy. */
 public final class CityAccessPolicy {
     public enum Relation { SELF, PARTNER, TRUSTED, NONE }
-    public enum Service { RAILWAY_PRIVATE, FREIGHT, SERVICE }
+    public enum Service { SERVICE }
 
     private CityAccessPolicy() {}
 
@@ -25,7 +25,5 @@ public final class CityAccessPolicy {
     }
 
     /** Extension hook. Relations currently grant no discount; only own infrastructure is exempt. */
-    public static int tariffBasisPoints(CityManager cities, UUID ownerCityId, UUID requesterCityId) {
-        return relation(cities, ownerCityId, requesterCityId) == Relation.SELF ? 0 : 10_000;
-    }
+
 }

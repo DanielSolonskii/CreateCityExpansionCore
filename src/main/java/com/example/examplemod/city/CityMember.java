@@ -8,7 +8,9 @@ public class CityMember {
         OWNER,
         ADMIN,
         BUILDER,
-        RESIDENT
+        RESIDENT,
+        ENGINEER,
+        TREASURER
     }
 
     private final UUID playerId;

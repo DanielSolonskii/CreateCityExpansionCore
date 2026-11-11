@@ -71,7 +71,10 @@ public final class CityTerritoryHandlers {
         } else if ((city = manager.getCityByPylon(request.dimension(), request.pylonPos())) == null) {
             result = CityClaimResult.NO_CITY;
         } else {
-            result = manager.claimPlot(city, request.plot(), player.getUUID());
+            var plot=request.plot();var border=player.serverLevel().getWorldBorder();
+            result = !plot.isValid() || plot.minX()<border.getMinX() || plot.maxX()+1d>border.getMaxX()
+                    || plot.minZ()<border.getMinZ() || plot.maxZ()+1d>border.getMaxZ()
+                    ? CityClaimResult.INVALID_PLOT : manager.claimPlot(city, plot, player.getUUID());
         }
         LOGGER.info("Claim request from {}: pylon={} plot=({},{}) result={}",
                 com.example.examplemod.auth.PlayerNames.name(player), request.pylonPos(),

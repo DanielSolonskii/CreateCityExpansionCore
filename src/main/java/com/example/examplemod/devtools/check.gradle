@@ -1,0 +1,10 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('checkRecipeWorkbench', JavaExec) {
+            dependsOn tasks.named('mineVisualTestClasses')
+            classpath = sourceSets.mineVisualTest.runtimeClasspath
+            mainClass = 'com.example.examplemod.devtools.RecipeWorkbenchCheck'
+            javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+        }
+    }
+}

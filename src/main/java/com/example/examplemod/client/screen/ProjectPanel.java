@@ -45,10 +45,6 @@ final class ProjectPanel {
     private Font font;
     private GuiGraphics graphics;
     private int mouseX,mouseY;
-    /** Smoothed hover, keyed by a control's label: stable across frames and across scrolling. */
-    private final UiMotion motion=new UiMotion();
-    /** One lerp step per frame, measured once in render -- never per control. */
-    private float frameDelta;
     private CityMapPanel map;
     private net.minecraft.resources.ResourceLocation dimension;
     public boolean open(){return open;}
@@ -70,9 +66,8 @@ final class ProjectPanel {
     public void render(GuiGraphics g,Font font,CityMapPanel map,net.minecraft.resources.ResourceLocation dimension,
                        int width,int height,int top,WorldMapUiLayout.Rect viewport,int mx,int my,float partial,boolean enabled) {
         this.graphics=g;this.font=font;this.map=map;this.dimension=dimension;this.width=width;this.height=height;this.top=top;this.viewport=viewport;this.mouseX=mx;this.mouseY=my;
-        this.frameDelta=motion.delta(net.minecraft.Util.getMillis());
         if(!enabled)return;
-        var toggle=ProjectLayout.toggle(width,height);WorldMapChrome.control(g,toggle,open,motion.hover(toggle.x()*7919+toggle.y(),toggle.contains(mx,my),frameDelta),true,false);
+        var toggle=ProjectLayout.toggle(width,height);WorldMapChrome.control(g,toggle,open,toggle.contains(mx,my),true,false);
         g.drawCenteredString(font,tr(open?"close_workspace":"open_workspace"),toggle.x()+toggle.width()/2,toggle.y()+7,WorldMapChrome.ACCENT);
         if(!open)return;
         panel=ProjectLayout.panel(width,height,top);body=ProjectLayout.body(panel);
@@ -107,10 +102,7 @@ final class ProjectPanel {
     }
     private void button(Component label,Runnable action,boolean primary,boolean enabled) {
         var r=ProjectLayout.row(body,scroll,y,24);boolean available=enabled&&!ProjectClientState.pending();
-        // Keyed by the caption, not the slot: scrolling the list under the cursor must carry the
-        // highlight away with the row rather than leave it on whatever slid into view.
-        float lit=motion.hover(label.getString().hashCode(),r.contains(mouseX,mouseY)&&body.contains(mouseX,mouseY),frameDelta);
-        WorldMapChrome.control(graphics,r,false,lit,available,primary);
+        WorldMapChrome.control(graphics,r,false,r.contains(mouseX,mouseY)&&body.contains(mouseX,mouseY),available,primary);
         graphics.drawString(font,WorldMapChrome.fit(font,label,r.width()-12),r.x()+6,r.y()+8,available?WorldMapChrome.TEXT:WorldMapChrome.MUTED,false);
         if(available)hits.add(new Hit(r,action));y+=29;
     }
@@ -197,9 +189,11 @@ final class ProjectPanel {
         }catch(RuntimeException error){validation="invalid";}
     }
     private void renderDetails(Project p,float partial) {
+        com.example.examplemod.client.map.MinimapClient.focus(p);
         button("list",()->{selected=null;scroll=0;fields.clear();reason=null;},false);
         text(tr("category."+p.category().name().toLowerCase(Locale.ROOT)),WorldMapChrome.MUTED);
         heading(Component.literal(p.title()));
+        button(CommunityDashboard.tr("workspace"),()->ProjectWorkspaceScreen.open(Minecraft.getInstance().screen,p.id()),false,true);
         text(tr("scope."+p.scope().name().toLowerCase(Locale.ROOT)),ProjectMapStyle.color(p.scope(),p.status()));
         if(p.scope()==Scope.SERVER) {
             var overlaps=ProjectClientState.conflicts.getList(p.id().toString(),net.minecraft.nbt.Tag.TAG_STRING);
@@ -224,7 +218,7 @@ final class ProjectPanel {
         graphics.fill(progress.x(),progress.y(),progress.right(),progress.bottom(),WorldMapChrome.EDGE);
         graphics.fill(progress.x(),progress.y(),progress.x()+progress.width()*done/p.stages().size(),progress.bottom(),ProjectMapStyle.color(p.scope(),p.status()));y+=12;
         boolean server=p.scope()==Scope.SERVER;
-        boolean author=p.author().equals(me()),manage=server?ProjectClientState.op:author||ProjectClientState.admin,executor=p.executor()!=null&&p.executor().representative().equals(me());
+        boolean author=p.author().equals(me()),manage=server?ProjectClientState.op:author||ProjectClientState.admin||ProjectClientState.reviewer,executor=p.executor()!=null&&p.executor().representative().equals(me());
         for(int i=0;i<p.stages().size();i++) {
             int index=i;Stage s=p.stages().get(i);
             if(executor&&(p.status()==Status.BUILDING||p.status()==Status.REWORK))button(Component.literal((s.done()?"[✓] ":"[ ] ")+s.title()),()->send(Action.STAGE,p,null,index,!s.done(),"",null),false,true);
@@ -235,7 +229,7 @@ final class ProjectPanel {
             button("edit",()->start(p),false);
             button(p.funding()==Funding.TREASURY?"request_funding":"publish",()->confirm(operationConfirm(p,tr("reserve_confirm",p.reward())),()->send(Action.PUBLISH,p,null,0,server&&!ProjectClientState.conflicts.getList(p.id().toString(),net.minecraft.nbt.Tag.TAG_STRING).isEmpty(),"",null)),true);
         }
-        if(p.status()==Status.PENDING_FUNDING&&ProjectClientState.admin) {
+        if(p.status()==Status.PENDING_FUNDING&&ProjectClientState.finance) {
             button("approve",()->confirm(tr("reserve_confirm",p.reward()),()->send(Action.APPROVE,p,null,0,false,"",null)),true);
             ensureReason();field(reason,"reason",partial);button("reject_funding",()->confirm(tr("reject_funding"),()->send(Action.REJECT_FUNDING,p,null,0,false,reason.getValue(),null)),false);
         }
@@ -262,7 +256,7 @@ final class ProjectPanel {
             text(tr("zone_size",p.zone().maxX()-p.zone().minX()+1,p.zone().maxZ()-p.zone().minZ()+1),WorldMapChrome.MUTED);
             text(tr("build_rights"),WorldMapChrome.MUTED);
         }
-        if(managementOpen&&(server?manage:p.executor()==null?manage:ProjectClientState.admin)) {
+        if(managementOpen&&(server?manage:p.executor()==null?manage:ProjectClientState.admin||ProjectClientState.reviewer)) {
             if(p.executor()!=null&&!(manage&&!executor&&p.status()==Status.REVIEW)){ensureReason();field(reason,"reason",partial);}
             button("cancel",()->confirm(tr(server?"server_cancel_confirm":"refund_confirm",p.reserved()),()->send(Action.CANCEL,p,null,0,false,reason==null?"":reason.getValue(),null)),false);
         }
@@ -305,6 +299,7 @@ final class ProjectPanel {
         if(viewport==null||!viewport.contains(x,z)||button!=0)return picking;
         if(picking) {
             int wx=(int)Math.floor(map.screenToWorldX(x)),wz=(int)Math.floor(map.screenToWorldZ(z));
+            if(!com.example.examplemod.client.map.MapBorderLayer.covers(dimension,wx,wz,wx+1d,wz+1d)) {validation="outside_border";return true;}
             if(firstX==null){firstX=wx;firstZ=wz;if(shape!=ProjectZone.Shape.POINT)return true;}
             try{zone=new ProjectZone(dimension,shape,firstX,firstZ,wx,wz);picking=false;validation="";}catch(IllegalArgumentException ex){validation="invalid";firstX=firstZ=null;}
             return true;

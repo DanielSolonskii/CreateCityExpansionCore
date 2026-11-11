@@ -4,6 +4,8 @@ import com.example.examplemod.network.*;
 import com.example.examplemod.profile.PlayerProfile;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
+import com.example.examplemod.client.uiedit.UiEditLayout;
+import com.example.examplemod.client.uiedit.UiEditModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -49,14 +51,13 @@ public final class PlayerProfileScreen extends Screen {
     }
     public static void openSearch(Screen parent) {
         var client=Minecraft.getInstance(); if(client.player==null)return;
-        var screen=new PlayerProfileScreen(parent,client.player.getUUID()); screen.searching=true; client.setScreen(screen);
+        var screen=new PlayerProfileScreen(parent,client.player.getUUID()); screen.searching=true; SocialHubScreen.show(parent,screen,SocialHubScreen.Section.PROFILE);
     }
     public static void open(Screen parent, UUID target) {
-        Minecraft.getInstance().setScreen(new PlayerProfileScreen(parent, target));
+        SocialHubScreen.show(parent,new PlayerProfileScreen(parent,target),SocialHubScreen.Section.PROFILE);
     }
     public static void accept(ProfileResponsePayload response) {
-        if (!(Minecraft.getInstance().screen instanceof PlayerProfileScreen screen)
-                || screen.pending == null || !screen.pending.equals(response.request())) return;
+        if(SocialHubScreen.acceptProfile(response))return;var screen=SocialHubScreen.find(PlayerProfileScreen.class,s->response.request().equals(s.pending));if(screen==null)return;
         screen.pending = null; screen.result = response.result(); screen.refreshedAt = net.minecraft.Util.getMillis();
         if (response.profile() == null || !screen.target.equals(response.profile().id())) return;
         screen.profile = response.profile();
@@ -66,8 +67,7 @@ public final class PlayerProfileScreen extends Screen {
         screen.updateSkin();
     }
     public static void acceptDirectory(ProfileDirectoryPayload response) {
-        if (!(Minecraft.getInstance().screen instanceof PlayerProfileScreen screen)
-                || screen.searchPending == null || !screen.searchPending.equals(response.request())) return;
+        var screen=SocialHubScreen.find(PlayerProfileScreen.class,s->response.request().equals(s.searchPending));if(screen==null)return;
         screen.searchPending = null;
         if (!response.query().equals(screen.search.getValue())) return;
         screen.directory = response;
@@ -76,8 +76,11 @@ public final class PlayerProfileScreen extends Screen {
     }
     private static Component tr(String key, Object... args) { return Component.translatable("gui.createcityexpansioncore.profile." + key, args); }
     private boolean owner() { return minecraft.player != null && minecraft.player.getUUID().equals(target); }
+    public boolean ownProfileView(){var p=Minecraft.getInstance().player;return !searching&&p!=null&&target.equals(p.getUUID());}
     @Override protected void init() {
-        layout = PlayerProfileLayout.calculate(width, height);
+        layout = PlayerProfileLayout.calculate(width, height);var hub=SocialHubScreen.geometry(this);if(hub!=null)layout=new PlayerProfileLayout(width,height,hub.pageHeight(),hub.scale(),hub.pageX(PlayerProfileLayout.WIDTH),hub.pageY());
+        com.example.examplemod.client.AllianceClient.profile(target);
+        PacketDistributor.sendToServer(new CommunityRequestPayload(UUID.randomUUID(),CommunityRequestPayload.Action.VIEW,null,null,null,0,0,""));
         String draft = about == null ? profile == null ? "" : profile.settings().about() : about.getValue();
         var bounds = layout.aboutField();
         about = new EditBox(font, bounds.x() + 5, bounds.y() + 7, bounds.width() - 10, 12, tr("about"));
@@ -93,7 +96,7 @@ public final class PlayerProfileScreen extends Screen {
             searchDirty = true; searchChangedAt = net.minecraft.Util.getMillis(); directory = null; scroll = 0; searchResult = "result.loading";
         });
         if (searching) setInitialFocus(search);
-        if (openedAt == 0) { openedAt = switchedAt = net.minecraft.Util.getMillis(); request(false, 0); }
+        if (openedAt == 0) { com.example.examplemod.client.CommunityFx.sound("open");openedAt = switchedAt = net.minecraft.Util.getMillis(); request(false, 0); }
         else if (profile == null && pending == null) request(false, 0);
         if (searching && directory == null && searchPending == null) requestSearch(0);
     }
@@ -132,24 +135,51 @@ public final class PlayerProfileScreen extends Screen {
         if (searching && searchDirty && searchPending == null && now - searchChangedAt >= 350) requestSearch(0);
         if (profile != null && !editing && !searching && pending == null && (result.equals("ok") || result.equals("saved")) && now - refreshedAt >= 30_000) request(false, profile.page());
     }
-    private float entranceOffset() { return 8 * (1 - ease((net.minecraft.Util.getMillis() - openedAt) / 180f)); }
+    private float entranceOffset() { if(com.example.examplemod.client.CommunityFx.reduced)return 0; return 8 * (1 - ease((net.minecraft.Util.getMillis() - openedAt) / 180f)); }
     private static float ease(float value) { float t = Math.max(0, Math.min(1, value)); return 1 - (1 - t) * (1 - t) * (1 - t); }
+    private PlayerProfileLayout.Rect searchResultBounds(int index) {
+        var row = shifted(layout.searchRow(index));
+        String key = "profile.searchResult[" + index + "]";
+        float offset = entranceOffset();
+        var viewport = layout.screenBounds(layout.body(), offset);
+        UiEditLayout.setElementViewport(key, new UiEditModel.Bounds(
+                viewport.x(), viewport.y(), viewport.width(), viewport.height()));
+        return UiEditLayout.apply(key, row.x(), row.y(), row.width(), row.height(),
+                layout.scale(), layout.x(), layout.y() + offset * layout.scale(), PlayerProfileLayout.Rect::new);
+    }
+
     private PlayerProfileLayout.Rect shifted(PlayerProfileLayout.Rect r) { return new PlayerProfileLayout.Rect(r.x(), r.y() - scroll, r.width(), r.height()); }
     private void text(GuiGraphics g, Component label, int x, int y, int w, int color) { g.drawString(font, fit(font, label, Math.max(0, w)), x, y, color, false); }
     private void plate(GuiGraphics g, PlayerProfileLayout.Rect r, int colour) {
         rounded(g, r.x(), r.y(), r.width(), r.height(), 5, EDGE);
         rounded(g, r.x() + 1, r.y() + 1, r.width() - 2, r.height() - 2, 4, colour);
     }
-    private void button(GuiGraphics g, PlayerProfileLayout.Rect r, Component label, boolean primary, boolean active, boolean enabled, double mx, double my) {
-        WorldMapChrome.control(g, new WorldMapUiLayout.Rect(r.x(), r.y(), r.width(), r.height()), active, r.contains(mx, my), enabled, primary);
-        text(g, label, r.x() + 7, r.y() + (r.height() - 8) / 2, r.width() - 14, enabled ? TEXT : 0xFF6F7D80);
+    private final SocialHubIcons.HoverMotion buttonMotion = new SocialHubIcons.HoverMotion();
+    private static final SocialHubIcons.Icon[] TAB_ICONS = {
+            SocialHubIcons.Icon.PROFILE, SocialHubIcons.Icon.STATISTICS, SocialHubIcons.Icon.PROJECTS
+    };
+
+    private void button(GuiGraphics g, PlayerProfileLayout.Rect r, Component label, boolean primary, boolean active,
+            boolean enabled, double mx, double my) {
+        button(g, r, label, null, primary, active, enabled, mx, my);
     }
+
+    private void button(GuiGraphics g, PlayerProfileLayout.Rect r, Component label, SocialHubIcons.Icon icon,
+            boolean primary, boolean active, boolean enabled, double mx, double my) {
+        var bounds = new WorldMapUiLayout.Rect(r.x(), r.y(), r.width(), r.height());
+        SocialHubIcons.paintButton(g,font,bounds,SocialHubIcons.buttonCaption(label),
+                icon==null?SocialHubIcons.buttonIcon(label):icon,buttonMotion,r.contains(mx,my),enabled,active,primary);
+    }
+
     @Override public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        UiEditLayout.clearElements("profile.searchResult[");
+        buttonMotion.beginFrame();
         long now = net.minecraft.Util.getMillis(); float offset = entranceOffset();
+        UiEditLayout.registerTransform(this, layout.scale(), layout.x(), layout.y() + offset * layout.scale());
         double mx = layout.localX(mouseX), my = layout.localY(mouseY, offset);
-        float delta = previousFrame == 0 ? 1 : Math.min(1, (now - previousFrame) / 95f); previousFrame = now;
+        float delta = com.example.examplemod.client.CommunityFx.reduced||previousFrame == 0 ? 1 : Math.min(1, (now - previousFrame) / 95f); previousFrame = now;
         tooltip = null;
-        g.fill(0, 0, width, height, 0x87080D10);
+        if(!SocialHubScreen.embedded(this))g.fill(0, 0, width, height, 0x87080D10);
         g.pose().pushPose(); g.pose().translate(layout.x(), layout.y(), 0); g.pose().scale(layout.scale(), layout.scale(), 1); g.pose().translate(0, offset, 0);
         panel(g, 0, 0, PlayerProfileLayout.WIDTH, layout.height());
         var frameClip = layout.screenBounds(new PlayerProfileLayout.Rect(1, 1, PlayerProfileLayout.WIDTH - 2, layout.height() - 2), offset);
@@ -159,20 +189,22 @@ public final class PlayerProfileScreen extends Screen {
             g.fillGradient(2, 2, PlayerProfileLayout.WIDTH - 2, 88, 0xFF303737, SURFACE);
             g.fill(15, 14, 17, 23, ACCENT);
             text(g, tr(searching ? "search_title" : "title"), 24, 14, 178, ACCENT);
-            button(g,layout.socialToggle(),Component.translatable("gui.createcityexpansioncore.social.friends"),false,false,!editing,mx,my);
-            button(g, layout.searchToggle(), tr(searching ? "search_profile" : "search_button"), false, searching, !editing, mx, my);
+            if(!SocialHubScreen.embedded(this)){
+            button(g,layout.socialToggle(),Component.translatable("gui.createcityexpansioncore.social.friends"),SocialHubIcons.Icon.FRIENDS,false,false,!editing,mx,my);
+            button(g, layout.searchToggle(), tr(searching ? "search_profile" : "search_button"), SocialHubIcons.Icon.SEARCH, false, searching, !editing, mx, my);
             button(g, layout.close(), Component.literal("×"), false, false, true, mx, my);
+            }
             if (searching) {
                 g.renderItem(new ItemStack(Items.COMPASS), 24, 47);
                 text(g, tr("search_intro"), 54, 43, 350, TEXT);
                 text(g, tr("search_subtitle"), 54, 61, 350, MUTED);
                 plate(g, layout.searchField(), search.isFocused() ? RAISED : INSET);
                 search.render(g, (int) mx, (int) my, partialTick);
-                button(g, layout.searchSubmit(), tr("search_submit"), true, false, searchPending == null, mx, my);
+                button(g, layout.searchSubmit(), tr("search_submit"), SocialHubIcons.Icon.SEARCH, true, false, searchPending == null, mx, my);
             } else {
                 header(g);
                 String[] tabs = {"overview", "statistics", "projects"};
-                for (int i = 0; i < 3; i++) button(g, layout.tab(i), tr(tabs[i]), false, tab == i, !editing, mx, my);
+                for (int i = 0; i < 3; i++) button(g, layout.tab(i), tr(tabs[i]), TAB_ICONS[i], false, tab == i, !editing, mx, my);
             }
             var body = layout.body();
             var bodyClip = layout.screenBounds(body, offset);
@@ -187,7 +219,7 @@ public final class PlayerProfileScreen extends Screen {
                 else if (tab == 0) overview(g, mx, my, delta);
                 else if (tab == 1) statistics(g, mx, my);
                 else projects(g, mx, my);
-                float transition = 1 - ease((now - switchedAt) / 150f);
+                float transition = com.example.examplemod.client.CommunityFx.reduced?0:1 - ease((now - switchedAt) / 150f);
                 if (transition > 0) g.fill(body.x(), body.y(), body.right(), body.bottom(), ((int) (transition * 110) << 24) | (SURFACE & 0xFFFFFF));
             } finally { g.flush(); g.disableScissor(); }
             scroll = Math.max(0, Math.min(scroll, layout.scrollMaximum(contentHeight)));
@@ -216,7 +248,9 @@ public final class PlayerProfileScreen extends Screen {
         text(g, tr(profile == null ? "result.loading" : profile.online() ? "online" : "offline"), 88, 55, 300, status);
         Component city = profile == null ? Component.literal("…") : profile.city().isEmpty() ? tr("no_city")
                 : Component.literal(profile.city()).append(" · ").append(Component.translatable("role.createcityexpansioncore." + profile.cityRole().toLowerCase(Locale.ROOT)));
-        text(g, city, 78, 73, 330, MUTED);
+        var alliance=com.example.examplemod.client.AllianceClient.forPlayer(target);
+        text(g, city, 78, 73, alliance==null?330:215, MUTED);
+        if(alliance!=null){var r=layout.allianceBadge();rounded(g,r.x(),r.y(),r.width(),r.height(),4,INSET);AllianceScreen.drawEmblem(g,r.x()+2,r.y()+2,16,alliance.getInt("Color"),alliance.getInt("Emblem"));text(g,Component.literal(alliance.getString("Name")),r.x()+22,r.y()+6,r.width()-26,0xFF000000|alliance.getInt("Color"));}
     }
     private void overview(GuiGraphics g, double mx, double my, float delta) {
         var b = layout.body(); int y = b.y() - scroll;
@@ -269,24 +303,58 @@ public final class PlayerProfileScreen extends Screen {
         contentHeight = count * 40 + 12 + lines.size() * 11;
     }
     private void projects(GuiGraphics g, double mx, double my) {
-        var b = layout.body(); int y = b.y() - scroll;
-        if (profile.projects().isEmpty()) {
-            plate(g, b, INSET); text(g, tr("career_start"), b.x() + 16, b.y() + 24, b.width() - 32, ACCENT);
-            g.drawWordWrap(font, tr("project_empty_detail"), b.x() + 16, b.y() + 47, b.width() - 32, MUTED); contentHeight = 0; return;
+        var body = layout.body();
+        var projects = profile.projects();
+        if (projects.isEmpty()) {
+            plate(g, body, INSET);
+            text(g, tr("career_start"), body.x() + 16, body.y() + 24, body.width() - 32, ACCENT);
+            g.drawWordWrap(font, tr("project_empty_detail"), body.x() + 16, body.y() + 47,
+                    body.width() - 32, MUTED);
+            contentHeight = 0;
+            return;
         }
-        for (var entry : profile.projects()) {
-            var row = new PlayerProfileLayout.Rect(b.x(), y, b.width(), 49); boolean over = row.contains(mx, my) && b.contains(mx, my);
-            plate(g, row, over ? RAISED : INSET);
-            g.fill(b.x() + 1, y + 8, b.x() + 3, y + 41, entry.server() ? ACCENT : 0xFF76B9C3);
-            text(g, Component.literal(entry.title()), b.x() + 12, y + 8, b.width() - 110, TEXT);
-            text(g, tr(entry.server() ? "server_project" : "city_project"), b.x() + 12, y + 22, 170, entry.server() ? ACCENT : 0xFF84C3CC);
-            text(g, roles(entry), b.x() + 12, y + 35, b.width() - 24, MUTED);
-            text(g, tr("completed"), b.right() - 96, y + 9, 84, 0xFF96C8AE);
-            if (over) tooltip = Component.literal(entry.title()).append("\n").append(roles(entry)).append("\n").append(tr("participation_note"));
-            y += 55;
-        }
-        contentHeight = profile.projects().size() * 55;
+
+        int start = body.y() - scroll;
+        int y = projectGroup(g, body, projects, false, start, mx, my);
+        y = projectGroup(g, body, projects, true, y, mx, my);
+        contentHeight = y - start;
     }
+
+    private int projectGroup(GuiGraphics g, PlayerProfileLayout.Rect body, List<ProjectEntry> projects,
+            boolean shared, int y, double mx, double my) {
+        if (projects.stream().noneMatch(entry -> entry.server() == shared)) return y;
+
+        int accent = shared ? ACCENT : 0xFF84C3CC;
+        var header = new SocialHubLayout.Rect(body.x(), y, body.width(), 24);
+        rounded(g, header.x(), header.y(), header.width(), header.height(), 4, SURFACE);
+        if (shared) {
+            SocialHubIcons.Icon.PROJECTS.draw(g, header.x() + SocialHubIcons.INSET, header.y() + 4, false, 0);
+        } else {
+            SocialHubIcons.navigation(g, header, SocialHubScreen.Section.CITY, false);
+        }
+        text(g, tr(shared ? "projects_shared" : "projects_city"),
+                header.x() + SocialHubIcons.LABEL_OFFSET, header.y() + 8,
+                header.width() - SocialHubIcons.LABEL_OFFSET - 8, accent);
+        y += header.height() + 6;
+
+        for (var entry : projects) {
+            if (entry.server() != shared) continue;
+            var row = new PlayerProfileLayout.Rect(body.x(), y, body.width(), 36);
+            boolean hovered = body.contains(mx, my) && row.contains(mx, my);
+            plate(g, row, hovered ? RAISED : INSET);
+            g.fill(row.x() + 1, row.y() + 7, row.x() + 3, row.bottom() - 7, accent);
+            Component role = roles(entry);
+            text(g, Component.literal(entry.title()), row.x() + 12, row.y() + 7, row.width() - 24, TEXT);
+            text(g, role, row.x() + 12, row.y() + 21, row.width() - 24, MUTED);
+            if (hovered) {
+                tooltip = Component.literal(entry.title()).append("\n").append(role)
+                        .append("\n").append(tr("participation_note"));
+            }
+            y += row.height() + 6;
+        }
+        return y + 4;
+    }
+
     private void editor(GuiGraphics g, double mx, double my, float pt) {
         var b = layout.body(); plate(g, b, INSET);
         text(g, tr("about"), b.x() + 12, b.y() + 9, b.width() - 60, ACCENT);
@@ -313,27 +381,28 @@ public final class PlayerProfileScreen extends Screen {
                         342, layout.height()-24, 42, MUTED);
                 button(g, layout.pageButton(true), Component.literal("›"), false, false,
                         searchPending == null && (directory.page()+1)*ProfileDirectoryPayload.PAGE_SIZE < directory.total(), mx, my);
-            } else button(g, layout.refresh(), Component.literal("↻"), false, false, searchPending == null, mx, my);
+            } else button(g, layout.refresh(), Component.empty(), SocialHubIcons.Icon.REFRESH, false, false, searchPending == null, mx, my);
             return;
         }
         if (editing) {
             button(g, layout.footerAction(), tr("cancel"), false, false, pending == null, mx, my);
-            button(g, layout.save(), tr(pending == null ? "save" : "saving"), true, false, pending == null, mx, my);
+            button(g, layout.save(), tr(pending == null ? "save" : "saving"), SocialHubIcons.Icon.SAVE, true, false, pending == null, mx, my);
             text(g, tr("result." + (result.equals("ok") || result.equals("loading") ? "edit" : result)), 145, layout.height() - 24, 155, MUTED);
             if (my >= layout.height() - 33 && mx >= 145 && mx < 300) tooltip = tr("result." + result);
             return;
         }
-        if (owner() && profile != null) button(g, layout.footerAction(), tr("edit"), false, false, pending == null, mx, my);
+        if (owner() && profile != null) button(g, layout.footerAction(), tr("edit"), SocialHubIcons.Icon.EDIT, false, false, pending == null, mx, my);
         else {
-            button(g, layout.footerAction(), Component.translatable("gui.createcityexpansioncore.social.open_peer"), false, false, profile!=null, mx, my);
+            button(g, layout.footerAction(), Component.translatable("gui.createcityexpansioncore.social.open_peer"), SocialHubIcons.Icon.MESSAGES, false, false, profile!=null, mx, my);
         }
-        text(g, tr("result." + (result.equals("ok") ? "public" : result)), 147, layout.height() - 24, tab == 2 && profile != null && profile.completed() > PAGE_SIZE ? 140 : 230, MUTED);
+        if(!owner()&&profile!=null&&profile.city().isBlank()&&com.example.examplemod.client.CommunityClient.canInvite())button(g,layout.invite(),Component.translatable("gui.createcityexpansioncore.community.invite_player"),false,false,true,mx,my);
+        else text(g, tr("result." + (result.equals("ok") ? "public" : result)), 147, layout.height() - 24, tab == 2 && profile != null && profile.completed() > PAGE_SIZE ? 140 : 230, MUTED);
         if (tab == 2 && profile != null && profile.completed() > PAGE_SIZE) {
             button(g, layout.pageButton(false), Component.literal("‹"), false, false, pending == null && profile.page() > 0, mx, my);
             text(g, Component.literal((profile.page() + 1) + "/" + ((profile.completed() + PAGE_SIZE - 1) / PAGE_SIZE)), 342, layout.height() - 24, 42, MUTED);
             button(g, layout.pageButton(true), Component.literal("›"), false, false, pending == null && (profile.page() + 1) * PAGE_SIZE < profile.completed(), mx, my);
         } else {
-            button(g, layout.refresh(), Component.literal("↻"), false, false, pending == null, mx, my);
+            button(g, layout.refresh(), Component.empty(), SocialHubIcons.Icon.REFRESH, false, false, pending == null, mx, my);
             if (layout.refresh().contains(mx, my)) tooltip = tr("refresh");
         }
     }
@@ -345,7 +414,7 @@ public final class PlayerProfileScreen extends Screen {
             contentHeight = 0; return;
         }
         for (int i=0; i<directory.entries().size(); i++) {
-            var entry=directory.entries().get(i); var row=shifted(layout.searchRow(i));
+            var entry=directory.entries().get(i); var row=searchResultBounds(i);
             boolean over=b.contains(mx,my) && row.contains(mx,my);
             plate(g,row,over ? RAISED : INSET);
             var info=minecraft.getConnection()==null ? null : minecraft.getConnection().getPlayerInfo(entry.id());
@@ -390,10 +459,13 @@ public final class PlayerProfileScreen extends Screen {
     @Override public boolean mouseClicked(double x, double y, int button) {
         double mx = layout.localX(x), my = layout.localY(y, entranceOffset());
         if (button != 0) return false;
-        if (layout.close().contains(mx, my)) { onClose(); return true; }
-        if (!editing && layout.socialToggle().contains(mx,my)) { SocialScreen.open(this,null); return true; }
+        com.example.examplemod.client.CommunityFx.sound("click");
+        if (!SocialHubScreen.embedded(this)&&layout.close().contains(mx, my)) { onClose(); return true; }
+        if(!editing&&!searching&&!owner()&&profile!=null&&profile.city().isBlank()&&com.example.examplemod.client.CommunityClient.canInvite()&&layout.invite().contains(mx,my)){CommunityScreen.invite(this,target);return true;}
+        if(!editing&&!searching&&layout.allianceBadge().contains(mx,my)){var alliance=com.example.examplemod.client.AllianceClient.forPlayer(target);if(alliance!=null){AllianceScreen.openAlliance(this,alliance.getUUID("Id"));return true;}}
+        if (!SocialHubScreen.embedded(this)&&!editing && layout.socialToggle().contains(mx,my)) { CommunityScreen.open(this); return true; }
         if (!editing && !searching && !owner() && profile!=null && layout.footerAction().contains(mx,my)) { SocialScreen.open(this,target); return true; }
-        if (!editing && layout.searchToggle().contains(mx,my)) { showSearch(!searching); return true; }
+        if (!SocialHubScreen.embedded(this)&&!editing && layout.searchToggle().contains(mx,my)) { showSearch(!searching); return true; }
         if (!editing && layout.scrollMaximum(contentHeight) > 0 && layout.scrollTrack().contains(mx, my)) {
             draggingScroll = true; moveScroll(my); return true;
         }
@@ -412,8 +484,8 @@ public final class PlayerProfileScreen extends Screen {
                 }
             } else if (layout.refresh().contains(mx,my)) { requestSearch(0); return true; }
             if (directory != null && layout.body().contains(mx,my)) {
-                for (int i=0;i<directory.entries().size();i++) if (shifted(layout.searchRow(i)).contains(mx,my)) {
-                    open(this,directory.entries().get(i).id()); return true;
+                for (int i=0;i<directory.entries().size();i++) if (searchResultBounds(i).contains(mx,my)) {
+                    if(!SocialHubScreen.inspect(directory.entries().get(i).id()))open(this,directory.entries().get(i).id()); return true;
                 }
             }
             return layout.frame().contains(mx,my);
@@ -476,7 +548,7 @@ public final class PlayerProfileScreen extends Screen {
     @Override public void onClose() {
         if (searching) { showSearch(false); return; }
         if (editing && pending == null) { editing = false; about.setVisible(false); setFocused(null); return; }
-        minecraft.setScreen(parent);
+        if(!SocialHubScreen.back(this))minecraft.setScreen(parent);
     }
     @Override public void removed() {
         // Responses for an inactive parent are ignored. Reopening must not retain a pending nonce.

@@ -28,7 +28,8 @@ describe("Mandatory Launcher update", () => {
     await screen.findByText("Повторить установку");
     expect((check as HTMLButtonElement).disabled).toBe(false);
     const panel = screen.getByRole("region", { name: "Обновление Launcher" });
-    expect(panel.style.position).toBe("fixed"); expect(panel.style.top).toBe("78px"); expect(Number(panel.style.zIndex)).toBeGreaterThan(10);
+    expect(panel.classList.contains("launcher-update")).toBe(true);
+    expect(screen.getByRole("button",{name:/Launcher 0.1.2/}).getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(check);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("game_prepare"));
     await waitFor(() => expect((screen.getByRole("button", { name: /^Играть/i }) as HTMLButtonElement).disabled).toBe(true));

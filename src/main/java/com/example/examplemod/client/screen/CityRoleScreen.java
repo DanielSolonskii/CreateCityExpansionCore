@@ -34,126 +34,8 @@ public class CityRoleScreen extends ModalOverlayScreen {
 
     @Override
     protected void init() {
-
-        super.init();
-
-        int panelWidth = 300;
-        int panelHeight = 230;
-
-        int left =
-                (this.width - panelWidth) / 2;
-
-        int top =
-                (this.height - panelHeight) / 2;
-
-        /*
-         * =========================================
-         * АДМИНИСТРАТОР
-         * =========================================
-         */
-
-        this.addRenderableWidget(
-                new CityButton(
-                        left + 25,
-                        top + 60,
-                        250,
-                        25,
-                        Component.translatable("role.createcityexpansioncore.admin"),
-                        button -> selectRole(
-                                CityMember.Role.ADMIN
-                        )
-                )
-        );
-
-        /*
-         * =========================================
-         * СТРОИТЕЛЬ
-         * =========================================
-         */
-
-        this.addRenderableWidget(
-                new CityButton(
-                        left + 25,
-                        top + 90,
-                        250,
-                        25,
-                        Component.translatable("role.createcityexpansioncore.builder"),
-                        button -> selectRole(
-                                CityMember.Role.BUILDER
-                        )
-                )
-        );
-
-        /*
-         * =========================================
-         * ЖИТЕЛЬ
-         * =========================================
-         */
-
-        this.addRenderableWidget(
-                new CityButton(
-                        left + 25,
-                        top + 120,
-                        250,
-                        25,
-                        Component.translatable("role.createcityexpansioncore.resident"),
-                        button -> selectRole(
-                                CityMember.Role.RESIDENT
-                        )
-                )
-        );
-        /*
-         * =========================================
-         * ИСКЛЮЧИТЬ ИЗ ГОРОДА
-         * =========================================
-         */
-
-        this.addRenderableWidget(
-                new CityButton(
-                        left + 25,
-                        top + 160,
-                        250,
-                        25,
-                        Component.translatable("gui.createcityexpansioncore.city.role.remove"),
-                        button -> {
-
-                            if (this.minecraft != null) {
-
-                                this.minecraft.setScreen(
-                                        new CityRemoveMemberConfirmScreen(
-                                                this.parent,
-                                                this.pylonPos,
-                                                this.targetPlayer,
-                                                this.playerName
-                                        )
-                                );
-                            }
-                        }
-                )
-        );
-        /*
-         * =========================================
-         * ОТМЕНА
-         * =========================================
-         */
-
-        this.addRenderableWidget(
-                new CityButton(
-                        left + 25,
-                        top + 195,
-                        250,
-                        25,
-                        Component.translatable("gui.createcityexpansioncore.common.cancel"),
-                        button -> this.onClose()
-                )
-        );
+        CommunityScreen.openRoles(this.parent,this.targetPlayer);
     }
-
-    /*
-     * =========================================
-     * ВЫБОР РОЛИ
-     * =========================================
-     */
 
     private void selectRole(
             CityMember.Role role
@@ -228,12 +110,12 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * =========================================
          */
 
-        WorldMapChrome.panel(
-                guiGraphics,
+        guiGraphics.fill(
                 left,
                 top,
-                panelWidth,
-                panelHeight
+                left + panelWidth,
+                top + panelHeight,
+                0xFF202020
         );
 
         /*
@@ -242,14 +124,12 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * =========================================
          */
 
-        WorldMapChrome.rounded(
-                guiGraphics,
-                left + 1,
-                top + 1,
-                panelWidth - 2,
-                44,
-                WorldMapChrome.RADIUS - 1,
-                WorldMapChrome.RAISED
+        guiGraphics.fill(
+                left,
+                top,
+                left + panelWidth,
+                top + 45,
+                0xFF353535
         );
 
         /*
@@ -258,11 +138,12 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * =========================================
          */
 
-        guiGraphics.hLine(
-                left + WorldMapChrome.RADIUS,
-                left + panelWidth - WorldMapChrome.RADIUS - 1,
-                top + 44,
-                WorldMapChrome.ACCENT
+        guiGraphics.fill(
+                left,
+                top + 43,
+                left + panelWidth,
+                top + 46,
+                0xFFD09A3A
         );
 
         /*
@@ -276,7 +157,7 @@ public class CityRoleScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.role.heading"),
                 left + 15,
                 top + 10,
-                WorldMapChrome.ACCENT
+                0xFFFFFF
         );
 
         /*
@@ -287,14 +168,12 @@ public class CityRoleScreen extends ModalOverlayScreen {
 
         guiGraphics.drawString(
                 this.font,
-                WorldMapChrome.fit(
-                        this.font,
-                        Component.literal(playerName),
-                        panelWidth - 30
+                Component.literal(
+                        playerName
                 ),
                 left + 15,
                 top + 29,
-                WorldMapChrome.TEXT
+                0xAAAAAA
         );
 
         /*
@@ -308,7 +187,7 @@ public class CityRoleScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.role.select"),
                 left + 25,
                 top + 48,
-                WorldMapChrome.MUTED
+                0x777777
         );
 
         /*

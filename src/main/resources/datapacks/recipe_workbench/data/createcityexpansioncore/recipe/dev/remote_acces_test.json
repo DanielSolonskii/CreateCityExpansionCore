@@ -1,0 +1,80 @@
+{
+  "type": "create:sequenced_assembly",
+  "ingredient": {
+    "item": "create:linked_controller"
+  },
+  "transitional_item": {
+    "id": "createcityexpansioncore:incomplete_access_control_remote"
+  },
+  "sequence": [
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_access_control_remote"
+        },
+        {
+          "item": "create:brass_casing"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_access_control_remote"
+        }
+      ]
+    },
+    {
+      "type": "create:pressing",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_access_control_remote"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_access_control_remote"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_access_control_remote"
+        },
+        {
+          "item": "create:electron_tube"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_access_control_remote"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "createcityexpansioncore:incomplete_access_control_remote"
+        },
+        {
+          "item": "minecraft:redstone_lamp"
+        }
+      ],
+      "results": [
+        {
+          "id": "createcityexpansioncore:incomplete_access_control_remote"
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "count": 1,
+      "chance": 1.0,
+      "id": "createcityexpansioncore:access_control_remote"
+    }
+  ],
+  "loops": 1
+}

@@ -11,7 +11,7 @@ struct Pending { credential:StoredDevice, polling:String }
 #[derive(Deserialize,Clone,Copy)] #[serde(rename_all="lowercase")]
 pub enum DeviceOperation { Begin,Poll,Restore,Logout,Cancel }
 #[derive(Serialize)]
-pub struct DeviceResponse { status:u16,body:Value }
+pub struct DeviceResponse { pub(crate) status:u16,pub(crate) body:Value }
 fn token(value:&str)->bool { value.len()==43 && value.bytes().all(|b|b.is_ascii_alphanumeric() || b==b'_' || b==b'-') }
 fn validate_account(value:&Value)->bool {
     value["status"]=="AUTHENTICATED" && value["platformUserId"].as_str().is_some_and(|id|uuid::Uuid::parse_str(id).is_ok()) &&
@@ -24,7 +24,7 @@ pub(crate) async fn wire(base:&Url,path:&str,method:&str,bearer:Option<&str>,bod
     let mut request=if method=="GET" { client.get(url) } else { client.post(url) };
     if let Some(token)=bearer { request=request.bearer_auth(token); }
     if let Some(body)=body { request=request.json(&body); }
-    let response=request.header("Cache-Control","no-store").send().await.map_err(|_|"Backend unavailable")?;
+    let response=crate::network::send(request.header("Cache-Control","no-store")).await.map_err(|_|"Backend unavailable")?;
     let status=response.status().as_u16();
     if response.content_length().is_some_and(|n|n>32768) { return Err("Invalid Backend response"); }
     let bytes=response.bytes().await.map_err(|_|"Backend unavailable")?;

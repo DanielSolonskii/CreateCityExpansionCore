@@ -1,157 +1,107 @@
-# CURRENT_STATE.md
+# Текущее состояние CCEC
 
-> Этот текст ниже сохраняет срез от 03.10.2026. Актуальный State от 14.10.2026: [docs/audit-2026-10-14/STATE_RU.md](docs/audit-2026-10-14/STATE_RU.md).
-> В частности, ниже устарели Geology v3 и перечень новых Auth/Projects/Profile/HUD систем.
+**Срез: 2026-11-07 (Europe/Minsk).** Мод и игровой клиент опубликованы как **alpha-0.1.38**, Launcher для Windows — **0.1.15**. Версии игрового канала и установщика независимы.
 
-Срез текущего локального состояния CreateCityExpansionCore.
+## Итоги работы 6–7 ноября
 
-Актуализирован: 2026-10-03. Source of truth — код текущего MERGED worktree.
+- Мод: локализация уведомления и публичной карточки городского проекта; компактный клиентский TAB с отдельной колонкой городов, цветом из City.getColorRgb(), сортировкой по UUID города, короткими подсказками клавиш и отступом под полосы боссов. Убраны золотые OP-ромбы; чат использует разделитель «·» и цвет города.
+- Логистика: в рабочую базу включены чартерные разрешения/автозапуск, мастер BUY/SEND, экран сети, визуальные карточки и пояснения ошибок. Подробности: [мастер и чартеры](docs/logistics/charter-dispatch-and-wizard-2026-11-06.md), [UX-аудит](docs/logistics/cargo-ux-audit-2026-11-05.md).
+- Сервер: штатный deploy alpha-0.1.38 завершился DEPLOYED / ready=true; после старта подтверждён Done, NRestarts=0. Игроки предупреждены через **ccec maintenance announce 60** с ожиданием минуты до остановки. JAR: build/libs/createcityexpansioncore-1.0.2.15-sablefix.1.jar, SHA-256 b4c845220bfddb78c003146dacbd57e49000eb5d711e162cd731d6f805577275.
+- Игровой клиент: alpha-0.1.38, sequence 39, публикация PUBLISHED. Обновлён shared JAR и launch.json; серверные SavedData прошли штатный preflight совместимости. macOS-канал в этом сеансе не обновлялся.
+- По прямой инструкции пользователя старые архивы мира удалены. На момент завершения deploy оставлен один архив: /opt/create-server/backups/server-deploy-b568b33f478a414ba41d433083d9e528/world.tar. Локальное копирование отменено, частичный файл удалён. Это описывает архивы мира, не служебные backups публикаций/платформы.
+- Launcher 0.1.15: актуальная Companion-база с боковой навигацией и отдельным профилем, читаемые шрифты, короткие переходы, компактная подготовка игры, сглаженная скорость, корректный неопределённый индикатор проверки/установки, новости без автоматического открытия. Профиль: локальные цвет, описание, интересы, минимальные анимации и стаж регистрации; город/роль/статистика остаются серверными.
 
-## 1. Платформа
+## Важный инцидент: источник лаунчера
 
-| Компонент | Версия |
-|---|---|
-| Minecraft | 1.21.1 |
-| NeoForge | 21.1.251 |
-| Java | 21 |
-| Create | 6.0.10-280 |
-| Create: Electro Energetics | 1.21.1-1.1.2 |
-| Mod ID | `createcityexpansioncore` |
+Первый installer **0.1.14** был ошибочно собран из устаревшей импортированной platform/launcher, хотя package version совпадала с новым standalone checkout. Пользователь обнаружил старый интерфейс. **0.1.15 исправляет публикацию**: актуальные Companion-исходники восстановлены из соседнего E:/CreateCityExpansionCore_MERGED/CreateServerPlatform/launcher, затем поверх перенесены изменения текущего сеанса. Исправления синхронизированы в platform/launcher этого репозитория; именно эти исходники собраны и опубликованы как 0.1.15. Нельзя выбирать базу по одной строке версии: сверять CompanionProfile, companion.css, launcher-refresh.css и боковую навигацию. Обратного переключения на меньший semver/sequence не было.
 
-## 2. Реализованные домены
+Windows NSIS 0.1.15 опубликован APPROVED, sequence 15, обновление необязательное. Размер 5574300 байт; SHA-256 f0bd6abe63f2d139fc7eabbff195a955998186c05d513cd89c32f7cb200ba56c. Подписанный канал и installer: https://api.recreated.ru/launcher/latest/update.json и https://api.recreated.ru/launcher/versions/0.1.15/RE-CREATED-Launcher-x64-setup.exe. Закрытые signing keys не копировались.
 
-### City
+## Граница подтверждения
 
-- `CityManager` SavedData, City Pylon, роли, приглашения, территория.
-- City Projects, Industrial Mine commissioning и развитие I → II.
-- One-way trusted relations; mutual trust = partner.
-- `CityAccessPolicy` для Railway private access и будущих Freight/tariff hooks.
+Мод: compileJava / processResources / jar PASS; checkSocial — 340, checkQuietTab — 5062 headless assertions. Launcher: финальные TypeScript/Vite и Rust release/NSIS build PASS, 80 frontend tests PASS. Штатные публикации подтвердили загрузку установщика и его SHA-256. Полный install/upgrade/login/gameplay E2E и визуальная приёмка не выполнены: пользователь попросил не продолжать проверки. Не считать эти сборки доказательством runtime-поведения GUI, поездов или macOS.
 
-### Geology v3
+Предложенные последующие изменения жизненного цикла городских проектов (следующий шаг, формы замечаний, обзор/этапы/планирование) **не реализованы**: пользователь переключил задачу на deploy и Launcher.
 
-| Параметр | Текущее значение |
-|---|---|
-| SavedData format | 3 |
-| Generator version | 1 |
-| Macro-cell | 768×768 |
-| Lookup | 3×3 macro-cell (`LOOKUP_RING = 1`) |
-| Максимум кандидатов | 2 на ресурс / macro-cell |
-| Ресурсы | iron, coal, limestone, copper, zinc |
-| Радиус залежи | 150–480 блоков |
-| Analyzer search | 200 блоков от границы |
-| Analyzer cooldown | 60 ticks |
+[Platform STATE](platform/STATE.md). Остальные разделы ниже — исторический срез 2026-11-04; их версии и ограничения не переопределяют опубликованные итоги выше.
 
-`DepositShape` хранит center, axes, rotation, core radius и shape seed. Граница получает smooth deterministic distortion; local potential плавно падает от ядра к краю. `depositsById` содержит канонический объект на stable ID, поэтому разные query/шахты списывают один remaining reserve.
+---
 
-Quality classes:
+## Исторический срез 2026-11-04
 
-- MODEST: 25%, 500–1500 units/h;
-- RICH: 35%, 1500–3000;
-- DENSE: 25%, 3000–6000;
-- PRIME: 12%, 6000–8500;
-- EXCEPTIONAL: 3%, 8500–10000.
+**Срез: 2026-11-04. Целевая версия — 1.0.2.15.** Область — этот репозиторий и все вложенные проекты. Интеграционная версия готовится к выпуску; финальный JAR, проверки и установка требуют отдельной квитанции. [Актуальный аудит](docs/audit-2026-11-04/README.md).
 
-Size classes независимы от quality:
+## Источник действующей базы
 
-- SMALL: 20%, radius 150–230, 50–100 h;
-- NORMAL: 50%, 220–330, 120–180 h;
-- LARGE: 25%, 300–400, 180–300 h;
-- GIANT: 5%, 380–480, 300–500 h.
+После синхронизации main старая ветка Freight оказалась новее по Git, но старее установленного Cargo-кода. Подлинные исходники восстановлены из index snapshot `0839bbb1fd43fbb3aca217478f37c5b5f28c73c1` сохранённого stash. Неизменённая восстановленная сборка содержит **751/751 побайтово одинаковых production Java-классов**. Сам stash сохранён.
 
-Migration v1/v2 → v3 сохраняет resource, deposit ID, initial/remaining reserve и legacy grade. Недостающая геометрия восстанавливается детерминированно.
+Старый рабочий сервер восстановлен на JAR 1.0.2.13, SHA-256 `040766463749530001475fd3b75fc24b5e5cbd7ce5127223c60685d32b59e086`, Economy 15. Клиентские каналы остались Windows alpha-0.1.32 и macOS alpha-0.1.32-mac.1. Это проверенная квитанция восстановления, а не утверждение о более позднем deployment. [Инцидент и доказательства](docs/releases/2026-11-03-compatibility-incident.md).
 
-### Magnetic Analyzer
+## Проекты
 
-- Один server-authoritative `performScan` используется `use` и `useOn`.
-- Первый scan не блокируется отсутствующим timestamp.
-- Durability списывается только после успешной проверки storage/cooldown.
-- Вне залежи: resource, direction, грубая дистанция.
-- Внутри: local potential, оценка reserve, size class.
-- Payload: `GeologyAnalysisPayload` / актуальные `GeologySnapshotCodecs`.
-- Кодовая регрессия «ПКМ в воздухе ничего не делает» исправлена; нужен ручной runtime retest.
+| Часть | Основа | Документация |
+| --- | --- | --- |
+| Мод | Minecraft 1.21.1, NeoForge 21.1.251, JDK 21, Gradle 9.2.1 | [Разработка](README_DEV.md) |
+| Create / EE | 6.0.10-280 / 1.21.1-1.1.2 | [build.gradle](build.gradle), [dev runtime](gradle/dev-mods.gradle) |
+| Backend | Spring Boot 4.0.8, Java 21, Flyway V1–V14 | [README](platform/backend/README.md) |
+| Launcher | React 19, TypeScript, Vite, Tauri 2; source package 0.1.13 | [README](platform/launcher/README.md) |
+| Telegram bot | Java 21, OkHttp 4.12.0, source artifact 0.1.0-SNAPSHOT | [README](platform/telegram-bot/README.md) |
+| Infra | Примеры конфигураций и отдельные explicit release helpers | [README](platform/infra/README.md) |
 
-### Industrial Mine и Bulk iron
+Корневой Gradle не включает `platform/`. Соседний CreateServerPlatform исключён из области. [Platform STATE](platform/STATE.md).
 
-- Мультиблок 10×3×10: 120 Mine Frame, 128 Technical Block, 16 Drill Unit, Controller, Power Port, Gateway.
-- EE power/state machine сохранены.
-- Mine выбирает deposit по локальному potential и добывает общий reserve.
-- Номинальная шкала — 3000 reserve units/h при 100% мощности; ниже 100 units/h добыча практически бессмысленна.
-- `MineOutputMapping` разделяет physical output и reserve units.
-- Iron: `physicalAmountFor(iron, 5) = 10`, `reserveUnitsFor(iron, 10) = 5`.
-- Добавлены предметы/рецепты Bulk iron: raw ore, crushed ore, concentrate.
+## Домены мода
 
-### Economy v2
+| Домен | Текущая реализация |
+| --- | --- |
+| Города и территория | [city](src/main/java/com/example/examplemod/city): пилон, роли, приглашения, участки, развитие, межгородские отношения и отдельные grants |
+| Городские проекты | [projects](src/main/java/com/example/examplemod/projects): требования, зоны, финансирование и снабжение |
+| Геология | [geology](src/main/java/com/example/examplemod/geology): пространственные залежи, анализатор, расходуемый общий запас |
+| Промышленная шахта | [mine](src/main/java/com/example/examplemod/mine): структура, EE-питание и физическая добыча |
+| Cargo-оборудование | [cargo](src/main/java/com/example/examplemod/cargo): Router/Ticker, адреса/ParcelId, точки, native Create hooks и квитанции приёмки |
+| Центр логистики | [cargo/center](src/main/java/com/example/examplemod/cargo/center): склады, владельцы/ACL, линии, расписания, выбор маршрута, заказы и расчёт |
+| Экономика | [EconomyManager](src/main/java/com/example/examplemod/economy/EconomyManager.java): кошельки, казна, банк, проекты и CargoCommerce; старые теги сохраняются непрозрачно |
+| Интерфейсы | [client/logistics](src/main/java/com/example/examplemod/client/logistics), [client/map](src/main/java/com/example/examplemod/client/map): центр, карта, состояния и направление маршрута |
+| Транспорт и доступ | [block](src/main/java/com/example/examplemod/block), [mixin](src/main/java/com/example/examplemod/mixin): терминал, grants, Create/Sable/Simulated compatibility |
+| Профиль/сообщество/первые шаги | Существующие server-authoritative домены и отдельные проверки |
 
-- Wallets, City Treasury, escrow.
-- P2P listings/contracts, community/exclusive contracts.
-- External Market, MarketDefinition, MarketOffer, demand/saturation.
-- Master warehouse и procurement budget.
-- Smart Orders восстанавливаются/генерируются из admin definitions.
-- Master City buy/sell использует physical Freight endpoints; inventory grants не используются.
+Старые `economy/FreightLogistics`, самостоятельный Railway и металлургические blast/coke/steel мультиблоки **выведены из Cargo production** ранее. Восстановление вернуло именно этот контракт; они не считаются дополнительными действующими системами.
 
-### Freight Logistics v1
+## Контракты логистики
 
-- Persistent Freight Points: city, name, SEND/RECEIVE/BOTH, generated address, Postbox, Packager, station, enabled/default flags, validation status.
-- Guided registration/rebind с server-side проверкой территории и Create blocks.
-- Freight Assignment связывает subject, source/destination point, route/train и dispatch state.
-- ShipmentToken и ShippingManifest переиспользованы как внутренние ledger/proof механизмы.
-- Packager создаёт физическую Create Package с destination address и token.
-- Contract intake/unpacking валидирует destination, item, amount, replay и atomic acceptance.
-- Full delivery автоматически закрывает contract/offer и выполняет settlement.
-- Source outage приостанавливает flow без инвалидирования уже созданных tokens.
+Резерв денег создаётся в существующих счетах EconomyManager. Цена, права, остаток товара и маршрут повторно проверяются сервером. Создание native запроса упаковки фиксируется до обращения к Create: неоднозначная ошибка не разрешает автоматически повторить отправку или вернуть весь резерв.
 
-### Railway CRE-75
+Каждая физическая коробка имеет Shipment/Parcel identity, проверяемое содержимое, историю плеч и квитанцию конечной приёмки. Перевалка в Cargo Router не оплачивает товар. Выплаты за товар и оплаченные плечи требуют физического доказательства.
 
-- `RailwayManager` format v5.
-- City stations/fleet trains и Create schedule integration.
-- OwnedRailwayNetwork / OwnedRailwaySection, owner PLAYER/CITY.
-- PUBLIC/PRIVATE, freight tariff CR/1000 blocks/train.
-- TrackGraph path references, marker reconciliation, protection from ownership takeover.
-- RailwayTripLedger, reserve/actual settlement, owner payouts, restart и replay protection.
-- RailwayRoutePlanner: CHEAPEST / FASTEST / BALANCED, duplicate collapse, private exclusion.
-- SelectedRailwayRoute, RouteReservation, RouteGuard/topology validation.
-- Freight dispatch переиспользует planner, accounting и guard.
-- Train registration доступна через server-authoritative railway command/UI flow; legacy Dispatcher Key path также остаётся частью системы.
+Цель интеграции 1.0.2.15 — отмена игроком/администратором на любом этапе, отдельный учёт коробок и физическое изъятие. Возврат неотправленного объёма разрешается только после доказательства, что он не появится позже из native очереди. Обратный маршрут не требуется. Фактическое завершение переноса и проверки фиксируются в актуальном аудите.
 
-### City Relations
+WorldMap сохраняет общую карту города и terrain, а действующая логистика отображается через Cargo `LogisticsMapOverlay`. Анимация направления не является GPS-наблюдением каждой коробки. Новые визуальные состояния и выбор оборудования проверяются отдельно от живого GUI.
 
-- Persistent A → B trusted relation.
-- Mutual trust отображается как PARTNER.
-- Собственный город всегда имеет полный доступ.
-- Private railway access может разрешаться owner policy + relations; автоматической tariff discount/exemption механики пока нет.
+## Сохранения и обновление
 
-### UI
+| Данные | Целевой контракт 1.0.2.15 |
+| --- | --- |
+| Economy | FormatVersion 16; старые поля сохраняются, native loader не должен создавать пустой баланс при отказе codec |
+| CargoCommerce | Вложенная Version 2, миграция Version 1; отмена и учёт физического груза |
+| Cargo shipments | Version 2, чтение Version 1 |
+| Cargo points/trains/receipts/lines/schedules/warehouses/ownership | Version 1 |
+| Geology | Codec 4, generator 2; переход generator 1→2 пересоздаёт геометрию/идентичности |
+| City и остальные вспомогательные данные | Разные контракты, нет обещания универсальной поддержки произвольного будущего формата |
 
-- City Pylon hub, Logistics operational panels, Market, Railway management.
-- Polished World Map: terrain, cities, territories, Freight Points, Create stations, networks/sections, trains, selected routes/reservations, context cards.
-- Unified status/toast model и Problem Center.
-- RU/EN localization и headless layout/status checks.
+`META-INF/ccec-save-formats.json` объявляет поддерживаемые диапазоны. Deploy helper читает реальные gzip NBT заголовки до остановки, сверяет кандидат и повторяет проверку после final save. Неподдерживаемый или неизвестный Cargo-реестр блокирует установку. Файловый rollback также не разрешает downgrade данных. Отсутствие metadata в старом JAR требует ручной проверки восстановления.
 
-## 3. Производственный слой
+Шахта: 10×3×10, **298 блоков и две сервисные воздушные клетки**; 151 Mine Frame, 128 Technical Block, 16 Drill Unit, Controller, Power Port, Gateway. Питание 500–600 В, номинал 10 кВт, минимум 8,5 кВт, standby 120 Вт. Геология, добыча и развитие города не заменялись ради исправления логистики.
 
-Tier предмета не равен City Level.
+## Проверки и открытые работы
 
-- Tier 1: bulk raw resources.
-- Tier 2: coke, billet, plate, beam, fasteners, reinforcement, rail profile, sleepers, concrete, ceramics, copper busbar.
-- Tier 3: heavy machine frame, industrial control unit, power distribution module.
+Восстановленная неизменённая Cargo-база прошла `assemble check`: 62 задачи. Это подтверждение базы и сравнения production классов; результаты окончательной интеграции публикуются отдельно.
 
-Create recipes и dependency override datapack остаются основным production path.
+Backend: 153 tests PASS; bot: 67 PASS; launcher frontend: 72 tests и TS/Vite build PASS. Native Rust launcher имеет compile blockers: отсутствуют `social_links`, `presence`, `presence_ipc`, `settings::launcher_memory`. Нельзя объявлять installer собираемым по frontend-проверкам. Новые preflight regression checks: 12 PASS; прежние Python release tests — 11 PASS / 8 Linux-only skips на Windows.
 
-## 4. Persistence
+Игровой GUI/OpenGL, реальный Create транспорт, отмена/изъятие после restart/unload и PostgreSQL acceptance требуют своего прогона. FTB campaign verifier доказывает структуру исторической книги, а не соответствие каждому предмету нынешнего Cargo JAR. Полное автоматическое распределение флота, offline simulation, пассажирские/traction tariffs и полный прогноз сигналов не заявлены готовыми.
 
-Отдельные SavedData используются для CityManager/relations, Geology v3, Railway v5/ownership/trips/reservations, Economy v2 и Freight Points/assignments/tokens.
+[Игроку](GUIDE_RU.md) · [Разработчику](README_DEV.md) · [Архитектура](MASTER_CONTEXT.md) · [Решения](DECISIONS.md) · [Аудит](docs/audit-2026-11-04/README.md)
 
-Ключевое правило миграций: неизвестная новая версия не должна молча перегенерировать или обнулять production data.
+## Ограничение текущего выпуска
 
-## 5. Headless verification
-
-`check` включает suites для Freight ledger/reconciliation, dispatch/handoff/arrival, package identity, Railway ownership/accounting, relations, World Map/layout, City Pylon/invite/members, unified status, train management и procedural geology/Analyzer contract.
-
-Точный список задач находится в `build.gradle` и является актуальнее этого перечня.
-
-## 6. Известные ограничения и runtime backlog
-
-- Minecraft runtime/world testing выполняется вручную владельцем проекта.
-- Geology v3 и Analyzer interaction fix присутствуют в коде, но требуют ручного теста: ПКМ в воздухе, ПКМ по блоку, cooldown, restart и отображение survey.
-- Нет traction billing, passenger tariffs, fleet balancing, timetable prediction, offline Create simulation и multi-train shipment splitting.
-- Не считать старые chat summaries и GitHub-ветку источником истины, если они расходятся с текущим локальным MERGED worktree.
+По запросу владельца дальнейший аудит и доработки остановлены перед публикацией. Подтверждение происхождения коробки от конкретного native запроса Create не завершено: восстановление ранее зарегистрированной коробки нельзя считать полностью защищённым от подмены, а коробка без зарегистрированного Parcel UUID не принимается для восстановления. Неопределённый груз сохраняет резерв. Полная игровая приёмка не выполнялась.

@@ -4,6 +4,7 @@ import com.example.examplemod.client.CityInviteClientHandler;
 import com.example.examplemod.network.CityInviteNotificationPayload;
 
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -14,8 +15,6 @@ public class CityInviteScreen extends Screen {
 
     private static final int PANEL_HEIGHT =
             235;
-
-    private final UiMotion motion = new UiMotion();
 
     public CityInviteScreen() {
 
@@ -48,19 +47,19 @@ public class CityInviteScreen extends Screen {
          */
 
         this.addRenderableWidget(
-                new ChromeButton(
-                        left + 25,
-                        top + 175,
-                        175,
-                        30,
+                Button.builder(
                         Component.literal(
                                 "ПРИНЯТЬ"
                         ),
                         button ->
                                 CityInviteClientHandler
-                                        .respond(true),
-                        true
-                )
+                                        .respond(true)
+                ).bounds(
+                        left + 25,
+                        top + 175,
+                        175,
+                        30
+                ).build()
         );
 
         /*
@@ -68,18 +67,19 @@ public class CityInviteScreen extends Screen {
          */
 
         this.addRenderableWidget(
-                new ChromeButton(
-                        left + 220,
-                        top + 175,
-                        175,
-                        30,
+                Button.builder(
                         Component.literal(
                                 "ОТКЛОНИТЬ"
                         ),
                         button ->
                                 CityInviteClientHandler
                                         .respond(false)
-                )
+                ).bounds(
+                        left + 220,
+                        top + 175,
+                        175,
+                        30
+                ).build()
         );
     }
 
@@ -122,10 +122,6 @@ public class CityInviteScreen extends Screen {
          * игровой мир за интерфейсом.
          */
 
-        long now = net.minecraft.Util.getMillis();
-        motion.opened(now);
-        float offset = motion.entranceOffset(now);
-
         int left =
                 (this.width - PANEL_WIDTH) / 2;
 
@@ -133,48 +129,39 @@ public class CityInviteScreen extends Screen {
                 (this.height - PANEL_HEIGHT) / 2;
 
         /*
-         * Виджеты рисуются внутри того же pose, поэтому сдвигаются вместе с панелью.
-         */
-
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(0.0F, offset, 0.0F);
-        try {
-
-        /*
          * Панель
          */
 
-        WorldMapChrome.panel(
-                guiGraphics,
+        guiGraphics.fill(
                 left,
                 top,
-                PANEL_WIDTH,
-                PANEL_HEIGHT
+                left + PANEL_WIDTH,
+                top + PANEL_HEIGHT,
+                0xFF202020
         );
 
         /*
          * Заголовок
          */
 
-        WorldMapChrome.rounded(
-                guiGraphics,
-                left + 1,
-                top + 1,
-                PANEL_WIDTH - 2,
-                51,
-                WorldMapChrome.RADIUS - 1,
-                WorldMapChrome.RAISED
+        guiGraphics.fill(
+                left,
+                top,
+                left + PANEL_WIDTH,
+                top + 52,
+                0xFF353535
         );
 
         /*
          * Линия
          */
 
-        guiGraphics.hLine(
-                left + WorldMapChrome.RADIUS,
-                left + PANEL_WIDTH - WorldMapChrome.RADIUS - 1,
-                top + 50,
-                WorldMapChrome.ACCENT
+        guiGraphics.fill(
+                left,
+                top + 49,
+                left + PANEL_WIDTH,
+                top + 52,
+                0xFFD09A3A
         );
 
         /*
@@ -188,7 +175,7 @@ public class CityInviteScreen extends Screen {
                 ),
                 this.width / 2,
                 top + 14,
-                WorldMapChrome.ACCENT
+                0xFFFFFF
         );
 
         /*
@@ -236,7 +223,7 @@ public class CityInviteScreen extends Screen {
                 ),
                 this.width / 2,
                 top + 85,
-                WorldMapChrome.MUTED
+                0xAAAAAA
         );
 
         guiGraphics.drawCenteredString(
@@ -248,7 +235,7 @@ public class CityInviteScreen extends Screen {
                 ),
                 this.width / 2,
                 top + 108,
-                WorldMapChrome.ACCENT
+                0xFFD09A3A
         );
 
         guiGraphics.drawCenteredString(
@@ -259,7 +246,7 @@ public class CityInviteScreen extends Screen {
                 ),
                 this.width / 2,
                 top + 133,
-                WorldMapChrome.TEXT
+                0xFFFFFF
         );
 
         guiGraphics.drawCenteredString(
@@ -269,7 +256,7 @@ public class CityInviteScreen extends Screen {
                 ),
                 this.width / 2,
                 top + 153,
-                WorldMapChrome.MUTED
+                0x777777
         );
 
         /*
@@ -284,39 +271,7 @@ public class CityInviteScreen extends Screen {
                 mouseY,
                 partialTick
         );
-
-        } finally {
-            // The early return above (no pending invite) must not leave the pose unbalanced,
-            // or every later screen would render shifted.
-            guiGraphics.pose().popPose();
-        }
     }
-
-    /*
-     * =========================================
-     * ВВОД
-     * =========================================
-     *
-     * Виджеты нарисованы внутри сдвинутого pose, поэтому их границы живут в
-     * координатах панели. Клики и прокрутка приводятся к ним же, иначе в первые
-     * 180 мс после открытия кнопки принимали бы попадания выше нарисованных.
-     */
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return super.mouseClicked(mouseX, mouseY - motion.entranceOffset(net.minecraft.Util.getMillis()), button);
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return super.mouseReleased(mouseX, mouseY - motion.entranceOffset(net.minecraft.Util.getMillis()), button);
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return super.mouseDragged(mouseX, mouseY - motion.entranceOffset(net.minecraft.Util.getMillis()), button, dragX, dragY);
-    }
-
     @Override
     protected void renderBlurredBackground(float partialTick) {
         // Ничего не делаем.

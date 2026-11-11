@@ -492,8 +492,9 @@ public final class CityPylonMembersLayoutCheck {
                 "the nickname line paints from the layout");
         require(screen.contains("layout.metadataY(visibleIndex)"),
                 "the metadata line paints from the layout");
-        require(screen.contains("layout.gear(visibleIndex)"),
-                "the gear paints from the layout");
+        require(screen.contains("layout.gear(index)")
+                        && screen.contains("memberGear(layout, visibleIndex, card)"),
+                "the gear paints from the layout and follows the edited row");
         require(screen.contains("layout.textX(visibleIndex)")
                         && screen.contains("layout.textRight(visibleIndex)"),
                 "the text column is bounded by the layout");
@@ -519,7 +520,7 @@ public final class CityPylonMembersLayoutCheck {
         require(screen.contains("CityPylonMembersLayout.MembersLayout layout =")
                         && screen.contains("this.membersLayout();"),
                 "the wheel and the gear hit paths read the members layout");
-        require(screen.contains("gear.contains(mouseX, mouseY)"),
+        require(screen.contains("memberGear(layout, visibleIndex, row).contains(mouseX, mouseY)"),
                 "the gear hitbox is the painted gear rectangle");
         require(screen.contains("int visibleIndex,\n            int mouseX,\n            int mouseY\n    ) {"),
                 "renderMemberCard receives the interfaceScale-corrected mouse position");

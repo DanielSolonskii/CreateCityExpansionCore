@@ -47,6 +47,8 @@ public record PlayerProfileLayout(int screenWidth, int screenHeight, int height,
     public Rect metric(int index) { return hook("metric[" + index + "]", new Rect(body().x() + index * 137, body().y() + 62, 130, 64)); }
     public Rect pageButton(boolean next) { return hook("pageButton[" + next + "]", new Rect(next ? WIDTH - 44 : WIDTH - 126, height - 31, 30, 22)); }
     public Rect scrollTrack() { return hook("scrollTrack", new Rect(body().right() + 1, body().y(), 10, body().height())); }
+    public Rect allianceBadge() { return hook("allianceBadge", new Rect(302,68,112,20)); }
+    public Rect invite() { return hook("invite", new Rect(148,height-31,140,22)); }
     public Rect scrollThumb(int scroll, int contentHeight) {
         int h = Math.min(body().height(), Math.max(18, body().height() * body().height() / Math.max(1, contentHeight)));
         int y = body().y() + (body().height() - h) * Math.max(0, Math.min(scrollMaximum(contentHeight), scroll)) / Math.max(1, scrollMaximum(contentHeight));

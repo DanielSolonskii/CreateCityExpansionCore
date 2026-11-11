@@ -2,6 +2,7 @@ package com.example.examplemod.client.screen;
 
 import com.example.examplemod.network.RemoveCityMemberPayload;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -46,11 +47,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
          */
 
         this.addRenderableWidget(
-                new ChromeButton(
-                        left + 35,
-                        this.height / 2 + 55,
-                        165,
-                        26,
+                Button.builder(
                         Component.translatable("gui.createcityexpansioncore.common.cancel"),
                         button -> {
 
@@ -58,7 +55,12 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                                     this.parent
                             );
                         }
-                )
+                ).bounds(
+                        left + 35,
+                        this.height / 2 + 55,
+                        165,
+                        26
+                ).build()
         );
 
         /*
@@ -68,11 +70,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
          */
 
         this.addRenderableWidget(
-                new ChromeButton(
-                        left + 220,
-                        this.height / 2 + 55,
-                        165,
-                        26,
+                Button.builder(
                         Component.translatable("gui.createcityexpansioncore.city.remove_member.confirm"),
                         button -> {
 
@@ -95,9 +93,13 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                             this.minecraft.setScreen(
                                     this.parent
                             );
-                        },
-                        false
-                )
+                        }
+                ).bounds(
+                        left + 220,
+                        this.height / 2 + 55,
+                        165,
+                        26
+                ).build()
         );
     }
 
@@ -139,37 +141,43 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                 (this.height - panelHeight) / 2;
 
         /*
-         * Основная панель и шапка берутся из общего хрома профиля: скруглённые углы,
-         * тень и верхняя подсветка вместо плоских прямоугольников.
+         * =====================================
+         * ОСНОВНАЯ ПАНЕЛЬ
+         * =====================================
          */
 
-        WorldMapChrome.panel(
-                guiGraphics,
+        guiGraphics.fill(
                 left,
                 top,
-                panelWidth,
-                panelHeight
+                left + panelWidth,
+                top + panelHeight,
+                0xFF202020
         );
 
         /*
-         * Шапка и золотая линия Create.
+         * =====================================
+         * ВЕРХНЯЯ ПАНЕЛЬ
+         * =====================================
          */
 
-        WorldMapChrome.rounded(
-                guiGraphics,
-                left + 1,
-                top + 1,
-                panelWidth - 2,
-                48,
-                WorldMapChrome.RADIUS - 1,
-                WorldMapChrome.RAISED
+        guiGraphics.fill(
+                left,
+                top,
+                left + panelWidth,
+                top + 50,
+                0xFF353535
         );
 
-        guiGraphics.hLine(
-                left + WorldMapChrome.RADIUS,
-                left + panelWidth - WorldMapChrome.RADIUS - 1,
-                top + 49,
-                WorldMapChrome.ACCENT
+        /*
+         * Золотая линия Create
+         */
+
+        guiGraphics.fill(
+                left,
+                top + 48,
+                left + panelWidth,
+                top + 51,
+                0xFFD09A3A
         );
 
         /*
@@ -183,7 +191,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.remove_member.heading"),
                 left + 20,
                 top + 18,
-                WorldMapChrome.ACCENT
+                0xFFFFFF
         );
 
         /*
@@ -197,27 +205,29 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.remove_member.description"),
                 left + 20,
                 top + 75,
-                WorldMapChrome.MUTED
+                0xAAAAAA
         );
 
         /*
+         * =====================================
          * ИМЯ ИГРОКА
+         * =====================================
          */
 
         guiGraphics.drawString(
                 this.font,
-                WorldMapChrome.fit(
-                        this.font,
-                        Component.literal(playerName),
-                        panelWidth - 40
+                Component.literal(
+                        playerName
                 ),
                 left + 20,
                 top + 98,
-                WorldMapChrome.TEXT
+                0xFFFFFF
         );
 
         /*
+         * =====================================
          * ПРЕДУПРЕЖДЕНИЕ
+         * =====================================
          */
 
         guiGraphics.drawString(
@@ -225,7 +235,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                 Component.translatable("gui.createcityexpansioncore.city.remove_member.warning"),
                 left + 20,
                 top + 122,
-                WorldMapChrome.MUTED
+                0xAAAAAA
         );
 
         renderOwnWidgets(guiGraphics, mouseX, mouseY, partialTick);

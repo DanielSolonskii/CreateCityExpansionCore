@@ -26,10 +26,12 @@ public final class ReportAdminPanel {
             try{status=ServerPanel.summary(backend);}catch(IOException unavailable){status="⚪ Статус сервера временно недоступен";}
             return new BotPage("🛠 Администрирование\n\n"+status+"\nОткрытых репортов: "+count,List.of(
                 List.of(list("🚨 Репорты",0)),
+                List.of(Map.of("text","📊 Аналитика игроков","callback_data","admin:telemetry:online")),
                 List.of(ServerPanel.adminButton("👥 Игроки","players"),ServerPanel.adminButton("📊 Статистика","stats")),
                 List.of(Map.of("text","📣 Рассылки","callback_data","broadcast:home")),
                 List.of(ServerPanel.adminButton("↻ Обновить","home"),BotPage.button("← Главное меню","home"))));
         }
+        if(data.startsWith("admin:telemetry:")||data.startsWith("admin:timeline:"))return TelemetryPanel.page(backend,user,data);
         if(data.equals("admin:stats"))return ServerPanel.page(backend,user);
         if(data.equals("admin:players"))return ServerPanel.players(backend,user);
         try{

@@ -1,180 +1,127 @@
-# CreateServerPlatform backend — Create Server Account
+# Create Server backend
 
-Java 21, Spring Boot 4.0.8, Gradle 9.2.1, Spring Data JPA, PostgreSQL и Flyway.
-Redis и игровые интеграции в runtime отсутствуют.
+**Сверка состояния: 2026-11-04.** [Актуальный аудит CCEC/Cargo](../../docs/audit-2026-11-04/README.md) описывает интеграцию 1.0.2.15. Ранее датированные результаты проверок ниже сохраняют свою дату; новый игровой/production прогон ими не подтверждается.
 
-## Локальный PostgreSQL на Windows
+Актуализировано 02.11.2026: Java 21, Spring Boot 4.0.8, Gradle wrapper 9.2.1,
+Spring Data JPA/JDBC, PostgreSQL и Flyway V1–V14. Artifact version —
+`0.1.0-SNAPSHOT`, не номер последнего deployment. Это вложенный snapshot CCEC:
+[границы](../README.md), [STATE](../STATE.md),
+[аудит](../../docs/audit-2026-11-02/PLATFORM_AUDIT_RU.md).
 
-Нужна запущенная служба PostgreSQL и отдельная база, например `create_server`.
-Создайте login role `create_server` с паролем и назначьте её владельцем базы
-через pgAdmin. Backend не создаёт базу или роль; Flyway создаёт таблицы внутри
-уже существующей базы. Используйте отдельную базу без чужих таблиц.
+## Реализация
 
-Все параметры задаются environment variables. Значения по умолчанию:
-`POSTGRES_HOST=127.0.0.1`, `POSTGRES_PORT=5432`,
-`POSTGRES_DB=create_server`, `POSTGRES_USER=create_server`,
-`PLATFORM_BIND_ADDRESS=127.0.0.1`, `PLATFORM_API_PORT=8080`.
-`POSTGRES_PASSWORD` обязателен и не имеет значения по умолчанию.
-Дополнительно: `DB_POOL_SIZE=5`, `DB_CONNECTION_TIMEOUT_MS=3000`.
+| Область | Исходники / контракт |
+| --- | --- |
+| Health/version, identity read | [api](src/main/java/dev/createserver/backend/api/), [identity](src/main/java/dev/createserver/backend/identity/) |
+| Alpha keys, registration, Telegram verification, trusted devices | [account](src/main/java/dev/createserver/backend/account/), [API](../docs/account-api.md) |
+| Game Session capability/ticket/boot/consume | [game](src/main/java/dev/createserver/backend/game/), [protocol](../docs/game-session-protocol.md) |
+| Server bridge, telemetry v1/v2, launcher status/profile/experience telemetry | [bridge](src/main/java/dev/createserver/backend/bridge/), [launcher](src/main/java/dev/createserver/backend/launcher/) |
+| Reports, admin broadcasts, launcher news | [report](src/main/java/dev/createserver/backend/report/), [broadcast](src/main/java/dev/createserver/backend/broadcast/) |
+| Mini App/companion snapshots, community relay | [miniapp](src/main/java/dev/createserver/backend/miniapp/), [community](src/main/java/dev/createserver/backend/community/) |
 
-`.env.example` — справочник; Spring Boot автоматически его не загружает.
-Не сохраняйте реальные пароли в конфигурации, README или Git.
+Redis и прямое управление игровым миром в runtime отсутствуют. CCEC исполняет
+игровые действия и передаёт snapshots. Endpoint в коде не доказывает его
+публичную доступность или установленную версию на сервере.
 
-Из каталога `backend` в PowerShell:
+## Сборка и тесты
+
+Из `platform/backend`:
 
 ```powershell
-$env:POSTGRES_DB = 'create_server'
-$env:POSTGRES_USER = 'create_server'
-$credential = Get-Credential -UserName $env:POSTGRES_USER -Message 'Пароль PostgreSQL'
-$env:POSTGRES_PASSWORD = $credential.GetNetworkCredential().Password
-.\gradlew.bat bootRun
+.\gradlew.bat test build --console=plain
 ```
 
-После остановки удалите пароль из текущего окружения:
-`Remove-Item Env:POSTGRES_PASSWORD`.
-В Linux/macOS используются те же переменные и `./gradlew bootRun`.
+Linux/macOS: `./gradlew test build --console=plain`. `test` исключает tag
+`postgres`; использует H2 и локальные HTTP fixtures, без настоящего Telegram.
+`build` создаёт executable `build/libs/create-server-backend-0.1.0-SNAPSHOT.jar`
+через `bootJar`; plain jar отключён. Root CCEC Gradle/CI эти tests не запускают.
+Проверено 02.11.2026: после актуализации schema assertions 11→14 полный
+offline `test build` прошёл, 153 tests без failures. Для ограниченного
+Windows окружения использован workspace `java.io.tmpdir`; точные команды и
+разбор первоначальных ошибок — в
+[аудите](../../docs/audit-2026-11-02/PLATFORM_AUDIT_RU.md).
 
-При запуске Flyway применяет `V1__platform_infrastructure.sql`: одну техническую
-таблицу с единственной строкой версии схемы. V2 добавляет platform_user и
-minecraft_identity с UUID, внешним ключом и ограничениями уникальности.
-V3 добавляет credentials, Telegram identity и registration sessions; V1/V2 не меняются.
-V4 добавляет hash-only одноразовые Alpha Access Keys; V1–V3 не меняются.
-JPA подключён; Hibernate имеет `ddl-auto=validate`, schema управляется Flyway.
-Ошибка подключения или миграции останавливает запуск приложения.
+Реальный PostgreSQL проверяется отдельно; заранее создайте выделенную пустую
+тестовую БД/роль и задайте connection environment:
 
-## API
+```powershell
+$env:POSTGRES_DB = 'create_server_test'
+$env:POSTGRES_USER = 'create_server_test'
+$dbCredential = Get-Credential -UserName $env:POSTGRES_USER -Message 'Пароль отдельной тестовой БД'
+$env:POSTGRES_PASSWORD = $dbCredential.GetNetworkCredential().Password
+.\gradlew.bat postgresTest --console=plain
+Remove-Item Env:POSTGRES_PASSWORD
+```
 
-- `GET /api/health`: HTTP 200 и
-  `{"status":"UP","checks":{"postgres":"UP"}}`.
-  Проверяется реальный SQL-запрос технического маркера миграции.
-  При недоступной БД или отсутствии маркера — HTTP 503 и статусы `DOWN`.
-  Endpoint не раскрывает exception, URL, username или пароль.
-- `GET /api/version`: HTTP 200, `name` и `version` из Gradle build-info.
-  Пример: `{"name":"create-server-backend","version":"0.1.0-SNAPSHOT"}`.
+`postgresTest` применяет миграции и пишет fixtures; не направляйте его на
+production/игровую БД. H2 tests не доказывают PostgreSQL acceptance.
+
+## Локальный запуск
+
+Нужны JDK 21 и PostgreSQL с заранее созданной отдельной database/login role.
+Backend не создаёт саму БД/роль. Docker необязателен:
+[dev compose](../infra/README.md) содержит PostgreSQL 17-alpine.
+Другие PostgreSQL major versions в этом аудите не проверялись.
+
+Из `platform/backend`, после настройки локальной БД:
+
+```powershell
+$env:POSTGRES_DB = 'create_server_dev'
+$env:POSTGRES_USER = 'create_server_dev'
+$dbCredential = Get-Credential -UserName $env:POSTGRES_USER -Message 'Пароль локальной БД'
+$env:POSTGRES_PASSWORD = $dbCredential.GetNetworkCredential().Password
+.\gradlew.bat bootRun
+# После завершения процесса:
+Remove-Item Env:POSTGRES_PASSWORD
+```
+
+После сборки также доступен `java -jar build/libs/create-server-backend-0.1.0-SNAPSHOT.jar`.
+Startup применяет все pending Flyway migrations; Hibernate использует
+`ddl-auto=validate`, Flyway clean отключён. Ошибка БД/миграции блокирует startup.
+
+| Переменные | Default / назначение |
+| --- | --- |
+| `PLATFORM_BIND_ADDRESS`, `PLATFORM_API_PORT` | `127.0.0.1`, `8080` |
+| `POSTGRES_HOST`, `POSTGRES_PORT` | `127.0.0.1`, `5432` |
+| `POSTGRES_DB`, `POSTGRES_USER` | Оба `create_server`; для разработки задайте свои |
+| `POSTGRES_PASSWORD` | Обязательный secret без default |
+| `DB_POOL_SIZE`, `DB_CONNECTION_TIMEOUT_MS` | `5`, `3000` |
+| `TELEGRAM_BOT_USERNAME`, `BOT_BACKEND_SECRET` | Имя без `@`, общий с bot secret 32+ символа; без них регистрация недоступна |
+| `REGISTRATION_TTL_SECONDS` | `900`, диапазон 60–3600 |
+| `GAME_SERVER_ID`, `CCEC_BACKEND_SECRET` | ID `[a-z0-9_-]{1,64}`, отдельный game service secret 32–512 символов |
+| `REPORT_ADMIN_TELEGRAM_IDS` | До 20 positive numeric IDs через запятую; пусто — без admin |
+| `MINI_APP_BOT_TOKEN` | Secret для проверки Telegram initData; без него Mini App proof недоступен |
+| `COMPANION_MEDIA_DIR` | Optional локальный каталог companion media |
+
+[application.yaml](src/main/resources/application.yaml) и settings classes —
+источники истины. `.env.example` автоматически не читается. Secrets передаются
+защищённым способом; не сохраняйте реальные значения в Git/чат/VITE.
+
+## API и доверие
+
+`GET /api/health` проверяет SQL marker: 200/UP либо 503/DOWN. `GET /api/version`
+показывает build info. Это health backend/БД, не Minecraft. Для отдельно
+запущенного локального backend:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8080/api/health
 Invoke-RestMethod http://127.0.0.1:8080/api/version
 ```
 
-Это health внешней платформы, а не статус Minecraft/CCEC. HTTP 503 проверяется
-после потери соединения уже запущенным приложением; при недоступной БД на старте
-приложение не запускается. Ответы запрещены к кэшированию.
-Connection acquisition ограничено `DB_CONNECTION_TIMEOUT_MS`; это не полный
-HTTP deadline. Права роли не должны позволять посторонним менять marker.
+Регистрация требует alpha key и подтверждения numeric Telegram ID через bot.
+Password hash использует BCrypt. Polling secret, trusted-device credential и
+game capability имеют разные назначения; password login не выдаёт разрешение
+на Minecraft-вход. Mini App initData — отдельное proof, не game credential.
+Identity/internal bot API защищены service-secret guard; game bridge использует
+отдельный CCEC secret. Подробнее: [account API](../docs/account-api.md),
+[trusted devices](../docs/trusted-devices.md), [game session](../docs/game-session-4b.md).
 
-## Проверки и сборка
+Public edge должен публиковать необходимые routes через TLS, не весь backend.
+[Caddy snapshot](../infra/caddy/Caddyfile) отстаёт от части новых API: news,
+Mini App и registration restart требуют отдельной сверки. In-memory rate
+limits сбрасываются при restart и не заменяют multi-instance защиту.
+Не логируйте credentials/proof/raw updates/DB errors с содержимым строк.
 
-```powershell
-.\gradlew.bat test build
-java -jar build/libs/create-server-backend-0.1.0-SNAPSHOT.jar
-```
-
-Обычные тесты не требуют PostgreSQL: проверяют 200/503, version, обработку
-ошибки JDBC, identity repositories/services, ограничения БД, read API и запуск
-Spring/JPA/Flyway на H2 в PostgreSQL mode. H2 используется
-только в тестах и не доказывает совместимость с настоящим PostgreSQL.
-
-Отдельная проверка PostgreSQL (после задания тех же переменных окружения):
-
-```powershell
-$env:POSTGRES_DB = 'create_server_test'
-.\gradlew.bat postgresTest
-```
-
-Тест применяет миграции и проверяет health/JPA и тот же identity-контракт на
-PostgreSQL. Создайте отдельную тестовую базу заранее. Fixtures удаляют только
-созданные ими записи UUID; схема не очищается, чужие записи не удаляются.
-Регистрация и password login доступны через account API; игровые sessions пока отсутствуют.
-
-## Identity Foundation
-
-- `GET /api/users/{platformUserId}` возвращает внутренний `id`, `status`,
-  `createdAt`, `updatedAt` и `minecraftIdentity` (или null).
-- `GET /api/identities/minecraft/{minecraftUuid}` возвращает `platformUserId`,
-  `minecraftUuid`, `currentName`.
-- Успех: 200; отсутствующая запись: 404; UUID не в канонической форме: 400.
-  UUID нечувствителен к регистру. POST/PUT/DELETE для identity не реализованы.
-
-UUID платформы независим от Minecraft UUID. Minecraft UUID уникален; один
-пользователь может иметь не более одной Minecraft identity. Имя изменяемо,
-не уникально и не используется в lookup. Статусы `ACTIVE` и `DISABLED`
-описывают запись платформы; V3 добавляет PENDING_VERIFICATION. Все статусы видимы
-в authenticated internal read API. Login дополнительно требует Telegram identity.
-Timestamps пользователя управляются JPA; изменение Minecraft name не меняет
-updatedAt самого пользователя. Привязка не является доказательством владения
-Minecraft-аккаунтом. Подробнее: `docs/adr/0002-identity-foundation.md` в корне проекта.
-
-Identity read API теперь требует X-Bot-Service-Secret и предназначен для internal
-использования. Игровое подтверждение identity остаётся отдельным milestone.
-Создание fixtures реализовано только в `src/test/.../identity/IdentityFixtures.java`.
-Оно использует repositories внутри транзакций и не попадает в production JAR.
-
-## Account + Telegram Verification
-
-Собственный login независим от Minecraft name. Telegram verification обязательна
-для ACTIVE/login. Offline-mode game session и CCEC authentication пока отсутствуют.
-
-Дополнительные environment variables:
-
-- TELEGRAM_BOT_USERNAME: bot username без @, одинаковый с telegram-bot.
-- BOT_BACKEND_SECRET: случайный secret минимум 32 characters, одинаковый с bot;
-  без default. Не передавать launcher.
-- REGISTRATION_TTL_SECONDS: 900 по умолчанию (60–3600).
-
-Без bot username/service secret регистрация отключена (503). Health/version
-продолжают работать. .env автоматически не загружается.
-
-Username: 3–32 ASCII characters, первая буква, далее буквы/цифры/underscore;
-lowercase. Password: 12+ code points, максимум 72 UTF-8 bytes.
-BCrypt strength 12, random salt, {bcrypt} prefix. Password/secrets не логировать.
-
-POST /api/registrations принимает JSON username/password/alphaKey и возвращает
-registrationId, pollingToken, telegramDeepLink, expiresAt, verificationCode.
-Launcher показывает локальный QR и короткий код, опрашивает GET /api/registrations/{id}
-с Authorization: Bearer pollingToken. Telegram Desktop не требуется.
-Status: PENDING, COMPLETED, EXPIRED; completion содержит platformUserId.
-POST /api/auth/login успешен только для ACTIVE с Telegram: возвращает
-AUTHENTICATED и platform UUID, без access token/game session.
-
-Bot POST /api/internal/telegram/prepare передаёт registrationToken ИЛИ verificationCode
-и numeric telegramUserId; затем explicit button отправляет confirmationToken,
-telegramUserId, nullable telegramUsername в /api/internal/telegram/accept.
-Оба endpoints требуют X-Bot-Service-Secret. Старый confirm — только pre-V5 sessions.
-GET /api/internal/telegram/users/{numericId} возвращает связанный platform UUID,
-platform username (nullable для identity без credentials) и status в безопасном
-read-only DTO. Password hash и verification secrets не сериализуются.
-Контракт: docs/account-api.md; решение: ADR-0003 в docs/adr.
-
-Создать локальный secret без вывода в terminal:
-
-```powershell
-$secretBytes = [byte[]]::new(32)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($secretBytes)
-$env:BOT_BACKEND_SECRET = [Convert]::ToBase64String($secretBytes)
-```
-
-Передайте тот же secret процессу bot защищённым способом. Внешний deployment
-требует TLS и proxy configuration. In-memory limits защищают один instance,
-сбрасываются после restart. Phone code limiter дополнительно хранится в PostgreSQL;
-bounded restart по polling secret — до 3 раз за 24 часа, без возврата alpha key.
-V5 / deployment plan: [Phone verification](../docs/phone-verification.md).
-
-Первый запуск Gradle Wrapper требует доступ к services.gradle.org, Gradle
-Plugin Portal и Maven Central. Gradle/JDK caches можно перенаправить через
-`GRADLE_USER_HOME` в доступный для записи каталог.
-
-## Closed alpha: административная генерация
-
-В защищённом окружении с PostgreSQL variables:
-
-```sh
-java -jar build/libs/create-server-backend-0.1.0-SNAPSHOT.jar --generate-alpha-keys=10
-```
-
-Необязательно `--alpha-keys-expires-at=2027-01-01T00:00:00Z` (будущий UTC instant).
-CLI не поднимает HTTP server; batch commit предшествует одноразовому выводу
-UUID и plaintext. Hash-only storage, concurrent consume, revoke и безопасное
-обращение с выводом: [Alpha Access Keys](../docs/alpha-access-keys.md).
-Новый JAR/CLI применяет V4 при запуске: НЕ запускать на production без отдельного
-разрешения на deployment/migration. На VDS этот milestone не развёрнут.
+CLI `--generate-alpha-keys=N` изменяет БД и однократно выводит plaintext keys:
+это отдельная административная операция по [runbook](../docs/alpha-access-keys.md).
+Наличие CLI/миграций не подтверждает их deployment сегодня.

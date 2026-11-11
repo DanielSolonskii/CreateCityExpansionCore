@@ -3,6 +3,7 @@ package com.example.examplemod.client.screen;
 import com.example.examplemod.city.CityColors;
 import com.example.examplemod.network.SetCityColorPayload;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -118,14 +119,15 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         Layout layout = layout();
 
         this.addRenderableWidget(
-                new ChromeButton(
+                Button.builder(
+                        Component.translatable("gui.createcityexpansioncore.common.close"),
+                        button -> this.minecraft.setScreen(this.parent)
+                ).bounds(
                         layout.left() + layout.buttonX(),
                         layout.top() + layout.buttonY(),
                         layout.buttonWidth(),
-                        layout.buttonHeight(),
-                        Component.translatable("gui.createcityexpansioncore.common.close"),
-                        button -> this.minecraft.setScreen(this.parent)
-                )
+                        layout.buttonHeight()
+                ).build()
         );
     }
 
@@ -141,18 +143,18 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         return false;
     }
 
+    private WorldMapUiLayout.Rect swatchControl(Layout layout, Swatch swatch) {
+        return CityPylonWorkspace.pageControl(this, "swatch[" + Integer.toHexString(swatch.color()) + "]",
+                layout.left()+swatch.x(), layout.top()+swatch.y(), swatch.width(), swatch.height(),
+                WorldMapUiLayout.Rect::new);
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // The swatches are painted inside the sliding pose, so the cursor has to be read in the
-        // same space or the first frames of the entrance would pick the wrong colour.
-        double contentY = localY(mouseY);
         if (button == 0) {
             Layout layout = layout();
             for (Swatch swatch : layout.swatches()) {
-                int x = layout.left() + swatch.x();
-                int y = layout.top() + swatch.y();
-                if (mouseX >= x && mouseX < x + swatch.width()
-                        && contentY >= y && contentY < y + swatch.height()) {
+                if (swatchControl(layout, swatch).contains(mouseX, mouseY)) {
                     /*
                      * Повторный выбор текущего цвета не отправляется:
                      * сервер всё равно отклонил бы его как «без изменений»,
@@ -208,17 +210,18 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         );
 
         for (Swatch swatch : layout.swatches()) {
-            int x = layout.left() + swatch.x();
-            int y = layout.top() + swatch.y();
-            guiGraphics.fill(x, y, x + swatch.width(), y + swatch.height(),
+            var bounds = swatchControl(layout, swatch);
+            int x = bounds.x();
+            int y = bounds.y();
+            guiGraphics.fill(x, y, x + bounds.width(), y + bounds.height(),
                     CityColors.argb(swatch.color(), 0xFF));
             /*
              * Тёмная подложка под рамкой: иначе светлый пресет сливается
              * с тёмной панелью по краю и квадрат «теряется».
              */
-            guiGraphics.renderOutline(x - 1, y - 1, swatch.width() + 2, swatch.height() + 2, 0xFF101010);
+            guiGraphics.renderOutline(x - 1, y - 1, bounds.width() + 2, bounds.height() + 2, 0xFF101010);
             if (swatch.color() == this.currentColor) {
-                guiGraphics.renderOutline(x - 3, y - 3, swatch.width() + 6, swatch.height() + 6, 0xFFD09A3A);
+                guiGraphics.renderOutline(x - 3, y - 3, bounds.width() + 6, bounds.height() + 6, 0xFFD09A3A);
             }
         }
 

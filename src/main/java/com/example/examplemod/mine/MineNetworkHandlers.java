@@ -2,8 +2,6 @@ package com.example.examplemod.mine;
 
 import com.example.examplemod.electrical.MineControllerBlock;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
-import com.example.examplemod.railway.CreateRailwayAdapter;
-import com.example.examplemod.railway.RailwayManager;
 import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
@@ -224,17 +222,10 @@ public final class MineNetworkHandlers {
             MineControllerSnapshot snapshot,
             boolean openScreen
     ) {
-        RailwayManager railway = RailwayManager.get(player.serverLevel());
-        var station = snapshot.projectId()
-                .map(railway::projectStation)
-                .map(railway::station)
-                .orElse(null);
         PacketDistributor.sendToPlayer(
                 player,
                 new MineControllerSnapshotPayload(
                         snapshot,
-                        station == null ? Optional.empty() : Optional.of(station.lastKnownName()),
-                        station != null && CreateRailwayAdapter.station(station.createStationId()) != null,
                         openScreen
                 )
         );
