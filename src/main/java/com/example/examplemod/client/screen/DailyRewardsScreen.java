@@ -21,8 +21,15 @@ public final class DailyRewardsScreen extends Screen {
     @Override protected void init(){layout=DailyRewardsLayout.of(width,height);if(opened==0){opened=net.minecraft.Util.getMillis();CommunityFx.load();CommunityFx.sound("open");}}
     public static void gift(GuiGraphics g,int x,int y){g.blit(GIFT,x,y,0,0,16,16,16,16);}
     private void text(GuiGraphics g,Component text,int x,int y,int width,int color){g.drawString(font,fit(font,text,width),x,y,color,false);}
-    private void control(GuiGraphics g,SocialHubLayout.Rect r,Component label,double mx,double my,boolean enabled,boolean primary){WorldMapChrome.control(g,new WorldMapUiLayout.Rect(r.x(),r.y(),r.width(),r.height()),false,enabled&&r.contains(mx,my),enabled,primary);g.drawCenteredString(font,fit(font,label,r.width()-12),r.x()+r.width()/2,r.y()+10,enabled?TEXT:MUTED);}
+    private final SocialHubIcons.HoverMotion hoverMotion = new SocialHubIcons.HoverMotion();
+    private void control(GuiGraphics g,SocialHubLayout.Rect r,Component label,double mx,double my,boolean enabled,boolean primary){
+        var bounds = new WorldMapUiLayout.Rect(r.x(),r.y(),r.width(),r.height());
+        SocialHubIcons.paintButton(g,font,bounds,SocialHubIcons.buttonCaption(label),SocialHubIcons.buttonIcon(label),
+                hoverMotion,r.contains(mx,my),enabled,false,primary);
+
+    }
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float partial){
+        hoverMotion.beginFrame();
         var t=DailyRewardsClient.state();double mx=layout.localX(mouseX),my=layout.localY(mouseY);boolean pending=t.getBoolean("Pending"),available=DailyRewardsClient.available();int day=t.getInt("Day");var cards=t.getList("Cards",10);ItemStack tooltip=ItemStack.EMPTY;Component extra=null;
         g.fill(0,0,width,height,0x85090E10);g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);
         panel(g,0,0,DailyRewardsLayout.WIDTH,DailyRewardsLayout.HEIGHT);gift(g,20,18);text(g,title,45,20,DailyRewardsLayout.WIDTH-90,ACCENT);control(g,layout.close(),Component.literal("×"),mx,my,true,false);

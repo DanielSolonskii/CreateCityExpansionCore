@@ -258,7 +258,9 @@ public final class UiEditSession {
         for (int i = names.size() - 1; i >= 0; i--) {
             String name = names.get(i);
             UiEditModel.Bounds b = appliedElement(target, name);
-            if (b != null && b.contains(mouseX, mouseY)) {
+            var viewport = UiEditLayout.elementViewport(className(target), name);
+            if (b != null && b.contains(mouseX, mouseY)
+                    && (viewport == null || viewport.contains(mouseX, mouseY))) {
                 return name;
             }
         }
@@ -290,7 +292,7 @@ public final class UiEditSession {
         }
         UiEditModel.WidgetOverride override = working == null ? null : working.getElement(name);
         UiEditModel.Bounds local = override == null ? raw : override.applyTo(raw);
-        return UiEditLayout.toScreen(className(target), local);
+        return UiEditLayout.elementToScreen(className(target), name, local);
     }
 
     /** Границы выбранного элемента для строки состояния: призрак, если тянется. */
@@ -421,6 +423,7 @@ public final class UiEditSession {
             int y = clamp((int) Math.round(mouseY - elementGrabY), 16 - cur.h(), target.height - 16);
             next = new UiEditModel.Bounds(x, y, cur.w(), cur.h());
         }
+        next = keepInViewport(target, draggingElement, next);
         if (!next.equals(cur)) {
             elementGhost = next;
             elementMoved = true;
@@ -458,8 +461,26 @@ public final class UiEditSession {
         if (x == current.x() && y == current.y()) {
             return;
         }
-        commitElement(target, selectedElement, new UiEditModel.Bounds(x, y, current.w(), current.h()));
+        var next = keepInViewport(target, selectedElement, new UiEditModel.Bounds(x, y, current.w(), current.h()));
+        if (next.equals(current)) {
+            return;
+        }
+        commitElement(target, selectedElement, next);
         rebuild(target);
+    }
+
+    private UiEditModel.Bounds keepInViewport(Screen target, String name, UiEditModel.Bounds bounds) {
+        var viewport = UiEditLayout.elementViewport(className(target), name);
+        if (viewport == null) {
+            return bounds;
+        }
+        int visibleWidth = Math.min(16, Math.min(bounds.w(), viewport.w()));
+        int visibleHeight = Math.min(16, Math.min(bounds.h(), viewport.h()));
+        int x = clamp(bounds.x(), viewport.x() + visibleWidth - bounds.w(),
+                viewport.x() + viewport.w() - visibleWidth);
+        int y = clamp(bounds.y(), viewport.y() + visibleHeight - bounds.h(),
+                viewport.y() + viewport.h() - visibleHeight);
+        return new UiEditModel.Bounds(x, y, bounds.w(), bounds.h());
     }
 
     /** Записать правку элемента: экранный призрак → логические дельты. */
@@ -472,7 +493,7 @@ public final class UiEditSession {
         if (raw == null) {
             return;
         }
-        UiEditModel.Bounds local = UiEditLayout.toLayout(screenName, screenBounds);
+        UiEditModel.Bounds local = UiEditLayout.elementToLayout(screenName, name, screenBounds);
         working.putElement(name, UiEditModel.delta(raw, local, null, null));
         dirty = true;
     }

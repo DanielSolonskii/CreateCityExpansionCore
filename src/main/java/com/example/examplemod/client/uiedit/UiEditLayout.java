@@ -79,6 +79,10 @@ public final class UiEditLayout {
     /** Экран → параметры pose-преобразования (обновляется на каждом apply). */
     private static final Map<String, Transform> TRANSFORMS = new HashMap<>();
 
+    private static final Map<String, Map<String, Transform>> ELEMENT_TRANSFORMS = new HashMap<>();
+
+    private static final Map<String, Map<String, UiEditModel.Bounds>> ELEMENT_VIEWPORTS = new HashMap<>();
+
     private static UiEditStore store;
     private static BooleanSupplier gate = UiEditLayout::allowedByDefault;
     private static long gateCheckedAt;
@@ -139,7 +143,8 @@ public final class UiEditLayout {
             // Нет активного экрана (headless) — проходная функция без регистрации.
             return factory.create(x, y, w, h);
         }
-        TRANSFORMS.put(screen, new Transform(scale, originX, originY));
+        ELEMENT_TRANSFORMS.computeIfAbsent(screen, key -> new HashMap<>())
+                .put(element, new Transform(scale, originX, originY));
         UiEditModel.Bounds local = new UiEditModel.Bounds(x, y, w, h);
         REGISTERED.computeIfAbsent(screen, key -> new LinkedHashMap<>()).put(element, local);
         UiEditModel.WidgetOverride override = allowedNow() ? overridesFor(screen).getElement(element) : null;
@@ -225,6 +230,50 @@ public final class UiEditLayout {
     /** Очистить реестр перед инициализацией нового экрана (Init.Pre). */
     public static void clearRegistry() {
         REGISTERED.clear();
+        ELEMENT_TRANSFORMS.clear();
+        ELEMENT_VIEWPORTS.clear();
+    }
+
+    /** Remove entries for controls whose visibility is recomputed on each frame. */
+    public static void clearElements(String prefix) {
+        Map<String, UiEditModel.Bounds> bounds = REGISTERED.get(activeScreen);
+        Map<String, Transform> transforms = ELEMENT_TRANSFORMS.get(activeScreen);
+        if (bounds != null) {
+            bounds.keySet().removeIf(name -> name.startsWith(prefix));
+            transforms.keySet().removeIf(name -> name.startsWith(prefix));
+            var viewports = ELEMENT_VIEWPORTS.get(activeScreen);
+            if (viewports != null) {
+                viewports.keySet().removeIf(name -> name.startsWith(prefix));
+            }
+        }
+    }
+
+    /** Keep page controls selectable only within the surface that paints them. */
+    public static void setElementViewport(String element, UiEditModel.Bounds viewport) {
+        String screen = activeScreen;
+        if (screen != null) {
+            ELEMENT_VIEWPORTS.computeIfAbsent(screen, key -> new HashMap<>()).put(element, viewport);
+        }
+    }
+
+    static UiEditModel.Bounds elementViewport(String screen, String element) {
+        return ELEMENT_VIEWPORTS.getOrDefault(screen, Collections.emptyMap()).get(element);
+    }
+
+    private static Transform elementTransform(String screen, String element) {
+        return ELEMENT_TRANSFORMS.getOrDefault(screen, Collections.emptyMap()).get(element);
+    }
+
+    public static UiEditModel.Bounds elementToScreen(String screen, String element, UiEditModel.Bounds local) {
+        return toScreen(elementTransform(screen, element), local);
+    }
+
+    public static UiEditModel.Bounds elementToLayout(String screen, String element, UiEditModel.Bounds bounds) {
+        return toLayout(elementTransform(screen, element), bounds);
+    }
+
+    static int elementToScreenDelta(String screen, String element, int delta) {
+        return toScreenDelta(elementTransform(screen, element), delta);
     }
 
     // ------------------------------------------------------------------
@@ -233,7 +282,10 @@ public final class UiEditLayout {
 
     /** Логические границы → экранные (как их рисует pose-стек экрана). */
     public static UiEditModel.Bounds toScreen(String screen, UiEditModel.Bounds local) {
-        Transform t = TRANSFORMS.get(screen);
+        return toScreen(TRANSFORMS.get(screen), local);
+    }
+
+    private static UiEditModel.Bounds toScreen(Transform t, UiEditModel.Bounds local) {
         if (t == null || t.identity()) {
             return local;
         }
@@ -246,7 +298,10 @@ public final class UiEditLayout {
 
     /** Экранные границы → логические (обратное преобразование). */
     public static UiEditModel.Bounds toLayout(String screen, UiEditModel.Bounds screenBounds) {
-        Transform t = TRANSFORMS.get(screen);
+        return toLayout(TRANSFORMS.get(screen), screenBounds);
+    }
+
+    private static UiEditModel.Bounds toLayout(Transform t, UiEditModel.Bounds screenBounds) {
         if (t == null || t.identity()) {
             return screenBounds;
         }
@@ -269,7 +324,10 @@ public final class UiEditLayout {
 
     /** Логическая дельта → экранные пиксели (для строки состояния). */
     public static int toScreenDelta(String screen, int layoutDelta) {
-        Transform t = TRANSFORMS.get(screen);
+        return toScreenDelta(TRANSFORMS.get(screen), layoutDelta);
+    }
+
+    private static int toScreenDelta(Transform t, int layoutDelta) {
         if (t == null || t.identity()) {
             return layoutDelta;
         }
@@ -320,6 +378,8 @@ public final class UiEditLayout {
     /** Тесты: полный сброс статического состояния. */
     static void reset() {
         REGISTERED.clear();
+        ELEMENT_TRANSFORMS.clear();
+        ELEMENT_VIEWPORTS.clear();
         FILES.clear();
         TRANSFORMS.clear();
         activeScreen = null;

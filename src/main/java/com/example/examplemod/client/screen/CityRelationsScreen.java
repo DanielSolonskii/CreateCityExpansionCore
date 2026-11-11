@@ -20,7 +20,11 @@ public final class CityRelationsScreen extends CityPylonPageScreen {
     private int scroll;
     private static final int ROW_TOP=84, ROW_HEIGHT=64;
     private record ActionBounds(int x,int y,int width,int height){boolean contains(double px,double py){return px>=x&&px<x+width&&py>=y&&py<y+height;}}
-    private ActionBounds actionBounds(int rowY,boolean access){return new ActionBounds(width/2+50,rowY+(access?34:6),108,22); }
+    private ActionBounds actionBounds(int rowY, boolean access) {
+        String key = (access ? "access[" : "trust[") + (rowY - ROW_TOP) / ROW_HEIGHT + "]";
+        return CityPylonWorkspace.pageControl(this, key, width/2+50, rowY+(access?34:6), 108, 22,
+                ActionBounds::new);
+    }
 
     public CityRelationsScreen(CityPylonScreen parent) {
         super(Component.translatable("gui.createcityexpansioncore.relations.title"));

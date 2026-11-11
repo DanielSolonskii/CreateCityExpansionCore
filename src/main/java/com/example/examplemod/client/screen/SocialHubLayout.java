@@ -5,7 +5,7 @@ public record SocialHubLayout(int height,float scale,float x,float y) {
     public record Rect(int x,int y,int width,int height){public int right(){return x+width;}public int bottom(){return y+height;}public boolean contains(double a,double b){return a>=x&&b>=y&&a<right()&&b<bottom();}}
     public static SocialHubLayout calculate(int w,int h){float s=Math.min(1,Math.min(Math.max(1,w-24)/800f,Math.max(1,h-24)/470f));int height=Math.clamp((int)((h-24)/s),470,500);return new SocialHubLayout(height,s,(w-WIDTH*s)/2,(h-height*s)/2);}
     public Rect frame(){return new Rect(0,0,WIDTH,height);}public Rect content(){return new Rect(CONTENT_X,CONTENT_Y,WIDTH-CONTENT_X-10,height-CONTENT_Y-10);}
-    public Rect nav(int i){return new Rect(10,112+i*35,SIDEBAR-20,30);}public Rect settings(){return new Rect(10,height-40,SIDEBAR-20,26);}public Rect search(){return new Rect(WIDTH-247,10,207,26);}public Rect close(){return new Rect(WIDTH-34,10,24,26);}public Rect back(){return new Rect(CONTENT_X,10,25,26);}
+    public Rect nav(int i){return new Rect(10,112+i*35,SIDEBAR-20,30);}public Rect settings(){return new Rect(10,height-40,SIDEBAR-20,26);}public Rect search(){return new Rect(WIDTH-247,10,207,26);}public Rect close(){return new Rect(WIDTH-36,9,28,28);}public Rect back(){return new Rect(CONTENT_X,10,25,26);}
     public Rect balance(){return new Rect(10,height-70,SIDEBAR-20,23);}
     public Rect dailyGift(){return new Rect(WIDTH-285,10,28,26);}
     public Rect drawer(double progress){var c=content();return new Rect(c.right()-252+(int)Math.round((1-progress)*252),c.y(),252,c.height());}

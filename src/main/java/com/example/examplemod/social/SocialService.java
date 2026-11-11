@@ -69,6 +69,23 @@ public final class SocialService {
         boolean older=target!=null&&!messages.isEmpty()&&book.dialogs.getOrDefault(SocialBook.Pair.of(actor,target),List.of()).stream().anyMatch(m->m.id()<messages.getFirst().id());
         int incoming=(int)book.requests.stream().filter(e->e.to().equals(actor)).count();int unread=book.dialogs.keySet().stream().filter(p->p.includes(actor)).mapToInt(p->book.unread(actor,p.other(actor))).sum();
         PacketDistributor.sendToPlayer(viewer,new SocialStatePayload(r.request(),result,book.revision(actor),target,target==null?"":PlayerNames.name(s,target),target==null?SocialBook.Relation.NONE:book.relation(actor,target),r.filter(),page,visible.size(),contacts,messages,older,incoming,unread,target==null||cities.getMemberCity(target)==null?"":cities.getMemberCity(target).getName(),target==null||cities.getMemberCity(target)==null?"":cities.getMemberCity(target).getMember(target).getRole().name()));
+        if (r.filter() == 2 && r.action() != SocialBook.Action.READ
+                && viewer.connection.hasChannel(SocialDialogPreviews.TYPE)) {
+            var previews = new ArrayList<SocialDialogPreviews.Entry>();
+            for (var contact : contacts) {
+                var history = book.dialogs.get(SocialBook.Pair.of(actor, contact.id()));
+                if (history == null || history.isEmpty()) continue;
+                var last = history.getLast();
+                String snippet = last.text();
+                if (snippet.length() > SocialDialogPreviews.MAX_TEXT) {
+                    int end = SocialDialogPreviews.MAX_TEXT - 1;
+                    if (Character.isHighSurrogate(snippet.charAt(end - 1))) end--;
+                    snippet = snippet.substring(0, end) + "…";
+                }
+                previews.add(new SocialDialogPreviews.Entry(contact.id(), last.id(), last.time(), snippet));
+            }
+            PacketDistributor.sendToPlayer(viewer, new SocialDialogPreviews(r.request(), previews));
+        }
     }
     public static void notify(ServerPlayer player,UUID peer,String key) {
         var text=Component.translatable("gui.createcityexpansioncore.social."+key,PlayerNames.name(player.getServer(),peer));

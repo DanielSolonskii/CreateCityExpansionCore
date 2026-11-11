@@ -210,7 +210,7 @@ public class CityInvitePlayerScreen extends CityPylonPageScreen {
             return;
         }
         CityInviteUiLayout.Rect action =
-                CityInviteUiLayout.rowAction(this.width, PANEL_TOP, feedback(), visibleIndex, visibleRowCount());
+                actionControl(visibleIndex, visibleRowCount());
         boolean hover = action.contains(this.lastMouseX, this.lastMouseY);
         graphics.fill(action.x(), action.y(), action.right(), action.bottom(), hover ? 0xFF4A391E : 0xFF3A4145);
         graphics.drawCenteredString(this.font,
@@ -220,12 +220,25 @@ public class CityInvitePlayerScreen extends CityPylonPageScreen {
                 action.x() + action.width() / 2, action.y() + 7, 0xFFFFD59A);
     }
 
+    private CityInviteUiLayout.Rect actionControl(int index, int count) {
+        var bounds = CityInviteUiLayout.rowAction(this.width, PANEL_TOP, feedback(), index, count);
+        return CityPylonWorkspace.pageControl(this, "invite[" + index + "]",
+                bounds.x(), bounds.y(), bounds.width(), bounds.height(), CityInviteUiLayout.Rect::new);
+    }
+
+    private CityInviteUiLayout.Rect backControl() {
+        int left = CityInviteUiLayout.panelLeft(this.width);
+        return CityPylonWorkspace.pageControl(this, "back", left + CityInviteUiLayout.EDGE,
+                PANEL_TOP + PANEL_HEIGHT - 30, 100 - CityInviteUiLayout.EDGE, 18, CityInviteUiLayout.Rect::new);
+    }
+
     private void renderFooter(GuiGraphics graphics) {
         int left = CityInviteUiLayout.panelLeft(this.width);
         int y = PANEL_TOP + PANEL_HEIGHT - 26;
+        var back = backControl();
         graphics.drawString(this.font,
                 Component.translatable("gui.createcityexpansioncore.common.back"),
-                left + CityInviteUiLayout.EDGE, y, 0xFF98A3A7, false);
+                back.x(), back.y()+4, 0xFF98A3A7, false);
         if (visibleRowCount() > visibleCapacity()) {
             graphics.drawString(this.font,
                     Component.literal(this.scroll + 1 + " / " + visibleRowCount()),
@@ -238,29 +251,19 @@ public class CityInvitePlayerScreen extends CityPylonPageScreen {
         if (button != 0) {
             return super.mouseClicked(mouseX, mouseY, button);
         }
-        List<CityPlayerSearchResultPayload.Entry> results = CityInviteClientHandler.results();
-        for (int index = 0; index < results.size() && index - this.scroll < visibleCapacity(); index++) {
-            CityInviteUiLayout.Rect bounds =
-                    CityInviteUiLayout.row(this.width, PANEL_TOP, feedback(), index - this.scroll, results.size());
-            if (!bounds.contains(mouseX, mouseY)) {
-                continue;
-            }
-            CityPlayerSearchResultPayload.Entry entry = results.get(index);
-            if (entry.state() != CityPlayerSearchResultPayload.State.AVAILABLE
-                    && entry.state() != CityPlayerSearchResultPayload.State.INVITED) {
-                return true;
-            }
-            CityInviteUiLayout.Rect action = CityInviteUiLayout.rowAction(this.width, PANEL_TOP, feedback(),
-                    index - this.scroll, results.size());
-            if (action.contains(mouseX, mouseY)) {
-                sendInvite(entry);
-            }
+        if (backControl().contains(mouseX, mouseY)) {
+            onClose();
             return true;
         }
-        int left = CityInviteUiLayout.panelLeft(this.width);
-        if (mouseX >= left + CityInviteUiLayout.EDGE && mouseX < left + 100
-                && mouseY >= PANEL_TOP + PANEL_HEIGHT - 30 && mouseY < PANEL_TOP + PANEL_HEIGHT - 12) {
-            onClose();
+        List<CityPlayerSearchResultPayload.Entry> results = CityInviteClientHandler.results();
+        for (int index = this.scroll; index < results.size() && index - this.scroll < visibleCapacity(); index++) {
+            CityPlayerSearchResultPayload.Entry entry = results.get(index);
+            if ((entry.state() == CityPlayerSearchResultPayload.State.AVAILABLE
+                    || entry.state() == CityPlayerSearchResultPayload.State.INVITED)
+                    && actionControl(index - this.scroll, results.size()).contains(mouseX, mouseY)) {
+                sendInvite(entry);
+                return true;
+            }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }

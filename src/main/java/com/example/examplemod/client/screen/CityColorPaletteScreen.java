@@ -143,15 +143,18 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         return false;
     }
 
+    private WorldMapUiLayout.Rect swatchControl(Layout layout, Swatch swatch) {
+        return CityPylonWorkspace.pageControl(this, "swatch[" + Integer.toHexString(swatch.color()) + "]",
+                layout.left()+swatch.x(), layout.top()+swatch.y(), swatch.width(), swatch.height(),
+                WorldMapUiLayout.Rect::new);
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
             Layout layout = layout();
             for (Swatch swatch : layout.swatches()) {
-                int x = layout.left() + swatch.x();
-                int y = layout.top() + swatch.y();
-                if (mouseX >= x && mouseX < x + swatch.width()
-                        && mouseY >= y && mouseY < y + swatch.height()) {
+                if (swatchControl(layout, swatch).contains(mouseX, mouseY)) {
                     /*
                      * Повторный выбор текущего цвета не отправляется:
                      * сервер всё равно отклонил бы его как «без изменений»,
@@ -207,17 +210,18 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         );
 
         for (Swatch swatch : layout.swatches()) {
-            int x = layout.left() + swatch.x();
-            int y = layout.top() + swatch.y();
-            guiGraphics.fill(x, y, x + swatch.width(), y + swatch.height(),
+            var bounds = swatchControl(layout, swatch);
+            int x = bounds.x();
+            int y = bounds.y();
+            guiGraphics.fill(x, y, x + bounds.width(), y + bounds.height(),
                     CityColors.argb(swatch.color(), 0xFF));
             /*
              * Тёмная подложка под рамкой: иначе светлый пресет сливается
              * с тёмной панелью по краю и квадрат «теряется».
              */
-            guiGraphics.renderOutline(x - 1, y - 1, swatch.width() + 2, swatch.height() + 2, 0xFF101010);
+            guiGraphics.renderOutline(x - 1, y - 1, bounds.width() + 2, bounds.height() + 2, 0xFF101010);
             if (swatch.color() == this.currentColor) {
-                guiGraphics.renderOutline(x - 3, y - 3, swatch.width() + 6, swatch.height() + 6, 0xFFD09A3A);
+                guiGraphics.renderOutline(x - 3, y - 3, bounds.width() + 6, bounds.height() + 6, 0xFFD09A3A);
             }
         }
 

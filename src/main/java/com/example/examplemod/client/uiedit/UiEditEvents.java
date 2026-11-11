@@ -83,6 +83,11 @@ public final class UiEditEvents {
 
     @SubscribeEvent
     public static void onInitPre(ScreenEvent.Init.Pre event) {
+        // Workspaces initialize their pages as screens, but input and rendering
+        // events still go to the top-level screen.
+        if (event.getScreen() != Minecraft.getInstance().screen) {
+            return;
+        }
         // Сначала объявляем ключ экрана: layout-классы посчитают геометрию в
         // init() между Pre и Post, и хук зарегистрирует элементы под ним же.
         UiEditLayout.setActiveScreen(event.getScreen());
@@ -94,7 +99,7 @@ public final class UiEditEvents {
 
     @SubscribeEvent
     public static void onInit(ScreenEvent.Init.Post event) {
-        if (!UiEditAccess.isAllowed()) {
+        if (event.getScreen() != Minecraft.getInstance().screen || !UiEditAccess.isAllowed()) {
             return;
         }
         UiEditSession.get().attach(event.getScreen(), event.getListenersList(), true);

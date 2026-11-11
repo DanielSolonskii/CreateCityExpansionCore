@@ -258,10 +258,10 @@ public final class UiEditOverlay {
         UiEditModel.WidgetOverride override = session.overrideOfElement(name);
         if (override != null) {
             String screenName = UiEditSession.className(screen);
-            lines.add("сдвиг " + fmt(UiEditLayout.toScreenDelta(screenName, override.dx()))
-                    + "," + fmt(UiEditLayout.toScreenDelta(screenName, override.dy()))
-                    + "  размер " + fmt(UiEditLayout.toScreenDelta(screenName, override.dw()))
-                    + "," + fmt(UiEditLayout.toScreenDelta(screenName, override.dh())));
+            lines.add("сдвиг " + fmt(UiEditLayout.elementToScreenDelta(screenName, name, override.dx()))
+                    + "," + fmt(UiEditLayout.elementToScreenDelta(screenName, name, override.dy()))
+                    + "  размер " + fmt(UiEditLayout.elementToScreenDelta(screenName, name, override.dw()))
+                    + "," + fmt(UiEditLayout.elementToScreenDelta(screenName, name, override.dh())));
         }
         drawCard(graphics, font, lines, screen, mouseX, mouseY);
     }
@@ -337,8 +337,8 @@ public final class UiEditOverlay {
             }
             UiEditModel.WidgetOverride override = session.overrideOfElement(element);
             return infoFor(element, bounds,
-                    override == null ? 0 : UiEditLayout.toScreenDelta(screenName, override.dx()),
-                    override == null ? 0 : UiEditLayout.toScreenDelta(screenName, override.dy()),
+                    override == null ? 0 : UiEditLayout.elementToScreenDelta(screenName, element, override.dx()),
+                    override == null ? 0 : UiEditLayout.elementToScreenDelta(screenName, element, override.dy()),
                     screen, font);
         }
         if (selected instanceof AbstractWidget widget) {
