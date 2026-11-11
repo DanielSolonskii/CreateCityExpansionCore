@@ -65,6 +65,20 @@ public final class PolishedWorldMapScreen extends Screen {
      * готовности рисуется экран загрузки.
      */
     private CityMapPanel map;
+    private boolean journeyWorkspaceOpen;
+    /** Transfer the live map to its marker workspace without tearing down the shared session. */
+    public void openJourneyWorkspace(String marker) {
+        if (this.map == null) return;
+        journeyWorkspaceOpen = true;
+        minecraft.setScreen(new com.example.examplemod.client.journey.JourneyAtlasScreen(this, this.map, marker));
+    }
+    public void tickJourneyWorkspace() {
+        if (this.map != null) this.data.drainMapTiles().forEach(this.map::receive);
+    }
+    public void finishJourneyWorkspace(boolean returning) {
+        journeyWorkspaceOpen = false;
+        if (!returning) removed();
+    }
     /** Legacy map management stays read-only by key; projects use their own membership-checked commands. */
     private final boolean readOnly;
     private final ProjectPanel projectWorkspace = new ProjectPanel();
@@ -1504,6 +1518,7 @@ case ENERGY -> setOverlays(false,false);
         catch (java.io.IOException error) { org.slf4j.LoggerFactory.getLogger(PolishedWorldMapScreen.class).warn("Cannot save local atlas view", error); }
     }
     @Override public void removed() {
+        if (journeyWorkspaceOpen) { super.removed(); return; }
         // Every way out of the atlas (ESC, a child screen, the "open object" action) must stop the
         // ambient logistics feed; otherwise a finished center session leaks its markers onto the
         // next normal world map opened in this client.

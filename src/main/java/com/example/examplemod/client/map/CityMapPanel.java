@@ -877,6 +877,9 @@ for (int index = 0; index < this.personalPins.size(); index++) {
                     }
                 }
             });
+            if (!projectPicking && !preciseTool())
+                guiGraphics.drawManaged(() -> com.example.examplemod.client.journey.JourneyMapLayer.render(guiGraphics, this, dimensionId, viewportX, viewportY, viewportWidth, viewportHeight, mouseX, mouseY, hud));
+            else com.example.examplemod.client.journey.JourneyMapLayer.clear(this);
             guiGraphics.drawManaged(() -> MapBorderLayer.render(guiGraphics, this, dimensionId, x, y, width, viewportHeight, mouseX, mouseY));
             if (hud) {
                 var mc = Minecraft.getInstance();
@@ -967,6 +970,8 @@ for (int index = 0; index < this.personalPins.size(); index++) {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && !projectPicking && !preciseTool() && pendingClaim == null && !placingPin && !measuring && insideViewport(mouseX,mouseY)
+                && com.example.examplemod.client.journey.JourneyMapLayer.click(this,mouseX,mouseY)) return true;
         if(button==1 && insideViewport(mouseX,mouseY) && !MapBorderLayer.available(dimensionId,screenToWorldX(mouseX),screenToWorldZ(mouseY))) return true;
         if(button==0&&!projectPicking&&pendingClaim==null&&insideViewport(mouseX,mouseY)&&com.example.examplemod.client.screen.MapSocialLayer.click(this,mouseX,mouseY))return true;
         if (insideViewport(mouseX,mouseY)) { stopMotion(); dragAt=0; }

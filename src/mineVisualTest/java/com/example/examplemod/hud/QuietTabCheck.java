@@ -11,6 +11,13 @@ public final class QuietTabCheck {
     private static int checks;
     private static void require(boolean value,String message) { checks++;if(!value)throw new AssertionError(message); }
     public static void main(String[] args) throws Exception {
+        require(TabCityLabel.playerName(null,"Fallback").equals("Fallback"),"missing display name preserves profile fallback");
+        require(TabCityLabel.playerName(Component.literal("RealNickname"),"cs0123456789abcd").equals("RealNickname"),"authenticated display name replaces technical join profile");
+        require(TabCityLabel.playerName(Component.literal("cs0123456789abcd"),"Fallback").equals("Fallback"),"technical name is not mistaken for an account display name");
+        require(TabCityLabel.playerName(Component.empty().append(Component.literal("RealNickname")).append(" · ")
+                .append(TabCityLabel.create(UUID.randomUUID().toString(),"My city",0x123456)),"Fallback").equals("RealNickname"),"nested account name is separated from city metadata");
+        require(TabCityLabel.playerName(Component.literal("Actual").append(" · ")
+                .append(TabCityLabel.create(UUID.randomUUID().toString(),"Actual",0x123456)),"Fallback").equals("Actual"),"identical city and account names do not remove the account");
         String id=UUID.randomUUID().toString();
         for(int rgb:List.of(0xD0483C,0x3A78C4,0x4C7F6B)) {
             var label=TabCityLabel.create(id,"Северный порт",rgb);

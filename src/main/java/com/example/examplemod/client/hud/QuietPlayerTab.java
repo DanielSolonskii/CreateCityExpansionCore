@@ -24,9 +24,13 @@ public final class QuietPlayerTab {
         players.sort(Comparator.comparingInt((PlayerInfo info)->{
             var other=TabCityLabel.read(info.getTabListDisplayName());
             return city!=null&&other!=null&&city.id().equals(other.id())?0:1;
-        }).thenComparing(info->info.getProfile().getName(),String.CASE_INSENSITIVE_ORDER)
+        }).thenComparing(info->playerName(info),String.CASE_INSENSITIVE_ORDER)
                 .thenComparing(info->info.getProfile().getId()));
         return players;
+    }
+
+    private static String playerName(PlayerInfo info) {
+        return TabCityLabel.playerName(info.getTabListDisplayName(), info.getProfile().getName());
     }
 
     public static Component hints() {
@@ -48,7 +52,7 @@ public final class QuietPlayerTab {
         var mc=Minecraft.getInstance();var font=mc.font;
         int nameWidth=70,cityWidth=70;
         for(var info:players) {
-            nameWidth=Math.max(nameWidth,Math.min(120,font.width(info.getProfile().getName())));
+            nameWidth=Math.max(nameWidth,Math.min(120,font.width(playerName(info))));
             var city=TabCityLabel.read(info.getTabListDisplayName());
             if(city!=null)cityWidth=Math.max(cityWidth,Math.min(120,font.width(city.name())));
         }
@@ -74,7 +78,7 @@ public final class QuietPlayerTab {
                 int x=12+column*cellWidth,y=38+row*15;
                 if(info.getProfile().getId().equals(self))g.fill(x-3,y-3,x+cellWidth-5,y+11,0x183B5550);
                 PlayerFaceRenderer.draw(g,info.getSkin(),x,y,8);
-                var name=Component.literal(fit(font,info.getProfile().getName(),nameWidth));
+                var name=Component.literal(fit(font,playerName(info),nameWidth));
                 boolean spectator=info.getGameMode()==GameType.SPECTATOR;
                 name.withStyle(style->style.withItalic(spectator));
                 g.drawString(font,name,x+14,y,spectator?MUTED:TEXT,false);

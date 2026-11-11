@@ -794,7 +794,8 @@ tasks.named('check') { dependsOn tasks.named('checkDispatchPresentation') }
     checkSocial: 'com.example.examplemod.social.SocialCheck',
     checkEconomyCompatibility: 'com.example.examplemod.economy.EconomyCompatibilityCheck',
     checkDailyRewards: 'com.example.examplemod.daily.DailyRewardsCheck',
-    checkOnboarding: 'com.example.examplemod.onboarding.OnboardingCheck'
+    checkOnboarding: 'com.example.examplemod.onboarding.OnboardingCheck',
+    checkJourneys: 'com.example.examplemod.journey.JourneyCheck'
 ].each { taskName, checkClass ->
     tasks.register(taskName, JavaExec) {
         dependsOn tasks.named('mineVisualTestClasses')
@@ -815,3 +816,12 @@ tasks.register('checkTransportTerminalBinding', JavaExec) {
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
 }
 tasks.named('check') { dependsOn tasks.named('checkTransportTerminalBinding') }
+
+// Native component/name policy; runs without a Minecraft client.
+tasks.register('checkPlayerDisplayNames', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.hud.QuietTabCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkPlayerDisplayNames') }

@@ -238,11 +238,20 @@ public final class SocialHubScreen extends Screen {
         return hubControl("drawerClose", new SocialHubLayout.Rect(drawer.right()-34, drawer.y(), 34, 34));
     }
 
+    static String playerName(String synced) {
+        var mc=net.minecraft.client.Minecraft.getInstance();
+        String name=com.example.examplemod.hud.TabCityLabel.playerName(Component.literal(synced), "");
+        if(!name.isBlank())return name;
+        var info=mc.getConnection()==null?null:mc.getConnection().getPlayerInfo(mc.player.getUUID());
+        name=com.example.examplemod.hud.TabCityLabel.playerName(info==null?null:info.getTabListDisplayName(), "");
+        return name.isBlank()?com.example.examplemod.hud.TabCityLabel.playerName(mc.player.getCustomName(),mc.player.getGameProfile().getName()):name;
+    }
+
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float pt){UiEditLayout.clearElements("");buttonMotion.beginFrame();double mx=layout.localX(mouseX),my=layout.localY(mouseY);g.fill(0,0,width,height,0x99090E10);g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);panel(g,0,0,SocialHubLayout.WIDTH,layout.height());g.fill(SocialHubLayout.SIDEBAR,9,SocialHubLayout.SIDEBAR+1,layout.height()-9,EDGE);g.pose().popPose();
         if(section!=Section.INBOX&&page!=null)page.render(g,inspected==null?mouseX:-10000,inspected==null?mouseY:-10000,pt);
         g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);
         text(g,tr("title"),16,17,140,ACCENT);button(g,hubControl("back", layout.back()),Component.literal("‹"),mx,my,true);text(g,tr("section."+section.name().toLowerCase(Locale.ROOT)),199,18,SocialHubLayout.WIDTH-505,TEXT);button(g,hubControl("search", layout.search()),tr("search"),SocialHubIcons.Icon.SEARCH,mx,my,true);button(g,hubControl("close", layout.close()),Component.empty(),SocialHubIcons.Icon.CLOSE,mx,my,true);
-        var info=minecraft.getConnection().getPlayerInfo(minecraft.player.getUUID());var skin=info==null?DefaultPlayerSkin.get(minecraft.player.getUUID()):info.getSkin();rounded(g,12,47,35,35,4,INSET);PlayerFaceRenderer.draw(g,skin,15,50,29);text(g,Component.literal(minecraft.player.getGameProfile().getName()),53,51,101,TEXT);text(g,community.hasUUID("OwnCity")?Component.literal(community.getString("OwnName")):tr("no_city"),53,68,101,MUTED);
+        var info=minecraft.getConnection().getPlayerInfo(minecraft.player.getUUID());var skin=info==null?DefaultPlayerSkin.get(minecraft.player.getUUID()):info.getSkin();rounded(g,12,47,35,35,4,INSET);PlayerFaceRenderer.draw(g,skin,15,50,29);text(g,Component.literal(playerName(community.getString("SelfName"))),53,51,101,TEXT);text(g,community.hasUUID("OwnCity")?Component.literal(community.getString("OwnName")):tr("no_city"),53,68,101,MUTED);
         text(g,community.hasUUID("OwnCity")?Component.translatable("role.createcityexpansioncore."+community.getString("OwnRole").toLowerCase(Locale.ROOT)):tr("independent"),16,92,138,ACCENT);
         long now=net.minecraft.Util.getMillis();float blend=CommunityFx.reduced?1:Math.min(1,(now-(lastFrame==0?now-16:lastFrame))/70f);lastFrame=now;indicator+=(navControl(section).y()-indicator)*blend;
         g.fill(9,(int)indicator+5,11,(int)indicator+25,ACCENT);

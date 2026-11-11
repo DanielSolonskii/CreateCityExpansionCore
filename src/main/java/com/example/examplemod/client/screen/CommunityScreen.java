@@ -71,7 +71,7 @@ public final class CommunityScreen extends Screen {
         if(membershipAction!=null){hits.clear();g.fill(0,0,layout.width(),layout.height(),0xBD0B1012);var r=layout.membershipModal();panel(g,r.x(),r.y(),r.width(),r.height());label(g,tr("membership.confirm"),r.x()+12,r.y()+12,r.width()-24,ACCENT);g.drawWordWrap(font,membershipQuestion,r.x()+12,r.y()+34,r.width()-24,TEXT);button(g,layout.membershipConfirm(false),tr("membership.cancel"),()->membershipAction=null,true,false,mx,my);button(g,layout.membershipConfirm(true),tr("membership.proceed"),()->{var action=membershipAction;membershipAction=null;action.run();},pending==null,true,mx,my);}
         g.flush();g.pose().popPose();
     }
-    private void home(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;label(g,tr("greeting",state.getString("SelfName").isBlank()?minecraft.player.getGameProfile().getName():state.getString("SelfName")),layout.body().x()+12,y,layout.body().width()-24,TEXT);y+=23;
+    private void home(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;label(g,tr("greeting",SocialHubScreen.playerName(state.getString("SelfName"))),layout.body().x()+12,y,layout.body().width()-24,TEXT);y+=23;
         row(g,y,tr("messages_count",state.getInt("Unread")),tr("open_messages"),()->SocialScreen.open(this,null),mx,my);y+=49;
         row(g,y,tr("requests_count",state.getInt("FriendRequests")),tr("open_friends"),()->SocialScreen.openRequests(this),mx,my);y+=49;
         row(g,y,AllianceScreen.tr("title"),AllianceScreen.tr("community_entry"),()->AllianceScreen.open(this,null),mx,my);y+=49;
