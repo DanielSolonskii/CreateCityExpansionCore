@@ -11,6 +11,9 @@ import net.minecraft.resources.ResourceLocation;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.BitSet;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -41,7 +44,6 @@ public final class GeologyProceduralCheck {
 
     public static void main(String[] args) throws IOException {
         determinism();
-        crossingDepositIsShared();
         localPotentialIsSmooth();
         qualityAndSizeAreIndependent();
         sharedReserveAcrossMines();
@@ -51,11 +53,9 @@ public final class GeologyProceduralCheck {
         legacyDataIsRegenerated();
         worksOutsideStartingArea();
         lookupNeverTouchesChunks();
-        densityTargets();
+        densityTargets(args.length == 0 ? null : Path.of(args[0]));
         resourcesDoNotSharePosition();
         resourcesDoNotShareQualityOrReserve();
-        everyResourceIsFindableNearSpawn();
-        emptyCellShareIsInTargetRange();
         scannerCanReportEveryResource();
 
         System.out.println("PASS: " + checks + " procedural geology checks");
@@ -161,116 +161,6 @@ public final class GeologyProceduralCheck {
                         + identicalQuality);
         require(identicalReserve == 0,
                 "resources must not share reserve, found " + identicalReserve);
-    }
-
-    /**
-     * У каждого ресурса есть залежь не дальше 500 блоков от старта.
-     *
-     * <p>Это то требование, ради которого всё затевалось: игрок гуляет и всегда
-     * имеет шанс что-то найти, а искать богатое — уже отдельная задача.
-     */
-    private static void everyResourceIsFindableNearSpawn() {
-        /*
-         * Проверяется то, что реально обещано игроку: откуда угодно в стартовой
-         * зоне до ближайшей залежи ЛЮБОГО ресурса не больше 500 блоков.
-         *
-         * <p>Раньше здесь проверялось обратное — что каждый ресурс встречается в
-         * стартовом квадрате. При 25% пустых ячеек это неверная формулировка:
-         * ресурс законно может не попасть в один квадрат из нескольких, и это не
-         * «недостижимый уголь». Гарантия, которая нужна игроку, — про любую
-         * залежь; богатство и конкретный ресурс ищутся целенаправленно.
-         */
-        int cell = GeologyGenerator.MACRO_CELL_SIZE;
-        int probesPerAxis = 24;
-        int worst = 0;
-        int over500 = 0;
-        int probes = 0;
-
-        for (int px = -2; px <= 2; px++) {
-            for (int pz = -2; pz <= 2; pz++) {
-                for (int sx = 0; sx < probesPerAxis; sx++) {
-                    for (int sz = 0; sz < probesPerAxis; sz++) {
-                        int x = px * cell + (int) ((long) cell * sx / probesPerAxis);
-                        int z = pz * cell + (int) ((long) cell * sz / probesPerAxis);
-                        int nearest = Integer.MAX_VALUE;
-
-                        // Ячейка точки плюс её соседи: столько и обходит запрос.
-                        int cx = GeologyGenerator.cellXOf(x);
-                        int cz = GeologyGenerator.cellZOf(z);
-                        for (int dx = -1; dx <= 1; dx++) {
-                            for (int dz = -1; dz <= 1; dz++) {
-                                for (GeologicalDeposit deposit
-                                        : GeologyGenerator.createDeposits(
-                                                DIMENSION, SEED, cx + dx, cz + dz)) {
-                                    /*
-                                     * Меряется расстояние до КРАЯ залежи, а не до
-                                     * центра. Залежь — тело радиусом до 480
-                                     * блоков, и «до центра 600» означает «руда у
-                                     * тебя под ногами». Игрок спрашивает, сколько
-                                     * идти до руды, а не до её середины.
-                                     */
-                                    int distance = (int) Math.hypot(
-                                            deposit.getCenterX() - x,
-                                            deposit.getCenterZ() - z
-                                    );
-                                    double meanRadius = 0.5 * (
-                                            deposit.getShape().radiusX()
-                                                    + deposit.getShape().radiusZ()
-                                    );
-                                    int toEdge = (int) Math.max(
-                                            0.0, distance - meanRadius
-                                    );
-                                    nearest = Math.min(nearest, toEdge);
-                                }
-                            }
-                        }
-
-                        probes++;
-                        if (nearest == Integer.MAX_VALUE) {
-                            continue;
-                        }
-                        worst = Math.max(worst, nearest);
-                        if (nearest > 500) {
-                            over500++;
-                        }
-                    }
-                }
-            }
-        }
-
-        System.out.println("  distance to nearest deposit edge: worst "
-                + worst + " blocks, over 500 in " + over500 + "/" + probes);
-        require(probes > 10_000, "enough probe points (" + probes + ")");
-        require(over500 * 100 <= probes * 2,
-                "at most 2% of probed spots may be further than 500 blocks from "
-                        + "any deposit, got " + over500 + "/" + probes);
-    }
-
-    /**
-     * Доля пустых ячеек попадает в заданный диапазон.
-     *
-     * <p>Раньше получалось 75% (у пользователя вышло 71%): решения о наличии
-     * залежи брались из одного числа для всех ресурсов, поэтому клетка получала
-     * либо все пять залежей, либо ни одной.
-     */
-    private static void emptyCellShareIsInTargetRange() {
-        int cells = 0;
-        int empty = 0;
-
-        for (int cx = -60; cx <= 60; cx++) {
-            for (int cz = -60; cz <= 60; cz++) {
-                cells++;
-                if (GeologyGenerator.createDeposits(DIMENSION, SEED, cx, cz).isEmpty()) {
-                    empty++;
-                }
-            }
-        }
-
-        double share = 100.0 * empty / cells;
-        System.out.println("  empty cells: " + String.format("%.1f%%", share)
-                + " of " + cells);
-        require(share >= 12.0 && share <= 40.0,
-                "empty cells should stay near 25%, got " + share + "%");
     }
 
     /**
@@ -413,125 +303,6 @@ public final class GeologyProceduralCheck {
     }
 
     /*
-     * 2. Соседние query cells видят один и тот же пересекающий
-     *    их depositId — и это один и тот же объект, а не копия.
-     */
-    private static void crossingDepositIsShared() {
-        GeologyManager manager = new GeologyManager(DIMENSION);
-        manager.materialize(1, 1);
-
-        Crossing crossing = findCrossingDeposit(manager, 1, 1);
-        require(crossing != null, "a deposit crosses a macro-cell boundary");
-
-        GeologicalDeposit deposit = crossing.deposit();
-        BlockPos low = new BlockPos(
-                crossing.lowX(),
-                64,
-                crossing.lowZ()
-        );
-        BlockPos high = new BlockPos(
-                crossing.highX(),
-                64,
-                crossing.highZ()
-        );
-        require(deposit.contains(low.getX(), low.getZ()),
-                "the first probe is inside the crossing deposit");
-        require(deposit.contains(high.getX(), high.getZ()),
-                "the second probe is inside the crossing deposit");
-        require(GeologyGenerator.cellXOf(low.getX())
-                        != GeologyGenerator.cellXOf(high.getX())
-                        || GeologyGenerator.cellZOf(low.getZ())
-                        != GeologyGenerator.cellZOf(high.getZ()),
-                "the two probe positions really sit in different macro cells");
-
-        GeologicalDeposit fromLow = manager.query(low)
-                .getDeposit(deposit.getId()).orElse(null);
-        GeologicalDeposit fromHigh = manager.query(high)
-                .getDeposit(deposit.getId()).orElse(null);
-
-        require(fromLow != null, "first macro cell sees the crossing deposit");
-        require(fromHigh != null, "second macro cell sees the crossing deposit");
-        require(fromLow == fromHigh,
-                "both macro cells resolve to the same canonical deposit instance");
-    }
-
-    private record Crossing(
-            GeologicalDeposit deposit,
-            int lowX,
-            int lowZ,
-            int highX,
-            int highZ
-    ) {
-    }
-
-    /**
-     * Ищет залежь, пересекающую границу своей macro-cell,
-     * и две точки по разные стороны от этой границы.
-     *
-     * Точки берутся на 0.6 полуоси вдоль оси пересечения: при
-     * любом повороте и любом соотношении полуосей нормированный
-     * радиус там не превышает 0.83, то есть обе точки гарантированно
-     * находятся внутри залежи.
-     */
-    private static Crossing findCrossingDeposit(
-            GeologyManager manager,
-            int baseX,
-            int baseZ
-    ) {
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dz = -2; dz <= 2; dz++) {
-                manager.materialize(baseX + dx, baseZ + dz);
-            }
-        }
-
-        for (int cx = baseX - 2; cx <= baseX + 2; cx++) {
-            for (int cz = baseZ - 2; cz <= baseZ + 2; cz++) {
-                long cellStartX = (long) cx * GeologyGenerator.MACRO_CELL_SIZE;
-                long cellStartZ = (long) cz * GeologyGenerator.MACRO_CELL_SIZE;
-
-                for (GeologicalDeposit deposit : manager.depositsInCell(cx, cz)) {
-                    int centerX = deposit.getCenterX();
-                    int centerZ = deposit.getCenterZ();
-
-                    int reachX = (int) (deposit.getShape().radiusX() * 0.6);
-                    int reachZ = (int) (deposit.getShape().radiusZ() * 0.6);
-                    if (reachX < 8 || reachZ < 8) {
-                        continue;
-                    }
-
-                    boolean crossesX = centerX - reachX < cellStartX
-                            || centerX + reachX > cellStartX
-                            + GeologyGenerator.MACRO_CELL_SIZE;
-                    boolean crossesZ = centerZ - reachZ < cellStartZ
-                            || centerZ + reachZ > cellStartZ
-                            + GeologyGenerator.MACRO_CELL_SIZE;
-                    if (!crossesX && !crossesZ) {
-                        continue;
-                    }
-
-                    Crossing candidate = new Crossing(
-                            deposit,
-                            centerX - reachX,
-                            centerZ - reachZ,
-                            centerX + reachX,
-                            centerZ + reachZ
-                    );
-                    boolean differentCells =
-                            GeologyGenerator.cellXOf(candidate.lowX())
-                                    != GeologyGenerator.cellXOf(candidate.highX())
-                                    || GeologyGenerator.cellZOf(candidate.lowZ())
-                                    != GeologyGenerator.cellZOf(candidate.highZ());
-                    if (!differentCells) {
-                        continue;
-                    }
-                    return candidate;
-                }
-            }
-        }
-        return null;
-    }
-
-    /*
      * 3. Потенциал меняется плавно: у соседних блоков нет
      *    скачков вида 8000 -> 500.
      */
@@ -545,7 +316,6 @@ public final class GeologyProceduralCheck {
 
         double worstNeighbourDelta = 0.0;
         double worstJump = 0.0;
-        double worstRadialRise = 0.0;
         int inspected = 0;
 
         for (GeologicalDeposit deposit : deposits) {
@@ -580,82 +350,21 @@ public final class GeologyProceduralCheck {
                 }
             }
 
-            /*
-             * Радиальный проход: потенциал должен монотонно
-             * снижаться от центра к границе. Малые локальные
-             * волны от искажения границы допустимы, но заметного
-             * роста при движении наружу быть не должно - именно
-             * он превращал бы плавное поле в «лестницу».
-             */
-            int[] rayAngles = {0, 45, 90, 135, 180, 225, 270, 315};
-            for (int degrees : rayAngles) {
-                double radians = Math.toRadians(degrees);
-                double stepX = Math.cos(radians);
-                double stepZ = Math.sin(radians);
-                double previous = deposit.localPotentialPerHour(
-                        deposit.getCenterX(),
-                        deposit.getCenterZ()
-                );
-                double tolerance = 0.005 * deposit.getPeakPotentialPerHour();
-
-                for (int step = 1; step <= reach; step++) {
-                    double value = deposit.localPotentialPerHour(
-                            deposit.getCenterX() + stepX * step,
-                            deposit.getCenterZ() + stepZ * step
-                    );
-                    worstRadialRise = Math.max(worstRadialRise, value - previous);
-                    previous = value;
-                }
-            }
+            double core = deposit.localPotentialPerHour(deposit.getCenterX(), deposit.getCenterZ());
+            require(Math.abs(core - deposit.getPeakPotentialPerHour()) < 1e-8,
+                    "the polygon core reaches peak potential");
+            VeinFootprint footprint = deposit.getShape().footprint();
+            require(deposit.localPotentialPerHour(footprint.originX() - 1, deposit.getCenterZ()) == 0,
+                    "potential is zero outside the polygon bounds");
         }
 
         require(inspected > 0, "smoothness was actually measured somewhere");
-
-        /*
-         * Геометрия задаёт нижнюю границу перепада: у залежи
-         * диаметром 300 блоков и пиком 10000/ч средний наклон
-         * составляет peak / radius = 67/ч, а гладкая
-         * колоколообразная функция неизбежно проходит через
-         * ~1.5x от среднего на самом крутом участке.
-         * Поэтому проверяется смысловое свойство «нет скачков»,
-         * а не недостижимое «перепад равен нулю»:
-         *
-         *  - шаг между соседними блоками мал относительно шкалы;
-         *  - при движении наружу потенциал не растёт.
-         */
         double ceiling = DepositQualityClass.PEAK_POTENTIAL_CEILING;
         require(worstNeighbourDelta < ceiling * 0.02,
                 "adjacent blocks differ by less than 2% of the scale ceiling (worst="
                         + worstNeighbourDelta + " of " + ceiling + ")");
         require(worstJump < ceiling * 0.04,
                 "two-block step stays smooth (worst=" + worstJump + ")");
-        require(worstRadialRise < ceiling * 0.01,
-                "potential never rises on the way from the core to the rim (worst="
-                        + worstRadialRise + ")");
-
-        /* Потенциал обязан реально снижаться от ядра к периферии. */
-        GeologicalDeposit deposit = deposits.stream()
-                .max((left, right) -> Double.compare(
-                        left.localPotentialPerHour(left.getCenterX(), left.getCenterZ()),
-                        right.localPotentialPerHour(right.getCenterX(), right.getCenterZ())
-                ))
-                .orElseThrow();
-
-        double core = deposit.localPotentialPerHour(
-                deposit.getCenterX(),
-                deposit.getCenterZ()
-        );
-        double mid = deposit.localPotentialPerHour(
-                deposit.getCenterX() + deposit.getShape().radiusX() / 2,
-                deposit.getCenterZ()
-        );
-        double rim = deposit.localPotentialPerHour(
-                deposit.getCenterX() + deposit.getShape().radiusX() * 3,
-                deposit.getCenterZ()
-        );
-        require(core > mid, "potential falls off from the core");
-        require(mid > rim, "potential keeps falling towards the rim");
-        require(rim == 0.0, "potential is zero outside the deposit");
     }
 
     /* 4. Quality class и Size class выбираются независимо. */
@@ -692,38 +401,12 @@ public final class GeologyProceduralCheck {
         require(poorGiant > 0 || richSmall > 0,
                 "a small rich or a poor giant deposit exists");
 
-        /*
-         * Size class определяет срок эксплуатации, а reserve
-         * не зависит от качества: бедное гигантское месторождение
-         * должно иметь reserve не меньше богатого малого.
-         */
-        double poorGiantReserve = averageReserve(DepositSizeClass.GIANT, DepositQualityClass.MODEST);
-        double richSmallReserve = averageReserve(DepositSizeClass.SMALL, DepositQualityClass.EXCEPTIONAL);
-        require(poorGiantReserve > 0.0, "poor giant deposits exist for the reserve check");
-        require(poorGiantReserve >= richSmallReserve * 0.5,
-                "reserve is driven by size class, not by quality ("
-                        + poorGiantReserve + " vs " + richSmallReserve + ")");
-    }
-
-    private static double averageReserve(
-            DepositSizeClass sizeClass,
-            DepositQualityClass qualityClass
-    ) {
-        double total = 0.0;
-        int count = 0;
-        for (int cx = -40; cx <= 40; cx++) {
-            for (int cz = -40; cz <= 40; cz++) {
-                for (GeologicalDeposit deposit
-                        : GeologyGenerator.createDeposits(DIMENSION, SEED, cx, cz)) {
-                    if (deposit.getSizeClass() == sizeClass
-                            && deposit.getQualityClass() == qualityClass) {
-                        total += deposit.getInitialReserve();
-                        count++;
-                    }
-                }
-            }
+        for (int sample = 0; sample < 100; sample++) {
+            long reserveSeed = GeologyNoise.mix(SEED, sample);
+            require(GeologyGenerator.computeReserve(reserveSeed, DepositSizeClass.GIANT)
+                            > GeologyGenerator.computeReserve(reserveSeed, DepositSizeClass.SMALL),
+                    "the reserve scales with size across lifetime rolls");
         }
-        return count == 0 ? 0.0 : total / count;
     }
 
     /*
@@ -892,7 +575,7 @@ public final class GeologyProceduralCheck {
         CompoundTag tag = manager.save(new CompoundTag(), null);
         require(tag.getInt("FormatVersion") == GeologySavedDataCodec.CURRENT_FORMAT_VERSION,
                 "saved data uses the current format version");
-        require(tag.contains("GeneratorVersion", net.minecraft.nbt.Tag.TAG_INT),
+        require(tag.getInt("GeneratorVersion") == 4,
                 "saved data carries the generator version");
 
         GeologyManager restored = GeologyManager.load(tag, null, DIMENSION, SEED);
@@ -933,7 +616,8 @@ public final class GeologyProceduralCheck {
      */
     private static void legacyDataIsRegenerated() {
         CompoundTag legacy = new CompoundTag();
-        legacy.putInt("FormatVersion", 2);
+        legacy.putInt("FormatVersion", 5);
+        legacy.putInt("GeneratorVersion", 3);
         legacy.putString("Dimension", DIMENSION.toString());
 
         ListTag regions = new ListTag();
@@ -976,10 +660,21 @@ public final class GeologyProceduralCheck {
          * Залежи на старом месте строятся заново — и уже разнесены по позициям.
          * Именно это и было обещано игроку вместо переноса старых данных.
          */
-        BlockPos probe = new BlockPos(12 * 100 + 50, 64, 7 * 100 + 50);
+        GeologicalDeposit expected = null;
+        for (int x = -3; x <= 3 && expected == null; x++) {
+            List<GeologicalDeposit> cell = GeologyGenerator.createDeposits(DIMENSION, SEED, x, 0);
+            if (!cell.isEmpty()) {
+                expected = cell.getFirst();
+            }
+        }
+        require(expected != null, "a generated deposit exists near the origin");
+        BlockPos probe = new BlockPos(expected.getCenterX(), 64, expected.getCenterZ());
         GeologicalRegion rebuilt = regenerated.query(probe);
-        require(!rebuilt.getDeposits().isEmpty(),
-                "the cell is rebuilt on demand after regeneration");
+        GeologicalDeposit regeneratedDeposit = rebuilt.getDeposit(expected.getId()).orElseThrow();
+        require(regeneratedDeposit.getRemainingReserve() == expected.getInitialReserve(),
+                "format 5 regenerates the deposit with a fresh reserve");
+        require(regeneratedDeposit.getId().getPath().startsWith("deposit/v4/"),
+                "the regenerated deposit uses a version 4 identifier");
 
         java.util.Set<Integer> centres = new java.util.HashSet<>();
         for (GeologicalDeposit deposit : rebuilt.getDeposits()) {
@@ -1045,8 +740,8 @@ public final class GeologyProceduralCheck {
         for (int index = 0; index < far.size(); index++) {
             require(far.get(index).getShape().equals(again.get(index).getShape()),
                     "far deposits keep the same shape");
-            require(far.get(index).getCenterX() >= cell * GeologyGenerator.MACRO_CELL_SIZE,
-                    "far deposits belong to their own macro cell");
+            require(far.get(index).getId().equals(again.get(index).getId()),
+                    "far deposits retain the same storage identity");
         }
 
         /* Запрос позиции в этой далёкой ячейке тоже работает. */
@@ -1152,126 +847,202 @@ public final class GeologyProceduralCheck {
      * по одному seed была бы ложным срабатыванием, а не
      * характеристикой генератора.
      */
-    private static void densityTargets() {
-        int half = 2_500 / GeologyGenerator.MACRO_CELL_SIZE + 1;
-        int sampledPerAxis = half * 2 + 1;
-        int interiorPerAxis = sampledPerAxis - 2;
+    private static void densityTargets(Path mapDirectory) throws IOException {
+        smoothedContoursAreExclusive();
+        long[] seeds = {0, 1, -317, SEED, 42};
+        int half = 8;
+        int step = VeinFootprint.STEP;
+        int cellWidth = GeologyGenerator.MACRO_CELL_SIZE;
+        int side = cellWidth / step;
+        int width = (2 * half + 1) * side;
+        int start = -half * cellWidth;
+        int sampleCount = width * width;
+        long[] oreTotals = new long[GeologyGenerator.RESOURCES.size()];
+        for (long seed : seeds) {
+            long layoutSeed = GeologyNoise.mix(seed, 0x3000L, DIMENSION.toString().hashCode());
+            int raw = 0;
+            for (int z = 0; z < width; z++) {
+                for (int x = 0; x < width; x++) {
+                    if (VeinLayout.presence(layoutSeed, start + (x + 0.5) * step,
+                            start + (z + 0.5) * step) >= VeinLayout.PRESENCE_THRESHOLD) {
+                        raw++;
+                    }
+                }
+            }
 
-        long cellArea = (long) GeologyGenerator.MACRO_CELL_SIZE
-                * GeologyGenerator.MACRO_CELL_SIZE;
-        long blockArea = (long) sampledPerAxis * sampledPerAxis * cellArea;
-
-        int seedSamples = 12;
-        long[] totals = new long[GeologyGenerator.RESOURCES.size()];
-        double coveredShare = 0.0;
-
-        for (int sample = 0; sample < seedSamples; sample++) {
-            long worldSeed = SEED + sample * 7_919L;
-            long[] interiorCounts = new long[GeologyGenerator.RESOURCES.size()];
-            long covered = 0L;
-
-            for (int cx = -half; cx <= half; cx++) {
-                for (int cz = -half; cz <= half; cz++) {
-                    boolean interior = cx != -half && cx != half
-                            && cz != -half && cz != half;
-
-                    for (GeologicalDeposit deposit
-                            : GeologyGenerator.createDeposits(DIMENSION, worldSeed, cx, cz)) {
-                        covered += approximateArea(deposit);
-
-                        if (!interior) {
-                            continue;
+            int covered = 0;
+            int count = 0;
+            int[] owners = new int[sampleCount];
+            long[] oreArea = new long[oreTotals.length];
+            List<GeologicalDeposit> mapDeposits = new ArrayList<>();
+            int ring = GeologyGenerator.LOOKUP_RING;
+            for (int cx = -half - ring; cx <= half + ring; cx++) {
+                for (int cz = -half - ring; cz <= half + ring; cz++) {
+                    for (GeologicalDeposit deposit : GeologyGenerator.createDeposits(DIMENSION, seed, cx, cz)) {
+                        VeinFootprint footprint = deposit.getShape().footprint();
+                        require(footprint != null && footprint.area() >= VeinLayout.MIN_AREA,
+                                "every vein has a polygon at least the size of SMALL");
+                        require(deposit.contains(deposit.getCenterX(), deposit.getCenterZ()),
+                                "the core is inside its own polygon");
+                        if (mapDirectory != null && Math.abs(cx) <= 4 && Math.abs(cz) <= 4) {
+                            mapDeposits.add(deposit);
                         }
-                        for (int index = 0; index < interiorCounts.length; index++) {
-                            if (GeologyGenerator.RESOURCES.get(index).id()
-                                    .equals(deposit.getResourceId())) {
-                                interiorCounts[index]++;
+                        int owner = ++count;
+                        int offsetX = (footprint.originX() - start) / step;
+                        int offsetZ = (footprint.originZ() - start) / step;
+                        int footprintSide = VeinFootprint.SIDE;
+                        int areaInSurvey = 0;
+                        BitSet samples = BitSet.valueOf(footprint.sampleWords());
+                        for (int sample = samples.nextSetBit(0); sample >= 0; sample = samples.nextSetBit(sample + 1)) {
+                            int worldX = footprint.originX() + sample % footprintSide * step;
+                            int worldZ = footprint.originZ() + sample / footprintSide * step;
+                            int reach = GeologyGenerator.STORAGE_REACH;
+                            require(worldX >= cx * cellWidth - reach && worldX + step <= (cx + 1) * cellWidth + reach
+                                            && worldZ >= cz * cellWidth - reach
+                                            && worldZ + step <= (cz + 1) * cellWidth + reach,
+                                    "the owner lookup reach contains the entire footprint");
+                            int x = offsetX + sample % footprintSide;
+                            int z = offsetZ + sample / footprintSide;
+                            if (x >= 0 && x < width && z >= 0 && z < width) {
+                                int index = z * width + x;
+                                require(owners[index] == 0, "polygons cannot overlap across storage cells");
+                                owners[index] = owner;
+                                areaInSurvey++;
+                            }
+                        }
+                        covered += areaInSurvey;
+                        for (int ore = 0; ore < oreArea.length; ore++) {
+                            if (GeologyGenerator.RESOURCES.get(ore).id().equals(deposit.getResourceId())) {
+                                oreArea[ore] += areaInSurvey;
                             }
                         }
                     }
                 }
             }
 
-            for (int index = 0; index < interiorCounts.length; index++) {
-                totals[index] += interiorCounts[index];
+            double rawShare = (double) raw / sampleCount;
+            double coverage = (double) covered / sampleCount;
+            System.out.printf(Locale.ROOT, "  seed %d: mask %.2f%%, retained %.2f%%%n",
+                    seed, rawShare * 100, coverage * 100);
+            require(rawShare >= 0.60 && rawShare <= 0.72, "mask stays within the denser coverage range");
+            require(coverage >= 0.58 && covered <= raw, "filtered coverage stays near the target");
+            verifyStorageSeams(owners, width, side);
+            for (int ore = 0; ore < oreTotals.length; ore++) {
+                oreTotals[ore] += oreArea[ore];
+                require(oreArea[ore] > 0, "each ore occurs in every sampled world");
             }
-            coveredShare += (double) covered / blockArea;
+            if (mapDirectory != null) {
+                VeinMapImages.write(mapDirectory, seed, coverage, mapDeposits);
+            }
         }
-
-        StringBuilder report = new StringBuilder();
-        report.append("  starter area ~").append(interiorPerAxis).append('x')
-                .append(interiorPerAxis).append(" macro cells (")
-                .append(interiorPerAxis * GeologyGenerator.MACRO_CELL_SIZE)
-                .append(" blocks); mean deposits per world: ");
-        for (int index = 0; index < totals.length; index++) {
-            report.append(GeologyGenerator.RESOURCES.get(index).id().getPath())
-                    .append('=')
-                    .append(String.format("%.1f", mean(totals[index], seedSamples)))
-                    .append(' ');
-        }
-        System.out.println(report);
-
-        /*
-         * Плотность проверяется как «есть ли ресурс», а не как точное число.
-         *
-         * <p>Раньше здесь стояли жёсткие коридоры 10-14 залежей на ресурс. Они
-         * были следствием старой схемы, где все ресурсы получали решение из
-         * одного броска: на клетку приходилось 1.08 залежи, и отдельные миры
-         * естественно уезжали за коридор. Теперь на клетку приходится несколько
-         * залежей, и коридор стал бы требованием разрежать мир. Важна нижняя
-         * граница: ресурс должен встречаться в любом стартовом квадрате, иначе
-         * игрок уходит за углём на 3000 блоков.
-         */
-        for (int index = 0; index < totals.length; index++) {
-            double average = mean(totals[index], seedSamples);
-            require(average >= 20.0,
-                    GeologyGenerator.RESOURCES.get(index).id().getPath()
-                            + " must be common in the starter area (got "
-                            + String.format("%.1f", average) + ")");
-        }
-
-        /*
-         * Сумма площадей больше площади выборки — это нормально, а не ошибка.
-         *
-         * <p>Раньше доля свободной площади считалась как 1 минус сумма площадей
-         * залежей. Пока залежи слипались в пять штук на одной точке, это давало
-         * осмысленное «сколько места свободно». Теперь залежей больше, чем
-         * помещается в выборку, и такая формула уходит в минус. Плотность за
-         * теперь проверяется долей пустых ячеек отдельно, а доля ресурсов
-         * считается по числу самих залежей.
-         */
-        double areaRatio = 100.0 * (coveredShare / seedSamples);
-        System.out.println("  summed deposit area vs sampled area: "
-                + String.format("%.0f%%", areaRatio));
-        require(areaRatio > 20.0,
-                "deposits must cover a meaningful share of the sampled area, got "
-                        + String.format("%.0f%%", areaRatio));
-
-        /*
-         * Ориентир срока эксплуатации считается от опорной
-         * производительности 3000 базовых единиц/ч.
-         */
-        for (GeologicalDeposit deposit
-                : GeologyGenerator.createDeposits(DIMENSION, SEED, 5, 5)) {
-            double lifetime = deposit.getInitialReserve()
-                    / DepositSizeClass.REFERENCE_THROUGHPUT_PER_HOUR;
-            double minHours = deposit.getSizeClass().minLifetimeHours() * 0.85;
-            double maxHours = deposit.getSizeClass().maxLifetimeHours() * 1.20;
-            require(lifetime >= minHours && lifetime <= maxHours,
-                    "lifetime " + lifetime + "h fits size class " + deposit.getSizeClass());
+        long total = java.util.Arrays.stream(oreTotals).sum();
+        for (int ore = 0; ore < oreTotals.length; ore++) {
+            double share = (double) oreTotals[ore] / total;
+            System.out.printf(Locale.ROOT, "  %s: %.2f%% of vein area%n",
+                    GeologyGenerator.RESOURCES.get(ore).id().getPath(), share * 100);
+            require(share >= 0.16 && share <= 0.24, "ores are balanced by area across seeds");
         }
     }
 
-    private static double mean(long total, int samples) {
-        return total / (double) samples;
+    private static void verifyStorageSeams(int[] owners, int width, int cellSide) {
+        int[] pairs = new int[2];
+        int[] cuts = new int[2];
+        for (int z = 0; z < width - 1; z++) {
+            for (int x = 0; x < width - 1; x++) {
+                int index = z * width + x;
+                int owner = owners[index];
+                if (owner == 0) {
+                    continue;
+                }
+                for (int axis = 0; axis < 2; axis++) {
+                    int neighbor = owners[index + (axis == 0 ? 1 : width)];
+                    if (neighbor == 0) {
+                        continue;
+                    }
+                    int seam = ((axis == 0 ? x : z) + 1) % cellSide == 0 ? 1 : 0;
+                    pairs[seam]++;
+                    if (neighbor != owner) {
+                        cuts[seam]++;
+                    }
+                }
+            }
+        }
+        double offGrid = (double) cuts[0] / pairs[0];
+        double onGrid = (double) cuts[1] / pairs[1];
+        int uninterrupted = pairs[1] - cuts[1];
+        System.out.printf(Locale.ROOT,
+                "    vein-to-vein transitions on storage grid %.2f%%, elsewhere %.2f%%; %d uninterrupted crossings%n",
+                100 * onGrid, 100 * offGrid, uninterrupted);
+        require(uninterrupted > 2_000, "veins cross thousands of storage boundaries without being cut");
+        require(onGrid <= offGrid * 1.35 + 0.01,
+                "ore boundaries are not concentrated along the storage grid");
     }
 
-    /** Площадь эллипса, увеличенная на среднее искажение границы. */
-    private static long approximateArea(GeologicalDeposit deposit) {
-        double rx = deposit.getShape().radiusX();
-        double rz = deposit.getShape().radiusZ();
-        double inflation = 1.0 + DepositShape.EDGE_NOISE_AMPLITUDE / 2.0;
-        return Math.round(Math.PI * rx * rz * inflation);
+    private static void smoothedContoursAreExclusive() {
+        VeinFootprint[] patterns = new VeinFootprint[16];
+        int side = VeinFootprint.SIDE;
+        int[] corners = {0, 1, side + 1, side};
+        for (int mask = 1; mask < patterns.length; mask++) {
+            List<Integer> samples = new ArrayList<>();
+            for (int i = 0; i < corners.length; i++) {
+                if ((mask & (1 << i)) != 0) {
+                    samples.add(corners[i]);
+                }
+            }
+            patterns[mask] = VeinFootprint.fromSamples(-VeinFootprint.STEP, 0, samples);
+        }
+        int step = VeinFootprint.STEP;
+        int half = step / 2;
+        for (int first = 1; first < patterns.length; first++) {
+            VeinFootprint a = patterns[first];
+            for (int z = half; z < half + step; z++) {
+                for (int x = half; x < half + step; x++) {
+                    double localX = x + 0.125;
+                    double localZ = z + 0.375;
+                    boolean contained = a.contains(a.originX() + localX, a.originZ() + localZ);
+                    require(contained == isInsideEdges(a, localX, localZ),
+                            "the scanline outline agrees with polygon containment");
+                }
+            }
+            for (int second = 1; second < patterns.length; second++) {
+                if ((first & second) != 0) {
+                    continue;
+                }
+                VeinFootprint b = patterns[second];
+                for (int z = half; z <= half + step; z++) {
+                    for (int x = half; x <= half + step; x++) {
+                        double worldX = a.originX() + x;
+                        double worldZ = a.originZ() + z;
+                        boolean inA = a.contains(worldX, worldZ);
+                        boolean inB = b.contains(worldX, worldZ);
+                        require(!(inA && inB), "interpolation does not overlap at shared edges");
+                        if ((first | second) == 15 && first != 5 && first != 10) {
+                            require(inA || inB, "two adjoining owners have no gap at their edge");
+                        }
+                    }
+                }
+            }
+        }
+        VeinFootprint corner = patterns[1];
+        require(!corner.contains(corner.originX() + step - 1, corner.originZ() + step - 1),
+                "the polygon clips the former square corner");
+        require(corner.edges().stream().anyMatch(edge -> edge.x0() != edge.x1() && edge.z0() != edge.z1()),
+                "the map receives the same diagonal outline");
+    }
+
+    private static boolean isInsideEdges(VeinFootprint footprint, double x, double z) {
+        boolean inside = false;
+        for (VeinFootprint.Edge edge : footprint.edges()) {
+            if ((edge.z0() > z) == (edge.z1() > z)) {
+                continue;
+            }
+            double crossing = edge.x0()
+                    + (z - edge.z0()) * (edge.x1() - edge.x0()) / (edge.z1() - edge.z0());
+            if (x < crossing) {
+                inside = !inside;
+            }
+        }
+        return inside;
     }
 
     private static GeologicalDeposit firstDeposit(

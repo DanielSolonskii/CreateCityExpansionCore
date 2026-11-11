@@ -2,6 +2,7 @@ package com.example.examplemod.network;
 
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.geology.GeologicalDeposit;
+import com.example.examplemod.geology.VeinFootprint;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -22,10 +23,6 @@ import java.util.Objects;
  * это именно обзор: сервер отправляет контуры всех залежей в
  * радиусе сканирования, и клиент рисует их на глобальной карте.
  *
- * <p>Контур — вытянутый эллипс залежи ({@code DepositShape})
- * без краевого шума: на масштабе карты шум нечитаем, а радиусы
- * и поворот уже дают игроку адекватный абрис.
- *
  * <p>{@code foundTotal} и {@code truncated} описывают полный
  * список находок: если число залежей превысило предел пейлоада,
  * клиент покажет «N из M», а не молча потеряет данные.
@@ -38,19 +35,19 @@ public record GeologyWideScanPayload(
         List<Contour> contours
 ) implements CustomPacketPayload {
 
-    /**
-     * Один контур на карте. Центр, радиусы и поворот — прямо
-     * из DepositShape залежи; resourceId нужен для подписей
-     * в будущих итерациях интерфейса карты.
-     */
     public record Contour(
             int centerX,
             int centerZ,
             int radiusX,
             int radiusZ,
             float rotationRadians,
-            ResourceLocation resourceId
+            ResourceLocation resourceId,
+            VeinFootprint footprint
     ) {
+        public Contour(int centerX, int centerZ, int radiusX, int radiusZ,
+                       float rotationRadians, ResourceLocation resourceId) {
+            this(centerX, centerZ, radiusX, radiusZ, rotationRadians, resourceId, null);
+        }
     }
 
     public static final Type<GeologyWideScanPayload> TYPE = new Type<>(
@@ -84,7 +81,7 @@ public record GeologyWideScanPayload(
     ) {
         List<Contour> contours = new ArrayList<>();
         for (GeologicalDeposit deposit : deposits) {
-            if (contours.size() >= maxContours) {
+            if (contours.size() >= Math.min(MAX_CONTOURS, maxContours)) {
                 break;
             }
             var shape = deposit.getShape();
@@ -94,7 +91,8 @@ public record GeologyWideScanPayload(
                     shape.radiusX(),
                     shape.radiusZ(),
                     (float) shape.rotationRadians(),
-                    deposit.getResourceId()
+                    deposit.getResourceId(),
+                    shape.footprint()
             ));
         }
         return new GeologyWideScanPayload(
@@ -128,6 +126,14 @@ public record GeologyWideScanPayload(
             buffer.writeVarInt(contour.radiusZ());
             buffer.writeFloat(contour.rotationRadians());
             ResourceLocation.STREAM_CODEC.encode(buffer, contour.resourceId());
+            buffer.writeBoolean(contour.footprint() != null);
+            if (contour.footprint() != null) {
+                buffer.writeVarInt(contour.footprint().originX());
+                buffer.writeVarInt(contour.footprint().originZ());
+                for (long word : contour.footprint().sampleWords()) {
+                    buffer.writeLong(word);
+                }
+            }
         }
     }
 
@@ -137,7 +143,10 @@ public record GeologyWideScanPayload(
         int foundTotal = buffer.readVarInt();
         boolean truncated = buffer.readBoolean();
         int count = buffer.readVarInt();
-        List<Contour> contours = new ArrayList<>(Math.min(count, 4096));
+        if (count < 0 || count > MAX_CONTOURS) {
+            throw new IllegalArgumentException("Invalid geology contour count: " + count);
+        }
+        List<Contour> contours = new ArrayList<>(count);
         for (int index = 0; index < count; index++) {
             int centerX = buffer.readVarInt();
             int centerZ = buffer.readVarInt();
@@ -145,13 +154,24 @@ public record GeologyWideScanPayload(
             int radiusZ = buffer.readVarInt();
             float rotation = buffer.readFloat();
             ResourceLocation resourceId = ResourceLocation.STREAM_CODEC.decode(buffer);
+            VeinFootprint footprint = null;
+            if (buffer.readBoolean()) {
+                int originX = buffer.readVarInt();
+                int originZ = buffer.readVarInt();
+                long[] samples = new long[VeinFootprint.WORD_COUNT];
+                for (int word = 0; word < samples.length; word++) {
+                    samples[word] = buffer.readLong();
+                }
+                footprint = new VeinFootprint(originX, originZ, samples);
+            }
             contours.add(new Contour(
                     centerX,
                     centerZ,
                     radiusX,
                     radiusZ,
                     rotation,
-                    resourceId
+                    resourceId,
+                    footprint
             ));
         }
         Objects.requireNonNull(dimension, "dimension");

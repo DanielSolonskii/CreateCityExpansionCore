@@ -2029,7 +2029,7 @@ registrar.playToServer(
                 (payload, context) -> GEOLOGY_ANALYSIS_HANDLER.handle(payload, context)
         );
 
-        registrar.playToClient(
+        registrar.versioned("geology-wide-3").playToClient(
                 GeologyWideScanPayload.TYPE,
                 GeologyWideScanPayload.STREAM_CODEC,
                 (payload, context) -> GEOLOGY_WIDE_SCAN_HANDLER.handle(payload, context)

@@ -30,7 +30,7 @@ import java.math.BigInteger;
  */
 final class GeologySavedDataCodec {
 
-    static final int CURRENT_FORMAT_VERSION = 4;
+    static final int CURRENT_FORMAT_VERSION = 6;
     private static final int LEGACY_V2 = 2;
     private static final int LEGACY_V1 = 1;
 
@@ -50,17 +50,11 @@ final class GeologySavedDataCodec {
     ) {
         try {
             if (!tag.contains("FormatVersion")) {
-                /*
-                 * Версии без формата тоже пересоздаются: это форматы 1-2 в
-                 * disguise, а в них залежи лежат друг на друге ровно так же.
-                 * Отдельная миграция для них больше не нужна.
-                 */
                 if (tag.isEmpty()) {
                     return LoadResult.available(List.of(), false);
                 }
                 LOGGER.info(
-                        "Regenerating geology for dimension {}: unversioned data "
-                                + "precedes the per-resource seeding fix",
+                        "Regenerating geology for dimension {}: unversioned data",
                         dimensionId
                 );
                 return LoadResult.available(List.of(), true);
@@ -74,47 +68,6 @@ final class GeologySavedDataCodec {
                 );
             }
 
-            /*
-             * Формат 4 пересоздаёт геологию целиком.
-             *
-             * <p>В форматах 1-3 идентичность ресурса не входила в seed, поэтому
-             * все пять ресурсов одной macro-cell получали одно положение, форму,
-             * качество и запас. Уголь лежал ровно на железе, и сканер показывал
-             * только железо — оно первое в списке ресурсов, а потенциалы совпадали
-             * до бита. Сохранённые залежи починить нельзя: они физически лежат
-             * друг на друге, и «развести» их, не сдвинув ни одну, невозможно.
-             *
-             * <p>Поэтому старые записи отбрасываются, а залежи строятся заново по
-             * требованию. Запас и выработка на старых местах теряются — это
-             * осознанная цена: править геологию по частям означало бы оставить
-             * рядом старый и новый миры одновременно.
-             *
-             * <p>Измерение проверяется и здесь: файл от другого измерения — это
-             * не «старый формат», а ошибка, и молча пересоздавать геологию
-             * Nether в Overworld было бы хуже, чем отказать.
-             */
-            if (formatVersion < CURRENT_FORMAT_VERSION) {
-                ResourceLocation previousDimension = readResourceLocation(
-                        tag,
-                        "Dimension"
-                );
-                if (!previousDimension.equals(dimensionId)) {
-                    throw new GeologyDataException(
-                            "Stored dimension " + previousDimension
-                                    + " does not match " + dimensionId
-                    );
-                }
-                LOGGER.info(
-                        "Regenerating geology for dimension {}: stored format {} "
-                                + "placed every resource of a cell at one point; "
-                                + "deposits are rebuilt as {} cells are visited",
-                        dimensionId,
-                        formatVersion,
-                        CURRENT_FORMAT_VERSION
-                );
-                return LoadResult.available(List.of(), true);
-            }
-
             ResourceLocation storedDimension = readResourceLocation(
                     tag,
                     "Dimension"
@@ -126,28 +79,16 @@ final class GeologySavedDataCodec {
                 );
             }
 
-            boolean legacyFormat = formatVersion != CURRENT_FORMAT_VERSION;
-            boolean migrateReserves = formatVersion == LEGACY_V1;
-
-            List<LoadedCell> cells = readRegions(
-                    tag,
-                    dimensionId,
-                    legacyFormat,
-                    migrateReserves
-            );
-
-            if (legacyFormat) {
+            if (formatVersion < CURRENT_FORMAT_VERSION) {
                 LOGGER.info(
-                        "Migrated geology data from format {} to {} for dimension {}; "
-                                + "legacy deposits are preserved with their ids, grades "
-                                + "and remaining reserves",
-                        formatVersion,
-                        CURRENT_FORMAT_VERSION,
-                        dimensionId
+                        "Regenerating geology for dimension {} from format {} to {}; "
+                                + "old deposits and reserves are discarded",
+                        dimensionId, formatVersion, CURRENT_FORMAT_VERSION
                 );
+                return LoadResult.available(List.of(), true);
             }
 
-            return LoadResult.available(cells, legacyFormat || migrateReserves);
+            return LoadResult.available(readRegions(tag, dimensionId, false, false), false);
         } catch (GeologyDataException | RuntimeException exception) {
             LOGGER.error(
                     "Geology data for dimension {} is invalid; entering read-only "
@@ -214,6 +155,11 @@ final class GeologySavedDataCodec {
                 depositTag.putDouble("Rotation", shape.rotationRadians());
                 depositTag.putDouble("CoreRadius", shape.coreRadius());
                 depositTag.putLong("ShapeSeed", shape.shapeSeed());
+                if (shape.footprint() != null) {
+                    depositTag.putInt("VeinOriginX", shape.footprint().originX());
+                    depositTag.putInt("VeinOriginZ", shape.footprint().originZ());
+                    depositTag.putLongArray("VeinSamples", shape.footprint().sampleWords());
+                }
 
                 depositList.add(depositTag);
             }
@@ -517,6 +463,19 @@ final class GeologySavedDataCodec {
             int legacyCenterX,
             int legacyCenterZ
     ) {
+        if (tag.contains("VeinSamples") || id.getPath().startsWith("deposit/v4/")) {
+            int x = tag.getInt("CenterX");
+            int z = tag.getInt("CenterZ");
+            if (!tag.contains("VeinOriginX", Tag.TAG_INT) || !tag.contains("VeinOriginZ", Tag.TAG_INT)) {
+                throw new IllegalArgumentException("Missing origin for vein " + id);
+            }
+            VeinFootprint footprint = new VeinFootprint(tag.getInt("VeinOriginX"),
+                    tag.getInt("VeinOriginZ"), tag.getLongArray("VeinSamples"));
+            return new DepositShape(x, z, tag.getInt("RadiusX"), tag.getInt("RadiusZ"),
+                    tag.getDouble("Rotation"), tag.getDouble("CoreRadius"),
+                    tag.getLong("ShapeSeed"), footprint);
+        }
+
         if (!tag.contains("CenterX", Tag.TAG_INT)
                 || !tag.contains("ShapeSeed", Tag.TAG_LONG)) {
             /*

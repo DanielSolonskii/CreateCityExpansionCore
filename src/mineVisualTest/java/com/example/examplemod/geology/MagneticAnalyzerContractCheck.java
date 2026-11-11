@@ -203,15 +203,8 @@ public final class MagneticAnalyzerContractCheck {
          * вне залежи, поэтому contains() обязан вернуть false
          * и именно это состояние раньше ломало поиск.
          */
-        int radius = Math.max(
-                deposit.getShape().radiusX(),
-                deposit.getShape().radiusZ()
-        );
-        BlockPos probe = new BlockPos(
-                deposit.getCenterX() + radius + 30,
-                64,
-                deposit.getCenterZ()
-        );
+        BlockPos probe = pointOutsideBoundary(deposit, 30);
+        require(probe != null, "a probe 30 blocks outside the polygon exists");
         require(!deposit.contains(probe.getX(), probe.getZ()),
                 "probe point is genuinely outside the deposit");
 
@@ -372,60 +365,54 @@ public final class MagneticAnalyzerContractCheck {
                 "INSIDE reports a lifetime estimate");
     }
 
-    /**
-     * Граница между macro-cell: залежь, пересекающая её, должна
-     * находиться nearby-поиском с обеих сторон.
-     */
     private static void macroCellBoundary() {
-        Crossing crossing = findCrossingDeposit();
-        require(crossing != null, "a deposit crossing a macro-cell boundary exists");
-
-        GeologicalDeposit deposit = crossing.deposit();
-        for (int[] probe : new int[][]{
-                {crossing.lowX(), crossing.lowZ()},
-                {crossing.highX(), crossing.highZ()}
-        }) {
-            require(deposit.contains(probe[0], probe[1]),
-                    "both probes are inside the crossing deposit");
-
-            List<GeologicalDeposit> nearby = nearbyOf(
-                    new BlockPos(probe[0], 64, probe[1]),
-                    GeologySurvey.SCAN_RADIUS_BLOCKS
-            );
-            require(nearby.contains(deposit),
-                    "nearby lookup finds the crossing deposit from probe "
-                            + probe[0] + "," + probe[1]);
+        GeologyManager manager = testGeology();
+        int side = VeinFootprint.SIDE;
+        int step = VeinFootprint.STEP;
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                manager.materialize(x, z);
+                for (GeologicalDeposit deposit : manager.depositsInCell(x, z)) {
+                    VeinFootprint footprint = deposit.getShape().footprint();
+                    int ownerX = x * GeologyGenerator.MACRO_CELL_SIZE;
+                    for (int row = 0; row < side; row++) {
+                        int edgeX = ownerX;
+                        int probeZ = footprint.originZ() + row * step + step / 2;
+                        BlockPos inside = new BlockPos(edgeX, 64, probeZ);
+                        BlockPos across = inside.west();
+                        if (!deposit.contains(inside.getX(), probeZ)
+                                || !deposit.contains(across.getX(), probeZ)) {
+                            continue;
+                        }
+                        require(manager.query(inside).getDeposit(deposit.getId()).orElseThrow() == deposit,
+                                "a mine resolves the canonical vein in the owner cell");
+                        require(manager.query(across).getDeposit(deposit.getId()).orElseThrow() == deposit,
+                                "the same vein is visible across the cell boundary");
+                        require(manager.queryNearby(across, 10).contains(deposit),
+                                "nearby lookup sees the vein across the cell boundary");
+                        return;
+                    }
+                }
+            }
         }
-
-        /*
-         * Граница между INSIDE и OUTSIDE на самой кромке:
-         * точка сразу за границей ещё в радиусе сканера.
-         */
-        BlockPos edge = pointOutsideBoundary(deposit, 5);
-        require(edge != null, "found a probe just outside the crossing deposit");
-        require(nearbyOf(edge, GeologySurvey.SCAN_RADIUS_BLOCKS).contains(deposit),
-                "a point 5 blocks outside is still within the scan radius");
+        throw new AssertionError("no vein crosses a storage cell boundary");
     }
 
     /**
      * Кольцо nearby-обхода вычисляется, а не подбирается, и
-     * геометрически достаточно для scanRadius = 200 при
-     * MAX_RADIUS = 480 и CELL = 768.
+     * учитывает максимальный выход полигона за ячейку хранения.
      */
     private static void nearbyRingIsDerivedAndSufficient() {
-        require(GeologyGenerator.CENTRE_INSIDE_OWN_CELL_INVARIANT,
-                "deposit centre plus max radius fits its own macro cell");
 
         int scanRadius = GeologySurvey.SCAN_RADIUS_BLOCKS;
         int ring = GeologyGenerator.nearbyLookupRing(scanRadius);
 
         /*
-         * Для текущих констант ожидаемое кольцо = 1, но
-         * проверяем не «равно 1», а достаточность: никакая
-         * ячейка за кольцом не может содержать релевантный центр.
+         * Ячейка за кольцом не может содержать полигон,
+         * пересекающий область сканирования.
          */
         long reach = (long) scanRadius
-                + com.example.examplemod.geology.DepositSizeClass.MAX_RADIUS;
+                + GeologyGenerator.STORAGE_REACH;
         long cell = GeologyGenerator.MACRO_CELL_SIZE;
         long firstSkippedGap = (long) (ring + 1) * cell - (cell - 1);
         require(firstSkippedGap > reach,
@@ -506,10 +493,7 @@ public final class MagneticAnalyzerContractCheck {
          */
         int centerX = deposit.getCenterX();
         int centerZ = deposit.getCenterZ();
-        int reach = Math.max(
-                deposit.getShape().radiusX(),
-                deposit.getShape().radiusZ()
-        ) + outsideBy + 8;
+        int reach = VeinFootprint.SIDE * VeinFootprint.STEP + outsideBy + 8;
 
         for (int degrees = 0; degrees < 360; degrees += 6) {
             double radians = Math.toRadians(degrees);
@@ -601,64 +585,6 @@ public final class MagneticAnalyzerContractCheck {
             int radiusBlocks
     ) {
         return testGeology().queryNearby(pos, radiusBlocks);
-    }
-
-    private record Crossing(GeologicalDeposit deposit, int lowX, int lowZ, int highX, int highZ) {
-    }
-
-    /**
-     * Ищет залежь, пересекающую границу своей macro-cell,
-     * и две точки по разные стороны от границы.
-     */
-    private static Crossing findCrossingDeposit() {
-        GeologyManager manager = testGeology();
-        for (int dx = -2; dx <= 2; dx++) {
-            for (int dz = -2; dz <= 2; dz++) {
-                manager.materialize(dx, dz);
-            }
-        }
-
-        for (int cellX = -2; cellX <= 2; cellX++) {
-            for (int cellZ = -2; cellZ <= 2; cellZ++) {
-                long cellStartX = (long) cellX * GeologyGenerator.MACRO_CELL_SIZE;
-                long cellStartZ = (long) cellZ * GeologyGenerator.MACRO_CELL_SIZE;
-
-                for (GeologicalDeposit deposit : manager.depositsInCell(cellX, cellZ)) {
-                    int centerX = deposit.getCenterX();
-                    int centerZ = deposit.getCenterZ();
-                    int reachX = (int) (deposit.getShape().radiusX() * 0.6);
-                    int reachZ = (int) (deposit.getShape().radiusZ() * 0.6);
-                    if (reachX < 8 || reachZ < 8) {
-                        continue;
-                    }
-
-                    boolean crosses = centerX - reachX < cellStartX
-                            || centerX + reachX > cellStartX
-                            + GeologyGenerator.MACRO_CELL_SIZE
-                            || centerZ - reachZ < cellStartZ
-                            || centerZ + reachZ > cellStartZ
-                            + GeologyGenerator.MACRO_CELL_SIZE;
-                    if (!crosses) {
-                        continue;
-                    }
-
-                    Crossing candidate = new Crossing(
-                            deposit,
-                            centerX - reachX,
-                            centerZ - reachZ,
-                            centerX + reachX,
-                            centerZ + reachZ
-                    );
-                    boolean differentCells =
-                            GeologyGenerator.cellXOf(candidate.lowX())
-                                    != GeologyGenerator.cellXOf(candidate.highX())
-                                    || GeologyGenerator.cellZOf(candidate.lowZ())
-                                    != GeologyGenerator.cellZOf(candidate.highZ());
-                    return differentCells ? candidate : null;
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -778,15 +704,8 @@ public final class MagneticAnalyzerContractCheck {
     private static void wideNearbySuperset() {
         GeologicalDeposit deposit = firstDeposit();
         require(deposit != null, "a deposit is available for the wide checks");
-        int radius = Math.max(
-                deposit.getShape().radiusX(),
-                deposit.getShape().radiusZ()
-        );
-        BlockPos probe = new BlockPos(
-                deposit.getCenterX() + radius + 30,
-                64,
-                deposit.getCenterZ()
-        );
+        BlockPos probe = pointOutsideBoundary(deposit, 30);
+        require(probe != null, "a probe 30 blocks outside the polygon exists");
         List<GeologicalDeposit> narrow = nearbyOf(
                 probe,
                 GeologySurvey.SCAN_RADIUS_BLOCKS
@@ -817,7 +736,8 @@ public final class MagneticAnalyzerContractCheck {
                 shape.radiusX(),
                 shape.radiusZ(),
                 (float) shape.rotationRadians(),
-                deposit.getResourceId()
+                deposit.getResourceId(),
+                shape.footprint()
         );
         GeologyWideScanPayload payload = new GeologyWideScanPayload(
                 ResourceLocation.fromNamespaceAndPath("minecraft", "overworld"),
@@ -850,6 +770,8 @@ public final class MagneticAnalyzerContractCheck {
         require(shaded.radiusX() == shape.radiusX()
                 && shaded.radiusZ() == shape.radiusZ(),
                 "the contour radii survive the trip");
+        require(shape.footprint() != null && shape.footprint().equals(shaded.footprint()),
+                "the polygon mask survives the trip");
         require(shaded.resourceId().equals(deposit.getResourceId()),
                 "the contour resource survives the trip");
         require(Math.abs(shaded.rotationRadians() - shape.rotationRadians())

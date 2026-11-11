@@ -1,12 +1,16 @@
 package com.example.examplemod.client.map;
 
+import com.example.examplemod.geology.VeinFootprint;
 import com.example.examplemod.network.GeologyWideScanPayload;
+import com.example.examplemod.network.GeologyWideScanPayload.Contour;
 
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,9 +27,7 @@ import java.util.Map;
  * <p>Заливка полупрозрачная и окрашена по ресурсу залежи:
  * уголь — чёрный, железо — бирюзовый, медь — оранжевый,
  * известняк — белый; прочие ресурсы получают нейтральный
- * слой инструмента. Полигон — вытянутый эллипс залежи в её
- * повороте без краевого шума: на масштабе карты шум
- * нечитаем, а читается именно цвет и абрис области.
+ * слой инструмента. Карта заливает полигон залежи по маске сервера.
  *
  * <p>Снимок держится до следующего скана и до десяти минут
  * с момента получения: геология устаёт, и карта не должна
@@ -33,17 +35,6 @@ import java.util.Map;
  * к измерению — снимки другого мира не рисуются.
  */
 public final class GeologyWideScanOverlay {
-
-    /** Записанный контур, уже разжатый из пейлоада. */
-    private record Contour(
-            int centerX,
-            int centerZ,
-            int radiusX,
-            int radiusZ,
-            float rotationRadians,
-            ResourceLocation resourceId
-    ) {
-    }
 
     /**
      * Срок годности снимка: игрок получал контуры у себя,
@@ -103,16 +94,7 @@ public final class GeologyWideScanOverlay {
         snapshotDimension = payload.dimension();
         foundTotal = payload.foundTotal();
         receivedAt = Util.getMillis();
-        contours = payload.contours().stream()
-                .map(contour -> new Contour(
-                        contour.centerX(),
-                        contour.centerZ(),
-                        contour.radiusX(),
-                        contour.radiusZ(),
-                        contour.rotationRadians(),
-                        contour.resourceId()
-                ))
-                .toList();
+        contours = payload.contours();
     }
 
     /**
@@ -191,6 +173,57 @@ public final class GeologyWideScanOverlay {
         );
     }
 
+    private static void fillFootprint(GuiGraphics graphics, CityMapPanel map,
+                                      VeinFootprint footprint, View view, int color) {
+        int originX = footprint.originX();
+        int originZ = footprint.originZ();
+        int extent = VeinFootprint.SIDE * VeinFootprint.STEP;
+        int top = Math.max(view.top(), map.worldToScreenY(originZ));
+        int bottom = Math.min(view.bottom(), map.worldToScreenY(originZ + extent));
+        if (top >= bottom || map.worldToScreenX(originX) >= view.right()
+                || map.worldToScreenX(originX + extent) <= view.left()) {
+            return;
+        }
+
+        // Pair crossings on each scanline so concave outlines and holes are preserved.
+        List<List<Double>> rows = new ArrayList<>(Collections.nCopies(bottom - top, null));
+        for (VeinFootprint.Edge edge : footprint.edges()) {
+            int z0 = map.worldToScreenY(originZ + edge.z0());
+            int z1 = map.worldToScreenY(originZ + edge.z1());
+            if (z0 == z1) {
+                continue;
+            }
+            int x0 = map.worldToScreenX(originX + edge.x0());
+            int x1 = map.worldToScreenX(originX + edge.x1());
+            double slope = (double) (x1 - x0) / (z1 - z0);
+            int from = Math.max(top, Math.min(z0, z1));
+            int to = Math.min(bottom, Math.max(z0, z1));
+            for (int z = from; z < to; z++) {
+                int row = z - top;
+                List<Double> crossings = rows.get(row);
+                if (crossings == null) {
+                    crossings = new ArrayList<>();
+                    rows.set(row, crossings);
+                }
+                crossings.add(x0 + (z + 0.5 - z0) * slope);
+            }
+        }
+        for (int row = 0; row < rows.size(); row++) {
+            List<Double> crossings = rows.get(row);
+            if (crossings == null) {
+                continue;
+            }
+            crossings.sort(Double::compare);
+            for (int i = 1; i < crossings.size(); i += 2) {
+                int left = Math.max(view.left(), (int) Math.ceil(crossings.get(i - 1) - 0.5));
+                int right = Math.min(view.right(), (int) Math.ceil(crossings.get(i) - 0.5));
+                if (left < right) {
+                    graphics.fill(left, top + row, right, top + row + 1, color);
+                }
+            }
+        }
+    }
+
     /**
      * Полупрозрачная заливка одной залежи: её эллипс в
      * повороте растеризуется построчно (scanline). Выпуклый
@@ -203,6 +236,11 @@ public final class GeologyWideScanOverlay {
             Contour contour,
             View view
     ) {
+        if (contour.footprint() != null) {
+            fillFootprint(graphics, map, contour.footprint(), view, fillOf(contour));
+            return;
+        }
+
         /*
          * Граничные точки в экранных координатах: угол 0 и
          * 2π совпадают, поэтому первый столбец переписывает
