@@ -3062,5 +3062,17 @@
   "ccec.center.action.MASTER_IMPORT_CLOSE": "Close the import listing",
   "ccec.center.hint.MASTER_IMPORT_CLOSE": "Stop new purchases from this batch. Physical goods, its receipt and funded deliveries remain intact. Rebinding becomes available after active deliveries finish.",
   "ccec.center.navigator.train": "Train",
-  "ccec.center.navigator.cycles": "Trips"
+  "ccec.center.navigator.cycles": "Trips",
+  "screen.createcityexpansioncore.cutscene.playback": "Cutscene",
+  "screen.createcityexpansioncore.cutscene.skip": "Esc · Skip",
+  "gui.createcityexpansioncore.workspace.center.quick.territory": "Territory",
+  "gui.createcityexpansioncore.workspace.center.quick.members": "Members",
+  "gui.createcityexpansioncore.workspace.center.quick.projects": "Projects",
+  "gui.createcityexpansioncore.workspace.center.quick.chats": "Friends and chats",
+  "gui.createcityexpansioncore.workspace.center.quick.relations": "City relations",
+  "gui.createcityexpansioncore.workspace.center.newspaper.button": "The Industrial Herald",
+  "gui.createcityexpansioncore.workspace.center.newspaper.title_top": "The Industrial",
+  "gui.createcityexpansioncore.workspace.center.newspaper.title_bottom": "Herald",
+  "gui.createcityexpansioncore.workspace.center.newspaper.status": "Coming soon",
+  "gui.createcityexpansioncore.workspace.center.project_capacity": "Project capacity"
 }

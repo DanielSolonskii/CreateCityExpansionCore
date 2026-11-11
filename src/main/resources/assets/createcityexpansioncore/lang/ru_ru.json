@@ -3062,5 +3062,17 @@
   "ccec.center.action.MASTER_IMPORT_CLOSE": "Снять импортную партию с продажи",
   "ccec.center.hint.MASTER_IMPORT_CLOSE": "Запретить новые покупки остатка этой партии. Физический товар, квитанция и уже оплаченные доставки сохраняются. Перепривязка доступна после завершения действующих доставок.",
   "ccec.center.navigator.train": "Поезд",
-  "ccec.center.navigator.cycles": "Рейсы"
+  "ccec.center.navigator.cycles": "Рейсы",
+  "screen.createcityexpansioncore.cutscene.playback": "Кат-сцена",
+  "screen.createcityexpansioncore.cutscene.skip": "Esc · Пропустить",
+  "gui.createcityexpansioncore.workspace.center.quick.territory": "Территория",
+  "gui.createcityexpansioncore.workspace.center.quick.members": "Участники",
+  "gui.createcityexpansioncore.workspace.center.quick.projects": "Проекты",
+  "gui.createcityexpansioncore.workspace.center.quick.chats": "Друзья и чаты",
+  "gui.createcityexpansioncore.workspace.center.quick.relations": "Отношения городов",
+  "gui.createcityexpansioncore.workspace.center.newspaper.button": "Индустриальный вестник",
+  "gui.createcityexpansioncore.workspace.center.newspaper.title_top": "Индустриальный",
+  "gui.createcityexpansioncore.workspace.center.newspaper.title_bottom": "вестник",
+  "gui.createcityexpansioncore.workspace.center.newspaper.status": "Дополняется",
+  "gui.createcityexpansioncore.workspace.center.project_capacity": "Лимит проектов"
 }

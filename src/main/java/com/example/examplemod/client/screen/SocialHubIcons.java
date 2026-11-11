@@ -24,7 +24,8 @@ public final class SocialHubIcons {
     }
     enum Icon {
         PROFILE, STATISTICS, PROJECTS, SEARCH, EDIT, SAVE, REFRESH, SETTINGS, FRIENDS, MESSAGES, NOTIFICATIONS,
-        CHAT_MORE, CHAT_SEND, CHAT_BACK, CHAT_BLOCK, CLOSE, NEXT, CHECK, ACTION, CITY, HOME, ALLIANCE, BANK, GIFT;
+        CHAT_MORE, CHAT_SEND, CHAT_BACK, CHAT_BLOCK, CLOSE, NEXT, CHECK, ACTION, CITY, HOME, ALLIANCE, BANK, GIFT,
+        REPRESENTATIVE;
 
         private final ResourceLocation idle;
         private final ResourceLocation active;
@@ -74,6 +75,7 @@ public final class SocialHubIcons {
         }
         if (!(label.getContents() instanceof TranslatableContents translation)) return Icon.ACTION;
         String key = translation.getKey();
+        if (key.equals("gui.createcityexpansioncore.alliance.representative")) return Icon.REPRESENTATIVE;
         String action = key.substring(key.lastIndexOf('.') + 1);
         return switch (action) {
             case "back", "search_back", "members_back" -> Icon.CHAT_BACK;

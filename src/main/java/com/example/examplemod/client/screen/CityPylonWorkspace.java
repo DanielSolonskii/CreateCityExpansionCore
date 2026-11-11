@@ -27,6 +27,7 @@ public final class CityPylonWorkspace extends Screen {
     private static boolean rendering;
     private final CityPylonScreen root;
     private final CityPylonOverviewScreen overview;
+    private final CityPylonNewspaper newspaper = new CityPylonNewspaper();
     private final Map<Screen,int[]> initializedPages=new WeakHashMap<>();
     private Screen page;
 
@@ -102,6 +103,10 @@ public final class CityPylonWorkspace extends Screen {
                 geometry.sidebarWidth()-14, 22, WorldMapUiLayout.Rect::new);
     }
 
+    private WorldMapUiLayout.Rect centerBack() {
+        return UiEditLayout.apply("centerBack",geometry.frameX()+7,geometry.frameY()+3,26,24,WorldMapUiLayout.Rect::new);
+    }
+
     private WorldMapUiLayout.Rect collectControl() {
         return UiEditLayout.apply("collect", geometry.frameX()+7, geometry.frameY()+geometry.frameHeight()-52,
                 geometry.sidebarWidth()-14, 20, WorldMapUiLayout.Rect::new);
@@ -133,11 +138,13 @@ public final class CityPylonWorkspace extends Screen {
         else if(old[0]!=w||old[1]!=h){target.resize(minecraft,w,h);initializedPages.put(target,new int[]{w,h});}
     }
     private void layout() {
-        geometry=CityPylonWorkspaceLayout.calculate(width,height,page==root,page==overview);
+        int inset = page == overview ? newspaper.rightInset(width) : 0;
+        geometry=CityPylonWorkspaceLayout.calculate(width,height,page==root,page==overview||page==root,inset);
         if(page!=root)prepare(page,geometry.virtualWidth(),geometry.virtualHeight());
     }
     private void show(Screen next) {
         pointerCaptured=false;
+        if(next!=overview)newspaper.reset();
         if(next==root)section=1;
         else if(next==overview)section=0;
         if(page!=next)page.setFocused(null);
@@ -156,6 +163,7 @@ public final class CityPylonWorkspace extends Screen {
     private final SocialHubIcons.HoverMotion chromeMotion = new SocialHubIcons.HoverMotion();
 
     @Override public void render(GuiGraphics g,int mx,int my,float pt) {
+        if (page == overview && newspaper.advance(width)) layout();
         int fx=geometry.frameX(),fy=geometry.frameY(),fw=geometry.frameWidth(),fh=geometry.frameHeight();
         int sidebar=geometry.sidebarWidth();
         // The world remains visible outside this bounded frame.
@@ -165,17 +173,25 @@ public final class CityPylonWorkspace extends Screen {
         g.fill(fx+1,fy+25,fx+fw-1,fy+30,METAL);
         g.fill(fx+1,fy+29,fx+fw-1,fy+30,LINE);
         chromeMotion.beginFrame();
+        UiEditLayout.clearElements("centerBack");
         var close = geometry.closeRect();
         SocialHubIcons.paintButton(g,font,close,Component.empty(),SocialHubIcons.Icon.CLOSE,chromeMotion,
                 close.contains(mx,my),true,false,false);
-        if (page == overview) {
+        if (page == overview || page == root) {
             UiEditLayout.clearElements("nav[");
             UiEditLayout.clearElements("profileEntry");
             int cityWidth = Math.max(1, fw / 3 - 20);
-            SocialHubIcons.Icon.CITY.draw(g,fx+11,fy+7,false,0);
-            g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),cityWidth),
-                    fx+31,fy+11,MUTED,false);
-            var title = Component.translatable("gui.createcityexpansioncore.workspace.center.title");
+            if (page == root) {
+                var back = centerBack();
+                SocialHubIcons.paintButton(g,font,back,Component.empty(),SocialHubIcons.Icon.CHAT_BACK,chromeMotion,
+                        back.contains(mx,my),true,false,false);
+            } else {
+                SocialHubIcons.Icon.CITY.draw(g,fx+11,fy+7,false,0);
+                g.drawString(font,fit(font,Component.literal(root.getMenu().getCityName()),cityWidth),
+                        fx+31,fy+11,MUTED,false);
+            }
+            String key = page==overview ? "title" : root.workspaceProjects() ? "structures" : "management";
+            var title = Component.translatable("gui.createcityexpansioncore.workspace.center."+key);
             g.drawCenteredString(font,fit(font,title,Math.max(1,fw/3)),fx+fw/2,fy+11,BRASS_TEXT);
         } else {
             g.drawString(font,Component.literal("CITY PYLON"),fx+13,fy+11,BRASS_TEXT,false);
@@ -202,12 +218,12 @@ public final class CityPylonWorkspace extends Screen {
         UiEditLayout.clearElements("page.");
         UiEditLayout.clearElements("back");
         UiEditLayout.clearElements("collect");
-        if (page != overview) {
+        if (page != overview && page != root) {
             var back = backControl();
             if (sidebar >= 60) g.drawString(font,fit(font,Component.translatable("gui.createcityexpansioncore.common.back"),back.width()-6),
                     back.x()+6,back.y()+6,MUTED,false);
         }
-        if(page!=overview)g.drawString(font,fit(font,navLabel(section),fw-sidebar-30),fx+sidebar+13,fy+fh-15,MUTED,false);
+        if(page!=overview&&page!=root)g.drawString(font,fit(font,navLabel(section),fw-sidebar-30),fx+sidebar+13,fy+fh-15,MUTED,false);
         g.enableScissor(geometry.x(),geometry.y(),geometry.x()+geometry.width(),geometry.y()+geometry.height());
         g.pose().pushPose();g.pose().translate(geometry.originX(),geometry.originY(),0);g.pose().scale(geometry.scale(),geometry.scale(),1);
         rendering=true;
@@ -220,6 +236,8 @@ public final class CityPylonWorkspace extends Screen {
             }
             g.flush();
         }finally{rendering=false;g.pose().popPose();g.disableScissor();}
+        UiEditLayout.clearElements("newspaper.");
+        if (page == overview) newspaper.render(g,font,geometry,width,mx,my);
         if (canCollect()) {
             var collect = collectControl();
             button(g,font,collect.x(),collect.y(),collect.width(),collect.height(),
@@ -241,11 +259,13 @@ public final class CityPylonWorkspace extends Screen {
             }
             var close=geometry.closeRect();
             if(in(x,y,close.x(),close.y(),close.width(),close.height())){root.onClose();return true;}
-            if(page!=overview&&PlayerProfileLayout.workspaceEntry(fx,fy,geometry.frameWidth()).contains(x,y)) {
+            if(page==overview&&newspaper.mouseClicked(geometry,width,x,y))return true;
+            if(page==root&&centerBack().contains(x,y)){onClose();return true;}
+            if(page!=overview&&page!=root&&PlayerProfileLayout.workspaceEntry(fx,fy,geometry.frameWidth()).contains(x,y)) {
                 PlayerProfileScreen.open(this,minecraft.player.getUUID());return true;
             }
-            if(page!=overview)for(int i=0;i<SECTIONS.length;i++){var nav=geometry.navRect(i);if(in(x,y,nav.x(),nav.y(),nav.width(),nav.height())){navigate(i);return true;}}
-            if(page!=overview&&backControl().contains(x,y)){onClose();return true;}
+            if(page!=overview&&page!=root)for(int i=0;i<SECTIONS.length;i++){var nav=geometry.navRect(i);if(in(x,y,nav.x(),nav.y(),nav.width(),nav.height())){navigate(i);return true;}}
+            if(page!=overview&&page!=root&&backControl().contains(x,y)){onClose();return true;}
         }
         applyPageWidgetGeometry();
         pointerCaptured=geometry.contains(x,y)&&page.mouseClicked(geometry.localX(x),geometry.localY(y),button);return pointerCaptured;
@@ -257,7 +277,10 @@ public final class CityPylonWorkspace extends Screen {
     @Override public boolean charTyped(char c,int modifiers) {return page.charTyped(c,modifiers);}
     @Override public boolean keyPressed(int key,int scan,int modifiers) {if(key==256){onClose();return true;}return page.keyPressed(key,scan,modifiers);}
     @Override public boolean keyReleased(int key,int scan,int modifiers) {return page.keyReleased(key,scan,modifiers);}
-    @Override public void onClose() {if(page==overview)overview.onClose();else if(page==root){root.workspaceSelect(0);show(overview);}else page.onClose();}
+    @Override public void onClose() {
+        if(page==overview){if(!newspaper.close())overview.onClose();}
+        else if(page==root){root.workspaceSelect(0);show(overview);}else page.onClose();
+    }
     @Override public void removed() {if(!valid())root.removed();}
     @Override public boolean isPauseScreen() {return false;}
 }
