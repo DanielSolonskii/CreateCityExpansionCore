@@ -41,6 +41,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 import net.neoforged.neoforge.network.PacketDistributor;
+import com.example.examplemod.client.uiedit.UiEditLayout;
 
 public class CityPylonScreen
         extends AbstractContainerScreen<CityPylonMenu> {
@@ -359,7 +360,7 @@ private int helpContentHeight;
      * хранит только число участков. Нужен вкладке «Территория» и границе
      * в мире, чтобы обе показывали ровно то же, что показывает карта.
      */
-    private Set<CityPlot> ownTerritoryPlots() {
+    Set<CityPlot> ownTerritoryPlots() {
         CityMapPeersPayload.Peer own = null;
         for (CityMapPeersPayload.Peer peer : this.ownTerritoryCache) {
             if (peer.own()) {
@@ -564,6 +565,9 @@ public CityPylonScreen(
             this.leftPos = Math.round((this.width / this.interfaceScale - this.imageWidth) / 2.0F);
             this.topPos = Math.round((this.height / this.interfaceScale - this.imageHeight) / 2.0F);
         }
+        // UI-редактор (F7): дочерние виджеты рисуются внутри pose().scale(interfaceScale),
+        // их координаты логические — сообщаем масштаб для обводки и попаданий мышью.
+        UiEditLayout.registerTransform(this, this.interfaceScale, 0f, 0f);
 
         /*
          * GuiGraphics.enableScissor работает в экранных координатах,
@@ -819,15 +823,16 @@ private String managementTabName(int tab) {
         CityPylonMembersLayout.Rect bounds =
                 this.membersLayout().invite();
 
+        this.inviteButton.visible =
+                !this.showInvitePlayers && this.activeTab == 2 && canInvitePlayers();
+        if (this.inviteButton.visible) {
+            bounds = CityPylonWorkspace.pageControl(this, "members.invite",
+                    bounds.x(), bounds.y(), bounds.width(), bounds.height(), CityPylonMembersLayout.Rect::new);
+        }
         this.inviteButton.setX(bounds.x());
         this.inviteButton.setY(bounds.y());
         this.inviteButton.setWidth(bounds.width());
         this.inviteButton.setHeight(bounds.height());
-
-        this.inviteButton.visible =
-                !this.showInvitePlayers
-                        && this.activeTab == 2
-                        && canInvitePlayers();
     }
 
     @Override
@@ -1082,26 +1087,8 @@ return super.mouseScrolled(
                 && button == 0
                 && this.activeTab == 1) {
 
-            int checkboxX =
-                    this.contentLeft();
-
-            /*
-             * The same body-relative Y renderTerritory() paints. This used to be
-             * {@code contentTop + 45 + 110}, which matched neither the one-row nor the two-row
-             * navigation and left the checkbox unclickable.
-             */
-            int checkboxY =
-                    managementBody(this.contentTop()).top() + TERRITORY_CHECKBOX_TOP;
-
-            int boxSize = 14;
-
-            boolean clicked =
-                    mouseX >= checkboxX
-                            && mouseX <= checkboxX + CONTENT_WIDTH - 40
-                            && mouseY >= checkboxY - 3
-                            && mouseY <= checkboxY
-                            + boxSize
-                            + 3;
+            int checkboxY = managementBody(this.contentTop()).top() + TERRITORY_CHECKBOX_TOP;
+            boolean clicked = territoryControl(this.contentLeft(), checkboxY).contains(mouseX, mouseY);
 
             if (clicked) {
 
@@ -1129,8 +1116,7 @@ return super.mouseScrolled(
              * изменении, а не вычисляется на клиенте.
              */
             if (this.menu.canManageTerritory()
-                    && inside(mouseX, mouseY,
-                    colorPaletteButtonX + COLOR_BUTTON_OFFSET, colorPaletteButtonY - 1, 96, 16)) {
+                    && paletteControl().contains(mouseX, mouseY)) {
                 if (this.minecraft != null) {
                     this.minecraft.setScreen(new CityColorPaletteScreen(
                             this, this.menu.getPylonPos(), this.menu.getColorRgb()));
@@ -1213,8 +1199,7 @@ if (this.activeTab == 3 && button == 0) {
             List<CityProjectSnapshot> projects = this.menu.getProjects();
             for (int index = 0; index < Math.min(2, projects.size()); index++) {
                 int cardY = body + PROJECT_CARD_TOP + index * PROJECT_CARD_PITCH;
-                if (mouseX >= contentLeft + CONTENT_WIDTH - 54 && mouseX <= contentLeft + CONTENT_WIDTH - 4
-                        && mouseY >= cardY + 3 && mouseY <= cardY + 31) {
+                if (projectAction(contentLeft, cardY, index).contains(mouseX, mouseY)) {
                     CityProjectSnapshot project = projects.get(index);
                     if (project.projectId().equals(this.decommissionConfirmation)) {
                         PacketDistributor.sendToServer(new DecommissionCityProjectPayload(
@@ -1237,21 +1222,18 @@ if (this.activeTab == 3 && button == 0) {
             int contentLeft = this.contentLeft();
             // Same footer the painter uses: bottom-anchored to the content bottom of the body frame.
             int buttonY = managementBody(this.contentTop()).bottom() - DEV_BUTTON_H;
-            if (mouseY >= buttonY && mouseY <= buttonY + DEV_BUTTON_H) {
-                if (mouseX >= contentLeft && mouseX <= contentLeft + HALF_W) {
-                    PacketDistributor.sendToServer(new CityDevelopmentPayload(
-                            this.menu.getPylonPos(), CityDevelopmentPayload.Action.CONTRIBUTE
-                    ));
-                    return true;
-                }
-                if (mouseX >= contentLeft + HALF_W2 && mouseX <= contentLeft + CONTENT_WIDTH
-                        && this.menu.areDevelopmentRequirementsComplete()
-                        && this.menu.getCityLevel() < 2) {
-                    PacketDistributor.sendToServer(new CityDevelopmentPayload(
-                            this.menu.getPylonPos(), CityDevelopmentPayload.Action.COMPLETE_LEVEL_TWO
-                    ));
-                    return true;
-                }
+            if (developmentAction(contentLeft, buttonY, false).contains(mouseX, mouseY)) {
+                PacketDistributor.sendToServer(new CityDevelopmentPayload(
+                        this.menu.getPylonPos(), CityDevelopmentPayload.Action.CONTRIBUTE
+                ));
+                return true;
+            }
+            if (developmentAction(contentLeft, buttonY, true).contains(mouseX, mouseY)
+                    && this.menu.areDevelopmentRequirementsComplete() && this.menu.getCityLevel() < 2) {
+                PacketDistributor.sendToServer(new CityDevelopmentPayload(
+                        this.menu.getPylonPos(), CityDevelopmentPayload.Action.COMPLETE_LEVEL_TWO
+                ));
+                return true;
             }
         }
 
@@ -1291,17 +1273,14 @@ if (this.activeTab == 3 && button == 0) {
                 int visibleIndex =
                         i - start;
 
-                CityPylonMembersLayout.Rect gear =
-                        layout.gear(visibleIndex);
+                var row = memberControl("row", visibleIndex, layout.row(visibleIndex));
 
                 /*
                  * Hitbox ровно по нарисованной иконке.
                  */
-                boolean clicked =
-                        gear.contains(mouseX, mouseY);
+                boolean clicked = canManageMember(member) && memberGear(layout, visibleIndex, row).contains(mouseX, mouseY);
 
-                if (clicked
-                        && canManageMember(member)) {
+                if (clicked) {
 
                     String playerName =
                             getMemberName(member);
@@ -1318,7 +1297,7 @@ if (this.activeTab == 3 && button == 0) {
                     return true;
                 }
                 if (layout.listClip().contains(mouseX, mouseY)
-                        && layout.row(visibleIndex).contains(mouseX, mouseY) && !clicked) {
+                        && row.contains(mouseX, mouseY)) {
                     CommunityScreen.openMember(this, member.getPlayerId());
                     return true;
                 }
@@ -2199,13 +2178,44 @@ default ->
      * new row when the next one no longer fits. Both the painting and the hit test read this single
      * array of rectangles, so a tab can never be drawn where it cannot be clicked, or vice versa.
      */
+    private CityPylonUiLayout.Rect workspaceControl(String name, int x, int y, int w, int h) {
+        return CityPylonWorkspace.pageControl(this, name, x, y, w, h, CityPylonUiLayout.Rect::new);
+    }
+
+    private CityPylonUiLayout.Rect projectAction(int left, int cardY, int index) {
+        return workspaceControl("project.decommission[" + index + "]",
+                left + CONTENT_WIDTH - 54, cardY + 3, 50, 28);
+    }
+
+    private CityPylonUiLayout.Rect developmentAction(int left, int buttonY, boolean complete) {
+        int offset = complete ? HALF_W2 : 0;
+        return workspaceControl(complete ? "development.confirm" : "development.contribute",
+                left + offset, buttonY, complete ? CONTENT_WIDTH - offset : HALF_W, DEV_BUTTON_H);
+    }
+
+    private CityPylonMembersLayout.Rect memberControl(String name, int index, CityPylonMembersLayout.Rect bounds) {
+        return CityPylonWorkspace.pageControl(this, "members." + name + "[" + index + "]",
+                bounds.x(), bounds.y(), bounds.width(), bounds.height(), CityPylonMembersLayout.Rect::new);
+    }
+
+    private CityPylonMembersLayout.Rect memberGear(CityPylonMembersLayout.MembersLayout layout, int index,
+            CityPylonMembersLayout.Rect row) {
+        var original = layout.row(index);
+        var gear = layout.gear(index);
+        return memberControl("gear", index, new CityPylonMembersLayout.Rect(
+                gear.x() + row.right() - original.right(),
+                gear.y() + row.y() - original.y() + (row.height() - original.height()) / 2,
+                gear.width(), gear.height()));
+    }
+
     private CityPylonUiLayout.Rect[] managementTabs(int left, int top) {
-        return CityPylonUiLayout.flow(
-                left,
-                top,
-                CONTENT_WIDTH,
-                managementLabelWidths()
-        );
+        CityPylonUiLayout.Rect[] tabs = CityPylonUiLayout.flow(left, top, CONTENT_WIDTH, managementLabelWidths());
+        for (int i = 0; i < tabs.length; i++) {
+            var tab = tabs[i];
+            tabs[i] = workspaceControl("management.tab[" + MANAGEMENT_TABS[i] + "]",
+                    tab.x(), tab.y(), tab.width(), tab.height());
+        }
+        return tabs;
     }
 
     /**
@@ -2430,26 +2440,22 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
         );
 
         if (this.menu.canManageTerritory()) {
-            int buttonX = colorPaletteButtonX + COLOR_BUTTON_OFFSET;
-            boolean hovered = inside(mouseX, mouseY, buttonX, colorPaletteButtonY - 1, 96, 16);
-            guiGraphics.fill(buttonX, colorPaletteButtonY - 1,
-                    buttonX + 96, colorPaletteButtonY + 15,
+            var palette = paletteControl();
+            boolean hovered = palette.contains(mouseX, mouseY);
+            guiGraphics.fill(palette.x(), palette.y(), palette.right(), palette.bottom(),
                     hovered ? 0xFF4A3A20 : 0xFF303638);
-            guiGraphics.renderOutline(buttonX, colorPaletteButtonY - 1, 96, 16,
+            guiGraphics.renderOutline(palette.x(), palette.y(), palette.width(), palette.height(),
                     hovered ? 0xFFB78A43 : 0xFF596064);
             guiGraphics.drawCenteredString(this.font,
                     Component.translatable("gui.createcityexpansioncore.city.color.change"),
-                    buttonX + 48, colorPaletteButtonY + 3,
+                    palette.x() + palette.width()/2, palette.y() + (palette.height()-8)/2,
                     hovered ? 0xFFFFFFFF : 0xFFD3D8DA);
         }
 
-        int checkboxX =
-                left;
-
-        int checkboxY =
-                row + TERRITORY_CHECKBOX_TOP;
-
-        int boxSize = 14;
+        var checkbox = territoryControl(left, row + TERRITORY_CHECKBOX_TOP);
+        int checkboxX = checkbox.x();
+        int checkboxY = checkbox.y() + 3;
+        int boxSize = Math.max(4, Math.min(checkbox.width(), checkbox.height() - 7));
 
         guiGraphics.fill(
                 checkboxX,
@@ -2497,6 +2503,15 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                     0xAAAAAA
             );
         }
+    }
+
+    private CityPylonUiLayout.Rect paletteControl() {
+        return workspaceControl("territory.palette", colorPaletteButtonX + COLOR_BUTTON_OFFSET,
+                colorPaletteButtonY - 1, 96, 16);
+    }
+
+    private CityPylonUiLayout.Rect territoryControl(int left, int top) {
+        return workspaceControl("territory.boundaries", left, top - 3, CONTENT_WIDTH - 39, 21);
     }
 
     /** Границы кнопки палитры считаются при отрисовке и переиспользуются обработкой клика. */
@@ -2675,8 +2690,10 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
          * Все координаты — из layout; весь контент гарантированно
          * внутри row bounds.
          */
-        CityPylonMembersLayout.Rect card =
-                layout.row(visibleIndex);
+        var original = layout.row(visibleIndex);
+        var card = memberControl("row", visibleIndex, original);
+        int offsetX = card.x() - original.x();
+        int offsetY = card.y() - original.y();
 
         guiGraphics.fill(
                 card.x(),
@@ -2737,8 +2754,9 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
          * GuiGraphics.blit: (texture, x, y, destW, destH, srcU, srcV,
          * srcW, srcH, textureW, textureH) — голова 8×8 из 64×64 текстуры.
          */
-        CityPylonMembersLayout.Rect avatar =
-                layout.avatar(visibleIndex);
+        var originalAvatar = layout.avatar(visibleIndex);
+        var avatar = new CityPylonMembersLayout.Rect(originalAvatar.x() + offsetX, originalAvatar.y() + offsetY,
+                originalAvatar.width(), originalAvatar.height());
 
         if (playerInfo != null) {
 
@@ -2779,8 +2797,8 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
          * Line 1: nickname, обрезается по доступной ширине строки
          * (между avatar и gear), а не за рёбра row.
          */
-        int textX = layout.textX(visibleIndex);
-        int textRight = layout.textRight(visibleIndex);
+        int textX = layout.textX(visibleIndex) + offsetX;
+        int textRight = layout.textRight(visibleIndex) + card.right() - original.right();
         int textWidth = Math.max(1, textRight - textX);
 
         guiGraphics.drawString(
@@ -2790,14 +2808,14 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                         textWidth
                 ),
                 textX,
-                layout.nicknameY(visibleIndex),
+                layout.nicknameY(visibleIndex) + offsetY,
                 0xFFFFFF
         );
 
         /*
          * Line 2: status dot + ONLINE/OFFLINE + role, та же ширина.
          */
-        int metadataY = layout.metadataY(visibleIndex);
+        int metadataY = layout.metadataY(visibleIndex) + offsetY;
 
         int dotSize = 5;
         guiGraphics.fill(
@@ -2869,13 +2887,14 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
         if (canManageMember(member)) {
 
             CityPylonMembersLayout.Rect gear =
-                    layout.gear(visibleIndex);
+                    memberGear(layout, visibleIndex, card);
 
             drawGear(
                     guiGraphics,
                     gear.x(),
                     gear.y(),
                     gear.width(),
+                    gear.height(),
                     gear.contains(mouseX, mouseY)
                             ? 0xFFFFC978
                             : 0xFFB78A43
@@ -2891,13 +2910,14 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
      * Ð¢ÐµÐ¿ÐµÑ€ÑŒ ÑÑ‚Ð¾ Ð½Ð°ÑÑ‚Ð¾ÑÑ‰Ð°Ñ Ð¸ÐºÐ¾Ð½ÐºÐ° 16×16, Ð½Ð°Ñ€Ð¸ÑÐ¾Ð²Ð°Ð½Ð½Ð°Ñ Ð¿Ð¸ÐºÑÐµÐ»ÑŒ-Ð°Ñ€Ñ‚Ð¾Ð¼
      * в стиле интерфейса: без сглаживания, без растягивания текстуры.
      *
-     * @param size сторона иконки в логических пикселях GUI
+     * @param width ширина иконки в логических пикселях GUI
      */
     private void drawGear(
             GuiGraphics guiGraphics,
             int x,
             int y,
-            int size,
+            int width,
+            int height,
             int color
     ) {
         /*
@@ -2927,7 +2947,7 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
         };
 
         final int dark = 0xFF8A6320;
-        guiGraphics.fill(x, y, x + size, y + size, 0x00000000);
+        int columns = java.util.Arrays.stream(GEAR).mapToInt(String::length).max().orElse(1);
 
         for (int row = 0; row < GEAR.length; row++) {
             String line = GEAR[row];
@@ -2935,13 +2955,15 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                 if (line.charAt(column) != '#') {
                     continue;
                 }
-                int px = x + column;
-                int py = y + row;
+                int px = x + column * width / columns;
+                int py = y + row * height / GEAR.length;
+                int right = x + (column + 1) * width / columns;
+                int bottom = y + (row + 1) * height / GEAR.length;
                 /*
                  * Нижний ряд пикселя рисуется темнее — это даёт
                  * объём без единого сглаженного пикселя.
                  */
-                guiGraphics.fill(px, py, px + 1, py + 1,
+                guiGraphics.fill(px, py, right, bottom,
                         (row >= GEAR.length / 2) ? dark : color);
             }
         }
@@ -2995,12 +3017,13 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                             project.dimensionId().getPath(), creator),
                     left + 6, cardY + 23, 0xFF7E8D93);
             boolean confirm = project.projectId().equals(this.decommissionConfirmation);
-            guiGraphics.fill(left + CONTENT_WIDTH - 54, cardY + 3, left + CONTENT_WIDTH - 4, cardY + 31,
+            var action = projectAction(left, cardY, index);
+            guiGraphics.fill(action.x(), action.y(), action.right(), action.bottom(),
                     confirm ? 0xFF6B2828 : 0xFF33262A);
             guiGraphics.drawCenteredString(this.font, Component.translatable(confirm
                             ? "gui.createcityexpansioncore.common.confirm"
                             : "gui.createcityexpansioncore.project.decommission"),
-                    left + CONTENT_WIDTH - 29, cardY + 13, confirm ? 0xFFFFFFFF : 0xFFFF8C8C);
+                    action.x() + action.width()/2, action.y() + (action.height()-8)/2, confirm ? 0xFFFFFFFF : 0xFFFF8C8C);
         }
         if (projects.isEmpty()) {
             guiGraphics.drawString(this.font, Component.translatable(
@@ -3116,16 +3139,18 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
                 bodyBottom - DEV_FOOTER_TOP + 16, 0xFFB78A43);
 
         int buttonY = bodyBottom - DEV_BUTTON_H;
-        guiGraphics.fill(left, buttonY, left + HALF_W, buttonY + 19, 0xFF30434A);
+        var contribute = developmentAction(left, buttonY, false);
+        guiGraphics.fill(contribute.x(), contribute.y(), contribute.right(), contribute.bottom(), 0xFF30434A);
         guiGraphics.drawCenteredString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.development.contribute_all"),
-                left + HALF_W / 2, buttonY + 6, 0xFFFFFFFF);
+                contribute.x() + contribute.width()/2, contribute.y() + (contribute.height()-8)/2, 0xFFFFFFFF);
         boolean complete = this.menu.areDevelopmentRequirementsComplete();
-        guiGraphics.fill(left + HALF_W2, buttonY, left + CONTENT_WIDTH, buttonY + 19,
+        var confirm = developmentAction(left, buttonY, true);
+        guiGraphics.fill(confirm.x(), confirm.y(), confirm.right(), confirm.bottom(),
                 complete ? 0xFF32633C : 0xFF273036);
         guiGraphics.drawCenteredString(this.font, Component.translatable(
                         "gui.createcityexpansioncore.development.confirm"),
-                left + HALF_W2 + HALF_W / 2, buttonY + 6, complete ? 0xFFFFFFFF : 0xFF777777);
+                confirm.x() + confirm.width()/2, confirm.y() + (confirm.height()-8)/2, complete ? 0xFFFFFFFF : 0xFF777777);
     }
 
     private void renderRequirement(

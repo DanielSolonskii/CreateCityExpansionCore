@@ -43,9 +43,15 @@ public final class CommunityScreen extends Screen {
     private float offset(){return 7*(1-CommunityFx.ease((net.minecraft.Util.getMillis()-opened)/180.0));}
     private void section(int s){section=s;scroll=0;transition=net.minecraft.Util.getMillis();chosenRole=-1;rolePicker=false;CommunityFx.sound("click");}
     private void label(GuiGraphics g,Component text,int x,int y,int width,int color){if(inContent)contentHeight=Math.max(contentHeight,y+11+scroll-layout.body().y());g.drawString(font,fit(font,text,Math.max(1,width)),x,y,color,false);}
-    private void button(GuiGraphics g,CommunityLayout.Rect r,Component text,Runnable run,boolean enabled,boolean primary,double mx,double my){control(g,new WorldMapUiLayout.Rect(r.x(),r.y(),r.width(),r.height()),false,enabled&&r.contains(mx,my),enabled,primary);label(g,text,r.x()+7,r.y()+8,r.width()-14,enabled?TEXT:MUTED);if(inContent)contentHeight=Math.max(contentHeight,r.bottom()+scroll-layout.body().y());hits.add(new Hit(r,run,enabled,inContent));}
+    private final SocialHubIcons.HoverMotion hoverMotion = new SocialHubIcons.HoverMotion();
+    private void button(GuiGraphics g,CommunityLayout.Rect r,Component label,Runnable run,boolean enabled,boolean primary,double mx,double my){
+        var bounds = new WorldMapUiLayout.Rect(r.x(),r.y(),r.width(),r.height());
+        SocialHubIcons.paintButton(g,font,bounds,SocialHubIcons.buttonCaption(label),SocialHubIcons.buttonIcon(label),
+                hoverMotion,r.contains(mx,my),enabled,false,primary);
+        if(inContent)contentHeight=Math.max(contentHeight,r.bottom()+scroll-layout.body().y());hits.add(new Hit(r,run,enabled,inContent));
+    }
     private void row(GuiGraphics g,int y,Component title,Component subtitle,Runnable action,double mx,double my){var r=layout.row(y,42);rounded(g,r.x(),r.y(),r.width(),r.height(),4,r.contains(mx,my)?RAISED:INSET);label(g,title,r.x()+10,y+8,r.width()-20,TEXT);label(g,subtitle,r.x()+10,y+25,r.width()-20,MUTED);contentHeight=Math.max(contentHeight,r.bottom()+scroll-layout.body().y());if(action!=null)hits.add(new Hit(r,action,true,true));}
-    @Override public void render(GuiGraphics g,int mouseX,int mouseY,float pt){double mx=layout.localX(mouseX),my=layout.localY(mouseY)-offset();hits.clear();if(!SocialHubScreen.embedded(this))g.fill(0,0,width,height,0x88090E10);g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);g.pose().translate(0,offset(),0);panel(g,0,0,layout.width(),layout.height());
+    @Override public void render(GuiGraphics g,int mouseX,int mouseY,float pt){double mx=layout.localX(mouseX),my=layout.localY(mouseY)-offset();hits.clear();hoverMotion.beginFrame();if(!SocialHubScreen.embedded(this))g.fill(0,0,width,height,0x88090E10);g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);g.pose().translate(0,offset(),0);panel(g,0,0,layout.width(),layout.height());
         g.fill(16,15,18,25,ACCENT);label(g,tr("title"),25,17,layout.width()-170,ACCENT);if(!SocialHubScreen.embedded(this)){button(g,layout.settings(),tr("settings"),()->section(5),true,false,mx,my);button(g,layout.close(),Component.literal("×"),this::onClose,true,false,mx,my);}
         double a=CommunityFx.ease((net.minecraft.Util.getMillis()-transition)/180.0);
         if(!SocialHubScreen.embedded(this)){

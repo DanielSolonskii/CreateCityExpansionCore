@@ -43,16 +43,35 @@ public final class SocialCheck {
         global.friends.add(Pair.of(a,c));require(apply(global,a,c,Action.SEND,"new").equals("ok"),"global retention accepts new messages");
         require(global.dialogs.values().stream().mapToInt(List::size).sum()==GLOBAL_MESSAGES,"global history budget stays bounded");
         packets(a,c,latest);
+        var previousRows = List.of(new SocialLayout.MessageSpan(41, 20, 40),
+                new SocialLayout.MessageSpan(42, 65, 40), new SocialLayout.MessageSpan(43, 110, 40));
+        var nextRows = List.of(new SocialLayout.MessageSpan(42, 20, 40),
+                new SocialLayout.MessageSpan(43, 65, 40), new SocialLayout.MessageSpan(44, 110, 40));
+        require(SocialLayout.anchorMessages(78, previousRows, nextRows) == 33,
+                "background refresh preserves the position inside a message when an older row drops out");
+        require(SocialLayout.anchorMessages(78, previousRows, previousRows) == 78,
+                "repeated updates with the same messages do not move the scroll");
+        require(SocialLayout.anchorMessages(78, previousRows, List.of()) == 78,
+                "a refresh without a shared message leaves the scroll for the viewport to clamp");
         for(int width:new int[]{240,320,480,700,960})for(int height:new int[]{180,240,360,600}){
             var l=SocialLayout.calculate(width,height);require(l.x()>=0&&l.y()>=0&&l.width()*l.scale()<=width&&l.height()*l.scale()<=height,"window fits GUI scale");
             require(l.messages().height()>0&&l.input().right()<l.send().x(),"message and composer geometry");
             var r=l.send();require(r.contains(l.localX(l.x()+(r.x()+2)*l.scale()),l.localY(l.y()+(r.y()+2)*l.scale())),"hitbox uses render transform");
             require(l.screen(l.messages()).height()>0,"absolute scissor exists");
+            require(l.chatHeader().contains(l.chatMenu().x(),l.chatMenu().y())
+                    && l.chatMenu().right()<l.chatHeader().right(),"chat menu stays inside the header");
+            require(l.chatHeader().bottom()<l.messages().y()
+                    && l.chatMenuItem(6).bottom()<=l.detail().bottom(),"history and full action menu fit");
         }
         System.out.println("PASS: "+checks+" social lifecycle, privacy, replay, persistence, packet and layout checks");
     }
     private static void packets(UUID a,UUID c,List<Message> messages){var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);try {
         var request=new SocialRequestPayload(UUID.randomUUID(),c,Action.SEND,3,"hello","name",0,0,0);SocialRequestPayload.STREAM_CODEC.encode(buffer,request);require(SocialRequestPayload.STREAM_CODEC.decode(buffer).equals(request),"request codec");buffer.clear();
         var state=new SocialStatePayload(request.request(),"ok",4,c,"Friend",Relation.FRIEND,0,0,1,List.of(new SocialStatePayload.Contact(c,"Friend",false,Relation.FRIEND,3)),messages,true,0,3);SocialStatePayload.STREAM_CODEC.encode(buffer,state);require(SocialStatePayload.STREAM_CODEC.decode(buffer).equals(state),"bounded response codec");
+        buffer.clear();
+        var previews = new SocialDialogPreviews(request.request(), List.of(
+                new SocialDialogPreviews.Entry(c, messages.getLast().id(), 1234, "Последнее сообщение")));
+        SocialDialogPreviews.STREAM_CODEC.encode(buffer, previews);
+        require(SocialDialogPreviews.STREAM_CODEC.decode(buffer).equals(previews), "dialog preview codec");
     }finally{buffer.release();}}
 }
