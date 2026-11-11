@@ -1,4 +1,6 @@
 {
+  "screen.createcityexpansioncore.cutscene.playback": "Кат-сцена",
+  "screen.createcityexpansioncore.cutscene.skip": "Esc · Пропустить",
   "block.createcityexpansioncore.chunk_loader": "Загрузчик чанка",
   "block.createcityexpansioncore.city_pylon": "Городской пилон",
   "block.createcityexpansioncore.control_block": "Блок управления",

@@ -24,7 +24,9 @@
   "client": [
     "ClientTlsConnectionMixin",
     "PlayerTabPresentationMixin",
-    "BossHealthOverlayAccessor"
+    "BossHealthOverlayAccessor",
+    "CutsceneCameraMixin",
+    "CutsceneGameRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

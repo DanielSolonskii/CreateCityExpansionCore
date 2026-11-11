@@ -1,4 +1,6 @@
 {
+  "screen.createcityexpansioncore.cutscene.playback": "Cutscene",
+  "screen.createcityexpansioncore.cutscene.skip": "Esc · Skip",
   "block.createcityexpansioncore.chunk_loader": "Chunk Loader",
   "block.createcityexpansioncore.city_pylon": "City Pylon",
   "block.createcityexpansioncore.control_block": "Control Block",
