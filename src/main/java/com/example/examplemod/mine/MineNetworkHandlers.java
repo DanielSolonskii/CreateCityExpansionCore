@@ -77,7 +77,6 @@ public final class MineNetworkHandlers {
         } else {
             GeologicalRegion region = GeologyManager.getRegion(context.level(), controllerPos);
             deposit = region.getDeposit(depositId)
-                    .filter(value -> !value.isDepleted())
                     .orElse(null);
             if (deposit == null) {
                 failureKey = "message.createcityexpansioncore.mine.commission.deposit_unavailable";

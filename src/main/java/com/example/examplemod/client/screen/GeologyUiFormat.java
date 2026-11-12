@@ -1,6 +1,5 @@
 package com.example.examplemod.client.screen;
 
-import com.example.examplemod.geology.DepositStage;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
 
@@ -30,12 +29,5 @@ final class GeologyUiFormat {
         return translated.equals(key)
                 ? id.getPath().replace('_', ' ').toUpperCase(Locale.ROOT)
                 : translated;
-    }
-
-    static String stage(DepositStage stage) {
-        return Component.translatable(
-                "stage.createcityexpansioncore.deposit."
-                        + stage.name().toLowerCase(Locale.ROOT)
-        ).getString();
     }
 }

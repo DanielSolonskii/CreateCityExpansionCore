@@ -1,6 +1,7 @@
 package com.example.examplemod.mine;
 
 import com.example.examplemod.electrical.MinePowerPortDevice;
+import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 import com.george_vi.electroenergetics.devices.device.DevicesSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -20,13 +21,19 @@ public final class MinePowerAccess {
     private MinePowerAccess() {
     }
 
+    static double requiredWatts(boolean workingLoad, Tier tier) {
+        return workingLoad ? NOMINAL_POWER_WATTS * tier.powerPercent() / 100.0 : STANDBY_POWER_WATTS;
+    }
+
     static MinePowerSnapshot read(
             ServerLevel level,
             BlockPos powerPortPos,
-        boolean workingLoad
+            boolean workingLoad,
+            Tier tier
     ) {
+        double requiredPower = requiredWatts(workingLoad, tier);
         if (powerPortPos == null) {
-            return unavailable(workingLoad);
+            return unavailable(requiredPower);
         }
 
         MinePowerPortDevice device = DevicesSavedData.load(level).getDevice(
@@ -34,7 +41,7 @@ public final class MinePowerAccess {
                 MinePowerPortDevice.class
         );
         if (device == null || !device.isValid()) {
-            return unavailable(workingLoad);
+            return unavailable(requiredPower);
         }
 
         double voltage = finiteNonNegative(device.getVoltage());
@@ -45,7 +52,8 @@ public final class MinePowerAccess {
                 voltage,
                 current,
                 power,
-                workingLoad
+                workingLoad,
+                tier
         );
         return new MinePowerSnapshot(
                 true,
@@ -53,17 +61,18 @@ public final class MinePowerAccess {
                 voltage,
                 current,
                 power,
-                workingLoad ? NOMINAL_POWER_WATTS : STANDBY_POWER_WATTS
+                requiredPower
         );
     }
 
-    static MineElectricalState classify(MinePowerSnapshot power, boolean workingLoad) {
+    static MineElectricalState classify(MinePowerSnapshot power, boolean workingLoad, Tier tier) {
         return classify(
                 power.connected(),
                 power.voltage(),
                 power.current(),
                 power.power(),
-                workingLoad
+                workingLoad,
+                tier
         );
     }
 
@@ -72,7 +81,8 @@ public final class MinePowerAccess {
             double voltage,
             double current,
             double power,
-            boolean workingLoad
+            boolean workingLoad,
+            Tier tier
     ) {
         if (!connected || voltage <= 0.01) {
             return MineElectricalState.NO_POWER;
@@ -80,14 +90,15 @@ public final class MinePowerAccess {
         if (voltage > MAX_VOLTAGE) {
             return MineElectricalState.OVERVOLTAGE;
         }
-        if (current > MAX_CURRENT || power > MAX_SAFE_POWER_WATTS) {
+        double powerScale = tier.powerPercent() / 100.0;
+        if (current > MAX_CURRENT * powerScale || power > MAX_SAFE_POWER_WATTS * powerScale) {
             return MineElectricalState.OVERLOAD;
         }
         if (voltage < MIN_VOLTAGE) {
             return MineElectricalState.LOW_VOLTAGE;
         }
         if (workingLoad
-                && (current < MIN_CURRENT || power < MIN_WORKING_POWER_WATTS)) {
+                && (current < MIN_CURRENT * powerScale || power < MIN_WORKING_POWER_WATTS * powerScale)) {
             return MineElectricalState.INSUFFICIENT_POWER;
         }
         return MineElectricalState.NORMAL;
@@ -117,14 +128,14 @@ public final class MinePowerAccess {
         );
     }
 
-    private static MinePowerSnapshot unavailable(boolean workingLoad) {
+    private static MinePowerSnapshot unavailable(double requiredPower) {
         return new MinePowerSnapshot(
                 false,
                 false,
                 0.0,
                 0.0,
                 0.0,
-                workingLoad ? NOMINAL_POWER_WATTS : STANDBY_POWER_WATTS
+                requiredPower
         );
     }
 

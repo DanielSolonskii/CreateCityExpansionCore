@@ -70,7 +70,7 @@ public final class GeologicalRegion {
     /**
      * Compatibility-представление текущего извлекаемого потенциала 0-100.
      * Для каждого ресурса используется максимальное значение среди его залежей:
-     * grade * remainingRatio. Полностью истощённые залежи дают 0.
+     * доля пикового потенциала в общей шкале.
      * Значение всегда вычисляется и не является отдельным состоянием.
      */
     public Map<ResourceLocation, Integer> getResources() {
@@ -115,7 +115,6 @@ public final class GeologicalRegion {
         return (int) Math.round(
                 deposit.getPeakPotentialPerHour()
                         / ceiling
-                        * deposit.getRemainingRatio()
                         * 100.0
         );
     }

@@ -425,9 +425,11 @@ public final class MineControllerScreen extends Screen {
 
         Optional<GeologyDepositSnapshot> selected = snapshot.selectedDeposit();
         if (selected.isEmpty()) {
-            String message = snapshot.geologyAvailable()
-                    ? tr("gui.createcityexpansioncore.mine.deposit_not_selected")
-                    : tr("status.createcityexpansioncore.mine.geology_unavailable");
+            String message = tr(snapshot.commissioned()
+                    ? "gui.createcityexpansioncore.mine.bound_deposit_unavailable"
+                    : snapshot.geologyAvailable()
+                    ? "gui.createcityexpansioncore.mine.deposit_not_selected"
+                    : "status.createcityexpansioncore.mine.geology_unavailable");
             graphics.drawCenteredString(font, message, x + panelWidth / 2, y + 70, RED);
             return;
         }
@@ -440,54 +442,28 @@ public final class MineControllerScreen extends Screen {
                 y + 43,
                 CYAN
         );
-        graphics.drawCenteredString(
-                font,
-                GeologyUiFormat.stage(deposit.stage()),
-                x + panelWidth / 2,
-                y + 62,
-                deposit.depleted() ? RED : GREEN
-        );
+        graphics.drawCenteredString(font, tr("gui.createcityexpansioncore.mine.inexhaustible"),
+                x + panelWidth / 2, y + 66, GREEN);
 
-        int barX = x + 15;
-        int barY = y + 89;
-        int barWidth = panelWidth - 30;
-        drawReserveBar(graphics, barX, barY, barWidth, 18, deposit.remainingRatio());
-        graphics.drawCenteredString(
-                font,
-                GeologyUiFormat.percent(deposit.remainingRatio()),
-                x + panelWidth / 2,
-                barY + 5,
-                TEXT
-        );
-        graphics.drawCenteredString(
-                font,
-                GeologyUiFormat.count(deposit.remainingReserve()) + " / "
-                        + GeologyUiFormat.count(deposit.initialReserve()),
-                x + panelWidth / 2,
-                y + 118,
-                TEXT
-        );
-
-        valueLine(graphics, tr("gui.createcityexpansioncore.mine.stage"), GeologyUiFormat.stage(deposit.stage()), x + 15, y + 151, 145);
         valueLine(graphics, tr("gui.createcityexpansioncore.mine.richness"), GeologyUiFormat.percent(snapshot.richness()),
-                x + 15, y + 177, 145);
+                x + 15, y + 101, 145);
         valueLine(graphics, tr("gui.createcityexpansioncore.mine.production"), tr(
                         "gui.createcityexpansioncore.mine.production_value",
                         "%.1f".formatted(snapshot.productionPerMinute())),
-                x + 15, y + 203, 112);
+                x + 15, y + 127, 112);
         valueLine(graphics, tr("gui.createcityexpansioncore.mine.per_cycle"), GeologyUiFormat.count(snapshot.outputPerCycle()),
-                x + 15, y + 229, 145);
+                x + 15, y + 153, 145);
         valueLine(graphics, tr("gui.createcityexpansioncore.mine.cycle_time"), snapshot.cycleDurationTicks() <= 0
                         ? "--" : tr("gui.createcityexpansioncore.mine.seconds_value",
                         "%.1f".formatted(snapshot.cycleDurationTicks() / 20.0)),
-                x + 15, y + 255, 145);
+                x + 15, y + 179, 145);
         graphics.drawString(font,
                 snapshot.commissioned()
                         ? tr("gui.createcityexpansioncore.mine.specialization_locked")
                         : commissionConfirmation
                         ? tr("gui.createcityexpansioncore.mine.confirm_locks_resource")
                         : tr("gui.createcityexpansioncore.mine.select_for_commissioning"),
-                x + 15, y + 286,
+                x + 15, y + 213,
                 snapshot.commissioned() ? GREEN : 0xFFFFB347,
                 false);
         graphics.drawString(font, tr("gui.createcityexpansioncore.mine.server_authoritative"),
@@ -788,7 +764,7 @@ public final class MineControllerScreen extends Screen {
             case READY, RUNNING -> GREEN;
             case STOPPED -> TEXT_DIM;
             case STARTING, STOPPING, LOW_POWER, POWER_INTEGRATION_PENDING,
-                    NO_POWER, DEPOSIT_DEPLETED, OUTPUT_BLOCKED -> 0xFFFFB347;
+                    NO_POWER, OUTPUT_BLOCKED -> 0xFFFFB347;
             case OVERLOAD -> RED;
             default -> RED;
         };

@@ -84,40 +84,16 @@ public final class MineOutputMapping {
         return OUTPUT_FACTORS.getOrDefault(geologicalResource, 1L);
     }
 
-    /**
-     * Обратный пересчёт: сколько единиц геологического запаса
-     * списывается за указанное количество физических предметов.
-     *
-     * Reserve хранится в эквиваленте базового полезного ресурса,
-     * а не в количестве bulk-предметов. Для железа это значит,
-     * что 2 железорудного сырья = 1 единица запаса: физический
-     * выход шахты удвоен, а расход reserve — нет.
-     */
-    public static long reserveUnitsFor(
-            ResourceLocation geologicalResource,
-            long physicalAmount
-    ) {
-        if (physicalAmount <= 0L) {
-            return 0L;
-        }
-        long factor = outputFactor(geologicalResource);
-        return physicalAmount / factor;
-    }
-
-    /**
-     * Сколько физических предметов соответствует указанному
-     * объёму базового ресурса. Всегда >= reserveUnits, чтобы
-     * округление вниз не теряло добычу.
-     */
+    /** Converts base output into the item count delivered to the gateway. */
     public static long physicalAmountFor(
             ResourceLocation geologicalResource,
-            long reserveUnits
+            long baseUnits
     ) {
-        if (reserveUnits <= 0L) {
+        if (baseUnits <= 0L) {
             return 0L;
         }
         long factor = outputFactor(geologicalResource);
-        return reserveUnits * factor;
+        return baseUnits * factor;
     }
 
     private static ResourceLocation resource(String path) {

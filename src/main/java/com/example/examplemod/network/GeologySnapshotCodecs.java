@@ -2,7 +2,6 @@ package com.example.examplemod.network;
 
 import com.example.examplemod.geology.DepositQualityClass;
 import com.example.examplemod.geology.DepositSizeClass;
-import com.example.examplemod.geology.DepositStage;
 import com.example.examplemod.geology.GeologyDepositSnapshot;
 import com.example.examplemod.geology.GeologyRegionSnapshot;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -52,9 +51,6 @@ final class GeologySnapshotCodecs {
     ) {
         buffer.writeResourceLocation(deposit.depositId());
         buffer.writeResourceLocation(deposit.resourceId());
-        buffer.writeLong(deposit.initialReserve());
-        buffer.writeLong(deposit.remainingReserve());
-        buffer.writeEnum(deposit.stage());
         buffer.writeDouble(deposit.grade());
         buffer.writeInt(deposit.depth());
         buffer.writeDouble(deposit.hardness());
@@ -71,9 +67,6 @@ final class GeologySnapshotCodecs {
         return new GeologyDepositSnapshot(
                 buffer.readResourceLocation(),
                 buffer.readResourceLocation(),
-                buffer.readLong(),
-                buffer.readLong(),
-                buffer.readEnum(DepositStage.class),
                 buffer.readDouble(),
                 buffer.readInt(),
                 buffer.readDouble(),

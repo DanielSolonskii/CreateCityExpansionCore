@@ -250,6 +250,26 @@ tasks.register('checkMineVisualCoordinates', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkMineVisualCoordinates') }
 
+tasks.register('checkBlueprintProgression', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.mine.BlueprintProgressionCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkBlueprintProgression').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkBlueprintProgression') }
+
+tasks.register('checkMineBlueprintEditor', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.mine.MineBlueprintEditorCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkMineBlueprintEditor').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkMineBlueprintEditor') }
+
 tasks.register('checkCityRelations', JavaExec) {
     dependsOn tasks.named('mineVisualTestClasses')
     classpath = sourceSets.mineVisualTest.runtimeClasspath

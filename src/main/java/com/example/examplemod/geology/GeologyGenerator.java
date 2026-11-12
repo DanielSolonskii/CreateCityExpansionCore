@@ -52,9 +52,6 @@ final class GeologyGenerator {
 
     private static final String MOD_ID = "createcityexpansioncore";
 
-    private static final double MIN_RESERVE_NOISE = 0.85;
-    private static final double MAX_RESERVE_NOISE = 1.20;
-
     private static final long SALT_LAYOUT = 0x3000L;
     private static final long SALT_ORE = 0x3010L;
     private static final long SALT_SHAPE = 0x1040L;
@@ -145,17 +142,10 @@ final class GeologyGenerator {
         double grade = peakPerHour
                 / DepositQualityClass.PEAK_POTENTIAL_CEILING;
 
-        long reserve = computeReserve(
-                GeologyNoise.mix(candidateSeed, SALT_PEAK, 3L),
-                sizeClass
-        );
-
         return new GeologicalDeposit(
                 depositId(dimensionId, cellX, cellZ, profile.id(), index),
                 profile.id(),
                 index,
-                reserve,
-                reserve,
                 grade,
                 profile.depth(),
                 profile.hardness(),
@@ -164,32 +154,6 @@ final class GeologyGenerator {
                 peakPerHour,
                 qualityClass,
                 sizeClass
-        );
-    }
-
-    /**
-     * Reserve не зависит от качества: только класс размера и
-     * детерминированный шум срока эксплуатации.
-     *
-     * reserve = 3000 базовых единиц/ч * срок_часов * шум
-     */
-    static long computeReserve(long seed, DepositSizeClass sizeClass) {
-        double lifetimeHours = GeologyNoise.range(
-                seed,
-                sizeClass.minLifetimeHours(),
-                sizeClass.maxLifetimeHours()
-        );
-        double noise = GeologyNoise.range(
-                GeologyNoise.mix(seed, 11L),
-                MIN_RESERVE_NOISE,
-                MAX_RESERVE_NOISE
-        );
-        double reserve = DepositSizeClass.REFERENCE_THROUGHPUT_PER_HOUR
-                * lifetimeHours
-                * noise;
-        return Math.max(
-                GeologicalDeposit.MIN_INITIAL_RESERVE,
-                Math.round(reserve)
         );
     }
 
@@ -266,15 +230,6 @@ final class GeologyGenerator {
                         + "/" + cellX + "/" + cellZ
                         + "/" + encode(resourceId) + "/" + depositIndex
         );
-    }
-
-    /**
-     * Сохранённый запас для legacy-миграции формата 1.
-     * Сама процедурная генерация от этого больше не зависит.
-     */
-    static long reserveForGrade(double grade) {
-        double clamped = Math.max(0.0, Math.min(1.0, grade));
-        return 5_000_000L + Math.round(5_000_000L * clamped);
     }
 
     private static String encode(ResourceLocation value) {

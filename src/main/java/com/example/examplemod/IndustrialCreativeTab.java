@@ -36,6 +36,7 @@ public final class IndustrialCreativeTab {
 
     private static final List<ItemLike> TIER1_DERIVED = List.of(
             CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
+            CreateCityExpansionCore.BLUEPRINT_TERMINAL.get(),
             CreateCityExpansionCore.INCOMPLETE_ACCESS_CONTROL_REMOTE.get(),
             CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );

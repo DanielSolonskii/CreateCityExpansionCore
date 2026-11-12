@@ -13,24 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.math.BigInteger;
 
-/**
- * Сериализация геологии.
- *
- * Текущий формат — 3: добавлены геометрия, класс качества,
- * класс размера и пиковый потенциал месторождения.
- *
- * Форматы 1 и 2 читаются без потерь: legacy-залежи сохраняют
- * идентификатор, ресурс, grade, initialReserve и
- * remainingReserve, а отсутствующую пространственную форму
- * получают детерминированной совместимостью. Запасы при
- * миграции не пересчитываются, если только старый формат 1
- * явно требовал этого (там размер запаса был производным).
- */
+/** Кодек геологических регионов и контуров жил. */
 final class GeologySavedDataCodec {
 
-    static final int CURRENT_FORMAT_VERSION = 6;
+    static final int CURRENT_FORMAT_VERSION = 7;
+    private static final int POLYGON_FORMAT_VERSION = 6;
     private static final int LEGACY_V2 = 2;
     private static final int LEGACY_V1 = 1;
 
@@ -79,7 +67,7 @@ final class GeologySavedDataCodec {
                 );
             }
 
-            if (formatVersion < CURRENT_FORMAT_VERSION) {
+            if (formatVersion < POLYGON_FORMAT_VERSION) {
                 LOGGER.info(
                         "Regenerating geology for dimension {} from format {} to {}; "
                                 + "old deposits and reserves are discarded",
@@ -88,7 +76,8 @@ final class GeologySavedDataCodec {
                 return LoadResult.available(List.of(), true);
             }
 
-            return LoadResult.available(readRegions(tag, dimensionId, false, false), false);
+            return LoadResult.available(readRegions(tag, dimensionId, false),
+                    formatVersion < CURRENT_FORMAT_VERSION);
         } catch (GeologyDataException | RuntimeException exception) {
             LOGGER.error(
                     "Geology data for dimension {} is invalid; entering read-only "
@@ -125,8 +114,6 @@ final class GeologySavedDataCodec {
                         deposit.getResourceId().toString()
                 );
                 depositTag.putInt("DepositIndex", deposit.getDepositIndex());
-                depositTag.putLong("InitialReserve", deposit.getInitialReserve());
-                depositTag.putLong("RemainingReserve", deposit.getRemainingReserve());
                 depositTag.putDouble("Grade", deposit.getGrade());
                 depositTag.putInt("Depth", deposit.getDepth());
                 depositTag.putDouble("Hardness", deposit.getHardness());
@@ -175,8 +162,7 @@ final class GeologySavedDataCodec {
     private static List<LoadedCell> readRegions(
             CompoundTag tag,
             ResourceLocation dimensionId,
-            boolean legacyFormat,
-            boolean migrateReserves
+            boolean legacyFormat
     ) throws GeologyDataException {
         requireType(tag, "Regions", Tag.TAG_LIST);
         ListTag regionList = (ListTag) tag.get("Regions");
@@ -205,7 +191,6 @@ final class GeologySavedDataCodec {
             List<GeologicalDeposit> deposits = readDeposits(
                     regionTag,
                     legacyFormat,
-                    migrateReserves,
                     depositIds,
                     legacyFormat
                             ? coordinates.x() * LEGACY_FIELD_SIZE + LEGACY_FIELD_SIZE / 2
@@ -285,7 +270,6 @@ final class GeologySavedDataCodec {
     private static List<GeologicalDeposit> readDeposits(
             CompoundTag regionTag,
             boolean legacyFormat,
-            boolean migrateReserves,
             Map<ResourceLocation, Boolean> allDepositIds,
             int legacyCenterX,
             int legacyCenterZ
@@ -333,7 +317,6 @@ final class GeologySavedDataCodec {
                     depositId,
                     resourceId,
                     depositIndex,
-                    migrateReserves,
                     legacyCenterX,
                     legacyCenterZ
             );
@@ -350,19 +333,14 @@ final class GeologySavedDataCodec {
             ResourceLocation id,
             ResourceLocation resourceId,
             int depositIndex,
-            boolean migrateReserves,
             int legacyCenterX,
             int legacyCenterZ
     ) throws GeologyDataException {
-        requireType(tag, "InitialReserve", Tag.TAG_LONG);
-        requireType(tag, "RemainingReserve", Tag.TAG_LONG);
         requireType(tag, "Grade", Tag.TAG_DOUBLE);
         requireType(tag, "Depth", Tag.TAG_INT);
         requireType(tag, "Hardness", Tag.TAG_DOUBLE);
         requireType(tag, "SustainableExtractionRate", Tag.TAG_DOUBLE);
 
-        long initialReserve = tag.getLong("InitialReserve");
-        long remainingReserve = tag.getLong("RemainingReserve");
         double grade = tag.getDouble("Grade");
         int depth = tag.getInt("Depth");
         double hardness = tag.getDouble("Hardness");
@@ -413,32 +391,11 @@ final class GeologySavedDataCodec {
                 legacyCenterZ
         );
 
-        if (migrateReserves) {
-            if (initialReserve <= 0L || remainingReserve < 0L
-                    || remainingReserve > initialReserve) {
-                throw new GeologyDataException(
-                        "Cannot migrate invalid reserve values for " + id
-                );
-            }
-            long migratedInitial = GeologyGenerator.reserveForGrade(grade);
-            long migratedRemaining = BigInteger.valueOf(remainingReserve)
-                    .multiply(BigInteger.valueOf(migratedInitial))
-                    .divide(BigInteger.valueOf(initialReserve))
-                    .longValueExact();
-            if (remainingReserve > 0L && migratedRemaining == 0L) {
-                migratedRemaining = 1L;
-            }
-            initialReserve = migratedInitial;
-            remainingReserve = Math.min(migratedRemaining, migratedInitial);
-        }
-
         try {
             return new GeologicalDeposit(
                     id,
                     resourceId,
                     depositIndex,
-                    initialReserve,
-                    remainingReserve,
                     grade,
                     depth,
                     hardness,

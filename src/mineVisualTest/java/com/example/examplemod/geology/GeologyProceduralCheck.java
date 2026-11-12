@@ -1,5 +1,6 @@
 package com.example.examplemod.geology;
 
+import com.example.examplemod.mine.InexhaustibleMineCheck;
 import com.example.examplemod.mine.MineOutputMapping;
 
 import net.minecraft.core.BlockPos;
@@ -46,16 +47,14 @@ public final class GeologyProceduralCheck {
         determinism();
         localPotentialIsSmooth();
         qualityAndSizeAreIndependent();
-        sharedReserveAcrossMines();
-        bulkIronDoesNotDoubleReserve();
-        depletionNeverGoesBelowZero();
+        physicalOutputMultipliers();
         savedDataRoundTrip();
         legacyDataIsRegenerated();
         worksOutsideStartingArea();
         lookupNeverTouchesChunks();
         densityTargets(args.length == 0 ? null : Path.of(args[0]));
         resourcesDoNotSharePosition();
-        resourcesDoNotShareQualityOrReserve();
+        resourcesDoNotShareQuality();
         scannerCanReportEveryResource();
 
         System.out.println("PASS: " + checks + " procedural geology checks");
@@ -124,9 +123,8 @@ public final class GeologyProceduralCheck {
      * оказывались бедным углём и богатым железом одновременно: игрок не мог
      * найти богатое месторождение ни одного ресурса, кроме первого в списке.
      */
-    private static void resourcesDoNotShareQualityOrReserve() {
+    private static void resourcesDoNotShareQuality() {
         int identicalQuality = 0;
-        int identicalReserve = 0;
         int compared = 0;
 
         for (int cx = -25; cx <= 25; cx++) {
@@ -145,10 +143,6 @@ public final class GeologyProceduralCheck {
                                 && a.getPeakPotentialPerHour() == b.getPeakPotentialPerHour()) {
                             identicalQuality++;
                         }
-                        if (a.getInitialReserve() == b.getInitialReserve()
-                                && a.getPeakPotentialPerHour() == b.getPeakPotentialPerHour()) {
-                            identicalReserve++;
-                        }
                     }
                 }
             }
@@ -159,8 +153,6 @@ public final class GeologyProceduralCheck {
         require(identicalQuality == 0,
                 "resources must not share quality and potential, found "
                         + identicalQuality);
-        require(identicalReserve == 0,
-                "resources must not share reserve, found " + identicalReserve);
     }
 
     /**
@@ -253,9 +245,6 @@ public final class GeologyProceduralCheck {
                     "deposit id is deterministic");
             require(a.get(index).getShape().equals(b.get(index).getShape()),
                     "deposit shape is deterministic");
-            require(a.get(index).getInitialReserve()
-                            == b.get(index).getInitialReserve(),
-                    "deposit reserve is deterministic");
             require(a.get(index).getPeakPotentialPerHour()
                             == b.get(index).getPeakPotentialPerHour(),
                     "deposit quality is deterministic");
@@ -401,12 +390,6 @@ public final class GeologyProceduralCheck {
         require(poorGiant > 0 || richSmall > 0,
                 "a small rich or a poor giant deposit exists");
 
-        for (int sample = 0; sample < 100; sample++) {
-            long reserveSeed = GeologyNoise.mix(SEED, sample);
-            require(GeologyGenerator.computeReserve(reserveSeed, DepositSizeClass.GIANT)
-                            > GeologyGenerator.computeReserve(reserveSeed, DepositSizeClass.SMALL),
-                    "the reserve scales with size across lifetime rolls");
-        }
     }
 
     /*
@@ -462,115 +445,19 @@ public final class GeologyProceduralCheck {
         return null;
     }
 
-    /* 5. Две операции по одному deposit уменьшают один reserve. */
-    private static void sharedReserveAcrossMines() {
-        GeologyManager manager = managerWith(SEED, 4, 4, null);
-
-        GeologicalDeposit deposit = firstDepositOf(manager, null);
-        require(deposit != null, "a nearby cell has a deposit");
-
-        BlockPos probe = new BlockPos(deposit.getCenterX(), 64, deposit.getCenterZ());
-        long before = manager.findDeposit(deposit.getId()).orElseThrow().getRemainingReserve();
-
-        DepositExtractionResult mineOne =
-                manager.extract(deposit.getId(), 1_000L);
-        DepositExtractionResult mineTwo =
-                manager.extract(deposit.getId(), 1_500L);
-
-        require(mineOne.status() == DepositExtractionResult.Status.EXTRACTED,
-                "first extraction succeeded");
-        require(mineTwo.status() == DepositExtractionResult.Status.EXTRACTED,
-                "second extraction succeeded");
-
-        long afterFirst = mineOne.remainingReserve().orElseThrow();
-        long afterSecond = mineTwo.remainingReserve().orElseThrow();
-        require(afterFirst == before - 1_000L, "first mine consumed 1000");
-        require(afterSecond == before - 2_500L, "second mine consumed from the same reserve");
-
-        GeologicalDeposit viaA = manager.query(probe)
-                .getDeposit(deposit.getId()).orElseThrow();
-        GeologicalDeposit viaB = manager.query(probe)
-                .getDeposit(deposit.getId()).orElseThrow();
-        require(viaA.getRemainingReserve() == before - 2_500L,
-                "both lookups observe the same reduced reserve");
-        require(viaA == viaB, "lookups return the same deposit object");
-        require(manager.findDeposit(deposit.getId()).orElseThrow()
-                        == viaA,
-                "the canonical deposit is the object the mine saw");
-    }
-
-    /*
-     * 6. Bulk-вывод железа удваивает физический предмет,
-     *    но НЕ удваивает расход Fe-equivalent reserve.
-     */
-    private static void bulkIronDoesNotDoubleReserve() {
-        GeologyManager manager = managerWith(SEED, 0, 0, IRON);
-
-        GeologicalDeposit iron = firstDepositOf(manager, IRON);
-        require(iron != null, "an iron deposit exists near 0,0");
-
-        long factor = MineOutputMapping.outputFactor(IRON);
-        require(factor == 2L, "iron bulk output factor is 2");
-
-        long physical = 10L;
-        long reserveCost = MineOutputMapping.reserveUnitsFor(IRON, physical);
-        require(reserveCost == 5L,
-                "10 raw iron ore costs 5 Fe-equivalent reserve units");
-
-        long before = manager.findDeposit(iron.getId()).orElseThrow().getRemainingReserve();
-        DepositExtractionResult result = manager.extract(iron.getId(), reserveCost);
-        require(result.status() == DepositExtractionResult.Status.EXTRACTED,
-                "iron extraction succeeded");
-        require(result.remainingReserve().orElseThrow() == before - 5L,
-                "reserve shrank by the Fe-equivalent amount, not by the physical amount");
-
-        long coalCost = MineOutputMapping.reserveUnitsFor(resource("coal"), 10L);
-        require(coalCost == 10L, "coal has no bulk factor and stays 1:1");
-
+    private static void physicalOutputMultipliers() {
         require(MineOutputMapping.physicalAmountFor(IRON, 5L) == 10L,
-                "5 Fe-equivalent converts back into 10 bulk items");
+                "iron keeps its doubled physical output");
+        require(MineOutputMapping.physicalAmountFor(resource("coal"), 5L) == 5L,
+                "coal keeps its original physical output");
     }
 
-    /* 7. Истощение не уходит ниже нуля. */
-    private static void depletionNeverGoesBelowZero() {
-        GeologyManager manager = managerWith(SEED, 2, 2, null);
-        GeologicalDeposit deposit = firstDepositOf(manager, null);
-        require(deposit != null, "a nearby cell has a deposit");
-
-        long remaining = deposit.getRemainingReserve();
-        DepositExtractionResult overdraw = manager.extract(
-                deposit.getId(),
-                remaining * 4L + 10_000L
-        );
-        require(overdraw.status() == DepositExtractionResult.Status.EXTRACTED,
-                "overdraw is clamped rather than rejected");
-        require(overdraw.extractedAmount() == remaining,
-                "overdraw extracts exactly what was left");
-        require(overdraw.remainingReserve().orElseThrow() == 0L,
-                "reserve reaches exactly zero");
-        require(deposit.isDepleted(), "deposit reports depleted");
-
-        DepositExtractionResult after = manager.extract(deposit.getId(), 1L);
-        require(after.status() == DepositExtractionResult.Status.DEPLETED,
-                "further extraction is refused");
-        require(after.remainingReserve().orElseThrow() == 0L,
-                "reserve stays at zero and never goes negative");
-        require(deposit.getRemainingReserve() >= 0L, "reserve is non-negative");
-    }
-
-    /* 8. Round-trip SavedData сохраняет shape / quality / reserve. */
+    /* Format 6 keeps vein identity and shape when the old reserve is removed. */
     private static void savedDataRoundTrip() {
         GeologyManager manager = managerWith(SEED, 6, -5, null);
 
         GeologicalDeposit sample = firstDepositOf(manager, null);
         require(sample != null, "a nearby cell has a deposit");
-
-        /*
-         * Расходуем часть запаса, чтобы проверить, что
-         * сохраняется именно текущий remainingReserve.
-         */
-        manager.extract(sample.getId(), 25_000L);
-        GeologicalDeposit spent = manager.findDeposit(sample.getId()).orElseThrow();
 
         CompoundTag tag = manager.save(new CompoundTag(), null);
         require(tag.getInt("FormatVersion") == GeologySavedDataCodec.CURRENT_FORMAT_VERSION,
@@ -578,23 +465,37 @@ public final class GeologyProceduralCheck {
         require(tag.getInt("GeneratorVersion") == 4,
                 "saved data carries the generator version");
 
+        tag.putInt("FormatVersion", 6);
+        for (Tag region : tag.getList("Regions", Tag.TAG_COMPOUND)) {
+            for (Tag deposit : ((CompoundTag) region).getList("Deposits", Tag.TAG_COMPOUND)) {
+                ((CompoundTag) deposit).putLong("InitialReserve", 1L);
+                ((CompoundTag) deposit).putLong("RemainingReserve", 0L);
+            }
+        }
         GeologyManager restored = GeologyManager.load(tag, null, DIMENSION, SEED);
-
-        GeologicalDeposit restoredDeposit = restored.findDeposit(spent.getId()).orElseThrow();
-        require(restoredDeposit.getId().equals(spent.getId()),
-                "deposit id survives the round trip");
-        require(restoredDeposit.getShape().equals(spent.getShape()),
-                "deposit shape survives the round trip");
-        require(restoredDeposit.getPeakPotentialPerHour() == spent.getPeakPotentialPerHour(),
-                "depot quality survives the round trip");
-        require(restoredDeposit.getQualityClass() == spent.getQualityClass(),
-                "quality class survives the round trip");
-        require(restoredDeposit.getSizeClass() == spent.getSizeClass(),
-                "size class survives the round trip");
-        require(restoredDeposit.getInitialReserve() == spent.getInitialReserve(),
-                "initial reserve survives the round trip");
-        require(restoredDeposit.getRemainingReserve() == spent.getRemainingReserve(),
-                "remaining reserve survives the round trip");
+        GeologicalDeposit restoredDeposit = restored.findDeposit(sample.getId()).orElseThrow();
+        require(restoredDeposit.getShape().equals(sample.getShape()),
+                "format 6 preserves the vein shape and ID");
+        require(restoredDeposit.getPeakPotentialPerHour() == sample.getPeakPotentialPerHour(),
+                "format 6 preserves the peak potential");
+        require(restoredDeposit.getQualityClass() == sample.getQualityClass(),
+                "format 6 preserves the quality class");
+        require(restoredDeposit.getSizeClass() == sample.getSizeClass(),
+                "format 6 preserves the size class");
+        GeologicalRegion region = restored.query(new BlockPos(sample.getCenterX(), 64, sample.getCenterZ()));
+        InexhaustibleMineCheck.verify(region, restoredDeposit);
+        CompoundTag migrated = restored.save(new CompoundTag(), null);
+        require(migrated.getInt("FormatVersion") == 7, "format 6 is rewritten as format 7");
+        for (Tag entry : migrated.getList("Regions", Tag.TAG_COMPOUND)) {
+            for (Tag deposit : ((CompoundTag) entry).getList("Deposits", Tag.TAG_COMPOUND)) {
+                require(!((CompoundTag) deposit).contains("InitialReserve")
+                                && !((CompoundTag) deposit).contains("RemainingReserve"),
+                        "the new save omits old reserve tags");
+            }
+        }
+        GeologyManager reloaded = GeologyManager.load(migrated, null, DIMENSION, SEED);
+        require(reloaded.findDeposit(sample.getId()).orElseThrow().getShape().equals(sample.getShape()),
+                "the migrated polygon survives a second load");
         require(restored.query(new BlockPos(
                 restoredDeposit.getCenterX(), 64, restoredDeposit.getCenterZ()
         )).getDeposit(restoredDeposit.getId()).orElseThrow()
@@ -602,7 +503,7 @@ public final class GeologyProceduralCheck {
                 "restored deposit is spatially discoverable again");
     }
 
-    /* 9. Миграция v2 не теряет remaining reserve. */
+    /* Форматы до 6 пересоздают раскладку жил. */
     /**
      * Старые форматы пересоздаются, а не переносятся.
      *
@@ -671,8 +572,8 @@ public final class GeologyProceduralCheck {
         BlockPos probe = new BlockPos(expected.getCenterX(), 64, expected.getCenterZ());
         GeologicalRegion rebuilt = regenerated.query(probe);
         GeologicalDeposit regeneratedDeposit = rebuilt.getDeposit(expected.getId()).orElseThrow();
-        require(regeneratedDeposit.getRemainingReserve() == expected.getInitialReserve(),
-                "format 5 regenerates the deposit with a fresh reserve");
+        require(regeneratedDeposit.getShape().equals(expected.getShape()),
+                "format 5 regenerates the expected polygon");
         require(regeneratedDeposit.getId().getPath().startsWith("deposit/v4/"),
                 "the regenerated deposit uses a version 4 identifier");
 

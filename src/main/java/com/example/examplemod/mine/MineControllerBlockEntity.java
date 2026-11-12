@@ -20,7 +20,6 @@ public final class MineControllerBlockEntity extends BlockEntity {
 
     public static final int STARTUP_DURATION_TICKS = 60;
     public static final int STOP_DURATION_TICKS = 40;
-    public static final int MAX_PERSISTED_MINING_TICKS = 1200;
 
     private ResourceLocation activeDepositId;
     private ResourceLocation specializedResourceId;
@@ -35,7 +34,7 @@ public final class MineControllerBlockEntity extends BlockEntity {
     private boolean userRequestedStart;
     private int startupTicks;
     private int shutdownTicks;
-    private int miningTicks;
+    private double miningTicks;
     private MineOperationResult lastResult;
     private String statusMessage = "Шахта остановлена.";
     private boolean visualAssembled;
@@ -291,13 +290,17 @@ public final class MineControllerBlockEntity extends BlockEntity {
         shutdownTicks = Math.max(0, Math.min(STOP_DURATION_TICKS, ticks));
     }
 
-    int getMiningTicks() { return miningTicks; }
-    void setMiningTicks(int ticks) {
-        int clamped = Math.max(0, Math.min(MAX_PERSISTED_MINING_TICKS, ticks));
+    double getMiningTicks() { return miningTicks; }
+    void setMiningTicks(double ticks) {
+        double clamped = validMiningTicks(ticks);
         if (miningTicks != clamped) {
             miningTicks = clamped;
             setChanged();
         }
+    }
+
+    private static double validMiningTicks(double ticks) {
+        return Double.isFinite(ticks) ? Math.max(0.0, ticks) : 0.0;
     }
 
     void setLastResult(MineOperationResult result) {
@@ -323,11 +326,11 @@ public final class MineControllerBlockEntity extends BlockEntity {
         };
     }
 
-    double miningProgress(int cycleDurationTicks) {
+    double miningProgress(double cycleDurationTicks) {
         if (cycleDurationTicks <= 0) {
             return 0.0;
         }
-        return Math.min(1.0, (double) miningTicks / cycleDurationTicks);
+        return Math.min(1.0, miningTicks / cycleDurationTicks);
     }
 
     @Override
@@ -352,7 +355,7 @@ public final class MineControllerBlockEntity extends BlockEntity {
             tag.putUUID("ProjectId", projectId);
         }
         tag.putBoolean("Commissioned", commissioned);
-        tag.putInt("MiningProgressTicks", miningTicks);
+        tag.putDouble("MiningProgressTicks", miningTicks);
     }
 
     @Override
@@ -369,10 +372,7 @@ public final class MineControllerBlockEntity extends BlockEntity {
         projectId = tag.hasUUID("ProjectId") ? tag.getUUID("ProjectId") : null;
         commissioned = tag.getBoolean("Commissioned")
                 && cityId != null && projectId != null && activeDepositId != null;
-        miningTicks = Math.max(0, Math.min(
-                MAX_PERSISTED_MINING_TICKS,
-                tag.getInt("MiningProgressTicks")
-        ));
+        miningTicks = validMiningTicks(tag.getDouble("MiningProgressTicks"));
         runtimeState = IndustrialMineState.STOPPED;
         electricalState = MineElectricalState.NO_POWER;
         userRequestedStart = false;

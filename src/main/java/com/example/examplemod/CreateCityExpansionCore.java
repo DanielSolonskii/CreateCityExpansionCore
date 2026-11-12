@@ -452,6 +452,11 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     new Item.Properties()
                             .durability(10)
             );
+    public static final DeferredItem<Item> BLUEPRINT_TERMINAL =
+            ITEMS.registerItem("blueprint_terminal", Item::new, new Item.Properties().stacksTo(1));
+    public static final DeferredItem<Item> BLUEPRINT_EDITOR =
+            ITEMS.registerItem("blueprint_editor", Item::new, new Item.Properties().stacksTo(1));
+
     /*
      * Пульт управления доступом: открывает один блок города для ПКМ
      * любого игрока. Выключатель — повторное использование закрывает блок.
@@ -2023,7 +2028,7 @@ registrar.playToServer(
          * при NeoForge handshake (dedicated server должен знать о каналах).
          */
 
-        registrar.playToClient(
+        registrar.versioned("geology-analysis-2").playToClient(
                 GeologyAnalysisPayload.TYPE,
                 GeologyAnalysisPayload.STREAM_CODEC,
                 (payload, context) -> GEOLOGY_ANALYSIS_HANDLER.handle(payload, context)
@@ -2035,7 +2040,7 @@ registrar.playToServer(
                 (payload, context) -> GEOLOGY_WIDE_SCAN_HANDLER.handle(payload, context)
         );
 
-        registrar.playToClient(
+        registrar.versioned("mine-snapshot-2").playToClient(
                 MineControllerSnapshotPayload.TYPE,
                 MineControllerSnapshotPayload.STREAM_CODEC,
                 (payload, context) -> MINE_CONTROLLER_SNAPSHOT_HANDLER.handle(payload, context)

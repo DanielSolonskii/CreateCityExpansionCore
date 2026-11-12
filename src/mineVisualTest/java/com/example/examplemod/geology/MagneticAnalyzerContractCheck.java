@@ -175,8 +175,6 @@ public final class MagneticAnalyzerContractCheck {
                 "INSIDE reports a positive local potential");
         require(insideSurvey.peakPotentialPerHour() > 0,
                 "INSIDE reports the deposit peak");
-        require(insideSurvey.estimatedLifetimeHours() >= 0,
-                "INSIDE estimates the lifetime");
         require(insideSurvey.sizeClass() == deposit.getSizeClass(),
                 "INSIDE reports the size class");
         require(insideSurvey.qualityClass() == deposit.getQualityClass(),
@@ -361,8 +359,6 @@ public final class MagneticAnalyzerContractCheck {
                 "standing inside reports INSIDE, not NEAREST ANOMALY");
         require(survey.localPotentialPerHour() > 0,
                 "INSIDE reports a positive local potential");
-        require(survey.estimatedLifetimeHours() >= 0,
-                "INSIDE reports a lifetime estimate");
     }
 
     private static void macroCellBoundary() {
@@ -602,11 +598,8 @@ public final class MagneticAnalyzerContractCheck {
                 new RecordComponent("boundaryDistanceBlocks"),
                 new RecordComponent("localPotentialPerHour"),
                 new RecordComponent("peakPotentialPerHour"),
-                new RecordComponent("remainingReserve"),
-                new RecordComponent("initialReserve"),
                 new RecordComponent("sizeClass"),
                 new RecordComponent("qualityClass"),
-                new RecordComponent("estimatedLifetimeHours"),
                 new RecordComponent("remainingUses")
         );
 

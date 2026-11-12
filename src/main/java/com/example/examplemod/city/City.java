@@ -1,11 +1,14 @@
 package com.example.examplemod.city;
 
+import com.example.examplemod.multiblock.BlueprintCatalog.Structure;
+import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,8 +31,26 @@ public class City {
     private final List<CityMember> members;
     private final List<CityInvite> invites;
     private final List<CityProject> projects;
+    private final Map<Structure, Integer> unlockedBlueprintTiers = new EnumMap<>(Structure.class);
     private final Map<ResourceLocation, Long> developmentContributions;
     private ResourceLocation developmentPrimaryResource;
+
+    /** Highest unlocked tier, or zero if the whole structure is locked. */
+    public int getUnlockedBlueprintTier(Structure structure) {
+        return unlockedBlueprintTiers.getOrDefault(structure, Tier.I.level());
+    }
+
+    boolean setBlueprintTierLimit(Structure structure, int limit) {
+        if (limit < 0 || limit > structure.maxTier().level() || limit == getUnlockedBlueprintTier(structure)) {
+            return false;
+        }
+        if (limit == Tier.I.level()) {
+            unlockedBlueprintTiers.remove(structure);
+        } else {
+            unlockedBlueprintTiers.put(structure, limit);
+        }
+        return true;
+    }
 
     /*
      * =========================================

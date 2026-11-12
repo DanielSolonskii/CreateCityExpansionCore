@@ -1,11 +1,13 @@
 package com.example.examplemod.client.render;
 
+import com.example.examplemod.multiblock.BlueprintCatalog;
 import com.example.examplemod.multiblock.MineMultiblock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashSet;
+import java.util.List;
 
 /** Headless checks against actual canonical coordinate helpers (no test-library dependency). */
 public final class MineVisualCoordinatesCheck {
@@ -30,7 +32,16 @@ public final class MineVisualCoordinatesCheck {
                 "Foreign models must remain untouched");
         BlockPos controller = new BlockPos(-19, 73, 31); // Includes negative coordinates/chunk boundaries.
         int drills = 0, ports = 0;
+        BlockPos anchor = new BlockPos(4, 0, 4);
+        var projection = new BlueprintCatalog.Plan(BlueprintCatalog.Structure.MINE,
+                BlueprintCatalog.Tier.III, anchor, List.of());
         for (Direction facing : Direction.Plane.HORIZONTAL) {
+            BlockPos target = new BlockPos(-33, 66, -17);
+            require(projection.worldPosition(anchor, target, facing).equals(target),
+                    "The bottom center of the plan must coincide with the selected world block");
+            require(projection.worldPosition(anchor.offset(1, 1, -2), target, facing)
+                            .equals(target.above().relative(facing.getClockWise()).relative(facing, 2)),
+                    "Projection cells must use the same rotated coordinates as the built machine");
             BlockPos origin = MineMultiblock.getOrigin(controller, facing);
             for (int x = 3; x <= 6; x++) {
                 for (int z = 3; z <= 6; z++) {
