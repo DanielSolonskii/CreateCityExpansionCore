@@ -8,6 +8,10 @@ public final class CenterUiCheck {
         if (!value) throw new AssertionError(message);
     }
     public static void run() {
+        EquipmentWizardCheck.run();
+        LogisticsTutorialCheck.run();
+        LogisticsActivationCheck.run();
+        responsiveWorkspace();
         for (String status : new String[]{"MISSING", "BLOCKED", "UNLOADED", "FAILED", "WAITING_POINT", "WAITING_ROUTE", "WAITING_TRAIN"})
             require(CenterPresentation.problem(status), "waiting and broken objects remain visible in problem filter");
         for (String status : new String[]{"COMPLETED", "CANCELLED", "AVAILABLE", "IN_TRANSIT"})
@@ -26,4 +30,38 @@ public final class CenterUiCheck {
         System.out.println("PASS: " + checks + " logistics UI policy checks");
     }
     public static void main(String[] args) { run(); }
+
+    private static void responsiveWorkspace() {
+        for (int width : new int[]{320, 426, 500, 580, 640, 854, 1280}) {
+            for (int height : new int[]{180, 240, 260, 360, 480, 720}) {
+                var layout = CenterLayout.of(width, height);
+                var viewport = layout.list();
+                require(viewport.width() >= 200 && viewport.height() >= layout.rowStep() - 6, "a complete list row remains visible at Minecraft GUI scales");
+                require(viewport.bottom() <= layout.map().y() - 6, "body never covers bottom controls");
+                require(layout.search().right() <= layout.toolbar(0).x() - 4, "search and filters do not overlap");
+                require(layout.toolbar(2).right() <= width - layout.margin(), "filter controls remain inside viewport");
+                if (layout.detailWidth() > 0) require(!viewport.overlaps(layout.details()), "details do not obscure list rows");
+                int endScroll = CenterPresentation.scrollLimit(layout.listContentHeight(32), viewport.height());
+                var lastRow = layout.row(31, endScroll);
+                require(lastRow.y() >= viewport.y() && lastRow.bottom() <= viewport.bottom(), "the last record can be fully read at the end of scrolling");
+                var nav = layout.navigation();
+                for (int i = 0; i < 9; i++) {
+                    int scroll = Math.clamp((i + 1) * layout.navigationStep() - nav.height(), 0, layout.navigationLimit(9));
+                    var item = layout.navigationRow(i, scroll);
+                    require(item.y() >= nav.y() && item.bottom() <= nav.bottom(), "every section can scroll fully into view");
+                }
+                for (int i = 0; i < 4; i++) {
+                    var card = layout.dashboardCard(i);
+                    require(card.x() > layout.sidebar() && card.right() <= width - layout.margin(), "quick tasks stay within workspace");
+                    for (int j = 0; j < i; j++) require(!card.overlaps(layout.dashboardCard(j)), "quick tasks remain distinct");
+                }
+                for (int index = 0; index < 32; index++) {
+                    var row = layout.row(index, 17);
+                    require(row.contains(row.x() + 1, row.y() + 1), "rendered row is clickable");
+                    require(!row.contains(row.right(), row.bottom() - 1), "row right edge is exclusive");
+                    require(!row.contains(row.x(), row.bottom()), "row gap cannot select another object");
+                }
+            }
+        }
+    }
 }

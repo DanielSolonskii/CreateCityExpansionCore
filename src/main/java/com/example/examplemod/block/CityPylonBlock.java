@@ -505,6 +505,21 @@ public class CityPylonBlock extends BaseEntityBlock {
         if (target == null) {
             return;
         }
+        // Repair saves where an explosion/command removed the old block without
+        // playerWillDestroy. Never interpret an unloaded chunk as a missing pylon.
+        if (target.isPylonActive()) {
+            var oldLevel = serverLevel.getServer().getLevel(net.minecraft.resources.ResourceKey.create(
+                    net.minecraft.core.registries.Registries.DIMENSION, target.getPylonDimension()));
+            var oldPos = target.getPylonPos();
+            if (oldLevel != null && oldLevel.hasChunkAt(oldPos)
+                    && !oldLevel.getBlockState(oldPos).is(this)) {
+                manager.markPylonRelocating(target);
+            } else if (dimension.equals(target.getPylonDimension()) && pos.equals(oldPos)) {
+                // This is the newly placed block at the saved position, not a
+                // surviving old pylon (placement necessarily replaced that cell).
+                manager.markPylonRelocating(target);
+            }
+        }
         if (target.isPylonActive()) {
             rejectPlacement(serverLevel, pos, player, stack,
                     "message.createcityexpansioncore.pylon.restore.already_active");
@@ -520,6 +535,16 @@ public class CityPylonBlock extends BaseEntityBlock {
         player.sendSystemMessage(Component.translatable(
                 "message.createcityexpansioncore.pylon.restore.complete", target.getName()
         ));
+    }
+
+    @Override
+    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState replacement, boolean moving) {
+        if (!state.is(replacement.getBlock()) && level instanceof ServerLevel serverLevel) {
+            var manager = CityManager.get(serverLevel.getServer().overworld());
+            var city = manager.getCityByPylon(serverLevel.dimension().location(), pos);
+            if (city != null) manager.markPylonRelocating(city);
+        }
+        super.onRemove(state, level, pos, replacement, moving);
     }
 
     private static void rejectPlacement(

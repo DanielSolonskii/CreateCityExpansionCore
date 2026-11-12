@@ -11,8 +11,8 @@ public final class CenterForms {
         if(section.equals("warehouses"))add(list,"WAREHOUSE_REGISTER",false,"Name","Point@Points","Owner@Owners");
         if(section.equals("lines"))add(list,"LINE_CREATE",false,"Name","Owner@Owners","FirstStation@Stations","LastStation@Stations","Train@Trains","Mode=REGULAR|CHARTER","Tariff#0","Terms");
         if(section.equals("lines")||section.equals("map"))add(list,"ROUTE_PREVIEW",false,"SourcePoint@Points","DestinationPoint@Points","Preference=CHEAPEST|FEWEST_TRANSFERS");
-        if(selected!=null&&selected.getString("Kind").equals("offer"))add(list,"BUY",true,"Quantity#1","Destination@Warehouses","Owner@Owners","Preference=CHEAPEST|FEWEST_TRANSFERS","Service=ANY|REGULAR|CHARTER");
-        if(selected!=null&&selected.getString("Kind").equals("warehouse"))add(list,"SEND",true,"Stock@Stock","Quantity#1","Destination@Warehouses","Owner@Owners","Preference=CHEAPEST|FEWEST_TRANSFERS");
+        if(selected!=null&&selected.getString("Kind").equals("offer"))add(list,"BUY",true,"Quantity#1","Destination@Warehouses","Owner@Payers","Preference=CHEAPEST|NO_TOLLS|FASTEST|FEWEST_TRANSFERS","Service=ANY|REGULAR|CHARTER");
+        if(selected!=null&&selected.getString("Kind").equals("warehouse"))add(list,"SEND",true,"Stock@Stock","Quantity#1","Destination@Warehouses","Owner@Payers","Preference=CHEAPEST|NO_TOLLS|FASTEST|FEWEST_TRANSFERS","Service=ANY|REGULAR|CHARTER");
         if(selected==null||!selected.getBoolean("Manage"))return list;
         String kind=selected.getString("Kind");if(!kind.equals("line")&&!kind.equals("offer"))add(list,"RENAME",true,"Name");
         add(list,"ACCESS",true,"Owner@Owners","Access=PRIVATE|PUBLIC|RESTRICTED");add(list,"ACL_ADD",true,"Subject@Subjects");add(list,"ACL_REMOVE",true,"Subject@Allowed");

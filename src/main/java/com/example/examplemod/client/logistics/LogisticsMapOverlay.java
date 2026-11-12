@@ -20,7 +20,7 @@ public final class LogisticsMapOverlay {
     private static final Set<String> LAYERS=new HashSet<>(List.of(KINDS));
     private record View(int x,int y,int width,int height){int right(){return x+width;}int bottom(){return y+height;}boolean contains(double px,double py){return px>=x&&py>=y&&px<right()&&py<bottom();}}
     private static final Map<View,CompoundTag> HITS=new LinkedHashMap<>();
-    private static CompoundTag state=new CompoundTag(),fullState=new CompoundTag(),selection,focusLocation,route;
+    private static CompoundTag state=new CompoundTag(),fullState=new CompoundTag(),selection,focusLocation,route,reviewed;
     private static UUID focus,pending;
 
     private static final Map<UUID,double[]> trainMotion=new HashMap<>();
@@ -40,7 +40,7 @@ public final class LogisticsMapOverlay {
     private static boolean fitRoute;
     private static final DispatchMotion.Transition deliveredBar=new DispatchMotion.Transition(0);
     private LogisticsMapOverlay() {}
-    public static void deactivate(){trainMotion.clear();enabled=visible=session=false;HITS.clear();selection=null;}
+    public static void deactivate(){trainMotion.clear();enabled=visible=session=false;HITS.clear();selection=null;reviewed=null;}
     public static boolean isSession(){return session;}
     public static void reset(){deactivate();state=new CompoundTag();fullState=new CompoundTag();route=focusLocation=null;pending=focus=null;mapDimension=null;hash=0;sent=received=0;}
     /**
@@ -54,13 +54,13 @@ public final class LogisticsMapOverlay {
         state=new CompoundTag();fullState=new CompoundTag();mapDimension=dimension;hash=0;sent=received=0;
         refresh();
     }
-    public static void openRoute(LogisticsCenterScreen parent,CompoundTag values,CompoundTag preview){open(parent,new CompoundTag(),values,preview);}
-    public static void reviewRoute(LogisticsCenterScreen parent,net.minecraft.client.gui.screens.Screen form,CompoundTag values,CompoundTag preview){openRoute(parent,values,preview);var mc=Minecraft.getInstance();if(mc.screen instanceof PolishedWorldMapScreen map)map.returnToCommunity(form);}
-    public static void open(LogisticsCenterScreen parent,CompoundTag selected){open(parent,selected,null,null);}
+    public static void openRoute(LogisticsCenterScreen parent,CompoundTag values,CompoundTag preview){reviewed=null;open(parent,new CompoundTag(),values,preview);}
+    public static void reviewRoute(LogisticsCenterScreen parent,net.minecraft.client.gui.screens.Screen form,CompoundTag values,CompoundTag preview){reviewed=null;open(parent,new CompoundTag(),null,preview);reviewed=preview.copy();route=values.copy();var mc=Minecraft.getInstance();if(mc.screen instanceof PolishedWorldMapScreen map)map.returnToCommunity(form);}
+    public static void open(LogisticsCenterScreen parent,CompoundTag selected){reviewed=null;open(parent,selected,null,null);}
     private static void open(LogisticsCenterScreen parent,CompoundTag selected,CompoundTag requestedRoute,CompoundTag initial){var mc=Minecraft.getInstance();if(mc.player==null)return;enabled=true;session=true;visible=false;selection=null;focus=selected.hasUUID("Id")?selected.getUUID("Id"):null;focusLocation=selected.contains("Location")?selected.getCompound("Location").copy():null;route=requestedRoute==null?null:requestedRoute.copy();fitRoute=true;state=initial==null?new CompoundTag():initial.copy();fullState=new CompoundTag();hash=0;
         ResourceLocation dimension=focusLocation==null?mc.player.level().dimension().location():ResourceLocation.parse(focusLocation.getString("Dimension"));mapDimension=dimension;CityWorldMapSession.INSTANCE.awaitAnchor();var map=new PolishedWorldMapScreen(CityWorldMapSession.INSTANCE);map.planningDimension(dimension);map.returnToCommunity(parent);mc.setScreen(map);PacketDistributor.sendToServer(new RequestCityDirectoryPayload(dimension,RequestCityDirectoryPayload.NEW,0));refresh();}
-    public static void accept(CompoundTag response){if(!enabled||!response.hasUUID("Request")||!response.getUUID("Request").equals(pending))return;if(!response.getBoolean("Unchanged")){fullState=com.example.examplemod.cargo.center.CenterDelta.apply(fullState,response);state=fullState.getCompound("Map").copy();}received=net.minecraft.Util.getMillis();if(response.contains("Hash"))hash=response.getInt("Hash");}
-    private static void refresh(){var q=new CompoundTag();pending=UUID.randomUUID();q.putUUID("Request",pending);q.putString("Action","VIEW");q.putString("Section","map");q.putInt("Hash",hash);if(mapDimension!=null)q.putString("Dimension",mapDimension.toString());if(!session)q.putBoolean("RailsOnly",true);if(focus!=null)q.putUUID("Focus",focus);if(route!=null)q.put("MapRoute",route.copy());PacketDistributor.sendToServer(new CenterRequest(q));sent=net.minecraft.Util.getMillis();}
+    public static void accept(CompoundTag response){if(!enabled||!response.hasUUID("Request")||!response.getUUID("Request").equals(pending))return;if(!response.getBoolean("Unchanged")){fullState=com.example.examplemod.cargo.center.CenterDelta.apply(fullState,response);state=fullState.getCompound("Map").copy();if(reviewed!=null)for(String key:List.of("Rails","RouteStops","RouteFound"))if(reviewed.contains(key))state.put(key,reviewed.get(key).copy());}received=net.minecraft.Util.getMillis();if(response.contains("Hash"))hash=response.getInt("Hash");}
+    private static void refresh(){var q=new CompoundTag();pending=UUID.randomUUID();q.putUUID("Request",pending);q.putString("Action","VIEW");q.putString("Section","map");q.putInt("Hash",hash);if(mapDimension!=null)q.putString("Dimension",mapDimension.toString());if(!session)q.putBoolean("RailsOnly",true);if(focus!=null)q.putUUID("Focus",focus);if(route!=null&&reviewed==null)q.put("MapRoute",route.copy());PacketDistributor.sendToServer(new CenterRequest(q));sent=net.minecraft.Util.getMillis();}
     public static void render(GuiGraphics g,CityMapPanel map,ResourceLocation dimension,int left,int top,int width,int height,int mx,int my,boolean active){var viewport=new View(left,top,width,height);visible=enabled&&active;HITS.clear();if(!visible)return;if(net.minecraft.Util.getMillis()-sent>(session?1000:15000))refresh();
         /*
          * A normal World Map borrows only the rail feed. The chips, markers and object card are
@@ -140,6 +140,9 @@ public final class LogisticsMapOverlay {
         var points=new ArrayList<ShipmentRouteGeometry.Point>();for(Tag raw:state.getList("RouteStops",10)){var stop=(CompoundTag)raw;var location=stop.getCompound("Location");if(!location.getString("Dimension").equals(dimension.toString()))continue;var pos=BlockPos.of(location.getLong("Pos"));points.add(new ShipmentRouteGeometry.Point(pos.getX()+.5,pos.getZ()+.5));}return points;
     }
     private static void renderRoute(GuiGraphics g,CityMapPanel map,ResourceLocation dimension,View view){
+        if(exactRoute()){
+            if(fitRoute){var actual=new ArrayList<ShipmentRouteGeometry.Point>();for(Tag raw:state.getList("Rails",10)){var rail=(CompoundTag)raw;if(!rail.getString("Dimension").equals(dimension.toString())||!rail.getBoolean("Focus")&&!rail.contains("Phase"))continue;actual.add(new ShipmentRouteGeometry.Point(rail.getDouble("X"),rail.getDouble("Z")));actual.add(new ShipmentRouteGeometry.Point(rail.getDouble("ToX"),rail.getDouble("ToZ")));}var bounds=ShipmentRouteGeometry.fit(actual,view.width(),view.height(),70,.0001,4);if(bounds!=null)map.restoreView(bounds.x(),bounds.z(),bounds.zoom());fitRoute=false;}return;
+        }
         var points=routePoints(dimension);if(points.isEmpty())return;
         if(fitRoute){var bounds=ShipmentRouteGeometry.fit(points,view.width(),view.height(),70,.12,4);if(bounds!=null)map.restoreView(bounds.x(),bounds.z(),bounds.zoom());fitRoute=false;}
         boolean sameDimension=points.size()==state.getList("RouteStops",10).size();
@@ -166,14 +169,15 @@ public final class LogisticsMapOverlay {
             int count=shipment.getInt("Quantity"),delivered=shipment.getInt("Delivered");g.drawString(font,text("delivered")+" "+delivered+" / "+count,x+11,dy,MUTED,false);dy+=14;
             int bar=width-22;g.fill(x+11,dy,x+11+bar,dy+4,EDGE);int filled=(int)(bar*deliveredBar.value(count==0?0:delivered/(double)count,System.nanoTime(),map.reducedMotion(),240));g.fill(x+11,dy,x+11+filled,dy+4,TEAL);dy+=17;
         }
-        g.drawString(font,fit(text("map.schematic"),width-22),x+11,dy,BRASS,false);dy+=15;
-        g.drawString(font,fit(text("map.direction_demo"),width-22),x+11,dy,MUTED,false);dy+=20;
+        g.drawString(font,fit(text(exactRoute()?"navigator.frozen_route":"map.schematic"),width-22),x+11,dy,BRASS,false);dy+=15;
+        g.drawString(font,fit(text(exactRoute()?"navigator.review_only":"map.direction_demo"),width-22),x+11,dy,MUTED,false);dy+=20;
         for(int i=0;i<shown;i++){var stop=stops.getCompound(i);g.drawString(font,fit(stop.getInt("Index")+". "+stop.getString("Name"),width-22),x+11,dy,TEXT,false);dy+=19;}
         if(stops.size()>shown)g.drawString(font,"+ "+(stops.size()-shown),x+11,dy,MUTED,false);
     }
     private static void arrow(GuiGraphics g,int x,int y,double dx,double dy,int color){
         for(int i=0;i<5;i++){int ax=(int)Math.round(x-dx*i-dy*i*.65),ay=(int)Math.round(y-dy*i+dx*i*.65);g.fill(ax,ay,ax+2,ay+2,color);int bx=(int)Math.round(x-dx*i+dy*i*.65),by=(int)Math.round(y-dy*i-dx*i*.65);g.fill(bx,by,bx+2,by+2,color);}
     }
+    private static boolean exactRoute(){return reviewed!=null||state.getList("Rails",10).stream().anyMatch(raw->((CompoundTag)raw).contains("Phase"));}
     public static boolean click(double x,double y,int button){if(!visible||!session||button!=0)return false;if(y>=barY&&y<barY+23&&x>=barX&&x<barX+KINDS.length*27){String kind=KINDS[(int)((x-barX)/27)];if(!LAYERS.remove(kind))LAYERS.add(kind);return true;}
         if(selection!=null&&x>=barX&&x<barX+240&&y>=barY+86&&y<barY+113){var center=new LogisticsCenterScreen();center.focusObject(selection.getString("Kind"),selection.hasUUID("OpenId")?selection.getUUID("OpenId"):selection.getUUID("Id"));Minecraft.getInstance().setScreen(center);visible=false;return true;}
         for(var hit:HITS.entrySet())if(hit.getKey().contains(x,y)){selection=hit.getValue().copy();focus=selection.hasUUID("OpenId")?selection.getUUID("OpenId"):selection.getUUID("Id");fitRoute=false;refresh();return true;}return false;}

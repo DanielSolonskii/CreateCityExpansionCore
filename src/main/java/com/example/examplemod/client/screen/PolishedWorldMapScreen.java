@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.RequestCityTerritoriesPayload;
+import com.example.examplemod.client.uiedit.UiEditLayout;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -64,6 +65,20 @@ public final class PolishedWorldMapScreen extends Screen {
      * готовности рисуется экран загрузки.
      */
     private CityMapPanel map;
+    private boolean journeyWorkspaceOpen;
+    /** Transfer the live map to its marker workspace without tearing down the shared session. */
+    public void openJourneyWorkspace(String marker) {
+        if (this.map == null) return;
+        journeyWorkspaceOpen = true;
+        minecraft.setScreen(new com.example.examplemod.client.journey.JourneyAtlasScreen(this, this.map, marker));
+    }
+    public void tickJourneyWorkspace() {
+        if (this.map != null) this.data.drainMapTiles().forEach(this.map::receive);
+    }
+    public void finishJourneyWorkspace(boolean returning) {
+        journeyWorkspaceOpen = false;
+        if (!returning) removed();
+    }
     /** Legacy map management stays read-only by key; projects use their own membership-checked commands. */
     private final boolean readOnly;
     private final ProjectPanel projectWorkspace = new ProjectPanel();
@@ -488,8 +503,28 @@ if (this.searchOpen) updateSearchResults();
      * that takes input, so no marker can ever end up on top of it and no ordinary tooltip can leak
      * through a dim overlay.
      */
+    private WorldMapUiLayout.Rect editControl(String key, WorldMapUiLayout.Rect bounds) {
+        return UiEditLayout.apply("map." + key, bounds.x(), bounds.y(), bounds.width(), bounds.height(),
+                WorldMapUiLayout.Rect::new);
+    }
+
+    private WorldMapUiLayout.Rect modeControl(int index) {
+        return editControl("mode[" + index + "]", WorldMapUiLayout.modeTab(this.width, index, this.modeLabelWidths));
+    }
+
+    private WorldMapUiLayout.Rect globalControl(int index) {
+        return editControl("toolbar[" + index + "]",
+                WorldMapUiLayout.globalButton(this.width, index, this.modeLabelWidths, this.globalLabelWidths));
+    }
+
+    private WorldMapUiLayout.Rect searchResultControl(int index) {
+        return editControl("searchResult[" + index + "]",
+                WorldMapUiLayout.searchRow(this.width, this.modeLabelWidths, this.globalLabelWidths, index, 228));
+    }
+
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        UiEditLayout.clearElements("map.");
         this.mouseXNow=mouseX;this.mouseYNow=mouseY;
         syncMapData();
         if (this.map == null) {
@@ -580,7 +615,7 @@ if (this.searchOpen) updateSearchResults();
     private double tabLeft=Double.NaN, tabRight;
     private long tabFrame;
     private void renderModeToolbar(GuiGraphics graphics, int mouseX, int mouseY) {
-        var activeTab=WorldMapUiLayout.modeTab(this.width,this.mode.ordinal(),this.modeLabelWidths);
+        var activeTab=modeControl(this.mode.ordinal());
         long now=System.nanoTime(); double blend=this.map.reducedMotion()?1:com.example.examplemod.client.map.MapMotion.blend(tabFrame==0?0:(now-tabFrame)/1e9,22); tabFrame=now;
         if(Double.isNaN(tabLeft)){tabLeft=activeTab.x()+NORMAL;tabRight=activeTab.right()-NORMAL;}
         tabLeft+=(activeTab.x()+NORMAL-tabLeft)*blend; tabRight+=(activeTab.right()-NORMAL-tabRight)*blend;
@@ -589,7 +624,7 @@ if (this.searchOpen) updateSearchResults();
         Mode[] modes = Mode.values();
         for (int index = 0; index < modes.length; index++) {
             Mode value = modes[index];
-            WorldMapUiLayout.Rect bounds = WorldMapUiLayout.modeTab(this.width, index, this.modeLabelWidths);
+            WorldMapUiLayout.Rect bounds = modeControl(index);
             boolean selected = value == this.mode;
             boolean enabled = value.available();
             boolean hover = enabled && bounds.contains(mouseX, mouseY);
@@ -618,7 +653,7 @@ if (this.searchOpen) updateSearchResults();
         plate(graphics, bar.x() - MICRO, bar.y() - MICRO, bar.width() + MICRO * 2, bar.height() + MICRO * 2);
         int problems = problemCount();
         for (int index = 0; index < WorldMapUiLayout.GLOBAL_ACTIONS; index++) {
-            WorldMapUiLayout.Rect bounds = WorldMapUiLayout.globalButton(this.width, index, this.modeLabelWidths, this.globalLabelWidths);
+            WorldMapUiLayout.Rect bounds = globalControl(index);
             boolean active = (index == WorldMapUiLayout.GLOBAL_SEARCH && this.searchOpen)
                     || (index == WorldMapUiLayout.GLOBAL_LAYERS && this.layersOpen)
                     || (index == WorldMapUiLayout.GLOBAL_PROBLEMS && this.problemCenterOpen)
@@ -737,7 +772,7 @@ private int layersRowCount() {
         if (visible.isEmpty()) graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.world_map.search.empty"), panel.x() + 8, panel.y() + 73, panel.width() - 16, MUTED);
         for (int index = 0; index < visible.size(); index++) {
             var result = visible.get(index);
-            var row = WorldMapUiLayout.searchRow(this.width, this.modeLabelWidths, this.globalLabelWidths, index, 228);
+            var row = searchResultControl(index);
             graphics.fill(row.x(), row.y(), row.right(), row.bottom(), row.contains(mouseX, mouseY) ? 0xFF303A3D : PANEL_ALT);
             MapMarkerRenderer.drawGlyph(graphics, MapMarkerRenderer.glyph(result.icon()), row.x() + 3, row.y() + 2, result.warning() ? MapPalette.ALERT : TEXT);
             graphics.drawString(this.font, this.font.plainSubstrByWidth(result.title().getString(), row.width() - 30), row.x() + 24, row.y() + 3, TEXT, false);
@@ -899,7 +934,7 @@ case ENERGY->List.of();
             if(!this.cardActions.isEmpty()) {
                 cursor+=MICRO;this.cardActionY=cursor;
                 for(int i=0;i<this.cardActions.size();i++) {
-                    var action=WorldMapUiLayout.cardAction(panel,this.cardActionY,i);
+                    var action=editControl("card.action[" + i + "]", WorldMapUiLayout.cardAction(panel,this.cardActionY,i));
                     WorldMapChrome.dispatchControl(g,action,false,action.contains(this.mouseXNow,this.mouseYNow),true,i==0);
                     g.drawCenteredString(this.font,WorldMapChrome.fit(this.font,this.cardActions.get(i),action.width()-SECTION),action.x()+action.width()/2,action.y()+(action.height()-8)/2,TEXT);
                 }
@@ -929,6 +964,16 @@ case ENERGY->List.of();
      * A summary card, not a screen takeover: the map stays visible behind a light dim so the player
      * keeps their orientation while reading what needs attention.
      */
+    private WorldMapUiLayout.Rect problemRow(WorldMapUiLayout.Rect panel, int index) {
+        return editControl("problem[" + index + "]", new WorldMapUiLayout.Rect(
+                panel.x() + SECTION, panel.y() + 48 + index * 25, panel.width() - SECTION * 2, 22));
+    }
+
+    private WorldMapUiLayout.Rect modalFooter(String key, WorldMapUiLayout.Rect panel) {
+        return editControl(key, new WorldMapUiLayout.Rect(
+                panel.x() + SECTION, panel.bottom() - 30, panel.width() - SECTION * 2, 24));
+    }
+
     private void renderProblemCenter(GuiGraphics graphics) {
         graphics.fill(0, 0, this.width, this.height, 0x66101517);
         var panel = WorldMapUiLayout.problemModal(this.width, this.height);
@@ -940,15 +985,19 @@ case ENERGY->List.of();
         this.problemOffset = Math.min(this.problemOffset, Math.max(0, objects.size() - problemRows()));
         if (objects.isEmpty()) graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.ready"), panel.x() + SECTION, panel.y() + 50, panel.width() - SECTION * 2, MUTED);
         for (int index = 0; index < Math.min(problemRows(), objects.size() - this.problemOffset); index++) {
-            var value = objects.get(index + this.problemOffset); int y = panel.y() + 48 + index * 25;
-            graphics.fill(panel.x() + SECTION, y, panel.right() - SECTION, y + 22, PANEL_ALT);
-            MapMarkerRenderer.drawGlyph(graphics, MapMarkerRenderer.glyph(value.icon()), panel.x() + SECTION + 3, y + 3, MapPalette.ALERT);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(value.title().getString(), panel.width() - 54), panel.x() + SECTION + 24, y + 3, TEXT, false);
+            var value = objects.get(index + this.problemOffset);
+            var row = problemRow(panel, index);
+            int y = row.y();
+            graphics.fill(row.x(), y, row.right(), row.bottom(), PANEL_ALT);
+            MapMarkerRenderer.drawGlyph(graphics, MapMarkerRenderer.glyph(value.icon()), row.x() + 3, y + 3, MapPalette.ALERT);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(value.title().getString(), row.width() - 30), row.x() + 24, y + 3, TEXT, false);
             String detail = value.details().isEmpty() ? selectionType(value).getString() : value.details().getFirst().getString();
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, panel.width() - 54), panel.x() + SECTION + 24, y + 13, MUTED, false);
+            graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, row.width() - 30), row.x() + 24, y + 13, MUTED, false);
         }
         graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.world_map.problems.located", objects.size(), problemCount()), panel.x() + SECTION, panel.bottom() - 52, panel.width() - SECTION * 2, MUTED);
-        graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.close"), panel.x() + panel.width() / 2, panel.bottom() - 20, ACCENT);
+        var close = modalFooter("problemClose", panel);
+        graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.close"),
+                close.x() + close.width()/2, close.y() + (close.height()-8)/2 + 2, ACCENT);
     }
 
     private void renderGuide(GuiGraphics graphics) {
@@ -965,8 +1014,9 @@ case ENERGY->List.of();
         graphics.enableScissor(panel.x() + LARGE, top, panel.right() - LARGE, bottom);
         graphics.drawWordWrap(this.font, text, panel.x() + LARGE, top - this.guideScroll, panel.width() - LARGE * 2, TEXT);
         graphics.disableScissor();
+        var close = modalFooter("guideClose", panel);
         graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.dismiss"),
-                panel.x() + panel.width() / 2, panel.bottom() - 20, MUTED);
+                close.x() + close.width()/2, close.y() + (close.height()-8)/2 + 2, MUTED);
     }
 
     private void renderStatus(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -1090,7 +1140,7 @@ case ENERGY->List.of();
                     || super.mouseClicked(mouseX, mouseY, button);
         }
         for (int index = 0; index < this.viewButtons.size(); index++) {
-            if (!this.problemCenterOpen && !this.guideOpen && this.viewButtons.get(index).contains(mouseX, mouseY)) {
+            if (!this.problemCenterOpen && !this.guideOpen && editControl("view[" + index + "]", this.viewButtons.get(index)).contains(mouseX, mouseY)) {
                 handleViewAction(index<2?index:index+1); dismissTutorial(); return true;
             }
         }
@@ -1098,14 +1148,14 @@ case ENERGY->List.of();
         if (this.problemCenterOpen || this.guideOpen) return handleModalClick(mouseX, mouseY);
         Mode[] modes = Mode.values();
         for (int index = 0; index < modes.length; index++) {
-            if (!WorldMapUiLayout.modeTab(this.width, index, this.modeLabelWidths).contains(mouseX, mouseY)) continue;
+            if (!modeControl(index).contains(mouseX, mouseY)) continue;
             // A disabled mode is inert: it never switches focus and never pretends to have data.
             if (modes[index].available()) applyMode(modes[index]);
             dismissTutorial();
             return true;
         }
         for (int index = 0; index < WorldMapUiLayout.GLOBAL_ACTIONS; index++) {
-            if (!WorldMapUiLayout.globalButton(this.width, index, this.modeLabelWidths, this.globalLabelWidths).contains(mouseX, mouseY)) continue;
+            if (!globalControl(index).contains(mouseX, mouseY)) continue;
             handleGlobalAction(index);
             return true;
         }
@@ -1118,7 +1168,7 @@ case ENERGY->List.of();
         CityMapPanel.Selection selected = this.map.getSelection();
         if (selected != null && this.cardActionY >= 0 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) {
             for (int index = 0; index < this.cardActionCount; index++) {
-                var action=WorldMapUiLayout.cardAction(new WorldMapUiLayout.Rect(this.cardX,this.cardY,this.cardWidth,this.cardHeight),this.cardActionY,index);
+                var action=editControl("card.action[" + index + "]", WorldMapUiLayout.cardAction(new WorldMapUiLayout.Rect(this.cardX,this.cardY,this.cardWidth,this.cardHeight),this.cardActionY,index));
                 if (WorldMapUiLayout.cardBody(new WorldMapUiLayout.Rect(this.cardX,this.cardY,this.cardWidth,this.cardHeight)).contains(mouseX,mouseY)&&action.contains(mouseX,mouseY)) {
                     handleContextAction(selected, index);
                     return true;
@@ -1144,16 +1194,11 @@ private boolean handleModalClick(double mouseX, double mouseY) {
         if (this.problemCenterOpen) {
             var objects = problemObjects();
             var bounds = WorldMapUiLayout.problemModal(this.width, this.height);
-            for (int index = 0; index < Math.min(problemRows(), objects.size() - this.problemOffset); index++) if (inside(mouseX, mouseY, bounds.x() + SECTION, bounds.y() + 48 + index * 25, bounds.width() - SECTION * 2, 22)) {
+            for (int index = 0; index < Math.min(problemRows(), objects.size() - this.problemOffset); index++) if (problemRow(bounds, index).contains(mouseX, mouseY)) {
                 selectObject(objects.get(index + this.problemOffset)); this.problemCenterOpen = false; return true;
             }
-            WorldMapUiLayout.Rect panel = WorldMapUiLayout.problemModal(this.width, this.height);
-            boolean open = inside(mouseX, mouseY, panel.x() + WorldMapUiLayout.SECTION, panel.bottom() - 30,
-                    panel.width() - WorldMapUiLayout.SECTION * 2, 24);
             this.problemCenterOpen = false;
-            // В режиме чтения экран проблем информационный: его кнопка ведёт в
-
-return true;
+            return true;
         }
         this.guideOpen = false;
         tutorialSeen = true;
@@ -1233,7 +1278,7 @@ private void handleContextAction(CityMapPanel.Selection value){
 
     private WorldMapUiLayout.Rect layerRow(int index) {
         var raw = WorldMapUiLayout.layersRow(this.width, this.modeLabelWidths, this.globalLabelWidths, index, 228);
-        return new WorldMapUiLayout.Rect(raw.x(), raw.y() - this.layerScroll, raw.width(), raw.height());
+        return editControl("layer[" + index + "]", new WorldMapUiLayout.Rect(raw.x(), raw.y() - this.layerScroll, raw.width(), raw.height()));
     }
 
     private boolean handleSearchClick(double mouseX, double mouseY) {
@@ -1244,7 +1289,7 @@ private void handleContextAction(CityMapPanel.Selection value){
             else this.searchProblems = !this.searchProblems;
             this.searchOffset = 0; updateSearchResults(); return true;
         }
-        for (int index = 0; index < visible.size(); index++) if (WorldMapUiLayout.searchRow(this.width, this.modeLabelWidths, this.globalLabelWidths, index, 228).contains(mouseX, mouseY)) {
+        for (int index = 0; index < visible.size(); index++) if (searchResultControl(index).contains(mouseX, mouseY)) {
             selectObject(visible.get(index)); this.searchOpen = false; this.searchBox.setVisible(false); setFocused(null); return true;
         }
         return WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, visible.size(), 228).contains(mouseX, mouseY);
@@ -1474,6 +1519,7 @@ case ENERGY -> setOverlays(false,false);
         catch (java.io.IOException error) { org.slf4j.LoggerFactory.getLogger(PolishedWorldMapScreen.class).warn("Cannot save local atlas view", error); }
     }
     @Override public void removed() {
+        if (journeyWorkspaceOpen) { super.removed(); return; }
         // Every way out of the atlas (ESC, a child screen, the "open object" action) must stop the
         // ambient logistics feed; otherwise a finished center session leaks its markers onto the
         // next normal world map opened in this client.
@@ -1496,7 +1542,7 @@ case ENERGY -> setOverlays(false,false);
     private void renderViewButtons(GuiGraphics g,int mx,int my) {
         for(int viewIndex=0;viewIndex<this.viewButtons.size();viewIndex++) {
             int i=viewIndex<2?viewIndex:viewIndex+1;
-            var r=this.viewButtons.get(viewIndex);
+            var r=editControl("view[" + viewIndex + "]", this.viewButtons.get(viewIndex));
             boolean active=i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
             var selected=this.map.getSelection();
             boolean enabled=i!=2;
@@ -1573,7 +1619,7 @@ case ENERGY -> setOverlays(false,false);
     private WorldMapUiLayout.Rect searchFilterBounds(int index) {
         var panel = WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, 1, 228);
         int width = (panel.width() - 16) / 3;
-        return new WorldMapUiLayout.Rect(panel.x() + 6 + index * width, panel.y() + 28, width - 3, 19);
+        return editControl("searchFilter[" + index + "]", new WorldMapUiLayout.Rect(panel.x() + 6 + index * width, panel.y() + 28, width - 3, 19));
     }
     private void selectObject(CityMapPanel.Selection value) {
 
@@ -1589,25 +1635,34 @@ default -> applyMode(Mode.CITIES);
     }
     private List<CityMapPanel.Selection> problemObjects() { return this.map.search("").stream().filter(CityMapPanel.Selection::warning).toList(); }
     private int problemRows() { return Math.max(1, (WorldMapUiLayout.problemModal(this.width, this.height).height() - 112) / 25); }
+    private WorldMapUiLayout.Rect mutationControl(WorldMapUiLayout.Rect panel, boolean confirm) {
+        int half = (panel.width() - LARGE * 3) / 2;
+        int x = panel.x() + (confirm ? LARGE : LARGE * 2 + half);
+        return editControl(confirm ? "mutationConfirm" : "mutationCancel", new WorldMapUiLayout.Rect(
+                x, panel.bottom() - 34, confirm ? half : panel.right() - LARGE - x, 22));
+    }
+
     private void renderMutation(GuiGraphics graphics) {
         graphics.fill(0, 0, this.width, this.height, 0x88101517);
         var rect = WorldMapUiLayout.guideModal(this.width, this.height);
         plate(graphics, rect.x(), rect.y(), rect.width(), rect.height());
         graphics.drawWordWrap(this.font, this.mutationTitle, rect.x() + LARGE, rect.y() + LARGE, rect.width() - LARGE * 2, TEXT);
-        int half = (rect.width() - LARGE * 3) / 2;
-        graphics.fill(rect.x() + LARGE, rect.bottom() - 34, rect.x() + LARGE + half, rect.bottom() - 12, 0xFF5A4522);
-        graphics.fill(rect.x() + LARGE * 2 + half, rect.bottom() - 34, rect.right() - LARGE, rect.bottom() - 12, PANEL_ALT);
-        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.plot.claim_confirm"), rect.x() + LARGE + 6, rect.bottom() - 27, TEXT, false);
-        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.common.cancel"), rect.x() + LARGE * 2 + half + 6, rect.bottom() - 27, TEXT, false);
+        var confirm = mutationControl(rect, true);
+        var cancel = mutationControl(rect, false);
+        graphics.fill(confirm.x(), confirm.y(), confirm.right(), confirm.bottom(), 0xFF5A4522);
+        graphics.fill(cancel.x(), cancel.y(), cancel.right(), cancel.bottom(), PANEL_ALT);
+        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.city.plot.claim_confirm"),
+                confirm.x() + 6, confirm.y() + (confirm.height()-8)/2, TEXT, false);
+        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.common.cancel"),
+                cancel.x() + 6, cancel.y() + (cancel.height()-8)/2, TEXT, false);
     }
     private void handleMutationClick(double x, double y, int button) {
         if (button != 0) return;
         var rect = WorldMapUiLayout.guideModal(this.width, this.height);
-        int half = (rect.width() - LARGE * 3) / 2;
-        if (inside(x, y, rect.x() + LARGE, rect.bottom() - 34, half, 22)) {
+        if (mutationControl(rect, true).contains(x, y)) {
             Runnable command = this.pendingMutation; this.pendingMutation = null;
             if (!this.readOnly && command != null) command.run();
-        } else if (inside(x, y, rect.x() + LARGE * 2 + half, rect.bottom() - 34, half, 22)) this.pendingMutation = null;
+        } else if (mutationControl(rect, false).contains(x, y)) this.pendingMutation = null;
     }
 
     private record Legend(String key,int color,AtlasGlyph glyph) {}

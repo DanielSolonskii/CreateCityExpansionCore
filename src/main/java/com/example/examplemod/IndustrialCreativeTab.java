@@ -121,6 +121,7 @@ public final class IndustrialCreativeTab {
     private static final List<ItemLike> ECONOMY_INFRASTRUCTURE = List.of(
             com.example.examplemod.cargo.CargoBlocks.ROUTER_ITEM.get(),
             com.example.examplemod.cargo.CargoBlocks.TICKER_ITEM.get(),
+            com.example.examplemod.cargo.CargoBlocks.CUSTOMS_BUFFER_ITEM.get(),
             CreateCityExpansionCore.CITY_PYLON_ITEM.get(),
             CreateCityExpansionCore.CHUNK_LOADER_ITEM.get(),
             CreateCityExpansionCore.TRANSPORT_REGISTRATION_TERMINAL_ITEM.get()

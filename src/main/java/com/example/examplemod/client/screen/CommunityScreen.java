@@ -31,7 +31,7 @@ public final class CommunityScreen extends Screen {
     public static void accept(CommunityStatePayload p){SocialHubScreen.acceptCommunity(p);var v=SocialHubScreen.find(CommunityScreen.class,s->s.pending!=null&&p.data().hasUUID("Request")&&s.pending.equals(p.data().getUUID("Request")));if(v==null)return;
         v.pending=null;v.last=net.minecraft.Util.getMillis();v.result=p.data().getString("Result");if(v.result.equals("busy"))return;v.state=p.data();v.page=v.state.getInt("Page");v.memberPage=v.state.getInt("MemberPage");v.relationsPage=v.state.getInt("RelationsPage");if(v.ownCityOnReply){v.ownCityOnReply=false;if(v.state.hasUUID("OwnCity"))v.city=v.state.getUUID("OwnCity");}
         if((v.rolePicker||v.section==3&&v.member!=null)&&v.state.hasUUID("City"))v.city=v.state.getUUID("City");
-        if(v.ownCityMode&&!v.state.hasUUID("OwnCity")){v.city=null;v.member=null;v.rolePicker=false;}
+        if(v.ownCityMode&&!v.state.hasUUID("OwnCity")&&v.state.getList("Memberships",10).isEmpty()){v.city=null;v.member=null;v.rolePicker=false;}
         if(v.result.equals("ok")&&v.lastAction==CommunityRequestPayload.Action.KICK){v.rolePicker=false;v.member=null;v.scroll=0;}
         if(!v.lastActionView){CommunityFx.sound(v.result.equals("ok")?"success":"error");v.transition=v.last;}v.lastActionView=true;
     }
@@ -43,9 +43,15 @@ public final class CommunityScreen extends Screen {
     private float offset(){return 7*(1-CommunityFx.ease((net.minecraft.Util.getMillis()-opened)/180.0));}
     private void section(int s){section=s;scroll=0;transition=net.minecraft.Util.getMillis();chosenRole=-1;rolePicker=false;CommunityFx.sound("click");}
     private void label(GuiGraphics g,Component text,int x,int y,int width,int color){if(inContent)contentHeight=Math.max(contentHeight,y+11+scroll-layout.body().y());g.drawString(font,fit(font,text,Math.max(1,width)),x,y,color,false);}
-    private void button(GuiGraphics g,CommunityLayout.Rect r,Component text,Runnable run,boolean enabled,boolean primary,double mx,double my){control(g,new WorldMapUiLayout.Rect(r.x(),r.y(),r.width(),r.height()),false,enabled&&r.contains(mx,my),enabled,primary);label(g,text,r.x()+7,r.y()+8,r.width()-14,enabled?TEXT:MUTED);if(inContent)contentHeight=Math.max(contentHeight,r.bottom()+scroll-layout.body().y());hits.add(new Hit(r,run,enabled,inContent));}
+    private final SocialHubIcons.HoverMotion hoverMotion = new SocialHubIcons.HoverMotion();
+    private void button(GuiGraphics g,CommunityLayout.Rect r,Component label,Runnable run,boolean enabled,boolean primary,double mx,double my){
+        var bounds = new WorldMapUiLayout.Rect(r.x(),r.y(),r.width(),r.height());
+        SocialHubIcons.paintButton(g,font,bounds,SocialHubIcons.buttonCaption(label),SocialHubIcons.buttonIcon(label),
+                hoverMotion,r.contains(mx,my),enabled,false,primary);
+        if(inContent)contentHeight=Math.max(contentHeight,r.bottom()+scroll-layout.body().y());hits.add(new Hit(r,run,enabled,inContent));
+    }
     private void row(GuiGraphics g,int y,Component title,Component subtitle,Runnable action,double mx,double my){var r=layout.row(y,42);rounded(g,r.x(),r.y(),r.width(),r.height(),4,r.contains(mx,my)?RAISED:INSET);label(g,title,r.x()+10,y+8,r.width()-20,TEXT);label(g,subtitle,r.x()+10,y+25,r.width()-20,MUTED);contentHeight=Math.max(contentHeight,r.bottom()+scroll-layout.body().y());if(action!=null)hits.add(new Hit(r,action,true,true));}
-    @Override public void render(GuiGraphics g,int mouseX,int mouseY,float pt){double mx=layout.localX(mouseX),my=layout.localY(mouseY)-offset();hits.clear();if(!SocialHubScreen.embedded(this))g.fill(0,0,width,height,0x88090E10);g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);g.pose().translate(0,offset(),0);panel(g,0,0,layout.width(),layout.height());
+    @Override public void render(GuiGraphics g,int mouseX,int mouseY,float pt){double mx=layout.localX(mouseX),my=layout.localY(mouseY)-offset();hits.clear();hoverMotion.beginFrame();if(!SocialHubScreen.embedded(this))g.fill(0,0,width,height,0x88090E10);g.pose().pushPose();g.pose().translate(layout.x(),layout.y(),0);g.pose().scale(layout.scale(),layout.scale(),1);g.pose().translate(0,offset(),0);panel(g,0,0,layout.width(),layout.height());
         g.fill(16,15,18,25,ACCENT);label(g,tr("title"),25,17,layout.width()-170,ACCENT);if(!SocialHubScreen.embedded(this)){button(g,layout.settings(),tr("settings"),()->section(5),true,false,mx,my);button(g,layout.close(),Component.literal("×"),this::onClose,true,false,mx,my);}
         double a=CommunityFx.ease((net.minecraft.Util.getMillis()-transition)/180.0);
         if(!SocialHubScreen.embedded(this)){
@@ -65,7 +71,7 @@ public final class CommunityScreen extends Screen {
         if(membershipAction!=null){hits.clear();g.fill(0,0,layout.width(),layout.height(),0xBD0B1012);var r=layout.membershipModal();panel(g,r.x(),r.y(),r.width(),r.height());label(g,tr("membership.confirm"),r.x()+12,r.y()+12,r.width()-24,ACCENT);g.drawWordWrap(font,membershipQuestion,r.x()+12,r.y()+34,r.width()-24,TEXT);button(g,layout.membershipConfirm(false),tr("membership.cancel"),()->membershipAction=null,true,false,mx,my);button(g,layout.membershipConfirm(true),tr("membership.proceed"),()->{var action=membershipAction;membershipAction=null;action.run();},pending==null,true,mx,my);}
         g.flush();g.pose().popPose();
     }
-    private void home(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;label(g,tr("greeting",state.getString("SelfName").isBlank()?minecraft.player.getGameProfile().getName():state.getString("SelfName")),layout.body().x()+12,y,layout.body().width()-24,TEXT);y+=23;
+    private void home(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;label(g,tr("greeting",SocialHubScreen.playerName(state.getString("SelfName"))),layout.body().x()+12,y,layout.body().width()-24,TEXT);y+=23;
         row(g,y,tr("messages_count",state.getInt("Unread")),tr("open_messages"),()->SocialScreen.open(this,null),mx,my);y+=49;
         row(g,y,tr("requests_count",state.getInt("FriendRequests")),tr("open_friends"),()->SocialScreen.openRequests(this),mx,my);y+=49;
         row(g,y,AllianceScreen.tr("title"),AllianceScreen.tr("community_entry"),()->AllianceScreen.open(this,null),mx,my);y+=49;
@@ -83,6 +89,17 @@ public final class CommunityScreen extends Screen {
     private void openMap(){com.example.examplemod.client.CityWorldMapSession.INSTANCE.awaitAnchor();PacketDistributor.sendToServer(new RequestCityWorldMapPayload());minecraft.setScreen(SocialHubScreen.retainMap(new PolishedWorldMapScreen(com.example.examplemod.client.CityWorldMapSession.INSTANCE)));}
     private void respond(CompoundTag t,boolean accept){city=t.getUUID("City");request(accept?CommunityRequestPayload.Action.ACCEPT:CommunityRequestPayload.Action.DECLINE,null,t.getUUID("Token"),0);}
     private void cities(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;
+        var memberships=state.getList("Memberships",10);
+        if(ownCityMode&&(memberships.size()>1||!state.hasUUID("OwnCity"))) {
+            for(Tag raw:memberships) {
+                var entry=(CompoundTag)raw;
+                var label=Component.literal(entry.getString("Name"));
+                if(entry.getBoolean("Additional"))label.append(" · ").append(Component.translatable("role.createcityexpansioncore.operator_manager"));
+                button(g,layout.row(y,26),label,()->{city=entry.getUUID("Id");member=null;memberPage=scroll=0;rolePicker=false;request(CommunityRequestPayload.Action.VIEW,null,null,0);},pending==null,false,mx,my);
+                y+=34;
+            }
+        }
+        if(city==null&&ownCityMode&&!memberships.isEmpty())return;
         if(city!=null&&!state.hasUUID("City")&&pending==null){label(g,SocialHubScreen.tr("unavailable"),layout.body().x()+12,y,layout.body().width()-24,MUTED);return;}
         if(city==null&&ownCityMode&&!state.hasUUID("OwnCity")){
             label(g,SocialHubScreen.tr("no_city_title"),layout.body().x()+12,y,layout.body().width()-24,ACCENT);y+=26;g.drawWordWrap(font,SocialHubScreen.tr(foundingHelp?"found_city":"no_city_body"),layout.body().x()+12,y,layout.body().width()-24,TEXT);y+=font.wordWrapHeight(SocialHubScreen.tr(foundingHelp?"found_city":"no_city_body"),layout.body().width()-24)+18;
@@ -112,7 +129,7 @@ public final class CommunityScreen extends Screen {
         if(state.getInt("RelationsTotal")>16){int half=(layout.body().width()-34)/2;int px=layout.body().x()+12;button(g,new CommunityLayout.Rect(px,y,half,24),Component.literal("‹"),()->{relationsPage--;scroll=0;request(CommunityRequestPayload.Action.RELATIONS,null,null,0);},pending==null&&relationsPage>0,false,mx,my);button(g,new CommunityLayout.Rect(px+half+10,y,half,24),Component.literal("›"),()->{relationsPage++;scroll=0;request(CommunityRequestPayload.Action.RELATIONS,null,null,0);},pending==null&&(relationsPage+1)*16<state.getInt("RelationsTotal"),false,mx,my);}
     }
     private void roles(GuiGraphics g,double mx,double my){if(!state.getBoolean("Manage")){label(g,tr("result.permission"),layout.body().x()+12,layout.body().y()+18,layout.body().width()-24,MUTED);return;}int y=layout.body().y()+12-scroll;label(g,tr("role_title"),layout.body().x()+12,y,layout.body().width()-24,ACCENT);y+=26;
-        for(var role:CityMember.Role.values()){if(role==CityMember.Role.OWNER||role==CityMember.Role.ADMIN&&!state.getBoolean("Owner"))continue;var r=layout.row(y,54);boolean selected=chosenRole==role.ordinal();rounded(g,r.x(),r.y(),r.width(),r.height(),4,selected?RAISED:INSET);if(selected)g.fill(r.x()+1,r.y()+7,r.x()+3,r.bottom()-7,ACCENT);label(g,Component.translatable("role.createcityexpansioncore."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+9,r.width()-20,TEXT);g.drawWordWrap(font,tr("rights."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+25,r.width()-20,MUTED);hits.add(new Hit(r,()->{chosenRole=role.ordinal();transition=net.minecraft.Util.getMillis();CommunityFx.sound("click");},pending==null,true));y+=61;}
+        for(var role:CityMember.Role.values()){if(role==CityMember.Role.OPERATOR_MANAGER||role==CityMember.Role.OWNER||role==CityMember.Role.ADMIN&&!state.getBoolean("Owner"))continue;var r=layout.row(y,54);boolean selected=chosenRole==role.ordinal();rounded(g,r.x(),r.y(),r.width(),r.height(),4,selected?RAISED:INSET);if(selected)g.fill(r.x()+1,r.y()+7,r.x()+3,r.bottom()-7,ACCENT);label(g,Component.translatable("role.createcityexpansioncore."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+9,r.width()-20,TEXT);g.drawWordWrap(font,tr("rights."+role.name().toLowerCase(Locale.ROOT)),r.x()+10,y+25,r.width()-20,MUTED);hits.add(new Hit(r,()->{chosenRole=role.ordinal();transition=net.minecraft.Util.getMillis();CommunityFx.sound("click");},pending==null,true));y+=61;}
         button(g,layout.row(y,26),tr("assign_role"),()->{request(CommunityRequestPayload.Action.ROLE,member,null,chosenRole);rolePicker=false;scroll=0;},pending==null&&chosenRole>=0,true,mx,my);y+=34;membershipActions(g,y,mx,my);
     }
     private void confirmMembership(Component text,Runnable action){membershipQuestion=text;membershipAction=action;}

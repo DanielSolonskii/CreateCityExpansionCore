@@ -12,14 +12,15 @@ public final class CenterText {
     private static String t(String key,Function<String,String> language){return language.apply("ccec.center."+key);}
     public static String value(String code,Function<String,String> language) {
         if(code.isBlank())return "—";
-        for(String group:List.of("value.","status.")) {
-            String key="ccec.center."+group+code;String translated=language.apply(key);
+        for(String prefix:List.of("ccec.center.value.","ccec.center.status.","ccec.center.error.","ccec.rail.error.","ccec.company.error.","ccec.master.error.")) {
+            String key=prefix+code;String translated=language.apply(key);
             if(!translated.equals(key))return translated;
         }
         return t("unknown_state",language);
     }
     public static String name(CompoundTag row,Function<String,String> language) {
         String name=row.getString("Name");
+        if(!row.getString("NameKey").isBlank())name=language.apply(row.getString("NameKey"));
         if(row.contains("ItemKey")){String key=row.getString("ItemKey"),translated=language.apply(key);if(!key.equals(translated))name=translated;}
         if(row.contains("ItemCount"))name+=" × "+row.getInt("ItemCount");
         else if(row.contains("Count"))name+=" × "+row.getInt("Count");
@@ -69,6 +70,7 @@ public final class CenterText {
     }
     public static List<Field> fields(CompoundTag row,Function<String,String> language) {
         var fields=new ArrayList<Field>();
+        if(!row.getString("Warning").isBlank())fields.add(new Field(language.apply("ccec.rail.warning"),value(row.getString("Warning"),language),13));
         add(fields,"owner",row.getString("OwnerName"),8,language);if(!row.getString("Dispatch").isBlank())add(fields,"dispatch",value(row.getString("Dispatch"),language),2,language);
         add(fields,"state",value(row.getString("Status"),language),13,language);
         if(row.contains("Access"))add(fields,"field.Access",value(row.getString("Access"),language),8,language);
@@ -111,6 +113,11 @@ public final class CenterText {
         if(row.contains("StockAvailable")&&!row.getBoolean("StockAvailable"))add(fields,"stock",t("stock_unavailable",language),5,language);
         for(Tag raw:row.getList("Stock",10))add(fields,"stock",name((CompoundTag)raw,language),7,language);
         if(row.getBoolean("DetailsTruncated"))add(fields,"details",t("details_truncated",language),13,language);
+        for(Tag raw:row.getList("Facts",10)){
+            var fact=(CompoundTag)raw;String label=fact.getString("LabelKey");
+            String text=fact.getString("ValueKey").isBlank()?fact.getString("Value"):language.apply(fact.getString("ValueKey"));
+            if(!text.isBlank())fields.add(new Field(label.isBlank()?t("details",language):language.apply(label),text,Math.clamp(fact.getInt("Icon"),0,13)));
+        }
         return List.copyOf(fields);
     }
     private static void add(List<Field> fields,String label,String value,int icon,Function<String,String> language){if(!value.isBlank())fields.add(new Field(t(label,language),value,icon));}

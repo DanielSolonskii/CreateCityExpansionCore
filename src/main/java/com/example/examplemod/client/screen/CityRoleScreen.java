@@ -48,7 +48,7 @@ public class CityRoleScreen extends ModalOverlayScreen {
          * Дополнительная защита на клиенте.
          */
 
-        if (role == CityMember.Role.OWNER) {
+        if (role == CityMember.Role.OWNER || role == CityMember.Role.OPERATOR_MANAGER) {
             return;
         }
 

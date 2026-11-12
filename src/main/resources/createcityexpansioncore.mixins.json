@@ -5,6 +5,9 @@
   "compatibilityLevel": "JAVA_21",
   "plugin": "com.example.examplemod.mixin.TransportMixinPlugin",
   "mixins": [
+    "CarriageRailTravelMixin",
+    "TravellingPointRailTollMixin",
+    "NavigationFleetPathMixin",
     "PackagerCargoReceiptMixin",
     "GlobalStationCargoMixin",
     "CarriageBogeyAccessor",
@@ -24,7 +27,9 @@
   "client": [
     "ClientTlsConnectionMixin",
     "PlayerTabPresentationMixin",
-    "BossHealthOverlayAccessor"
+    "BossHealthOverlayAccessor",
+    "CutsceneCameraMixin",
+    "CutsceneGameRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

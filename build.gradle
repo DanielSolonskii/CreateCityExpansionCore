@@ -31,11 +31,14 @@ repositories {
     // This is also where Create: Ponder is published. Ponder is a hard requirement of
     // Create; without it at runtime mod loading fails with
     // "Missing or unsupported mandatory dependencies: Mod ID: 'ponder'".
-    // Checked-in mirror of the pinned createmod artifacts (Create slim + Ponder) so a
-    // build succeeds when maven.createmod.net is unreachable; consulted before the remote.
+    // Use the checked-in Create slim and Ponder mirror for compilation.
     maven {
         name = "localCcec"
         url = uri("libs/m2")
+        content {
+            // Runtime resolution needs the full Create jar from the upstream Maven repository.
+            notForConfigurations("devRuntimeMods")
+        }
     }
     maven {
         name = "createmod"
@@ -270,6 +273,15 @@ tasks.register('checkMineBlueprintEditor', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkMineBlueprintEditor') }
 
+// UI-редактор: модель дельт, JSON, файлы, экспорт и allowlist — headless.
+tasks.register('checkUiEdit', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.uiedit.UiEditCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkUiEdit') }
+
 tasks.register('checkCityRelations', JavaExec) {
     dependsOn tasks.named('mineVisualTestClasses')
     classpath = sourceSets.mineVisualTest.runtimeClasspath
@@ -422,6 +434,14 @@ tasks.register('checkCityPylonMembersLayout', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkCityPylonMembersLayout') }
 
+tasks.register('checkCityPylonWorkspaceLayout', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.client.screen.CityPylonWorkspaceLayoutCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkCityPylonWorkspaceLayout') }
+
 def ccecProductionJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
 tasks.named('jar', Jar) { includeEmptyDirs = false }
 tasks.register('checkGeologyProcedural', JavaExec) {
@@ -507,7 +527,7 @@ tasks.named('check') { dependsOn tasks.named('checkNoCreateSplitPackage') }
 
 // Each headless JVM owns its log directory even when Gradle runs checks in parallel.
 tasks.withType(JavaExec).configureEach {
-    if (name in ['checkMineVisualCoordinates', 'checkCityRelations', 'checkCityTerritory', 'checkCityTerritoryDelivery', 'checkCityMapTextLayout', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkGameplayRestrictions', 'checkKelpGrowthPolicy', 'checkCityMapReadAccess', 'checkCityWorldMapSession', 'checkWorldMapPanelLifecycle', 'checkChunkLoader', 'checkDependencyRecipeOverrides', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout', 'checkCityPylonMembersLayout', 'checkConnectionAdmission', 'checkAuthenticationStartupPolicy', 'checkReportLimits']) {
+    if (name in ['checkMineVisualCoordinates', 'checkCityRelations', 'checkCityTerritory', 'checkCityTerritoryDelivery', 'checkCityMapTextLayout', 'checkWorldMapV2', 'checkWorldMapUiLayout', 'checkGameplayRestrictions', 'checkKelpGrowthPolicy', 'checkCityMapReadAccess', 'checkCityWorldMapSession', 'checkWorldMapPanelLifecycle', 'checkChunkLoader', 'checkDependencyRecipeOverrides', 'checkCityInviteSearch', 'checkCityInviteUiLayout', 'checkCityPylonUiLayout', 'checkCityPylonMembersLayout', 'checkCityPylonWorkspaceLayout', 'checkConnectionAdmission', 'checkAuthenticationStartupPolicy', 'checkReportLimits']) {
         workingDir = layout.buildDirectory.dir("checks/${name}").get().asFile
         doFirst { workingDir.mkdirs() }
     }
@@ -798,16 +818,47 @@ tasks.register('checkDispatchPresentation', JavaExec) {
 }
 tasks.named('check') { dependsOn tasks.named('checkDispatchPresentation') }
 
+// Use only the pinned nested helper, never a second full Create jar, in plain headless graph tests.
+def prepareRailHeadlessLibraries = tasks.register('prepareRailHeadlessLibraries', Copy) {
+    from { zipTree(configurations.devRuntimeMods.files.find { it.name.startsWith('create-') }) }
+    include 'META-INF/jarjar/Registrate-*.jar'
+    includeEmptyDirs = false
+    eachFile { details -> details.relativePath = new org.gradle.api.file.RelativePath(true, details.name) }
+    into layout.buildDirectory.dir('logistics-implementation/native-libs')
+}
+def railTestClasspathReceipt = layout.buildDirectory.file('logistics-implementation/rail-test-classpath.txt')
+
 // Keep existing domain checks in the standard build; a test source alone is not CI coverage.
 [
+    checkCompanies: 'com.example.examplemod.economy.CompanyCheck',
+    checkMasterCityTrade: 'com.example.examplemod.cargo.center.MasterCityTradeCheck',
+    checkLogisticsNavigator: 'com.example.examplemod.client.logistics.LogisticsNavigatorCheck',
+    checkRailEconomy: 'com.example.examplemod.cargo.center.RailEconomyCheck',
+    checkLegacyRailLeases: 'com.example.examplemod.cargo.center.LegacyRailLeasesCheck',
+    checkRailTravelScope: 'com.example.examplemod.cargo.center.RailTravelScopeCheck',
+    checkRailNative: 'com.example.examplemod.cargo.center.RailNativeCheck',
+    checkRailJourneys: 'com.example.examplemod.cargo.center.RailJourneyCheck',
     checkSocial: 'com.example.examplemod.social.SocialCheck',
     checkEconomyCompatibility: 'com.example.examplemod.economy.EconomyCompatibilityCheck',
     checkDailyRewards: 'com.example.examplemod.daily.DailyRewardsCheck',
-    checkOnboarding: 'com.example.examplemod.onboarding.OnboardingCheck'
+    checkOnboarding: 'com.example.examplemod.onboarding.OnboardingCheck',
+    checkJourneys: 'com.example.examplemod.journey.JourneyCheck'
 ].each { taskName, checkClass ->
     tasks.register(taskName, JavaExec) {
         dependsOn tasks.named('mineVisualTestClasses')
         classpath = sourceSets.mineVisualTest.runtimeClasspath
+        if (taskName in ['checkRailNative', 'checkRailJourneys']) {
+            // Native graph integration needs Catnip from the pinned Ponder compile API.
+            // This remains a plain headless Java process; the game's runtime classpath is unchanged.
+            classpath += configurations.compileClasspath.filter { it.name.startsWith('ponder-neoforge-') }
+            dependsOn prepareRailHeadlessLibraries
+            classpath += fileTree(layout.buildDirectory.dir('logistics-implementation/native-libs')) { include '*.jar' }
+            doFirst {
+                def receipt = railTestClasspathReceipt.get().asFile
+                receipt.parentFile.mkdirs()
+                receipt.text = classpath.asPath
+            }
+        }
         mainClass = checkClass
         javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
         workingDir = layout.buildDirectory.dir("checks/${taskName}").get().asFile
@@ -824,3 +875,12 @@ tasks.register('checkTransportTerminalBinding', JavaExec) {
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
 }
 tasks.named('check') { dependsOn tasks.named('checkTransportTerminalBinding') }
+
+// Native component/name policy; runs without a Minecraft client.
+tasks.register('checkPlayerDisplayNames', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.hud.QuietTabCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+}
+tasks.named('check') { dependsOn tasks.named('checkPlayerDisplayNames') }

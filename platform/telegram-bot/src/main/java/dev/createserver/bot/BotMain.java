@@ -14,6 +14,7 @@ public final class BotMain {
                 secret.length() < 32) { throw new IllegalArgumentException("Invalid bot configuration"); }
         URI backendUri = URI.create(env.getOrDefault("BACKEND_URL", "http://127.0.0.1:8080"));
         String launcher = launcherUrl(env);
+        String macLauncher = downloadUrl(env, "LAUNCHER_MACOS_DOWNLOAD_URL");
         requireSafeTransport(backendUri);
         ProxyConfiguration proxy = ProxyConfiguration.fromEnvironment(env);
         try { MiniAppMenu.configure(env, token, BotHttpClients.telegram(proxy)); }
@@ -21,7 +22,7 @@ public final class BotMain {
         TelegramClient telegram = new TelegramClient(token, BotHttpClients.telegram(proxy));
         BackendClient backend=new BackendClient(backendUri, secret, BotHttpClients.backend());
         var admins=ReportAdminPanel.configured(env);
-        BotHandler handler = new BotHandler(username, launcher,backend,telegram,admins);
+        BotHandler handler = new BotHandler(username, launcher, macLauncher, backend, telegram, admins);
         long offset = 0;
         var broadcasts=java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r->{Thread t=new Thread(r,"broadcast-delivery");t.setDaemon(true);return t;});
         broadcasts.scheduleWithFixedDelay(()->{
@@ -52,7 +53,11 @@ public final class BotMain {
         return value;
     }
     static String launcherUrl(Map<String, String> env) {
-        String value = env.get("LAUNCHER_DOWNLOAD_URL");
+        return downloadUrl(env, env.containsKey("LAUNCHER_WINDOWS_DOWNLOAD_URL")
+            ? "LAUNCHER_WINDOWS_DOWNLOAD_URL" : "LAUNCHER_DOWNLOAD_URL");
+    }
+    static String downloadUrl(Map<String, String> env, String key) {
+        String value = env.get(key);
         if (value == null || value.isBlank()) return null;
         try {
             URI uri = URI.create(value);

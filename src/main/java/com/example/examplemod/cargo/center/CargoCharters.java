@@ -12,6 +12,8 @@ import java.util.*;
 /** Persistent opt-in dispatch. Native mail receipts, never elapsed time, release a loaded train. */
 public final class CargoCharters extends SavedData {
     private final Map<UUID,CompoundTag> permits=new HashMap<>(),jobs=new HashMap<>();
+    /** Read-only active legacy leases; completed history never grants a toll exemption. */
+    public Map<UUID,CompoundTag> activeJobs(){var active=new HashMap<UUID,CompoundTag>();jobs.forEach((train,job)->{if(!job.getString("Phase").equals("DONE"))active.put(train,job.copy());});return Map.copyOf(active);}
     public static CargoCharters get(MinecraftServer s){return s.overworld().getDataStorage().computeIfAbsent(new Factory<>(CargoCharters::new,CargoCharters::load,null),"ccec_cargo_charters");}
     public void authorize(ServerPlayer actor,UUID lineId,boolean enabled,boolean returns){
         var s=actor.getServer();var line=CargoLineRegistry.get(s).find(lineId).orElseThrow();

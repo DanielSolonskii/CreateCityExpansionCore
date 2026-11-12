@@ -19,15 +19,29 @@ public final class CenterEquipmentSelection {
     private record Pick(UUID warehouse,UUID token,long expires,CargoInfrastructure.Location packager,CargoInfrastructure.Location postbox) {}
     private static final Map<ServerPlayer,Pick> PICKS=new WeakHashMap<>();
     private CenterEquipmentSelection() {}
+    public static UUID session(ServerPlayer actor){var pick=PICKS.get(actor);return pick==null?null:pick.token();}
+    /** Cancels selection only; an already saved receiver and physical blocks are untouched. */
+    public static void cancel(ServerPlayer actor){PICKS.remove(actor);}
 
     public static void begin(ServerPlayer actor,UUID warehouse) {
         var value=CargoWarehouseRegistry.get(actor.getServer()).find(warehouse).orElseThrow();
-        CenterOperations.require(CargoWarehouseRegistry.manages(actor,value));
+        if(!CargoWarehouseRegistry.manages(actor,value))throw new IllegalArgumentException("setup_permission");
         CargoShipmentRegistry.get(actor.getServer()).requireUnused("warehouse",warehouse);
         PICKS.put(actor,new Pick(warehouse,UUID.randomUUID(),actor.getServer().overworld().getGameTime()+6000,null,null));
         prompt(actor,"pick.packager");
     }
     private static void prompt(ServerPlayer actor,String key){actor.displayClientMessage(Component.translatable("ccec.center."+key),true);}
+    private static void progress(ServerPlayer actor,Pick pick,String hint){
+        var data=new CompoundTag();data.putBoolean("EquipmentProgress",true);data.putUUID("EquipmentSession",pick.token());
+        data.putInt("EquipmentStep",pick.packager()==null?0:1);data.putString("EquipmentHint",hint);
+        if(pick.packager()!=null)data.put("EquipmentPackager",pick.packager().save());
+        PacketDistributor.sendToPlayer(actor,new CenterState(data));
+    }
+    private static void cancelled(ServerPlayer actor,Pick pick,String hint){
+        var data=new CompoundTag();data.putBoolean("EquipmentSelection",true);data.putBoolean("EquipmentCancelled",true);
+        data.putUUID("EquipmentSession",pick.token());data.putString("EquipmentHint",hint);
+        PacketDistributor.sendToPlayer(actor,new CenterState(data));
+    }
     static boolean withinReach(double distanceSquared){return distanceSquared<=64;}
     static <T> Optional<T> unambiguous(List<T> candidates){return candidates.size()==1?Optional.of(candidates.getFirst()):Optional.empty();}
     private static boolean validBox(ServerPlayer actor,UUID warehouse,CargoInfrastructure.Location packager,CargoInfrastructure.Location location){
@@ -45,28 +59,32 @@ public final class CenterEquipmentSelection {
         if(!(event.getEntity() instanceof ServerPlayer actor))return;
         var pick=PICKS.get(actor);if(pick==null||pick.postbox()!=null)return;
         event.setCanceled(true);event.setCancellationResult(InteractionResult.SUCCESS);
-        if(actor.isShiftKeyDown()||actor.getServer().overworld().getGameTime()>pick.expires()){PICKS.remove(actor);reply(actor,null);return;}
+        if(actor.isShiftKeyDown()||actor.getServer().overworld().getGameTime()>pick.expires()){
+            PICKS.remove(actor);cancelled(actor,pick,actor.isShiftKeyDown()?"cancelled":"expired");return;
+        }
         if(event.getHand()!=net.minecraft.world.InteractionHand.MAIN_HAND)return;
-        if(!withinReach(actor.getEyePosition().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(event.getPos()))))return;
+        if(!withinReach(actor.getEyePosition().distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(event.getPos())))){progress(actor,pick,"too_far");return;}
         var location=new CargoInfrastructure.Location(actor.level().dimension().location(),event.getPos());
+        boolean automatic=false;
         if(pick.packager()==null){
-            if(!(location.loaded(actor.getServer()) instanceof PackagerBlockEntity)){prompt(actor,"pick.packager");return;}
+            if(!(location.loaded(actor.getServer()) instanceof PackagerBlockEntity)){prompt(actor,"pick.packager");progress(actor,pick,"packager_required");return;}
             pick=new Pick(pick.warehouse(),pick.token(),pick.expires(),location,null);PICKS.put(actor,pick);
-            var automatic=unambiguous(nearby(actor,pick));
-            if(automatic.isEmpty()){prompt(actor,"pick.postbox");return;}
-            pick=new Pick(pick.warehouse(),pick.token(),pick.expires(),location,automatic.get());
+            var candidates=nearby(actor,pick);var suggested=unambiguous(candidates);
+            if(suggested.isEmpty()){prompt(actor,"pick.postbox");progress(actor,pick,candidates.size()>1?"ambiguous":"postbox_required");return;}
+            pick=new Pick(pick.warehouse(),pick.token(),pick.expires(),location,suggested.get());automatic=true;
         }else{
-            if(!validBox(actor,pick.warehouse(),pick.packager(),location)){prompt(actor,"pick.postbox_invalid");return;}
+            if(!validBox(actor,pick.warehouse(),pick.packager(),location)){prompt(actor,"pick.postbox_invalid");progress(actor,pick,"postbox_invalid");return;}
             pick=new Pick(pick.warehouse(),pick.token(),pick.expires(),pick.packager(),location);
         }
-        PICKS.put(actor,pick);reply(actor,pick);
+        PICKS.put(actor,pick);reply(actor,pick,automatic);
     }
-    private static void reply(ServerPlayer actor,Pick pick){var data=new CompoundTag();data.putBoolean("EquipmentSelection",true);if(pick!=null){data.putUUID("EquipmentToken",pick.token());data.put("EquipmentPackager",pick.packager().save());data.put("EquipmentPostbox",pick.postbox().save());}PacketDistributor.sendToPlayer(actor,new CenterState(data));}
+    private static void reply(ServerPlayer actor,Pick pick,boolean automatic){var data=new CompoundTag();data.putBoolean("EquipmentSelection",true);data.putUUID("EquipmentSession",pick.token());data.putUUID("EquipmentToken",pick.token());data.putBoolean("EquipmentAuto",automatic);data.put("EquipmentPackager",pick.packager().save());data.put("EquipmentPostbox",pick.postbox().save());PacketDistributor.sendToPlayer(actor,new CenterState(data));}
     public static void confirm(ServerPlayer actor,UUID warehouse,String token){
         var pick=PICKS.get(actor);
-        CenterOperations.require(pick!=null&&pick.warehouse().equals(warehouse)&&pick.token().toString().equals(token)&&pick.postbox()!=null&&actor.getServer().overworld().getGameTime()<=pick.expires());
-        CenterOperations.require(validBox(actor,warehouse,pick.packager(),pick.postbox()));
-        CenterOperations.require(CargoWarehouseRegistry.get(actor.getServer()).attachReceiverAt(actor,warehouse,pick.packager()));
+        if(pick==null||actor.getServer().overworld().getGameTime()>pick.expires())throw new IllegalArgumentException("setup_expired");
+        if(!pick.warehouse().equals(warehouse)||!pick.token().toString().equals(token)||pick.postbox()==null)throw new IllegalArgumentException("setup_selection_changed");
+        if(!validBox(actor,warehouse,pick.packager(),pick.postbox()))throw new IllegalArgumentException("setup_postbox_invalid");
+        if(!CargoWarehouseRegistry.get(actor.getServer()).attachReceiverAt(actor,warehouse,pick.packager()))throw new IllegalArgumentException("setup_receiver_invalid");
         var value=CargoWarehouseRegistry.get(actor.getServer()).find(warehouse).orElseThrow();
         var box=(PostboxBlockEntity)pick.postbox().loaded(actor.getServer());box.addressFilter=CargoAddress.postboxFilter(value.point());box.acceptsPackages=true;box.filterChanged();box.setChanged();box.sendData();
         PICKS.remove(actor);

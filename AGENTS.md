@@ -42,3 +42,9 @@ This project is indexed by GitNexus as **CreateCityExpansionCore**. Query the cu
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Quick CCEC deployment
+
+For an explicitly requested CCEC server + game-client deploy, run `./Deploy.ps1` from the repo root. It builds current sources, derives the next release from the signed channel, uses the existing compatibility-safe server pipeline, publishes Windows/macOS, verifies signatures/JARs and keeps one verified world backup. No manual source reconstruction or historical release paths are needed.
+
+Use `./Deploy.ps1 -DryRun` only for preparation without deployment. Follow the printed `-Resume` command after recoverable failures; never bypass an uncertain server result or an active deploy lock. Inspect `build/quick-deploy/<run>/state.json` and only the failed log tail when needed. Keep routine tool output short; report version, server readiness, client channels and any failure. Details: `platform/docs/quick-deploy.md`. This command does not commit/push, release launcher installers, or update backend/bot.

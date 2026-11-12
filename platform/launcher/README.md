@@ -113,6 +113,8 @@ device. Display preferences не меняют identity/город. Legacy userna
 
 ## Релизы — отдельная операция
 
+Быстрый deploy текущего CCEC на сервер и в игровые каналы Windows/macOS: из корня `./Deploy.ps1`. Подготовка без публикации — `./Deploy.ps1 -DryRun`. Версия релиза и источники выбираются автоматически, подробности пишутся в лог; [инструкция и продолжение после сбоя](../docs/quick-deploy.md).
+
 [Release.ps1](scripts/Release.ps1): `dry-run`, `server-deploy`, `publish`,
 `server-rollback`. Обычный dry-run может читать live manifest/сервер по сети;
 локальный вариант — `dry-run -Offline` с ранее проверенным signed `-Previous`.

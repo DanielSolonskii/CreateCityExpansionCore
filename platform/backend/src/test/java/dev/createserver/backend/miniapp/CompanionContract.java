@@ -7,9 +7,11 @@ import org.junit.jupiter.api.*;import org.springframework.beans.factory.annotati
 import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.*;
 
+@org.springframework.test.context.TestPropertySource(properties="platform.accounts.bot-backend-secret=test-only-companion-service-secret-at-least-32")
 abstract class CompanionContract extends MiniAppContract {
     @Autowired CompanionService companion;@Autowired DeviceService devices;@Autowired ReportService reports;
     @Autowired CompanionNoticeController notices;@Autowired BroadcastService broadcasts;
+    @Autowired TelegramCompanionService telegramCompanion;
     final JsonMapper json=JsonMapper.builder().build();
     @AfterEach void removeCompanion(){
         db.update("DELETE FROM companion_notice WHERE action_id IN (SELECT a.id FROM report_admin_action a JOIN player_report r ON r.id=a.report_id WHERE r.platform_user_id IN (?,?))",owner,other);
@@ -76,5 +78,56 @@ abstract class CompanionContract extends MiniAppContract {
             a.get(10,java.util.concurrent.TimeUnit.SECONDS);b.get(10,java.util.concurrent.TimeUnit.SECONDS);
             assertThat(db.queryForObject("SELECT COUNT(*) FROM companion_preferences WHERE platform_user_id=?",Integer.class,owner)).isOne();
         }
+    }
+    HttpResponse<String> botRequest(long actor,String tail,String body,boolean authenticated)throws Exception {
+        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/internal/telegram/companion/"+actor+tail));
+        if(authenticated)request.header("X-Bot-Service-Secret","test-only-companion-service-secret-at-least-32");
+        if(body==null)request.GET();else request.header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+        return HttpClient.newHttpClient().send(request.build(),HttpResponse.BodyHandlers.ofString());
+    }
+    @Test void botProfileRequiresServiceSecretAndActiveNumericOwner()throws Exception {
+        companion.receive(snapshot(Instant.now(),List.of(new CompanionService.City(UUID.randomUUID(),"Город",1,2,5000,List.of(new CompanionService.Member(mc,"OWNER"))))));
+        assertThat(botRequest(telegram,"",null,false).statusCode()).isEqualTo(401);
+        assertThat(request("/api/internal/telegram/companion/"+telegram,proof(telegram)).statusCode()).isEqualTo(401);
+        assertThat(botRequest(telegram+1,"",null,true).statusCode()).isEqualTo(403);
+        var response=botRequest(telegram,"?telegramUserId="+(telegram+1),null,true);
+        assertThat(response.statusCode()).isEqualTo(200);assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+        var profile=json.readTree(response.body());assertThat(profile.path("account").path("username").asText()).isEqualTo(username);
+        assertThat(profile.path("account").path("cities").size()).isOne();assertThat(profile.path("onlineState").asText()).isEqualTo("ONLINE");
+        assertThat(response.body()).doesNotContain("password_hash","credential_hash",owner.toString(),mc.toString(),other.toString());
+        db.update("UPDATE platform_user SET status='DISABLED' WHERE id=?",owner);
+        assertThat(botRequest(telegram,"",null,true).statusCode()).isEqualTo(403);
+        assertThat(botRequest(telegram,"/preferences","{\"field\":\"news\",\"enabled\":false}",true).statusCode()).isEqualTo(403);
+    }
+    @Test void botPreferencesPersistAcrossMiniAppReadsAndReplayIsIdempotent()throws Exception {
+        for(int i=0;i<2;i++)assertThat(botRequest(telegram,"/preferences","{\"field\":\"news\",\"enabled\":false}",true).statusCode()).isEqualTo(200);
+        var value=companion.account(telegram).preferences();assertThat(value).isEqualTo(new CompanionService.Preferences(false,true,true));
+        assertThat(json.readTree(request("/api/mini-app/account",proof(telegram)).body()).path("preferences").path("news").asBoolean()).isFalse();
+        companion.preferences(telegram,new CompanionService.Preferences(true,false,true));
+        assertThat(json.readTree(botRequest(telegram,"/preferences",null,true).body()).path("maintenance").asBoolean()).isFalse();
+        for(String body:List.of("{\"field\":\"news\"}","{\"field\":\"arbitrary\",\"enabled\":false}","null"))
+            assertThat(botRequest(telegram,"/preferences",body,true).statusCode()).isEqualTo(400);
+        assertThat(botRequest(telegram+1,"/preferences","{\"field\":\"news\",\"enabled\":false}",true).statusCode()).isEqualTo(403);
+        assertThat(companion.account(telegram).preferences()).isEqualTo(new CompanionService.Preferences(true,false,true));
+    }
+    @Test void independentBotPreferenceWritesDoNotLoseOtherSettings()throws Exception {
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(3)){
+            var start=new java.util.concurrent.CountDownLatch(1);var results=new ArrayList<java.util.concurrent.Future<?>>();
+            for(String field:List.of("news","maintenance","reports"))results.add(pool.submit(()->{start.await();return telegramCompanion.setPreference(telegram,field,false);}));
+            start.countDown();for(var result:results)result.get(10,java.util.concurrent.TimeUnit.SECONDS);
+        }
+        assertThat(companion.account(telegram).preferences()).isEqualTo(new CompanionService.Preferences(false,false,false));
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM companion_preferences WHERE platform_user_id=?",Integer.class,owner)).isOne();
+    }
+    @Test void botProfileMarksStaleOnlineAndPriorBootCitySnapshots() {
+        Instant now=Instant.now();
+        companion.receive(new CompanionService.Snapshot("mini-test",UUID.randomUUID(),now,List.of(),List.of(new CompanionService.About(mc,"Описание",72000L,null))));
+        assertThat(companion.account(telegram).cityState()).isEqualTo("STALE");
+        assertThat(telegramCompanion.profile(telegram).playtimeSeconds()).isEqualTo(3600L);
+        db.update("UPDATE server_bridge_boot SET observed_at=? WHERE boot_id=?",Timestamp.from(now.minusSeconds(150)),boot);
+        assertThat(telegramCompanion.profile(telegram).onlineState()).isEqualTo("UNKNOWN");
+        db.update("DELETE FROM minecraft_identity WHERE platform_user_id=?",owner);
+        assertThat(telegramCompanion.profile(telegram).minecraftLinked()).isFalse();
+        assertThat(telegramCompanion.profile(telegram).playtimeSeconds()).isNull();
     }
 }
