@@ -1,6 +1,7 @@
 package com.example.examplemod.client.journey;
 
 import com.example.examplemod.journey.JourneyModel.Marker;
+import com.example.examplemod.journey.JourneyModel.Kind;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -22,7 +23,18 @@ public final class JourneyAtlasStyle {
     };
     public static int[][] glyph(int icon){return GLYPHS[Math.clamp(icon,0,GLYPHS.length-1)];}
     public static int color(Marker m){return m.tint==0?JourneyClient.color(m.kind):0xff000000|(m.tint&0xffffff);}
-    public static double breathe(long now,boolean reduced){return reduced?1:.86+.14*Math.sin(now/1150.0);}
+    private static final int[][] GUIDE_SHAPE = {{0,-10},{8,-5},{9,2},{5,7},{0,10},{-5,7},{-9,2},{-8,-5}};
+    private static final int[][] QUEST_SHAPE = {{-5,-9},{5,-9},{9,-4},{9,5},{5,9},{-5,9},{-9,5},{-9,-4}};
+    private static final int[][] ACTIVITY_SHAPE = {{-6,-8},{6,-8},{10,-3},{10,3},{6,8},{-6,8},{-10,3},{-10,-3}};
+    private static final int[][] LANDMARK_SHAPE = {{-5,-9},{5,-9},{9,-5},{8,3},{0,10},{-8,3},{-9,-5}};
+    static int[][] silhouette(Kind kind) {
+        return switch (kind) {
+            case GUIDE -> GUIDE_SHAPE;
+            case QUEST -> QUEST_SHAPE;
+            case ACTIVITY -> ACTIVITY_SHAPE;
+            case LANDMARK -> LANDMARK_SHAPE;
+        };
+    }
     public static double reveal(long elapsed,boolean reduced){return reduced?1:1-Math.pow(1-Math.clamp(elapsed/360.0,0,1),3);}
     public static void line(GuiGraphics g,int x1,int y1,int x2,int y2,int color){
         int dx=Math.abs(x2-x1),sx=x1<x2?1:-1,dy=-Math.abs(y2-y1),sy=y1<y2?1:-1,error=dx+dy;
@@ -31,11 +43,35 @@ public final class JourneyAtlasStyle {
     }
     public static void diamond(GuiGraphics g,int x,int y,int r,int color){for(int row=-r;row<=r;row++){int half=r-Math.abs(row);g.fill(x-half,y+row,x+half+1,y+row+1,color);}}
     public static void mark(GuiGraphics g,int x,int y,Marker m,boolean active,boolean hover,long now,boolean reduced,boolean done){
-        int r=m.size,ink=done?0xff91b9a4:color(m);
-        if(active){int a=(int)(32*breathe(now,reduced));diamond(g,x,y,r+5,(a<<24)|(BRASS&0xffffff));diamond(g,x,y,r+2,BRASS);}
-        diamond(g,x+1,y+2,r+1,0x60000000);diamond(g,x,y,r,hover?TEXT:active?BRASS:EDGE);diamond(g,x,y,r-1,SURFACE);
-        for(var s:glyph(done?7:m.icon))line(g,x+s[0],y+s[1],x+s[2],y+s[3],ink);
-        if(active)g.fill(x-1,y-r-4,x+2,y-r-2,BRASS);
+        int radius = m.size + (active ? 2 : 0);
+        int[][] shape = silhouette(m.kind);
+        int edge = hover ? TEXT : active ? BRASS : mix(EDGE, color(m), .45);
+        badge(g, shape, x + 1, y + 2, radius + 1, 0xc4111619);
+        badge(g, shape, x, y, radius, edge);
+        badge(g, shape, x, y, radius - 2, active ? 0xff343027 : 0xff20282c);
+        int ink = done ? 0xffa8c4a9 : TEXT;
+        for (var segment : glyph(done ? 7 : m.icon)) {
+            line(g, x + segment[0], y + segment[1], x + segment[2], y + segment[3], ink);
+        }
+    }
+    private static void badge(GuiGraphics graphics, int[][] vertices, int x, int y, int radius, int color) {
+        for (int row = -radius; row <= radius; row++) {
+            double sample = (row + .5) * 10 / radius;
+            double left = Double.POSITIVE_INFINITY;
+            double right = Double.NEGATIVE_INFINITY;
+            for (int i = 0; i < vertices.length; i++) {
+                int[] a = vertices[i];
+                int[] b = vertices[(i + 1) % vertices.length];
+                if (sample < Math.min(a[1], b[1]) || sample >= Math.max(a[1], b[1])) continue;
+                double intersect = a[0] + (b[0] - a[0]) * (sample - a[1]) / (b[1] - a[1]);
+                left = Math.min(left, intersect);
+                right = Math.max(right, intersect);
+            }
+            if (left <= right) {
+                graphics.fill(x + (int) Math.ceil(left * radius / 10), y + row,
+                        x + (int) Math.floor(right * radius / 10) + 1, y + row + 1, color);
+            }
+        }
     }
     public static void panel(GuiGraphics g,int x,int y,int w,int h){g.fill(x+2,y+3,x+w+2,y+h+3,0x35000000);g.fill(x,y,x+w,y+h,SURFACE);g.renderOutline(x,y,w,h,EDGE);}
     public static Button button(int x,int y,int w,String key,Runnable action){return new FlatButton(x,y,w,20,JourneyClient.tr(key),action);}

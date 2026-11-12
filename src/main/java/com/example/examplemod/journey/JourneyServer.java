@@ -3,16 +3,20 @@ package com.example.examplemod.journey;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.cargo.center.CargoShipmentRegistry;
 import com.example.examplemod.economy.EconomyManager;
+import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.projects.Project;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
@@ -21,24 +25,36 @@ import static com.example.examplemod.journey.JourneyModel.*;
 @EventBusSubscriber(modid="createcityexpansioncore")
 public final class JourneyServer {
     public static boolean visible(Marker m,Progress p){return m.enabled&&(!m.newcomers||!p.graduated)&&(m.afterQuest.isEmpty()||p.completed.contains(m.afterQuest));}
+    private static boolean visible(JourneyData data, Marker marker, Progress progress) {
+        return marker != null && visible(marker, progress) && JourneyRouteAuthoring.accessible(data, progress, marker.id);
+    }
     public static Point location(ServerPlayer p){var b=p.blockPosition();return new Point(p.level().dimension().location().toString(),b.getX(),b.getY(),b.getZ());}
     public static boolean near(Marker m,ServerPlayer p){return m.point.distance(p.level().dimension().location().toString(),p.getX(),p.getY(),p.getZ())<=m.radius;}
     public static void request(ServerPlayer player,JourneyRequestPayload request){
         if(player instanceof FakePlayer)return;
+        if (JourneyPlaytestNetwork.active(player) && request.action() != JourneyRequestPayload.Action.STATE) return;
         var budget=player.getPersistentData();long window=net.minecraft.Util.getMillis()/1000;
         if(budget.getLong("CCECJourneyWindow")!=window){budget.putLong("CCECJourneyWindow",window);budget.putInt("CCECJourneyRequests",0);}
         int count=budget.getInt("CCECJourneyRequests");if(count>=6)return;budget.putInt("CCECJourneyRequests",count+1);
+        if (request.action() == JourneyRequestPayload.Action.STATE || request.action() == JourneyRequestPayload.Action.JOURNAL) {
+            send(player, request.action() == JourneyRequestPayload.Action.JOURNAL, "");
+            return;
+        }
         var d=JourneyData.get(player.getServer());var p=d.player(player.getUUID());
         try{switch(request.action()){
             case STATE,JOURNAL -> {}
-            case TRACK_QUEST -> {var q=d.quest(request.id());if(!available(q,p,d.chains.values()))throw new IllegalArgumentException("Quest unavailable");p.accept(q.id);}
-            case TRACK_MARKER -> {var m=d.marker(request.id());if(!visible(m,p))throw new IllegalArgumentException("Marker unavailable");p.activeQuest="";p.activeMarker=m.id;p.paused=false;}
+            case TRACK_QUEST -> {var q=d.quest(request.id());if(!JourneyRouteAuthoring.accessible(d,p,q.id)||!available(q,p,d.chains.values()))throw new IllegalArgumentException("Quest unavailable");p.accept(q.id);}
+            case TRACK_MARKER -> {var m=d.marker(request.id());if(!visible(d,m,p))throw new IllegalArgumentException("Marker unavailable");p.activeQuest="";p.activeMarker=m.id;p.paused=false;}
             case UNPIN -> {p.accepted.remove(request.id());if(p.activeQuest.equals(request.id())){p.activeQuest="";p.paused=true;}}
-            case START -> {var c=d.chain(request.id());if(!c.enabled||c.steps.isEmpty())throw new IllegalArgumentException("Journey unavailable");String next=JourneyModel.next(c,p);if(!next.isEmpty()&&!p.accepted.contains(next)&&p.accepted.size()>=3)throw new IllegalArgumentException("Only three pinned quests are allowed");p.chain=c.id;p.activeMarker=p.activeQuest="";p.autoStarted=true;p.paused=false;advance(d,p);}
+            case START -> {var c=d.chain(request.id());if(!c.enabled||c.steps.isEmpty()||!JourneyRouteAuthoring.accessible(d,p,c.id))throw new IllegalArgumentException("Journey unavailable");String next=JourneyModel.next(c,p);if(!next.isEmpty()&&!p.accepted.contains(next)&&p.accepted.size()>=3)throw new IllegalArgumentException("Only three pinned quests are allowed");p.chain=c.id;p.activeMarker=p.activeQuest="";p.autoStarted=true;p.paused=false;advance(d,p);}
             case PAUSE -> p.paused=true;
-            case RESUME -> {p.paused=false;advance(d,p);}
+            case RESUME -> {
+                p.paused = false;
+                if (!p.chain.isEmpty()) p.activeMarker = "";
+                advance(d, p);
+            }
         }}catch(IllegalArgumentException failure){player.displayClientMessage(Component.translatable("gui.createcityexpansioncore.journey.error",failure.getMessage()),false);}
-        d.setDirty();send(player,request.action()==JourneyRequestPayload.Action.JOURNAL,"");
+        d.setDirty();send(player,false,"");
     }
     public static void advance(JourneyData d,Progress p){
         var c=d.chains.get(p.chain);if(p.paused||c==null||!c.enabled)return;
@@ -56,11 +72,22 @@ public final class JourneyServer {
         boolean construction=d.quests.values().stream().anyMatch(q->q.enabled&&q.objectives.stream().anyMatch(o->o.kind()==ObjectiveKind.PROJECT_COMPLETED));
         if(cargo)shipments=CargoShipmentRegistry.get(server).all();if(construction)projects=EconomyManager.get(server.overworld()).projects().all();
         for(var player:server.getPlayerList().getPlayers()){
-            if(player instanceof FakePlayer)continue;var p=d.player(player.getUUID());boolean changed=false;
-            if(!p.autoStarted&&!p.paused){var c=d.chains.values().stream().filter(v->v.enabled&&v.automatic&&!v.steps.isEmpty()).findFirst().orElse(null);if(c!=null){p.chain=c.id;p.autoStarted=true;changed=true;advance(d,p);}}
+            if (player instanceof FakePlayer || JourneyPlaytestNetwork.active(player)) continue;
+            var p=d.player(player.getUUID());boolean changed=false;
+            if (!p.autoStarted && !p.paused) {
+                var automatic = d.chains.values().stream()
+                        .filter(chain -> chain.enabled && chain.automatic && !chain.steps.isEmpty())
+                        .findFirst().orElse(null);
+                if (automatic != null) {
+                    p.chain = automatic.id;
+                    p.autoStarted = true;
+                    changed = true;
+                    advance(d, p);
+                }
+            }
             String completed="";
             if(!p.paused)for(String id:List.copyOf(p.accepted)){
-                var q=d.quests.get(id);if(!available(q,p,d.chains.values()))continue;
+                var q=d.quests.get(id);if(!JourneyRouteAuthoring.accessible(d,p,id)||!available(q,p,d.chains.values()))continue;
                 for(var o:q.objectives){String key=q.id+"/"+o.id();if(!p.met.contains(key)&&satisfied(d,player,o,shipments,projects)){p.met.add(key);changed=true;}}
                 if(p.finish(q)){completed=q.title;changed=true;}
             }
@@ -70,8 +97,8 @@ public final class JourneyServer {
     }
     private static boolean satisfied(JourneyData d,ServerPlayer p,Objective o,List<CargoShipmentRegistry.Shipment> shipments,List<Project> projects){
         return switch(o.kind()){
-            case VISIT -> {var m=d.markers.get(o.target());yield m!=null&&visible(m,d.player(p.getUUID()))&&near(m,p);}
-            case INTERACT -> false; // Only the authoritative interaction event may satisfy this.
+            case VISIT -> {var m=d.markers.get(o.target());yield visible(d,m,d.player(p.getUUID()))&&near(m,p);}
+            case INTERACT, OPEN_PYLON -> false;
             case ITEM -> {int total=0;for(var stack:p.getInventory().items)if(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(o.target()))total+=stack.getCount();yield total>=o.count();}
             case CITY_MEMBER -> CityManager.get(p.getServer().overworld()).getMemberCity(p.getUUID())!=null;
             case SHIPMENT_DELIVERED -> shipments!=null&&shipments.stream().filter(s->s.creator().equals(p.getUUID())&&s.stage()==CargoShipmentRegistry.Stage.COMPLETED&&s.physicalComplete()).count()>=o.count();
@@ -79,24 +106,84 @@ public final class JourneyServer {
             case ADVANCEMENT -> {var a=p.getServer().getAdvancements().get(ResourceLocation.parse(o.target()));yield a!=null&&p.getAdvancements().getOrStartProgress(a).isDone();}
         };
     }
-    @SubscribeEvent(priority=net.neoforged.bus.api.EventPriority.LOWEST) public static void interact(PlayerInteractEvent.RightClickBlock event){
-        if(event.isCanceled()||!(event.getEntity() instanceof ServerPlayer player)||player instanceof FakePlayer)return;
-        var d=JourneyData.get(player.getServer());var p=d.player(player.getUUID());if(p.paused)return;boolean changed=false;
-        for(String id:p.accepted){var q=d.quests.get(id);if(!available(q,p,d.chains.values()))continue;for(var o:q.objectives){if(o.kind()!=ObjectiveKind.INTERACT)continue;var m=d.markers.get(o.target());if(m!=null&&visible(m,p)&&near(m,player)&&m.point.x()==event.getPos().getX()&&m.point.y()==event.getPos().getY()&&m.point.z()==event.getPos().getZ())changed|=p.met.add(q.id+"/"+o.id());}}
-        if(changed)d.setDirty();
+    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.LOWEST)
+    public static void interact(PlayerInteractEvent.RightClickBlock event) {
+        if (!event.isCanceled() && event.getEntity() instanceof ServerPlayer player) {
+            recordBlockAction(player, ObjectiveKind.INTERACT, event.getPos());
+        }
     }
-    public static String target(JourneyData d,Progress p){
-        if(p.paused)return "";if(!p.activeMarker.isEmpty())return p.activeMarker;var q=d.quests.get(p.activeQuest);if(!available(q,p,d.chains.values()))return "";
-        for(var o:q.objectives)if(!p.met.contains(q.id+"/"+o.id())&&(o.kind()==ObjectiveKind.VISIT||o.kind()==ObjectiveKind.INTERACT))return o.target();return q.marker;
+
+    @SubscribeEvent
+    public static void openPylon(PlayerContainerEvent.Open event) {
+        if (event.getEntity() instanceof ServerPlayer player && event.getContainer() instanceof CityPylonMenu menu
+                && player.level().dimension().location().equals(menu.getDimensionId())) {
+            recordBlockAction(player, ObjectiveKind.OPEN_PYLON, menu.getPylonPos());
+        }
     }
-    public static void send(ServerPlayer player,boolean open,String completed){
-        var d=JourneyData.get(player.getServer());var state=snapshot(d,d.player(player.getUUID()),open,completed);state.putBoolean("CanEdit",player.hasPermissions(2));PacketDistributor.sendToPlayer(player,new JourneyStatePayload(state));
+
+    private static void recordBlockAction(ServerPlayer player, ObjectiveKind kind, BlockPos pos) {
+        if (player instanceof FakePlayer || JourneyPlaytestNetwork.active(player)) return;
+        JourneyData data = JourneyData.get(player.getServer());
+        Progress progress = data.players.get(player.getUUID());
+        if (recordBlockAction(data, progress, kind, pos, player.level().dimension().location().toString(), player.position())) {
+            data.setDirty();
+        }
+    }
+
+    static boolean recordBlockAction(JourneyData data, Progress progress, ObjectiveKind kind, BlockPos pos,
+                                     String dimension, Vec3 playerPosition) {
+        if (progress == null || progress.paused) return false;
+
+        boolean changed = false;
+        for (String id : progress.accepted) {
+            Quest quest = data.quests.get(id);
+            if (!JourneyRouteAuthoring.accessible(data, progress, id) || !available(quest, progress, data.chains.values())) continue;
+            for (Objective objective : quest.objectives) {
+                if (objective.kind() != kind) continue;
+                Marker marker = data.markers.get(objective.target());
+                if (visible(data, marker, progress) && pos.getX() == marker.point.x()
+                        && pos.getY() == marker.point.y() && pos.getZ() == marker.point.z()
+                        && marker.point.distance(dimension, playerPosition.x, playerPosition.y, playerPosition.z) <= marker.radius) {
+                    changed |= progress.met.add(quest.id + "/" + objective.id());
+                }
+            }
+        }
+        return changed;
+    }
+
+    public static String target(JourneyData data, Progress progress) {
+        if (progress.paused) return "";
+        if (!progress.activeMarker.isEmpty()) {
+            return visible(data, data.markers.get(progress.activeMarker), progress) ? progress.activeMarker : "";
+        }
+        Quest quest = data.quests.get(progress.activeQuest);
+        if (quest == null || !JourneyRouteAuthoring.accessible(data, progress, quest.id)
+                || !available(quest, progress, data.chains.values())) return "";
+
+        for (Objective objective : quest.objectives) {
+            if (progress.met.contains(quest.id + "/" + objective.id())) continue;
+            if (objective.kind() == ObjectiveKind.VISIT || objective.kind() == ObjectiveKind.INTERACT
+                    || objective.kind() == ObjectiveKind.OPEN_PYLON) {
+                return visible(data, data.markers.get(objective.target()), progress) ? objective.target() : "";
+            }
+        }
+        return visible(data, data.markers.get(quest.marker), progress) ? quest.marker : "";
+    }
+    public static void send(ServerPlayer player, boolean open, String completed) {
+        var data = JourneyData.get(player.getServer());
+        data.requireAvailable();
+        var progress = data.players.get(player.getUUID());
+        var state = snapshot(data, progress == null ? new Progress() : progress, open, completed);
+        state.putBoolean("CanEdit", player.hasPermissions(2));
+        PacketDistributor.sendToPlayer(player, new JourneyStatePayload(state));
     }
     public static CompoundTag snapshot(JourneyData d,Progress p,boolean open,String completed){
-        var t=new CompoundTag();var markers=new ListTag();String target=target(d,p);d.markers.values().stream().filter(m->visible(m,p)).forEach(m->{var v=JourneyCodec.marker(m);if(!m.id.equals(target))v.remove("Route");markers.add(v);});t.put("Markers",markers);
-        var quests=new ListTag();for(var q:d.quests.values()){if(!q.enabled)continue;var v=JourneyCodec.quest(q);for(var raw:v.getList("Objectives",10)){var o=(CompoundTag)raw;o.putBoolean("Met",p.met.contains(q.id+"/"+o.getString("Id")));o.remove("Id");}v.putBoolean("Available",available(q,p,d.chains.values()));v.putBoolean("Done",p.completed.contains(q.id));v.putBoolean("Pinned",p.accepted.contains(q.id));int done=(int)q.objectives.stream().filter(o->p.met.contains(q.id+"/"+o.id())).count();v.putInt("DoneCount",done);quests.add(v);}t.put("Quests",quests);
-        var chains=new ListTag();for(var c:d.chains.values())if(c.enabled){var v=new CompoundTag();v.putString("Id",c.id);v.putString("Title",c.title);v.put("Steps",JourneyCodec.strings(c.steps));v.putInt("Total",c.steps.size());v.putInt("Done",(int)c.steps.stream().filter(p.completed::contains).count());chains.add(v);}t.put("Chains",chains);
-        t.putString("Target",target(d,p));t.putString("ActiveQuest",p.activeQuest);t.putString("Chain",p.chain);t.putBoolean("Paused",p.paused);t.putBoolean("Open",open);t.putString("Completed",completed);return t;
+        var t=new CompoundTag();var markers=new ListTag();String target=target(d,p);d.markers.values().stream().filter(m->visible(d,m,p)).forEach(m->{var v=JourneyCodec.marker(m);if(!m.id.equals(target))v.remove("Route");markers.add(v);});t.put("Markers",markers);
+        var quests=new ListTag();for(var q:d.quests.values()){if(!q.enabled||!JourneyRouteAuthoring.accessible(d,p,q.id))continue;var v=JourneyCodec.quest(q);for(var raw:v.getList("Objectives",10)){var o=(CompoundTag)raw;o.putBoolean("Met",p.met.contains(q.id+"/"+o.getString("Id")));o.remove("Id");}v.putBoolean("Available",available(q,p,d.chains.values()));v.putBoolean("Done",p.completed.contains(q.id));v.putBoolean("Pinned",p.accepted.contains(q.id));int done=(int)q.objectives.stream().filter(o->p.met.contains(q.id+"/"+o.id())).count();v.putInt("DoneCount",done);quests.add(v);}t.put("Quests",quests);
+        var chains=new ListTag();for(var c:d.chains.values())if(c.enabled&&JourneyRouteAuthoring.accessible(d,p,c.id)){var v=new CompoundTag();v.putString("Id",c.id);v.putString("Title",c.title);v.put("Steps",JourneyCodec.strings(c.steps));v.putInt("Total",c.steps.size());v.putInt("Done",(int)c.steps.stream().filter(p.completed::contains).count());chains.add(v);}t.put("Chains",chains);
+        t.putString("Target",target);t.putString("ActiveQuest",p.activeQuest);t.putString("Chain",p.chain);t.putBoolean("Paused",p.paused);
+        t.putBoolean("Detour", !p.chain.isEmpty() && !p.activeMarker.isEmpty());
+        t.putBoolean("Open",open);t.putString("Completed",completed);return t;
     }
     private JourneyServer(){}
 }

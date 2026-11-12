@@ -28,7 +28,14 @@ public final class JourneyScreen extends Screen {
             if(pinned)addRenderableWidget(JourneyAtlasStyle.builder(Component.literal("×"),b->JourneyClient.request(Action.UNPIN,q.getString("Id"))).bounds(x+w-116,y,20,20).build());
         }
         if(marker!=null&&JourneyClient.markers.containsKey(marker))addRenderableWidget(JourneyAtlasStyle.builder(JourneyClient.tr("track_place"),b->{JourneyClient.request(Action.TRACK_MARKER,marker);onClose();}).bounds(x,67,Math.min(158,w),20).build());
-        else addRenderableWidget(JourneyAtlasStyle.builder(JourneyClient.tr(JourneyClient.paused?"resume":"pause"),b->{JourneyClient.request(JourneyClient.paused?Action.RESUME:Action.PAUSE,"");onClose();}).bounds(x,67,Math.min(158,w),20).build());
+        else {
+            boolean resume = JourneyClient.paused || JourneyClient.detour;
+            String label = JourneyClient.detour ? "return_to_route" : resume ? "resume" : "pause";
+            addRenderableWidget(JourneyAtlasStyle.builder(JourneyClient.tr(label), b -> {
+                JourneyClient.request(resume ? Action.RESUME : Action.PAUSE, "");
+                onClose();
+            }).bounds(x, 67, Math.min(158, w), 20).build());
+        }
         int bottom=height-28;
         addRenderableWidget(JourneyAtlasStyle.builder(Component.literal("‹"),b->{page=Math.max(0,page-1);rebuildWidgets();}).bounds(x,bottom,26,20).build());
         addRenderableWidget(JourneyAtlasStyle.builder(Component.literal("›"),b->{if((page+1)*rows()<entries.size())page++;rebuildWidgets();}).bounds(x+30,bottom,26,20).build());
@@ -36,7 +43,7 @@ public final class JourneyScreen extends Screen {
         addRenderableWidget(JourneyAtlasStyle.builder(JourneyClient.tr("tab."+((tab+1)%3)),b->{tab=(tab+1)%3;page=0;rebuildWidgets();}).bounds(x+w-104,67,104,20).build());
     }
     private String signature="";
-    @Override public void tick(){String next=JourneyClient.quests.toString()+JourneyClient.chains+JourneyClient.paused;if(!signature.equals(next)){signature=next;rebuildWidgets();}}
+    @Override public void tick(){String next=JourneyClient.quests.toString()+JourneyClient.chains+JourneyClient.paused+JourneyClient.detour;if(!signature.equals(next)){signature=next;rebuildWidgets();}}
     @Override public void render(GuiGraphics g,int mx,int my,float delta){
         g.fill(0,0,width,height,0xef10191f);int x=left(),w=panelWidth();g.drawString(font,title,x,14,JourneyAtlasStyle.TEXT,false);
         var m=JourneyClient.markers.get(marker);String subtitle=m==null?JourneyClient.tr("journal_hint").getString():m.title;g.drawString(font,font.plainSubstrByWidth(subtitle,w),x,31,JourneyAtlasStyle.BRASS,false);

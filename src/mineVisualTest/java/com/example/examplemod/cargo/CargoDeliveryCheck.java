@@ -79,6 +79,21 @@ public final class CargoDeliveryCheck {
         for (var instruction : unwrap.instructions) if (instruction instanceof MethodInsnNode call
                 && call.owner.equals("com/simibubi/create/api/packager/unpacking/UnpackingHandler") && call.name.equals("unpack")) nativeCalls++;
         require(nativeCalls == 1, "pinned Create has exactly one unpack observation point");
+        var pack = packager.methods.stream().filter(method -> method.name.equals("attemptToSend")
+                && method.desc.equals("(Ljava/util/List;)V")).findFirst().orElseThrow();
+        int addressWrites = 0;
+        boolean readSign = false;
+        for (var instruction : pack.instructions) {
+            if (instruction instanceof org.objectweb.asm.tree.FieldInsnNode field && field.name.equals("signBasedAddress")) {
+                readSign = true;
+            }
+            if (instruction instanceof MethodInsnNode call && call.owner.endsWith("/PackageItem")
+                    && call.name.equals("addAddress")) {
+                require(readSign == (addressWrites > 0), "order address write precedes the native sign address write");
+                addressWrites++;
+            }
+        }
+        require(addressWrites == 2, "pinned Create has distinct order and sign address writes");
         var mixin = node("com/example/examplemod/mixin/PackagerCargoReceiptMixin");
         var hook = mixin.methods.stream().filter(method -> method.name.equals("ccec$observeNativeUnpack")).findFirst().orElseThrow();
         require(hook.desc.endsWith("Lnet/minecraft/world/item/ItemStack;Z)Z"), "hook captures original box and enclosing simulate parameter");

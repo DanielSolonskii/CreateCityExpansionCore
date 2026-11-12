@@ -3,8 +3,10 @@ package com.example.examplemod.journey;
 import com.example.examplemod.journey.JourneyModel.*;
 import static com.example.examplemod.journey.JourneyModel.*;
 import net.minecraft.nbt.*;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.world.phys.Vec3;
 import java.util.*;
 
 public final class JourneyCheck {
@@ -13,6 +15,8 @@ public final class JourneyCheck {
     private static void rejects(Runnable action,String why){boolean rejected=false;try{action.run();}catch(IllegalArgumentException e){rejected=true;}require(rejected,why);}
     public static void main(String[] args){
         JourneyAuthoringCheck.main(args);
+        JourneyTrialCheck.run();
+        checkPylonEvidence();
         var d=new JourneyData();var spawn=new Marker("spawn",new Point("minecraft:overworld",0,64,0));spawn.newcomers=true;d.markers.put(spawn.id,spawn);
         var center=new Marker("center",new Point("minecraft:overworld",120,65,12));center.route.add(new Point("minecraft:overworld",5,64,0));center.route.add(new Point("minecraft:overworld",80,65,12));d.markers.put(center.id,center);
         var welcome=new Quest("welcome");welcome.enabled=true;welcome.marker="spawn";welcome.objectives.add(new Objective("visit",ObjectiveKind.VISIT,"spawn",1));d.quests.put(welcome.id,welcome);
@@ -53,5 +57,36 @@ public final class JourneyCheck {
         var dispatcher=new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();JourneyCommands.register(new net.neoforged.neoforge.event.RegisterCommandsEvent(dispatcher,net.minecraft.commands.Commands.CommandSelection.ALL,null));var root=dispatcher.getRoot().getChild("ccec");require(root.getChild("quests")!=null&&root.getChild("marker")!=null&&root.getChild("quest")!=null&&root.getChild("journey")!=null&&root.getChild("route")!=null,"all command roots registered together");
         require(root.getChild("marker").getChild("set").getChild("id").getChild("type").getChild("guide")!=null,"marker type command exists");
         System.out.println("PASS: "+checks+" journey progression, isolation, persistence, commands and network checks");
+    }
+
+    private static void checkPylonEvidence() {
+        var data = new JourneyData();
+        String dimension = "minecraft:overworld";
+        var marker = new Marker("pylon", new Point(dimension, 20, 64, 30));
+        data.markers.put(marker.id, marker);
+        var quest = new Quest("pylon_guide");
+        quest.enabled = true;
+        quest.objectives.add(new Objective("open", ObjectiveKind.OPEN_PYLON, marker.id, 1));
+        data.quests.put(quest.id, quest);
+        var progress = new Progress();
+        progress.accept(quest.id);
+        var pylon = new BlockPos(20, 64, 30);
+        var nearby = new Vec3(20.5, 64, 32);
+
+        require(JourneyServer.target(data, progress).equals(marker.id), "pylon objective supplies the navigation target");
+        require(!JourneyServer.recordBlockAction(data, progress, ObjectiveKind.INTERACT, pylon, dimension, nearby),
+                "interacting alone does not prove the pylon menu opened");
+        require(!JourneyServer.recordBlockAction(data, progress, ObjectiveKind.OPEN_PYLON, pylon.east(), dimension, nearby),
+                "a neighboring pylon menu is not the objective");
+        require(!JourneyServer.recordBlockAction(data, progress, ObjectiveKind.OPEN_PYLON, pylon, "minecraft:the_nether", nearby),
+                "a pylon at the same coordinates in another dimension is not the objective");
+        require(!JourneyServer.recordBlockAction(data, progress, ObjectiveKind.OPEN_PYLON, pylon, dimension, nearby.add(12, 0, 0)),
+                "a pylon menu outside the objective radius does not count");
+        require(!progress.finish(quest), "wrong actions leave the task unfinished");
+        require(JourneyServer.recordBlockAction(data, progress, ObjectiveKind.OPEN_PYLON, pylon, dimension, nearby),
+                "the matching pylon menu records evidence");
+        require(!JourneyServer.recordBlockAction(data, progress, ObjectiveKind.OPEN_PYLON, pylon, dimension, nearby),
+                "opening the same pylon again does not duplicate evidence");
+        require(progress.finish(quest), "opening the correct pylon completes the task");
     }
 }

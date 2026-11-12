@@ -11,13 +11,25 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.List;
 
-/** One observational hook, including original box argument; no overwrite of Create's physical algorithm. */
+/** Keeps Cargo receipts and the address fallback at Create's native packaging points. */
 @Mixin(value = PackagerBlockEntity.class, remap = false)
 public abstract class PackagerCargoReceiptMixin {
+    @ModifyArg(method = "attemptToSend", at = @At(value = "INVOKE", ordinal = 0, remap = false,
+            target = "Lcom/simibubi/create/content/logistics/box/PackageItem;addAddress(Lnet/minecraft/world/item/ItemStack;Ljava/lang/String;)V"),
+            index = 1, remap = false, require = 1, allow = 1)
+    private String ccec$useSignForUnaddressedRequest(String requestAddress) {
+        if (!requestAddress.isBlank()) return requestAddress;
+
+        PackagerBlockEntity packager = (PackagerBlockEntity) (Object) this;
+        packager.updateSignAddress();
+        return packager.signBasedAddress.isBlank() ? requestAddress : packager.signBasedAddress;
+    }
+
     @Redirect(method = "unwrapBox", at = @At(value = "INVOKE", remap = false,
             target = "Lcom/simibubi/create/api/packager/unpacking/UnpackingHandler;unpack(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Ljava/util/List;Lcom/simibubi/create/content/logistics/stockTicker/PackageOrderWithCrafts;Z)Z"),
             remap = false, require = 1, allow = 1)

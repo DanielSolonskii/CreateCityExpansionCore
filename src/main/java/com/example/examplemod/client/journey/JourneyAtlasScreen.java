@@ -30,6 +30,7 @@ public final class JourneyAtlasScreen extends Screen {
     private boolean editing,loading,preview,pickPosition,drawRoute,showList,dragging;
     private long pendingAt;
     private boolean returning;
+    private boolean routeEditorOpen;
     private final Set<String> invalidFields=new HashSet<>();
     private List<Choice> choices;
     private Consumer<String> choose;
@@ -89,7 +90,10 @@ public final class JourneyAtlasScreen extends Screen {
         if(confirmation!=null){button(width/2-112,height/2+12,108,"discard",()->{var action=confirmation;confirmation=null;action.run();});button(width/2+4,height/2+12,108,"cancel",()->{confirmation=null;rebuildWidgets();});return;}
         if(choices!=null){var search=new EditBox(font,width/2-130,55,260,18,JourneyClient.tr("search"));search.setMaxLength(96);search.setValue(choiceFilter);search.setResponder(s->{choiceFilter=s;choiceScroll=0;});addRenderableWidget(search);button(width/2+60,height-35,70,"cancel",()->{choices=null;rebuildWidgets();});setInitialFocus(search);return;}
         button(8,8,72,"close",this::onClose);
-        if(JourneyClient.canEdit&&!editing)button(86,8,100,"edit",this::startEditing);
+        if(JourneyClient.canEdit&&!editing){
+            button(86,8,100,"route_editor.open",this::openRouteEditor);
+            button(192,8,104,"route_editor.advanced",this::startEditing);
+        }
         if(editing){button(86,8,100,preview?"preview_exit":"preview",()->{preview=!preview;rebuildWidgets();});button(192,8,78,"new",this::create);}
         int categoryWidth=Math.min(80,(width-(left==0?102:24))/3);button(8,33,categoryWidth,"markers",()->switchGroup("marker"));button(12+categoryWidth,33,categoryWidth,"quests",()->switchGroup("quest"));button(16+2*categoryWidth,33,categoryWidth,"chains",()->switchGroup("chain"));
         if(left==0)button(width-86,33,78,showList?"properties":"list",()->{showList=!showList;rebuildWidgets();});
@@ -127,7 +131,7 @@ public final class JourneyAtlasScreen extends Screen {
             formButton(y,JourneyClient.tr("add_condition").getString(),()->{if(objectives.size()>=16)return;var o=new CompoundTag();o.putString("Id",UUID.randomUUID().toString());o.putString("Kind","VISIT");o.putString("Target",d.getString("Marker"));o.putInt("Count",1);objectives.add(o);d.put("Objectives",objectives);rebuildWidgets();});y+=30;
             for(var raw:objectives){var o=(CompoundTag)raw;
                 formButton(y,JourneyClient.tr("condition."+o.getString("Kind")).getString(),()->picker(Arrays.stream(ObjectiveKind.values()).map(k->new Choice(k.name(),JourneyClient.tr("condition."+k.name()).getString())).toList(),id->{o.putString("Kind",id);o.putString("Target","");o.putInt("Count",1);rebuildWidgets();}));y+=26;
-                String kind=o.getString("Kind");if(kind.equals("VISIT")||kind.equals("INTERACT")){formButton(y,namedTitle("marker",o.getString("Target")),()->picker(named("marker",false),id->{o.putString("Target",id);rebuildWidgets();}));y+=26;}
+                String kind=o.getString("Kind");if(kind.equals("VISIT")||kind.equals("INTERACT")||kind.equals("OPEN_PYLON")){formButton(y,namedTitle("marker",o.getString("Target")),()->picker(named("marker",false),id->{o.putString("Target",id);rebuildWidgets();}));y+=26;}
                 else if(kind.equals("ITEM")){var resource=net.minecraft.resources.ResourceLocation.tryParse(o.getString("Target"));String itemName=resource==null?JourneyClient.tr("choose_item").getString():net.minecraft.core.registries.BuiltInRegistries.ITEM.get(resource).getDescription().getString();formButton(y,itemName,()->picker(net.minecraft.core.registries.BuiltInRegistries.ITEM.stream().filter(item->item!=net.minecraft.world.item.Items.AIR).map(item->new Choice(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item).toString(),item.getDescription().getString())).sorted(Comparator.comparing(Choice::title)).toList(),id->{o.putString("Target",id);rebuildWidgets();}));y+=28;}else if(kind.equals("ADVANCEMENT")){field(y,"advancement_id",o.getString("Target"),128,s->o.putString("Target",s));y+=40;}
                 if(kind.equals("ITEM")||kind.equals("SHIPMENT_DELIVERED")||kind.equals("PROJECT_COMPLETED")){field(y,"count",""+o.getInt("Count"),4,s->{try{int n=Integer.parseInt(s);if(n>=1&&n<=4096)o.putInt("Count",n);}catch(NumberFormatException ignored){}});y+=40;}
                 formButton(y,JourneyClient.tr("remove_condition").getString(),()->{objectives.remove(o);rebuildWidgets();});y+=34;
@@ -224,6 +228,18 @@ public final class JourneyAtlasScreen extends Screen {
     @Override public boolean keyPressed(int key,int scan,int mods){if(key==GLFW.GLFW_KEY_ESCAPE){if(confirmation!=null){confirmation=null;rebuildWidgets();return true;}if(choices!=null){choices=null;rebuildWidgets();return true;}if(pickPosition||drawRoute){pickPosition=drawRoute=false;status="";rebuildWidgets();return true;}}if(choices==null&&confirmation==null&&hasControlDown()&&key==GLFW.GLFW_KEY_S&&editing){save();return true;}return super.keyPressed(key,scan,mods);}
     @Override public void onClose(){if(!pending.isEmpty())return;if(dirty()){confirm("confirm_close",this::returnToMap);return;}returnToMap();}
     private void returnToMap(){returning=true;minecraft.setScreen(parent);}
-    @Override public void removed(){if(parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas)atlas.finishJourneyWorkspace(returning);super.removed();}
+    private void openRouteEditor() {
+        var next = new JourneyRouteEditorScreen(this, map);
+        routeEditorOpen = true;
+        minecraft.setScreen(next);
+        if (minecraft.screen != next) routeEditorOpen = false;
+    }
+    void finishRouteEditor(boolean returningToAtlas) {
+        routeEditorOpen = false;
+        if (!returningToAtlas && parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas) {
+            atlas.finishJourneyWorkspace(false);
+        }
+    }
+    @Override public void removed(){if(!routeEditorOpen&&parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas)atlas.finishJourneyWorkspace(returning);super.removed();}
     @Override public boolean isPauseScreen(){return false;}
 }

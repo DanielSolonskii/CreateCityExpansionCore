@@ -6,7 +6,7 @@ import java.util.*;
 public final class JourneyModel {
     public static final int MAX_MARKERS=128, MAX_QUESTS=128, MAX_STEPS=32, MAX_OBJECTIVES=16, MAX_POINTS=64;
     public enum Kind { GUIDE, QUEST, ACTIVITY, LANDMARK }
-    public enum ObjectiveKind { VISIT, INTERACT, ITEM, CITY_MEMBER, SHIPMENT_DELIVERED, PROJECT_COMPLETED, ADVANCEMENT }
+    public enum ObjectiveKind { VISIT, INTERACT, ITEM, CITY_MEMBER, SHIPMENT_DELIVERED, PROJECT_COMPLETED, ADVANCEMENT, OPEN_PYLON }
     public record Point(String dimension,int x,int y,int z) {
         public Point { if(dimension==null||!dimension.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")||Math.abs((long)x)>30_000_000||Math.abs((long)z)>30_000_000||y < -2048||y>2048)throw new IllegalArgumentException("Invalid position"); }
         public double distance(String dim,double px,double py,double pz){return dimension.equals(dim)?Math.sqrt((x+.5-px)*(x+.5-px)+(y-py)*(y-py)+(z+.5-pz)*(z+.5-pz)):Double.POSITIVE_INFINITY;}
