@@ -1,5 +1,7 @@
 package com.example.examplemod.city;
 
+import com.example.examplemod.multiblock.BlueprintCatalog.Structure;
+import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 import net.minecraft.core.BlockPos;
@@ -175,6 +177,12 @@ public class CityManager extends SavedData {
                     !cityTag.contains("PylonActive") || cityTag.getBoolean("PylonActive")
             );
             city.restoreTradeReputation(cityTag.getInt("TradeReputation"));
+            CompoundTag blueprintTiers = cityTag.getCompound("BlueprintTiers");
+            for (Structure structure : Structure.values()) {
+                if (blueprintTiers.contains(structure.key(), Tag.TAG_INT)) {
+                    city.setBlueprintTierLimit(structure, blueprintTiers.getInt(structure.key()));
+                }
+            }
 
             // =================================================
             // ЦВЕТ ГОРОДА
@@ -576,6 +584,14 @@ public class CityManager extends SavedData {
 
             cityTag.putBoolean("PylonActive", city.isPylonActive());
             cityTag.putInt("TradeReputation", city.getTradeReputation());
+            CompoundTag blueprintTiers = new CompoundTag();
+            for (Structure structure : Structure.values()) {
+                int unlocked = city.getUnlockedBlueprintTier(structure);
+                if (unlocked != Tier.I.level()) {
+                    blueprintTiers.putInt(structure.key(), unlocked);
+                }
+            }
+            cityTag.put("BlueprintTiers", blueprintTiers);
 
             /*
              * Цвет города. 24 бита без альфы — ровно столько, сколько
@@ -1100,6 +1116,30 @@ public class CityManager extends SavedData {
         trustedCities.remove(cityId);
         trustedCities.values().forEach(targets -> targets.remove(cityId));
         trustedCities.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+    }
+
+    /** Unlocks the requested tier and all prerequisites. */
+    public boolean unlockBlueprintTier(UUID cityId, Structure structure, Tier tier) {
+        return updateBlueprintTier(cityId, structure, tier, true);
+    }
+
+    /** Locks the requested tier and every higher tier. */
+    public boolean lockBlueprintTier(UUID cityId, Structure structure, Tier tier) {
+        return updateBlueprintTier(cityId, structure, tier, false);
+    }
+
+    private boolean updateBlueprintTier(UUID cityId, Structure structure, Tier tier, boolean unlock) {
+        City city = cities.get(cityId);
+        if (city == null || tier.level() > structure.maxTier().level()) {
+            return false;
+        }
+        int current = city.getUnlockedBlueprintTier(structure);
+        int limit = unlock ? Math.max(current, tier.level()) : Math.min(current, tier.level() - 1);
+        if (!city.setBlueprintTierLimit(structure, limit)) {
+            return false;
+        }
+        setDirty();
+        return true;
     }
 
     public City getCityByName(String name) {

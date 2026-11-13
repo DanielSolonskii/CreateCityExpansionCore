@@ -1,0 +1,10 @@
+allprojects {
+    afterEvaluate {
+        tasks.register('checkFluidRecipe', JavaExec) {
+            dependsOn tasks.named('classes')
+            classpath = sourceSets.main.runtimeClasspath
+            mainClass = 'com.example.examplemod.devtools.FluidRecipeCheck'
+            javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+        }
+    }
+}

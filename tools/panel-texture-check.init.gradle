@@ -1,0 +1,10 @@
+// ./gradlew --init-script tools/panel-texture-check.init.gradle checkPanelTextureCoordinates
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    p.tasks.register('checkPanelTextureCoordinates', JavaExec) {
+        dependsOn p.tasks.named('mineVisualTestClasses')
+        classpath = p.sourceSets.mineVisualTest.runtimeClasspath
+        mainClass = 'com.example.examplemod.client.render.PanelTextureCoordinatesCheck'
+        javaLauncher = p.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    }
+}

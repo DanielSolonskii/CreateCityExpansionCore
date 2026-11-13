@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "enum": "net/minecraft/client/model/HumanoidModel$ArmPose",
+      "name": "CREATECITYEXPANSIONCORE_PAINT_RIFLE",
+      "constructor": "(ZLnet/neoforged/neoforge/client/IArmPoseTransformer;)V",
+      "parameters": {
+        "class": "com/example/examplemod/client/PaintRiflePose",
+        "field": "HOLD"
+      }
+    }
+  ]
+}

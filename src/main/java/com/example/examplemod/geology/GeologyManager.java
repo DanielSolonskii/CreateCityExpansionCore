@@ -16,24 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/**
- * Server-authoritative слой геологии.
- *
- * Архитектура сохранения и извлечения не изменилась:
- * это по-прежнему SavedData, стабильный depositId,
- * initialReserve / remainingReserve, общий reserve для всех
- * шахт одного месторождения и fail-safe при повреждённых данных.
- *
- * Изменилась только пространственная модель: месторождение
- * больше не равно ячейке. Оно владеет собственным центром и
- * геометрией, пересекает множество macro-cell, а macro-cell
- * используется только как пространственный индекс и как
- * владелец записи в сохранении.
- *
- * Инвариант: в {@link #depositsById} лежит ровно один
- * экземпляр на depositId. Все обращения и все шахты работают
- * с одним и тем же объектом, поэтому reserve общий.
- */
+/** Хранит материализованные жилы и индексирует их по ячейкам. */
 public final class GeologyManager extends SavedData {
 
     static final int CURRENT_FORMAT_VERSION =
@@ -202,14 +185,6 @@ public final class GeologyManager extends SavedData {
         return get(level).findDeposit(depositId);
     }
 
-    public static DepositExtractionResult extractDeposit(
-            ServerLevel level,
-            ResourceLocation depositId,
-            long requestedAmount
-    ) {
-        return get(level).extract(depositId, requestedAmount);
-    }
-
     /**
      * Мягкая стартовая гарантия ресурсов рядом с опорной точкой.
      *
@@ -312,7 +287,8 @@ public final class GeologyManager extends SavedData {
     public GeologicalRegion query(BlockPos pos) {
         int cellX = GeologyGenerator.cellXOf(pos.getX());
         int cellZ = GeologyGenerator.cellZOf(pos.getZ());
-        long key = GeologyGenerator.cellKey(cellX, cellZ);
+        // The view is contains-filtered for this exact horizontal block, not the entire cell.
+        long key = ((long) pos.getX() << 32) | (pos.getZ() & 0xffffffffL);
 
         GeologicalRegion cached = queryViews.get(key);
         if (cached != null) {
@@ -374,7 +350,7 @@ public final class GeologyManager extends SavedData {
 
     /**
      * Приводит macro-cell к материализованному состоянию.
-     * Уже известные месторождения не пересоздаются: reserve,
+     * Уже известные месторождения не пересоздаются:
      * форма и качество остаются ровно теми, что были сохранены.
      */
     void materialize(int cellX, int cellZ) {
@@ -454,53 +430,6 @@ public final class GeologyManager extends SavedData {
                 GeologyGenerator.cellKey(cellX, cellZ)
         );
         return deposits == null ? List.of() : List.copyOf(deposits);
-    }
-
-    DepositExtractionResult extract(
-            ResourceLocation depositId,
-            long requestedAmount
-    ) {
-        Objects.requireNonNull(depositId, "depositId");
-
-        if (!storageAvailable) {
-            return DepositExtractionResult.storageUnavailable();
-        }
-
-        Optional<GeologicalDeposit> depositResult = findDeposit(depositId);
-        if (depositResult.isEmpty()) {
-            return DepositExtractionResult.notFound();
-        }
-
-        GeologicalDeposit deposit = depositResult.get();
-        if (requestedAmount < 0) {
-            return DepositExtractionResult.forDeposit(
-                    DepositExtractionResult.Status.INVALID_REQUEST,
-                    0L,
-                    deposit
-            );
-        }
-        if (requestedAmount == 0) {
-            return DepositExtractionResult.forDeposit(
-                    DepositExtractionResult.Status.ZERO_REQUEST,
-                    0L,
-                    deposit
-            );
-        }
-        if (deposit.isDepleted()) {
-            return DepositExtractionResult.forDeposit(
-                    DepositExtractionResult.Status.DEPLETED,
-                    0L,
-                    deposit
-            );
-        }
-
-        long extracted = deposit.extract(requestedAmount);
-        setDirty();
-        return DepositExtractionResult.forDeposit(
-                DepositExtractionResult.Status.EXTRACTED,
-                extracted,
-                deposit
-        );
     }
 
     public boolean isStorageAvailable() {

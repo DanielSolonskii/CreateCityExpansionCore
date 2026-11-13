@@ -18,8 +18,8 @@ import java.util.Optional;
  *  искать аномалию, а не получать готовые координаты.
  *
  *  INSIDE — игрок внутри месторождения. Прибор показывает
- *  ресурс, локальный production potential, оценочный остаток
- *  запаса и класс размера. Максимум находится перемещением
+ *  ресурс, локальный production potential и класс размера.
+ *  Максимум находится перемещением
  *  и сравнением local potential, а не по стрелке к ядру.
  *
  * Координаты не передаются в сеть ни в одном из режимов.
@@ -34,11 +34,8 @@ public record GeologySurvey(
         int boundaryDistanceBlocks,
         int localPotentialPerHour,
         int peakPotentialPerHour,
-        long remainingReserve,
-        long initialReserve,
         DepositSizeClass sizeClass,
         DepositQualityClass qualityClass,
-        int estimatedLifetimeHours,
         int remainingUses
 ) {
 
@@ -84,8 +81,8 @@ public record GeologySurvey(
         if (localPotentialPerHour < 0 || peakPotentialPerHour < 0) {
             throw new IllegalArgumentException("potentials cannot be negative");
         }
-        if (estimatedLifetimeHours < 0 || remainingUses < 0) {
-            throw new IllegalArgumentException("counters cannot be negative");
+        if (remainingUses < 0) {
+            throw new IllegalArgumentException("remainingUses cannot be negative");
         }
         if (mode == Mode.NO_ANOMALY && resourceId != null) {
             throw new IllegalArgumentException(
@@ -155,11 +152,8 @@ public record GeologySurvey(
                     0,
                     0,
                     0,
-                    0L,
-                    0L,
                     DepositSizeClass.NORMAL,
                     DepositQualityClass.MODEST,
-                    0,
                     remainingUses
             );
         }
@@ -182,11 +176,8 @@ public record GeologySurvey(
                 nearest.boundaryDistance(),
                 0,
                 (int) Math.round(nearest.deposit().getPeakPotentialPerHour()),
-                nearest.deposit().getRemainingReserve(),
-                nearest.deposit().getInitialReserve(),
                 nearest.deposit().getSizeClass(),
                 nearest.deposit().getQualityClass(),
-                0,
                 remainingUses
         );
     }
@@ -198,11 +189,6 @@ public record GeologySurvey(
     ) {
         double local = deposit.localPotentialPerHour(origin.getX(), origin.getZ());
         int roundedLocal = (int) (Math.round(local / 100.0) * 100.0);
-        int roundedReserve = (int) (Math.round(
-                (double) deposit.getRemainingReserve() / 1_000.0
-        ) * 1_000L);
-        int lifetime = (int) Math.round(deposit.estimatedLifetimeHours(local));
-
         return new GeologySurvey(
                 Mode.INSIDE,
                 origin,
@@ -213,11 +199,8 @@ public record GeologySurvey(
                 0,
                 Math.max(0, roundedLocal),
                 (int) Math.round(deposit.getPeakPotentialPerHour()),
-                Math.max(0L, roundedReserve),
-                deposit.getInitialReserve(),
                 deposit.getSizeClass(),
                 deposit.getQualityClass(),
-                Math.max(0, lifetime),
                 remainingUses
         );
     }

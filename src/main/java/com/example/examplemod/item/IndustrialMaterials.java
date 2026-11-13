@@ -53,10 +53,10 @@ public final class IndustrialMaterials {
      *  5000 Fe/ч  -> 10 000 сырья/ч
      * 10000 Fe/ч  -> 20 000 сырья/ч
      *
-     * Уголь, известняк и медь намеренно не получают
+     * Уголь и известняк намеренно не получают
      * собственных bulk-предметов: уголь остаётся обычным
-     * углём, известняк — существующим CRUSHED_LIMESTONE,
-     * медь — обычным create:raw_zinc.
+     * углём, известняк отдаётся шлюзом как ванильный
+     * кальцит,
      *
      * Обратных рецептов нет: ни железо, ни ванильная
      * железная руда / raw iron не превращаются в сырьё.
@@ -102,49 +102,8 @@ public final class IndustrialMaterials {
             );
 
     /**
-     * Дроблёный известняк.
-     * Промежуточный продукт Create Crushing для получения негашёной извести.
-     */
-    public static final DeferredItem<Item> CRUSHED_LIMESTONE =
-            CreateCityExpansionCore.ITEMS.registerItem(
-                    "crushed_limestone",
-                    properties -> new Item(properties),
-                    new Item.Properties()
-            );
-
-    /**
-     * Промышленный кокс.
-     * Bootstrap-продукт угольной цепочки: 4 угля -> 2 кокса (Mixing, нагрев).
-     * Coke Oven Battery сохраняет промышленную эффективность 1:1.
-     * Создаёт отдельную угольную промышленность вместо
-     * прямого использования угля в металлургии.
-     */
-    public static final DeferredItem<Item> INDUSTRIAL_COKE =
-            CreateCityExpansionCore.ITEMS.registerItem(
-                    "industrial_coke",
-                    properties -> new Item(properties),
-                    new Item.Properties()
-            );
-
-    /**
-     * Стальная заготовка.
-     * Ранний steel commodity: 4 железа + 4 кокса + 1 негашёная известь
-     * -> 2 заготовки (Mixing, сверхнагрев).
-     *
-     * Будущий City Project «Metallurgical Works» сможет производить
-     * её эффективнее и большими партиями, но не будет единственным
-     * способом получить сталь.
-     */
-    public static final DeferredItem<Item> STEEL_BILLET =
-            CreateCityExpansionCore.ITEMS.registerItem(
-                    "steel_billet",
-                    properties -> new Item(properties),
-                    new Item.Properties()
-            );
-
-    /**
      * Стальная плита.
-     * 1 заготовка -> 1 плита (Pressing).
+     * 1 стальной слиток (тег c:ingots/steel) -> 1 плита (Pressing).
      */
     public static final DeferredItem<Item> STEEL_PLATE =
             CreateCityExpansionCore.ITEMS.registerItem(
@@ -155,7 +114,7 @@ public final class IndustrialMaterials {
 
     /**
      * Конструкционная балка.
-     * 1 заготовка -> 2 балки (Cutting).
+     * 1 стальной слиток (тег c:ingots/steel) -> 2 балки (Cutting).
      * Основной профильный материал строительства.
      */
     public static final DeferredItem<Item> STRUCTURAL_BEAM =

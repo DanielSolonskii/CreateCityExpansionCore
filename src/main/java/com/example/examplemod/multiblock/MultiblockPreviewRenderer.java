@@ -285,6 +285,10 @@ public class MultiblockPreviewRenderer {
             int z
     ) {
 
+        if (y == 1 && x >= 3 && x <= 6 && z >= 3 && z <= 6) {
+            return MinePreviewType.DRILL_UNIT;
+        }
+
         /*
          * ========================================
          * НИЖНИЙ СЛОЙ
@@ -563,6 +567,18 @@ public class MultiblockPreviewRenderer {
             return getPreviewColor(
                     expected
             );
+        }
+
+        if (expected == MinePreviewType.DRILL_UNIT) {
+            BlockPos origin = MineMultiblock.getOrigin(controllerPos, facing);
+            BlockPos delta = pos.subtract(origin);
+            Direction right = facing.getClockWise();
+            Direction back = facing.getOpposite();
+            int x = delta.getX() * right.getStepX() + delta.getZ() * right.getStepZ();
+            int z = delta.getX() * back.getStepX() + delta.getZ() * back.getStepZ();
+            BlockState required = MineBlueprints.current().baseState(new BlockPos(x, delta.getY(), z));
+            boolean matches = actual == MineBlueprints.rotate(required, MineBlueprints.rotation(facing));
+            return matches ? new float[]{.10F, 1F, .30F, .30F} : new float[]{1F, .08F, .08F, .40F};
         }
 
         /*

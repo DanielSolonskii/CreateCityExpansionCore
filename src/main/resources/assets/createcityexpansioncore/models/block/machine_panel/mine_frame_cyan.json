@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:block/mine_frame",
+  "textures": {
+    "panel": "createcityexpansioncore:block/machine_panel/cyan"
+  }
+}

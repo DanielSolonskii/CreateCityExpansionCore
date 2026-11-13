@@ -13,24 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.math.BigInteger;
 
-/**
- * Сериализация геологии.
- *
- * Текущий формат — 3: добавлены геометрия, класс качества,
- * класс размера и пиковый потенциал месторождения.
- *
- * Форматы 1 и 2 читаются без потерь: legacy-залежи сохраняют
- * идентификатор, ресурс, grade, initialReserve и
- * remainingReserve, а отсутствующую пространственную форму
- * получают детерминированной совместимостью. Запасы при
- * миграции не пересчитываются, если только старый формат 1
- * явно требовал этого (там размер запаса был производным).
- */
+/** Кодек геологических регионов и контуров жил. */
 final class GeologySavedDataCodec {
 
-    static final int CURRENT_FORMAT_VERSION = 4;
+    static final int CURRENT_FORMAT_VERSION = 7;
+    private static final int POLYGON_FORMAT_VERSION = 6;
     private static final int LEGACY_V2 = 2;
     private static final int LEGACY_V1 = 1;
 
@@ -50,17 +38,11 @@ final class GeologySavedDataCodec {
     ) {
         try {
             if (!tag.contains("FormatVersion")) {
-                /*
-                 * Версии без формата тоже пересоздаются: это форматы 1-2 в
-                 * disguise, а в них залежи лежат друг на друге ровно так же.
-                 * Отдельная миграция для них больше не нужна.
-                 */
                 if (tag.isEmpty()) {
                     return LoadResult.available(List.of(), false);
                 }
                 LOGGER.info(
-                        "Regenerating geology for dimension {}: unversioned data "
-                                + "precedes the per-resource seeding fix",
+                        "Regenerating geology for dimension {}: unversioned data",
                         dimensionId
                 );
                 return LoadResult.available(List.of(), true);
@@ -74,47 +56,6 @@ final class GeologySavedDataCodec {
                 );
             }
 
-            /*
-             * Формат 4 пересоздаёт геологию целиком.
-             *
-             * <p>В форматах 1-3 идентичность ресурса не входила в seed, поэтому
-             * все пять ресурсов одной macro-cell получали одно положение, форму,
-             * качество и запас. Уголь лежал ровно на железе, и сканер показывал
-             * только железо — оно первое в списке ресурсов, а потенциалы совпадали
-             * до бита. Сохранённые залежи починить нельзя: они физически лежат
-             * друг на друге, и «развести» их, не сдвинув ни одну, невозможно.
-             *
-             * <p>Поэтому старые записи отбрасываются, а залежи строятся заново по
-             * требованию. Запас и выработка на старых местах теряются — это
-             * осознанная цена: править геологию по частям означало бы оставить
-             * рядом старый и новый миры одновременно.
-             *
-             * <p>Измерение проверяется и здесь: файл от другого измерения — это
-             * не «старый формат», а ошибка, и молча пересоздавать геологию
-             * Nether в Overworld было бы хуже, чем отказать.
-             */
-            if (formatVersion < CURRENT_FORMAT_VERSION) {
-                ResourceLocation previousDimension = readResourceLocation(
-                        tag,
-                        "Dimension"
-                );
-                if (!previousDimension.equals(dimensionId)) {
-                    throw new GeologyDataException(
-                            "Stored dimension " + previousDimension
-                                    + " does not match " + dimensionId
-                    );
-                }
-                LOGGER.info(
-                        "Regenerating geology for dimension {}: stored format {} "
-                                + "placed every resource of a cell at one point; "
-                                + "deposits are rebuilt as {} cells are visited",
-                        dimensionId,
-                        formatVersion,
-                        CURRENT_FORMAT_VERSION
-                );
-                return LoadResult.available(List.of(), true);
-            }
-
             ResourceLocation storedDimension = readResourceLocation(
                     tag,
                     "Dimension"
@@ -126,28 +67,17 @@ final class GeologySavedDataCodec {
                 );
             }
 
-            boolean legacyFormat = formatVersion != CURRENT_FORMAT_VERSION;
-            boolean migrateReserves = formatVersion == LEGACY_V1;
-
-            List<LoadedCell> cells = readRegions(
-                    tag,
-                    dimensionId,
-                    legacyFormat,
-                    migrateReserves
-            );
-
-            if (legacyFormat) {
+            if (formatVersion < POLYGON_FORMAT_VERSION) {
                 LOGGER.info(
-                        "Migrated geology data from format {} to {} for dimension {}; "
-                                + "legacy deposits are preserved with their ids, grades "
-                                + "and remaining reserves",
-                        formatVersion,
-                        CURRENT_FORMAT_VERSION,
-                        dimensionId
+                        "Regenerating geology for dimension {} from format {} to {}; "
+                                + "old deposits and reserves are discarded",
+                        dimensionId, formatVersion, CURRENT_FORMAT_VERSION
                 );
+                return LoadResult.available(List.of(), true);
             }
 
-            return LoadResult.available(cells, legacyFormat || migrateReserves);
+            return LoadResult.available(readRegions(tag, dimensionId, false),
+                    formatVersion < CURRENT_FORMAT_VERSION);
         } catch (GeologyDataException | RuntimeException exception) {
             LOGGER.error(
                     "Geology data for dimension {} is invalid; entering read-only "
@@ -184,8 +114,6 @@ final class GeologySavedDataCodec {
                         deposit.getResourceId().toString()
                 );
                 depositTag.putInt("DepositIndex", deposit.getDepositIndex());
-                depositTag.putLong("InitialReserve", deposit.getInitialReserve());
-                depositTag.putLong("RemainingReserve", deposit.getRemainingReserve());
                 depositTag.putDouble("Grade", deposit.getGrade());
                 depositTag.putInt("Depth", deposit.getDepth());
                 depositTag.putDouble("Hardness", deposit.getHardness());
@@ -214,6 +142,11 @@ final class GeologySavedDataCodec {
                 depositTag.putDouble("Rotation", shape.rotationRadians());
                 depositTag.putDouble("CoreRadius", shape.coreRadius());
                 depositTag.putLong("ShapeSeed", shape.shapeSeed());
+                if (shape.footprint() != null) {
+                    depositTag.putInt("VeinOriginX", shape.footprint().originX());
+                    depositTag.putInt("VeinOriginZ", shape.footprint().originZ());
+                    depositTag.putLongArray("VeinSamples", shape.footprint().sampleWords());
+                }
 
                 depositList.add(depositTag);
             }
@@ -229,8 +162,7 @@ final class GeologySavedDataCodec {
     private static List<LoadedCell> readRegions(
             CompoundTag tag,
             ResourceLocation dimensionId,
-            boolean legacyFormat,
-            boolean migrateReserves
+            boolean legacyFormat
     ) throws GeologyDataException {
         requireType(tag, "Regions", Tag.TAG_LIST);
         ListTag regionList = (ListTag) tag.get("Regions");
@@ -259,7 +191,6 @@ final class GeologySavedDataCodec {
             List<GeologicalDeposit> deposits = readDeposits(
                     regionTag,
                     legacyFormat,
-                    migrateReserves,
                     depositIds,
                     legacyFormat
                             ? coordinates.x() * LEGACY_FIELD_SIZE + LEGACY_FIELD_SIZE / 2
@@ -339,7 +270,6 @@ final class GeologySavedDataCodec {
     private static List<GeologicalDeposit> readDeposits(
             CompoundTag regionTag,
             boolean legacyFormat,
-            boolean migrateReserves,
             Map<ResourceLocation, Boolean> allDepositIds,
             int legacyCenterX,
             int legacyCenterZ
@@ -387,7 +317,6 @@ final class GeologySavedDataCodec {
                     depositId,
                     resourceId,
                     depositIndex,
-                    migrateReserves,
                     legacyCenterX,
                     legacyCenterZ
             );
@@ -404,19 +333,14 @@ final class GeologySavedDataCodec {
             ResourceLocation id,
             ResourceLocation resourceId,
             int depositIndex,
-            boolean migrateReserves,
             int legacyCenterX,
             int legacyCenterZ
     ) throws GeologyDataException {
-        requireType(tag, "InitialReserve", Tag.TAG_LONG);
-        requireType(tag, "RemainingReserve", Tag.TAG_LONG);
         requireType(tag, "Grade", Tag.TAG_DOUBLE);
         requireType(tag, "Depth", Tag.TAG_INT);
         requireType(tag, "Hardness", Tag.TAG_DOUBLE);
         requireType(tag, "SustainableExtractionRate", Tag.TAG_DOUBLE);
 
-        long initialReserve = tag.getLong("InitialReserve");
-        long remainingReserve = tag.getLong("RemainingReserve");
         double grade = tag.getDouble("Grade");
         int depth = tag.getInt("Depth");
         double hardness = tag.getDouble("Hardness");
@@ -467,32 +391,11 @@ final class GeologySavedDataCodec {
                 legacyCenterZ
         );
 
-        if (migrateReserves) {
-            if (initialReserve <= 0L || remainingReserve < 0L
-                    || remainingReserve > initialReserve) {
-                throw new GeologyDataException(
-                        "Cannot migrate invalid reserve values for " + id
-                );
-            }
-            long migratedInitial = GeologyGenerator.reserveForGrade(grade);
-            long migratedRemaining = BigInteger.valueOf(remainingReserve)
-                    .multiply(BigInteger.valueOf(migratedInitial))
-                    .divide(BigInteger.valueOf(initialReserve))
-                    .longValueExact();
-            if (remainingReserve > 0L && migratedRemaining == 0L) {
-                migratedRemaining = 1L;
-            }
-            initialReserve = migratedInitial;
-            remainingReserve = Math.min(migratedRemaining, migratedInitial);
-        }
-
         try {
             return new GeologicalDeposit(
                     id,
                     resourceId,
                     depositIndex,
-                    initialReserve,
-                    remainingReserve,
                     grade,
                     depth,
                     hardness,
@@ -517,6 +420,19 @@ final class GeologySavedDataCodec {
             int legacyCenterX,
             int legacyCenterZ
     ) {
+        if (tag.contains("VeinSamples") || id.getPath().startsWith("deposit/v4/")) {
+            int x = tag.getInt("CenterX");
+            int z = tag.getInt("CenterZ");
+            if (!tag.contains("VeinOriginX", Tag.TAG_INT) || !tag.contains("VeinOriginZ", Tag.TAG_INT)) {
+                throw new IllegalArgumentException("Missing origin for vein " + id);
+            }
+            VeinFootprint footprint = new VeinFootprint(tag.getInt("VeinOriginX"),
+                    tag.getInt("VeinOriginZ"), tag.getLongArray("VeinSamples"));
+            return new DepositShape(x, z, tag.getInt("RadiusX"), tag.getInt("RadiusZ"),
+                    tag.getDouble("Rotation"), tag.getDouble("CoreRadius"),
+                    tag.getLong("ShapeSeed"), footprint);
+        }
+
         if (!tag.contains("CenterX", Tag.TAG_INT)
                 || !tag.contains("ShapeSeed", Tag.TAG_LONG)) {
             /*

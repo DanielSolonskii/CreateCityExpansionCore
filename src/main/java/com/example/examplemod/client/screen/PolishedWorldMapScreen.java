@@ -563,6 +563,7 @@ if (this.searchOpen) updateSearchResults();
         this.map.render(graphics, mapLeft, mapTop, mapWidth, Math.max(1, mapBottom - mapTop), mouseX, mouseY);
         com.example.examplemod.client.screen.ProjectWorkspaceClient.render(graphics,this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
         com.example.examplemod.client.logistics.LogisticsMapOverlay.render(graphics,this.map,this.data.getDimensionId(),mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
+        com.example.examplemod.client.map.GeologyWideScanOverlay.render(graphics,this.map,this.data.getDimensionId(),mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
         // 3-4: markers are inside the panel render above; 5-6: chrome and the context column.
         renderTitle(graphics);
         renderModeToolbar(graphics, mouseX, mouseY);

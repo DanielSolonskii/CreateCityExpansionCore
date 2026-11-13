@@ -2,7 +2,7 @@
   "type": "create:cutting",
   "ingredients": [
     {
-      "item": "createcityexpansioncore:steel_billet"
+      "tag": "c:ingots/steel"
     }
   ],
   "results": [

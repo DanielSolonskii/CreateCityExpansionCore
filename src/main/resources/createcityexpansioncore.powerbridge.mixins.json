@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.example.examplemod.electrical.bridge.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.example.examplemod.electrical.bridge.mixin.PowerMixinPlugin",
+  "mixins": [
+    "BlockFeCapabilityMixin",
+    "EntityFeCapabilityMixin",
+    "ItemFeCapabilityMixin",
+    "FeStorageMixin",
+    "EeFeConverterMixin",
+    "TfmgFeBlocksMixin",
+    "TfmgNetworkMixin",
+    "TfmgCableEndpointMixin",
+    "TfmgSpoolStateMixin"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}

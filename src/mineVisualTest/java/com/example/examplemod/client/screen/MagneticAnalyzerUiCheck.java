@@ -40,8 +40,7 @@ public final class MagneticAnalyzerUiCheck {
             "complete", "scanning", "reading",
             "mode.inside", "mode.outside", "mode.none",
             "resource", "direction", "distance", "size",
-            "local_potential", "peak_potential", "remaining",
-            "lifetime", "lifetime_hours",
+            "local_potential", "peak_potential",
             "no_anomaly", "no_anomaly_hint",
             "no_core_hint", "search_hint",
             "direction.east", "direction.east_northeast",
@@ -202,7 +201,7 @@ public final class MagneticAnalyzerUiCheck {
         Map<String, String> en = lang("en_us.json");
         for (String suffix : List.of(
                 "resource", "direction", "distance", "size",
-                "local_potential", "peak_potential", "remaining", "lifetime"
+                "local_potential", "peak_potential"
         )) {
             require(!en.get(PREFIX + suffix).isBlank(),
                     "data row label " + suffix + " has text");

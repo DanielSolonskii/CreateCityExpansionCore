@@ -1,0 +1,89 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "net.createmod.ponder",
+    "module": "ponder-neoforge",
+    "version": "1.0.82+mc1.21.1",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14.3"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 21,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api"
+      },
+      "files": [
+        {
+          "name": "ponder-neoforge-1.0.82+mc1.21.1.jar",
+          "url": "ponder-neoforge-1.0.82+mc1.21.1.jar",
+          "size": 820109,
+          "sha512": "d335337031fcef2b2d87f5d2d54b1dfecd024851c9d9892dd52060172186b2fc98703e8bd20df5c18dadb2b634a74578302b618d104b817279f50c6ae2575546",
+          "sha256": "0cf4611ad853042b689ac386184c5bbe02950efcffddb49e5f604e82baddb0dc",
+          "sha1": "b10a04f40b9d6d33c346fb38df33f10f7e51b713",
+          "md5": "b6bc4bbb76ccd1e8dd47bf966a54df84"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 21,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "dev.engine-room.flywheel",
+          "module": "flywheel-neoforge-1.21.1",
+          "version": {
+            "requires": "1.0.4"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "ponder-neoforge-1.0.82+mc1.21.1.jar",
+          "url": "ponder-neoforge-1.0.82+mc1.21.1.jar",
+          "size": 820109,
+          "sha512": "d335337031fcef2b2d87f5d2d54b1dfecd024851c9d9892dd52060172186b2fc98703e8bd20df5c18dadb2b634a74578302b618d104b817279f50c6ae2575546",
+          "sha256": "0cf4611ad853042b689ac386184c5bbe02950efcffddb49e5f604e82baddb0dc",
+          "sha1": "b10a04f40b9d6d33c346fb38df33f10f7e51b713",
+          "md5": "b6bc4bbb76ccd1e8dd47bf966a54df84"
+        }
+      ]
+    },
+    {
+      "name": "sourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "ponder-neoforge-1.0.82+mc1.21.1-sources.jar",
+          "url": "ponder-neoforge-1.0.82+mc1.21.1-sources.jar",
+          "size": 372242,
+          "sha512": "fd6e59ad6a66a43ddc75b42a5e5511b2a3f9b730580c0ddfe518edb07e20b39d54ed0a793b2d6710ecc1a92374d584e19ef7a490ee04d2665f13dddb7e1db972",
+          "sha256": "4a89eeddecc9488be50831d51a5dafbe6000ca39d0a369a7cc94ad701f8b3af0",
+          "sha1": "2c0f4e82386a04486acfbb77251c6e2e0c624aad",
+          "md5": "785e12e54ae72e642d94b3a81efa26b0"
+        }
+      ]
+    }
+  ]
+}

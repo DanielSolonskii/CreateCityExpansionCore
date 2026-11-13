@@ -31,9 +31,23 @@ repositories {
     // This is also where Create: Ponder is published. Ponder is a hard requirement of
     // Create; without it at runtime mod loading fails with
     // "Missing or unsupported mandatory dependencies: Mod ID: 'ponder'".
+    // Use the checked-in Create slim and Ponder mirror for compilation.
+    maven {
+        name = "localCcec"
+        url = uri("libs/m2")
+        content {
+            // Runtime resolution needs the full Create jar from the upstream Maven repository.
+            notForConfigurations("devRuntimeMods")
+        }
+    }
     maven {
         name = "createmod"
         url = "https://maven.createmod.net"
+    }
+    maven {
+        name = "CurseMaven"
+        url = "https://cursemaven.com"
+        content { includeGroup "curse.maven" }
     }
 }
 
@@ -152,6 +166,13 @@ dependencies {
     // Create: Electro Energetics
     implementation files("libs/electroenergetics-1.21.1-1.1.2.jar")
 
+    def tfmgJar = file(providers.gradleProperty("tfmgJar").getOrElse("../tfmg-1.2.0.jar"))
+    if (tfmgJar.isFile()) {
+        compileOnly files(tfmgJar)
+    } else {
+        compileOnly "curse.maven:create-industry-693815:7430073"
+    }
+
     // Create Simulated / Aeronautics (optional compat): compile-only,
     // в рантайме эти моды предоставляет сборка игрока. Mixin'ы в их
     // классы охраняет TransportMixinPlugin (см. mixins.json).
@@ -243,6 +264,26 @@ tasks.register('checkMineVisualCoordinates', JavaExec) {
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
 }
 tasks.named('check') { dependsOn tasks.named('checkMineVisualCoordinates') }
+
+tasks.register('checkBlueprintProgression', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.mine.BlueprintProgressionCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkBlueprintProgression').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkBlueprintProgression') }
+
+tasks.register('checkMineBlueprintEditor', JavaExec) {
+    dependsOn tasks.named('mineVisualTestClasses')
+    classpath = sourceSets.mineVisualTest.runtimeClasspath
+    mainClass = 'com.example.examplemod.mine.MineBlueprintEditorCheck'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    workingDir = layout.buildDirectory.dir('checks/checkMineBlueprintEditor').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+tasks.named('check') { dependsOn tasks.named('checkMineBlueprintEditor') }
 
 // UI-редактор: модель дельт, JSON, файлы, экспорт и allowlist — headless.
 tasks.register('checkUiEdit', JavaExec) {
@@ -797,6 +838,7 @@ def prepareRailHeadlessLibraries = tasks.register('prepareRailHeadlessLibraries'
     eachFile { details -> details.relativePath = new org.gradle.api.file.RelativePath(true, details.name) }
     into layout.buildDirectory.dir('logistics-implementation/native-libs')
 }
+def railTestClasspathReceipt = layout.buildDirectory.file('logistics-implementation/rail-test-classpath.txt')
 
 // Keep existing domain checks in the standard build; a test source alone is not CI coverage.
 [
@@ -824,7 +866,7 @@ def prepareRailHeadlessLibraries = tasks.register('prepareRailHeadlessLibraries'
             dependsOn prepareRailHeadlessLibraries
             classpath += fileTree(layout.buildDirectory.dir('logistics-implementation/native-libs')) { include '*.jar' }
             doFirst {
-                def receipt = layout.buildDirectory.file('logistics-implementation/rail-test-classpath.txt').get().asFile
+                def receipt = railTestClasspathReceipt.get().asFile
                 receipt.parentFile.mkdirs()
                 receipt.text = classpath.asPath
             }

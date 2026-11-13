@@ -63,7 +63,8 @@ public record MineControllerSnapshot(
         if (actualExtraction < 0) {
             throw new IllegalArgumentException("actualExtraction cannot be negative");
         }
-        if (selectedDepositId.isPresent()
+        // A commissioned mine keeps its deposit binding even when the region cannot resolve it.
+        if (!commissioned && selectedDepositId.isPresent()
                 && region.flatMap(value -> value.findDeposit(
                         selectedDepositId.get()
                 )).isEmpty()) {

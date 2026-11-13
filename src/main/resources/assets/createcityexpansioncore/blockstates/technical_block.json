@@ -1,7 +1,244 @@
 {
   "variants": {
-    "": {
+    "color=white,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_white"
+    },
+    "color=white,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_white",
+      "y": 90
+    },
+    "color=white,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_white",
+      "y": 180
+    },
+    "color=white,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_white",
+      "y": 270
+    },
+    "color=orange,facing=north": {
       "model": "createcityexpansioncore:block/technical_block"
+    },
+    "color=orange,facing=east": {
+      "model": "createcityexpansioncore:block/technical_block",
+      "y": 90
+    },
+    "color=orange,facing=south": {
+      "model": "createcityexpansioncore:block/technical_block",
+      "y": 180
+    },
+    "color=orange,facing=west": {
+      "model": "createcityexpansioncore:block/technical_block",
+      "y": 270
+    },
+    "color=magenta,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_magenta"
+    },
+    "color=magenta,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_magenta",
+      "y": 90
+    },
+    "color=magenta,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_magenta",
+      "y": 180
+    },
+    "color=magenta,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_magenta",
+      "y": 270
+    },
+    "color=light_blue,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_blue"
+    },
+    "color=light_blue,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_blue",
+      "y": 90
+    },
+    "color=light_blue,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_blue",
+      "y": 180
+    },
+    "color=light_blue,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_blue",
+      "y": 270
+    },
+    "color=yellow,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_yellow"
+    },
+    "color=yellow,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_yellow",
+      "y": 90
+    },
+    "color=yellow,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_yellow",
+      "y": 180
+    },
+    "color=yellow,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_yellow",
+      "y": 270
+    },
+    "color=lime,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_lime"
+    },
+    "color=lime,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_lime",
+      "y": 90
+    },
+    "color=lime,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_lime",
+      "y": 180
+    },
+    "color=lime,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_lime",
+      "y": 270
+    },
+    "color=pink,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_pink"
+    },
+    "color=pink,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_pink",
+      "y": 90
+    },
+    "color=pink,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_pink",
+      "y": 180
+    },
+    "color=pink,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_pink",
+      "y": 270
+    },
+    "color=gray,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_gray"
+    },
+    "color=gray,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_gray",
+      "y": 90
+    },
+    "color=gray,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_gray",
+      "y": 180
+    },
+    "color=gray,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_gray",
+      "y": 270
+    },
+    "color=light_gray,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_gray"
+    },
+    "color=light_gray,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_gray",
+      "y": 90
+    },
+    "color=light_gray,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_gray",
+      "y": 180
+    },
+    "color=light_gray,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_light_gray",
+      "y": 270
+    },
+    "color=cyan,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_cyan"
+    },
+    "color=cyan,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_cyan",
+      "y": 90
+    },
+    "color=cyan,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_cyan",
+      "y": 180
+    },
+    "color=cyan,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_cyan",
+      "y": 270
+    },
+    "color=purple,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_purple"
+    },
+    "color=purple,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_purple",
+      "y": 90
+    },
+    "color=purple,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_purple",
+      "y": 180
+    },
+    "color=purple,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_purple",
+      "y": 270
+    },
+    "color=blue,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_blue"
+    },
+    "color=blue,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_blue",
+      "y": 90
+    },
+    "color=blue,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_blue",
+      "y": 180
+    },
+    "color=blue,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_blue",
+      "y": 270
+    },
+    "color=brown,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_brown"
+    },
+    "color=brown,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_brown",
+      "y": 90
+    },
+    "color=brown,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_brown",
+      "y": 180
+    },
+    "color=brown,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_brown",
+      "y": 270
+    },
+    "color=green,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_green"
+    },
+    "color=green,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_green",
+      "y": 90
+    },
+    "color=green,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_green",
+      "y": 180
+    },
+    "color=green,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_green",
+      "y": 270
+    },
+    "color=red,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_red"
+    },
+    "color=red,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_red",
+      "y": 90
+    },
+    "color=red,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_red",
+      "y": 180
+    },
+    "color=red,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_red",
+      "y": 270
+    },
+    "color=black,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_black"
+    },
+    "color=black,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_black",
+      "y": 90
+    },
+    "color=black,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_black",
+      "y": 180
+    },
+    "color=black,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/technical_block_black",
+      "y": 270
     }
   }
 }

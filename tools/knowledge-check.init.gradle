@@ -1,0 +1,13 @@
+gradle.projectsEvaluated {
+    def p=gradle.rootProject
+    def checks=p.sourceSets.create('knowledgeTest')
+    checks.java.srcDir('src/knowledgeTest/java')
+    checks.compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+    checks.runtimeClasspath += p.sourceSets.main.runtimeClasspath
+    p.tasks.register('checkKnowledgeSync', JavaExec) {
+        dependsOn p.tasks.named(checks.classesTaskName)
+        classpath=checks.runtimeClasspath
+        mainClass='com.example.examplemod.knowledge.KnowledgeSyncCheck'
+        javaLauncher=p.javaToolchains.launcherFor { languageVersion=JavaLanguageVersion.of(21) }
+    }
+}

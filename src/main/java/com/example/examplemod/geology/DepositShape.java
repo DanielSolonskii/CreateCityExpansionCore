@@ -3,14 +3,8 @@ package com.example.examplemod.geology;
 /**
  * Пространственная геометрия месторождения.
  *
- * Намеренно простая и поддерживаемая модель без полигонов и GIS:
- * эллипс с полуосями radiusX / radiusZ, поворотом, гладким
- * детерминированным искажением границы и отдельным
- * богатым ядром.
- *
- * Геометрия полностью выводится из shapeSeed и координат,
- * поэтому она идентична при любом пересчёте, в любом
- * диапазоне мира и после рестарта сервера.
+ * Процедурные жилы используют полигональную маску.
+ * Эллиптическая форма поддерживается для залежей, заданных вручную.
  */
 public record DepositShape(
         int centerX,
@@ -19,7 +13,8 @@ public record DepositShape(
         int radiusZ,
         double rotationRadians,
         double coreRadius,
-        long shapeSeed
+        long shapeSeed,
+        VeinFootprint footprint
 ) {
 
     /** Диаметр богатого ядра: 80-250 блоков. */
@@ -42,6 +37,12 @@ public record DepositShape(
     /** Нижняя и верхняя границы доли радиуса, занятой ядром. */
     public static final double MIN_CORE_FRACTION = 0.15;
     public static final double MAX_CORE_FRACTION = 0.60;
+    static final double MIN_VEIN_CORE_CLEARANCE = 80.0;
+
+    public DepositShape(int centerX, int centerZ, int radiusX, int radiusZ,
+                        double rotationRadians, double coreRadius, long shapeSeed) {
+        this(centerX, centerZ, radiusX, radiusZ, rotationRadians, coreRadius, shapeSeed, null);
+    }
 
     public DepositShape {
         if (radiusX <= 0 || radiusZ <= 0) {
@@ -56,6 +57,9 @@ public record DepositShape(
         if (coreRadius < MIN_CORE_FRACTION || coreRadius > MAX_CORE_FRACTION) {
             throw new IllegalArgumentException("coreRadius is out of range");
         }
+        if (footprint != null && !footprint.contains(centerX, centerZ)) {
+            throw new IllegalArgumentException("Deposit center must belong to its footprint");
+        }
     }
 
     /**
@@ -66,6 +70,17 @@ public record DepositShape(
      * потенциал по соседним блокам отличается плавно.
      */
     public double normalizedRadius(double worldX, double worldZ) {
+        if (footprint != null) {
+            double x = worldX + 0.5;
+            double z = worldZ + 0.5;
+            double edgeDistance = footprint.distanceToBoundary(x, z);
+            if (!footprint.contains(x, z)) {
+                return 1.0 + edgeDistance / Math.max(radiusX, radiusZ);
+            }
+            double rampWidth = Math.max(MIN_VEIN_CORE_CLEARANCE,
+                    footprint.coreClearance() * (1.0 - coreRadius));
+            return Math.max(0.0, 1.0 - (1.0 - coreRadius) * edgeDistance / rampWidth);
+        }
         double dx = worldX - centerX;
         double dz = worldZ - centerZ;
 
@@ -85,7 +100,9 @@ public record DepositShape(
     }
 
     public boolean contains(double worldX, double worldZ) {
-        return normalizedRadius(worldX, worldZ) < 1.0;
+        return footprint != null
+                ? footprint.contains(worldX + 0.5, worldZ + 0.5)
+                : normalizedRadius(worldX, worldZ) < 1.0;
     }
 
     /**

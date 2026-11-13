@@ -1,11 +1,13 @@
 package com.example.examplemod.client.render;
 
+import com.example.examplemod.multiblock.BlueprintCatalog;
 import com.example.examplemod.multiblock.MineMultiblock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashSet;
+import java.util.List;
 
 /** Headless checks against actual canonical coordinate helpers (no test-library dependency). */
 public final class MineVisualCoordinatesCheck {
@@ -30,13 +32,23 @@ public final class MineVisualCoordinatesCheck {
                 "Foreign models must remain untouched");
         BlockPos controller = new BlockPos(-19, 73, 31); // Includes negative coordinates/chunk boundaries.
         int drills = 0, ports = 0;
+        BlockPos anchor = new BlockPos(4, 0, 4);
+        var projection = new BlueprintCatalog.Plan(BlueprintCatalog.Structure.MINE,
+                BlueprintCatalog.Tier.III, anchor, List.of());
         for (Direction facing : Direction.Plane.HORIZONTAL) {
+            BlockPos target = new BlockPos(-33, 66, -17);
+            require(projection.worldPosition(anchor, target, facing).equals(target),
+                    "The bottom center of the plan must coincide with the selected world block");
+            require(projection.worldPosition(anchor.offset(1, 1, -2), target, facing)
+                            .equals(target.above().relative(facing.getClockWise()).relative(facing, 2)),
+                    "Projection cells must use the same rotated coordinates as the built machine");
             BlockPos origin = MineMultiblock.getOrigin(controller, facing);
-            for (int x = 3; x <= 6; x++) {
-                for (int z = 3; z <= 6; z++) {
-                    Vec3 expected = Vec3.atLowerCornerOf(MineMultiblock.getWorldPosition(origin, facing, x, 0, z))
-                            .add(.5, 1, .5);
-                    Vec3 rendered = IndustrialMineAnchors.transform(controller, facing, new Vec3(x - 3.5, 0, z + .5));
+            for (int x = 3; x <= 5; x += 2) {
+                for (int z = 3; z <= 5; z += 2) {
+                    Vec3 first = Vec3.atCenterOf(MineMultiblock.getWorldPosition(origin, facing, x, 0, z));
+                    Vec3 opposite = Vec3.atCenterOf(MineMultiblock.getWorldPosition(origin, facing, x + 1, 0, z + 1));
+                    Vec3 expected = first.add(opposite).scale(.5).add(0, -.5, 0);
+                    Vec3 rendered = IndustrialMineAnchors.transform(controller, facing, new Vec3(x - 3, -1, z + 1));
                     require(expected.distanceToSqr(rendered) < 1e-12, "Drill shaft misses canonical Drill Unit");
                     drills++;
                 }

@@ -1,6 +1,7 @@
 package com.example.examplemod.multiblock;
 
 import com.example.examplemod.CreateCityExpansionCore;
+import com.example.examplemod.machine.MachinePanels;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -95,6 +96,10 @@ public class MineMultiblock {
                         controllerPos,
                         facing
                 );
+        MineBlueprints.Layout blueprint = MineBlueprints.current();
+        if (!blueprint.legacyBase()) {
+            return validateBlueprint(level, origin, facing, blueprint);
+        }
 
         /*
          * 4. Проверяем всю структуру.
@@ -117,7 +122,6 @@ public class MineMultiblock {
         int[] powerLocal = detectedPowerPorts.size() == 1
                 ? findLocalInterfacePosition(origin, facing, detectedPowerPorts.getFirst())
                 : new int[]{-1, -1};
-
         for (int y = 0; y < HEIGHT; y++) {
 
             for (int x = 0; x < WIDTH; x++) {
@@ -143,37 +147,7 @@ public class MineMultiblock {
 
                     requiredBlocks++;
 
-                    BlockState actual =
-                            level.getBlockState(pos);
-
-                    /*
-                     * Определяем, какой блок
-                     * здесь должен быть.
-                     */
-                    ExpectedBlock expected =
-                            getExpectedBlock(
-                                    x,
-                                    y,
-                                    z
-                            );
-
-                    /*
-                     * Специальные интерфейсы
-                     * проверяем отдельно.
-                     */
-                    if (expected == ExpectedBlock.INTERFACE) {
-                        if (isCorrectInterfaceBlock(actual)) {
-                            correctBlocks++;
-                        } else {
-                            incorrectBlocks.add(pos);
-                        }
-                        continue;
-                    }
-
-                    if (isCorrectBlock(
-                            actual,
-                            expected
-                    )) {
+                    if (matchesBlueprintCell(blueprint, new BlockPos(x, y, z), level.getBlockState(pos), facing)) {
 
                         correctBlocks++;
 
@@ -238,6 +212,17 @@ public class MineMultiblock {
             );
         }
 
+        for (BlockPos port : List.of(powerPort, gateways.get(0))) {
+            var role = port.equals(powerPort)
+                    ? com.example.examplemod.machine.MachineDisplaySource.Role.ENERGY
+                    : com.example.examplemod.machine.MachineDisplaySource.Role.OUTPUT;
+            if (com.example.examplemod.machine.MachineDisplayBlock.adjacentDisplay(port, role,
+                    pos -> level.hasChunkAt(pos) ? level.getBlockState(pos) : null) == null) {
+                return ValidationResult.failed("Рядом с каждым портом нужен соответствующий технический экран.",
+                        correctBlocks, requiredBlocks, List.of(port));
+            }
+        }
+
         /*
          * =====================================================
          * ПРОВЕРКА КОНТРОЛЛЕРА
@@ -295,139 +280,44 @@ public class MineMultiblock {
      * =========================================================
      */
 
-    private static ExpectedBlock getExpectedBlock(
-            int x,
-            int y,
-            int z
-    ) {
-
-        /*
-         * ========================================
-         * Y = 0
-         * ========================================
-         */
-
-        if (y == 0) {
-
-            /*
-             * Центральные 4×4 —
-             * Drill Unit.
-             */
-            if (x >= 3 && x <= 6
-                    && z >= 3 && z <= 6) {
-
-                return ExpectedBlock.DRILL_UNIT;
-            }
-
-            return ExpectedBlock.FRAME;
+    private static ValidationResult validateBlueprint(Level level, BlockPos origin, Direction facing,
+                                                       MineBlueprints.Layout blueprint) {
+        var blocks = blueprint.blocks(BlueprintCatalog.Tier.I);
+        var rotation = MineBlueprints.rotation(facing);
+        List<BlockPos> incorrect = new ArrayList<>();
+        for (var entry : blocks.entrySet()) {
+            BlockPos local = entry.getKey();
+            BlockPos pos = getWorldPosition(origin, facing, local.getX(), local.getY(), local.getZ());
+            if (!level.hasChunkAt(pos)) return ValidationResult.failed("Часть структуры не загружена.");
+            if (!matchesState(entry.getValue(), level.getBlockState(pos), rotation)) incorrect.add(pos);
         }
-
-        /*
-         * ========================================
-         * Y = 1
-         * ========================================
-         */
-
-        if (y == 1) {
-
-            /*
-             * Controller.
-             */
-            if (x == CONTROLLER_X
-                    && z == CONTROLLER_Z) {
-
-                return ExpectedBlock.CONTROLLER;
-            }
-
-            /*
-             * Внутренние 8×8 —
-             * Technical Block.
-             */
-            if (x >= 1 && x <= 8
-                    && z >= 1 && z <= 8) {
-
-                return ExpectedBlock.TECHNICAL;
-            }
-
-            /*
-             * Внешний контур.
-             *
-             * Здесь:
-             * Frame
-             * Power Port
-             * Gateway
-             */
-            return ExpectedBlock.INTERFACE;
+        int total = blocks.size();
+        if (!incorrect.isEmpty()) {
+            return ValidationResult.failed("В конструкции есть неправильные блоки.",
+                    total - incorrect.size(), total, List.copyOf(incorrect));
         }
-
-        /*
-         * ========================================
-         * Y = 2
-         * ========================================
-         */
-
-        if (y == 2) {
-
-            if (x >= 1 && x <= 8
-                    && z >= 1 && z <= 8) {
-
-                return ExpectedBlock.TECHNICAL;
-            }
-
-            return ExpectedBlock.FRAME;
-        }
-
-        return ExpectedBlock.NONE;
+        BlockPos power = blueprint.powerPort();
+        BlockPos gateway = blueprint.gateway();
+        return ValidationResult.success(total, total,
+                getWorldPosition(origin, facing, power.getX(), power.getY(), power.getZ()),
+                getWorldPosition(origin, facing, gateway.getX(), gateway.getY(), gateway.getZ()));
     }
 
-    /*
-     * =========================================================
-     * BLOCK CHECK
-     * =========================================================
-     */
+    private static boolean matchesBlueprintCell(MineBlueprints.Layout blueprint, BlockPos local, BlockState actual, Direction facing) {
+        if (MineBlueprints.isInterface(local)) {
+            return isCorrectInterfaceBlock(actual);
+        }
+        return matchesState(blueprint.baseState(local), actual, MineBlueprints.rotation(facing));
+    }
 
-    private static boolean isCorrectBlock(
-            BlockState state,
-            ExpectedBlock expected
-    ) {
-
-        return switch (expected) {
-
-            case FRAME ->
-
-                    state.is(
-                            CreateCityExpansionCore
-                                    .MINE_FRAME
-                                    .get()
-                    );
-
-            case DRILL_UNIT ->
-
-                    state.is(
-                            CreateCityExpansionCore
-                                    .DRILL_UNIT
-                                    .get()
-                    );
-
-            case TECHNICAL ->
-
-                    state.is(
-                            CreateCityExpansionCore
-                                    .TECHNICAL_BLOCK
-                                    .get()
-                    );
-
-            case CONTROLLER ->
-
-                    state.is(
-                            CreateCityExpansionCore
-                                    .MINE_CONTROLLER
-                                    .get()
-                    );
-
-            case INTERFACE, NONE ->
-                    false;
-        };
+    private static boolean matchesState(BlockState expected, BlockState actual, net.minecraft.world.level.block.Rotation rotation) {
+        if (expected.getBlock() instanceof com.example.examplemod.electrical.DrillUnitBlock
+                || expected.getBlock() instanceof com.example.examplemod.machine.MachineDisplayBlock
+                || expected.getBlock() instanceof com.example.examplemod.electrical.MinePowerPortBlock) {
+            return MachinePanels.withoutColor(actual)
+                    == MachinePanels.withoutColor(MineBlueprints.rotate(expected, rotation));
+        }
+        return expected.isAir() ? actual.isAir() : actual.is(expected.getBlock());
     }
 
     private static boolean isCorrectInterfaceBlock(BlockState state) {
@@ -592,7 +482,7 @@ public class MineMultiblock {
         return isPowerServicePosition(x, y, z, local[0], local[1]);
     }
 
-    private static boolean isPowerServicePosition(int x, int y, int z, int portX, int portZ) {
+    static boolean isPowerServicePosition(int x, int y, int z, int portX, int portZ) {
         if (y != 1 || portX < 0 || portZ < 0) {
             return false;
         }
@@ -754,6 +644,10 @@ public class MineMultiblock {
             ServerLevel level,
             BlockPos controllerPos
     ) {
+        if (!MineBlueprints.current().legacyBase()) {
+            var result = validate(level, controllerPos);
+            return result.requiredBlocks() == 0 ? 0 : (float) result.correctBlocks() / result.requiredBlocks();
+        }
 
         BlockState controller =
                 level.getBlockState(
@@ -782,6 +676,7 @@ public class MineMultiblock {
 
         int correct = 0;
         int total = 0;
+        MineBlueprints.Layout blueprint = MineBlueprints.current();
 
         for (int y = 0; y < HEIGHT; y++) {
 
@@ -790,18 +685,6 @@ public class MineMultiblock {
                 for (int z = 0; z < DEPTH; z++) {
 
                     if (isServiceSpace(level, origin, facing, x, y, z)) {
-                        continue;
-                    }
-
-                    ExpectedBlock expected =
-                            getExpectedBlock(
-                                    x,
-                                    y,
-                                    z
-                            );
-
-                    if (expected == ExpectedBlock.NONE) {
-
                         continue;
                     }
 
@@ -817,9 +700,7 @@ public class MineMultiblock {
                             );
 
                     BlockState actual = level.getBlockState(pos);
-                    if (expected == ExpectedBlock.INTERFACE
-                            ? isCorrectInterfaceBlock(actual)
-                            : isCorrectBlock(actual, expected)) {
+                    if (matchesBlueprintCell(blueprint, new BlockPos(x, y, z), actual, facing)) {
 
                         correct++;
                     }
@@ -918,18 +799,4 @@ public class MineMultiblock {
      * =========================================================
      */
 
-    private enum ExpectedBlock {
-
-        FRAME,
-
-        DRILL_UNIT,
-
-        TECHNICAL,
-
-        CONTROLLER,
-
-        INTERFACE,
-
-        NONE
-    }
 }

@@ -18,6 +18,7 @@ import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.CityMapPeersPayload;
 import com.example.examplemod.network.CityNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.client.map.GeologyWideScanOverlay;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
 import com.example.examplemod.network.SyncCityMemberRemovalPayload;
@@ -77,14 +78,12 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(
                 CityPylonModels::onBakingCompleted
         );
-        modEventBus.addListener(IndustrialMineModels::registerAdditional);
-        modEventBus.addListener(IndustrialMineModels::onBakingCompleted);
-        com.example.examplemod.client.render.AssembledBlockVisibility.registerModels(
-                "mine_frame", "technical_block", "drill_unit", "mine_controller", "mine_power_port", "mine_gateway");
-        modEventBus.addListener(com.example.examplemod.client.render.AssembledBlockVisibility::wrapModels);
-        com.example.examplemod.mine.MineControllerBlockEntity.CLIENT_VISUAL_UPDATE =
-                com.example.examplemod.client.render.IndustrialMineVisuals::changed;
-        NeoForge.EVENT_BUS.register(com.example.examplemod.client.render.IndustrialMineVisuals.class);
+        // Machines retain their placed blocks. Only their physical instrument faces have a BER.
+        com.example.examplemod.mine.MineControllerBlockEntity.CLIENT_VISUAL_UPDATE = controller -> {
+                com.example.examplemod.client.sound.MineSoundController.onState(controller.getBlockPos(),
+                        controller.isRemoved() ? com.example.examplemod.mine.IndustrialMineState.STOPPED : controller.getRuntimeState());
+                com.example.examplemod.client.render.MineWorkEffects.changed(controller);
+        };
 
 /*
          * =========================================
@@ -98,6 +97,7 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(BuildGuideKeyMappings::register);
         modEventBus.addListener(CityWorldMapKey::register);
         modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
+        modEventBus.addListener(com.example.examplemod.knowledge.KnowledgeKey::register);
         modEventBus.addListener(com.example.examplemod.client.uiedit.UiEditKey::register);
         modEventBus.addListener(ModFluidClientExtensions::register);
 
@@ -114,6 +114,8 @@ public class CreateCityExpansionCoreClient {
         );
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.CityWorldMapKeyHandler.class);
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.PlayerProfileKey.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.knowledge.KnowledgeKey.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.knowledge.KnowledgeTooltipHandler.class);
         NeoForge.EVENT_BUS.register(com.example.examplemod.client.uiedit.UiEditEvents.class);
     }
     private void registerRenderers(
@@ -125,8 +127,10 @@ public class CreateCityExpansionCoreClient {
         );
         event.registerBlockEntityRenderer(
                 CreateCityExpansionCore.MINE_CONTROLLER_BLOCK_ENTITY.get(),
-                IndustrialMineRenderer::new
+                com.example.examplemod.client.render.MachineDisplayRenderer::new
         );
+        event.registerBlockEntityRenderer(CreateCityExpansionCore.TECHNICAL_SCREEN_ENTITY.get(),
+                com.example.examplemod.client.render.MachineDisplayRenderer::new);
     }
 
     /*
@@ -163,6 +167,10 @@ public class CreateCityExpansionCoreClient {
     ) {
         CreateCityExpansionCore.GEOLOGY_ANALYSIS_HANDLER = (payload, context) -> {
             invokeEnqueueWork(context, () -> MagneticAnalyzerScreen.open(payload));
+        };
+
+        CreateCityExpansionCore.GEOLOGY_WIDE_SCAN_HANDLER = (payload, context) -> {
+            invokeEnqueueWork(context, () -> GeologyWideScanOverlay.accept(payload));
         };
 
         CreateCityExpansionCore.MINE_CONTROLLER_SNAPSHOT_HANDLER = (payload, context) -> {

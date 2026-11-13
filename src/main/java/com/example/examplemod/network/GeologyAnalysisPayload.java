@@ -18,7 +18,7 @@ import java.util.Objects;
  * Координаты месторождения намеренно не передаются: в режиме
  * OUTSIDE прибор сообщает только ресурс, направление и
  * грубую дистанцию, в режиме INSIDE — локальный потенциал,
- * остаток запаса и класс размера. Игрок находит богатый
+ * пиковый потенциал и класс размера. Игрок находит богатый
  * участок перемещением и сравнением показаний, а не по стрелке
  * к координатам ядра.
  */
@@ -31,11 +31,8 @@ public record GeologyAnalysisPayload(
         int boundaryDistanceBlocks,
         int localPotentialPerHour,
         int peakPotentialPerHour,
-        long remainingReserve,
-        long initialReserve,
         DepositSizeClass sizeClass,
         DepositQualityClass qualityClass,
-        int estimatedLifetimeHours,
         int remainingUses
 ) implements CustomPacketPayload {
 
@@ -73,11 +70,8 @@ public record GeologyAnalysisPayload(
                 survey.boundaryDistanceBlocks(),
                 survey.localPotentialPerHour(),
                 survey.peakPotentialPerHour(),
-                survey.remainingReserve(),
-                survey.initialReserve(),
                 survey.sizeClass(),
                 survey.qualityClass(),
-                survey.estimatedLifetimeHours(),
                 survey.remainingUses()
         );
     }
@@ -103,11 +97,8 @@ public record GeologyAnalysisPayload(
         buffer.writeVarInt(payload.boundaryDistanceBlocks());
         buffer.writeVarInt(payload.localPotentialPerHour());
         buffer.writeVarInt(payload.peakPotentialPerHour());
-        buffer.writeVarLong(payload.remainingReserve());
-        buffer.writeVarLong(payload.initialReserve());
         buffer.writeEnum(payload.sizeClass());
         buffer.writeEnum(payload.qualityClass());
-        buffer.writeVarInt(payload.estimatedLifetimeHours());
         buffer.writeVarInt(payload.remainingUses());
     }
 
@@ -128,11 +119,8 @@ public record GeologyAnalysisPayload(
                 buffer.readVarInt(),
                 buffer.readVarInt(),
                 buffer.readVarInt(),
-                buffer.readVarLong(),
-                buffer.readVarLong(),
                 buffer.readEnum(DepositSizeClass.class),
                 buffer.readEnum(DepositQualityClass.class),
-                buffer.readVarInt(),
                 buffer.readVarInt()
         );
     }
