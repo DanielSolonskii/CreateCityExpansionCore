@@ -13,9 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Клиентский кэш базы знаний: разбор файлов каталога и синхронизированный
- * доступ. Клиент читает файлы напрямую (они в его папке), доступ приходит
- * payload'ом с сервера; интерфейс показывает пересечение двух списков.
+ * Reads the installed server revision without network requests. Singleplayer
+ * merges user articles and downloaded libraries and exposes all local articles.
  *
  * <p>Скан переоценивается не чаще раза в секунду — трогать диск каждый кадр
  * недопустимо, а реакция на новые файлы в течение секунды достаточно быстрая для
@@ -26,8 +25,10 @@ public final class KnowledgeBaseClient {
     private static final long SCAN_INTERVAL_MILLIS = 1000;
 
     private static volatile List<String> allowed = List.of();
+    private static final StringBuilder pendingAccess = new StringBuilder();
     private static volatile Map<String, KnowledgeFileMeta> metas = Map.of();
     private static volatile Map<String, KnowledgeFileMeta> byParentItem = Map.of();
+    private static Map<String, Path> files = Map.of(), roots = Map.of();
     private static long scannedAt;
     private static long rescanAfter; // 0: первый вызов обязан отсканировать каталог
 
@@ -36,7 +37,11 @@ public final class KnowledgeBaseClient {
 
     /** Payload с сервера: полный список имён из playerdata. */
     public static void acceptAccess(KnowledgeAccessPayload payload) {
-        allowed = KnowledgeAccess.parse(payload.files());
+        if (payload.first()) pendingAccess.setLength(0);
+        if (pendingAccess.length()+payload.files().length()>2*1024*1024) { pendingAccess.setLength(0); return; }
+        pendingAccess.append(payload.files());
+        if (!payload.last()) return;
+        allowed = KnowledgeAccess.parse(pendingAccess.toString()); pendingAccess.setLength(0);
         LOGGER.info("База знаний: сервер выдал {} записей доступа", allowed.size());
     }
 
@@ -45,20 +50,44 @@ public final class KnowledgeBaseClient {
         KnowledgeStorage.ensureFolder();
     }
 
+    public static void invalidate(boolean clearAccess) {
+        rescanAfter = 0; metas = Map.of(); byParentItem = Map.of(); files = Map.of(); roots = Map.of();
+        if (clearAccess) { allowed = List.of(); pendingAccess.setLength(0); }
+    }
+
     private static void refresh() {
         long now = System.currentTimeMillis();
         if (now < rescanAfter) return;
-        rescanAfter = now + SCAN_INTERVAL_MILLIS;
+        boolean local = KnowledgeSyncClient.local();
+        rescanAfter = local ? now + SCAN_INTERVAL_MILLIS : Long.MAX_VALUE;
         Map<String, KnowledgeFileMeta> scanned = new LinkedHashMap<>();
         Map<String, KnowledgeFileMeta> parents = new HashMap<>();
-        KnowledgeStorage.forEachMarkdown(path -> {
-            KnowledgeFileMeta meta = KnowledgeFileMeta.parse(
-                    path.rel(), KnowledgeStorage.firstLines(path.file(), 8));
-            scanned.put(path.rel(), meta);
+        Map<String,Path> locations = new HashMap<>(), bases = new HashMap<>();
+        Map<String,Path> catalogs = new LinkedHashMap<>();
+        if (local) {
+            catalogs.put("", KnowledgeStorage.folder());
+            Path cache = KnowledgeSyncClient.cacheRoot();
+            if (Files.isDirectory(cache)) try (var dirs = Files.list(cache)) {
+                for (Path dir : dirs.sorted().toList()) {
+                    if (!KnowledgeBundle.validHash(dir.getFileName().toString())) continue;
+                    try {
+                        Path root = new KnowledgeBundle.Cache(dir).active();
+                        if (root != null) catalogs.put("Сохранённые базы/" + dir.getFileName() + "/", root);
+                    } catch (java.io.IOException damaged) { LOGGER.warn("Skipping damaged offline library {}",dir); }
+                }
+            } catch (java.io.IOException e) { LOGGER.warn("Cannot read offline knowledge cache", e); }
+        } else if (KnowledgeSyncClient.ready() && KnowledgeSyncClient.activeRoot() != null) {
+            catalogs.put("", KnowledgeSyncClient.activeRoot());
+        }
+        catalogs.forEach((prefix, root) -> KnowledgeStorage.forEachMarkdown(root, path -> {
+            String key = prefix + path.rel();
+            KnowledgeFileMeta meta = KnowledgeFileMeta.parse(key, KnowledgeStorage.firstLines(path.file(), 32));
+            scanned.put(key, meta); locations.put(key, path.file()); bases.put(key, root);
             if (meta.parentItem() != null && !meta.parentItem().isBlank()) {
                 parents.putIfAbsent(meta.parentItem(), meta);
             }
-        });
+        }));
+        files = locations; roots = bases;
         metas = scanned;
         byParentItem = parents;
         scannedAt = now;
@@ -72,7 +101,7 @@ public final class KnowledgeBaseClient {
 
     /** Есть ли у игрока доступ к файлу. */
     public static boolean hasAccess(KnowledgeFileMeta meta) {
-        return KnowledgeAccess.hasAccess(meta, allowed);
+        return KnowledgeSyncClient.local() || KnowledgeAccess.hasAccess(meta, allowed);
     }
 
     /** Число записей доступа — для интерфейса (пусто ⇒ «сервер не выдал ничего»). */
@@ -99,7 +128,21 @@ public final class KnowledgeBaseClient {
 
     /** Настоящий путь файла по мета. */
     public static Path fileOf(KnowledgeFileMeta meta) {
-        return KnowledgeStorage.folder().resolve(meta.path());
+        return files.get(meta.path());
+    }
+
+    public static Path resolveLocalFile(KnowledgeFileMeta meta, String target) {
+        if (meta == null || !files.containsKey(meta.path())) return null;
+        Path root = roots.get(meta.path()).toAbsolutePath().normalize();
+        try {
+            Path direct = fileOf(meta).getParent().resolve(target.replace('\\','/')).toAbsolutePath().normalize();
+            if (direct.startsWith(root)) {
+                Path safe = KnowledgeBundle.resolve(root, root.relativize(direct).toString().replace('\\','/'));
+                if (Files.isRegularFile(safe)) return safe;
+            }
+            Path fallback = KnowledgeBundle.resolve(root, target.replace('\\','/'));
+            return Files.isRegularFile(fallback) ? fallback : null;
+        } catch (Exception e) { return null; }
     }
 
     /**
@@ -120,7 +163,7 @@ public final class KnowledgeBaseClient {
 
     public static KnowledgeFileMeta metaOf(String path) {
         refresh();
-        return metas.get(path.replace('\\', '/'));
+        return metas.get(Path.of(path.replace('\\', '/')).normalize().toString().replace('\\','/'));
     }
 
     /** Список файлов с доступом: корень в порядке следования каталога. */

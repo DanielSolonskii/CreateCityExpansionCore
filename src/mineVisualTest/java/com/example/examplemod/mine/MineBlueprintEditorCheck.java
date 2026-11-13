@@ -3,7 +3,6 @@ package com.example.examplemod.mine;
 import com.example.examplemod.devtools.BlueprintEditorWorld;
 import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 import com.example.examplemod.multiblock.MineBlueprints;
-import com.example.examplemod.multiblock.MineMultiblock;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -18,7 +17,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.fml.loading.LoadingModList;
 
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,57 +28,56 @@ public final class MineBlueprintEditorCheck {
         LoadingModList.of(List.of(), List.of(), List.of(), List.of(), Map.of());
         Bootstrap.bootStrap();
         checkStatesAndCollisions();
-        System.out.println("PASS: five packaged mine tiers, required footprint and interfaces, SNBT block state round-trip, rotation and collision rules.");
+        System.out.println("PASS: five packaged mine tiers, required parts and adjacent displays, SNBT block state round-trip, rotation and collision rules.");
     }
 
     private static void checkPackagedLayouts() throws Exception {
-        var used = new HashSet<BlockPos>();
         for (Tier tier : Tier.values()) {
             String path = "/" + MineBlueprints.RESOURCE_DIRECTORY + "/" + MineBlueprints.fileName(tier);
             try (var stream = MineBlueprintEditorCheck.class.getResourceAsStream(path)) {
                 require(stream != null, "Missing packaged tier " + tier);
                 var rows = TagParser.parseTag(new String(stream.readAllBytes(), StandardCharsets.UTF_8))
                         .getList("blocks", Tag.TAG_COMPOUND);
-                int baseSize = MineMultiblock.WIDTH * MineMultiblock.HEIGHT * MineMultiblock.DEPTH;
-                require(tier == Tier.I ? rows.size() == baseSize : !rows.isEmpty(), "Cell count for tier " + tier);
-                int powerPorts = 0;
-                int gateways = 0;
+                require(!rows.isEmpty(), "Empty packaged tier " + tier);
+                var cells = new HashMap<BlockPos, CompoundTag>();
                 for (Tag tag : rows) {
                     CompoundTag row = (CompoundTag) tag;
                     int[] p = row.getIntArray("pos");
                     require(p.length == 3, "Blueprint position needs three coordinates");
                     BlockPos pos = new BlockPos(p[0], p[1], p[2]);
-                    require(MineBlueprints.inside(pos) && used.add(pos), "Out-of-bounds or repeated blueprint cell " + pos);
-                    require((tier == Tier.I) == (pos.getY() < MineMultiblock.HEIGHT), "Wrong tier height at " + pos);
                     CompoundTag state = row.getCompound("state");
                     String block = state.getString("Name");
                     require(!block.isEmpty() && ResourceLocation.tryParse(block) != null, "Invalid block ID at " + pos);
-                    boolean controller = block.equals("createcityexpansioncore:mine_controller");
-                    require(controller == pos.equals(new BlockPos(4, 1, 0)), "Controller position at " + pos);
-                    if (controller) {
-                        require(state.getCompound("Properties").getString("facing").equals("north"), "Controller faces north");
-                    }
-                    boolean drillCell = pos.getY() == 0 && pos.getX() >= 3 && pos.getX() <= 6
-                            && pos.getZ() >= 3 && pos.getZ() <= 6;
-                    require(drillCell == block.equals("createcityexpansioncore:drill_unit"), "Drill position at " + pos);
-                    if (block.equals("createcityexpansioncore:mine_power_port")) {
-                        require(isPerimeter(pos), "Power port must be on the perimeter");
-                        powerPorts++;
-                    }
-                    if (block.equals("createcityexpansioncore:mine_gateway")) {
-                        require(isPerimeter(pos), "Gateway must be on the perimeter");
-                        gateways++;
-                    }
+                    require(cells.putIfAbsent(pos, state) == null, "Repeated blueprint cell " + pos);
                 }
-                int requiredInterfaces = tier == Tier.I ? 1 : 0;
-                require(powerPorts == requiredInterfaces && gateways == requiredInterfaces, "Required interfaces for " + tier);
+                if (tier != Tier.I) continue;
+                BlockPos controller = uniquePart(cells, "mine_controller");
+                require(controller.equals(MineBlueprints.CONTROLLER), "Controller is at the reference position");
+                require(cells.get(controller).getCompound("Properties").getString("facing").equals("north"),
+                        "Controller faces north");
+                require(cells.values().stream().filter(s -> s.getString("Name").equals("createcityexpansioncore:drill_unit")).count() >= 8,
+                        "Base contains at least one auger's worth of blocks");
+                requireAdjacentDisplay(cells, uniquePart(cells, "mine_power_port"), "energy");
+                requireAdjacentDisplay(cells, uniquePart(cells, "mine_gateway"), "output");
             }
         }
     }
 
-    private static boolean isPerimeter(BlockPos pos) {
-        return pos.getY() == 1 && (pos.getX() == 0 || pos.getX() == MineMultiblock.WIDTH - 1
-                || pos.getZ() == 0 || pos.getZ() == MineMultiblock.DEPTH - 1);
+    private static BlockPos uniquePart(Map<BlockPos, CompoundTag> cells, String part) {
+        var positions = cells.entrySet().stream()
+                .filter(entry -> entry.getValue().getString("Name").equals("createcityexpansioncore:" + part))
+                .map(Map.Entry::getKey).toList();
+        require(positions.size() == 1, "Expected exactly one " + part);
+        return positions.getFirst();
+    }
+
+    private static void requireAdjacentDisplay(Map<BlockPos, CompoundTag> cells, BlockPos port, String role) {
+        for (Direction direction : Direction.values()) {
+            CompoundTag state = cells.get(port.relative(direction));
+            if (state != null && state.getString("Name").equals("createcityexpansioncore:technical_screen")
+                    && state.getCompound("Properties").getString("role").equals(role)) return;
+        }
+        throw new AssertionError("Missing adjacent " + role + " display at " + port);
     }
 
     private static void checkStatesAndCollisions() throws Exception {

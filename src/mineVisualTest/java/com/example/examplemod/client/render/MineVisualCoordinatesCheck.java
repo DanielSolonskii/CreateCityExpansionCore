@@ -43,11 +43,12 @@ public final class MineVisualCoordinatesCheck {
                             .equals(target.above().relative(facing.getClockWise()).relative(facing, 2)),
                     "Projection cells must use the same rotated coordinates as the built machine");
             BlockPos origin = MineMultiblock.getOrigin(controller, facing);
-            for (int x = 3; x <= 6; x++) {
-                for (int z = 3; z <= 6; z++) {
-                    Vec3 expected = Vec3.atLowerCornerOf(MineMultiblock.getWorldPosition(origin, facing, x, 0, z))
-                            .add(.5, 1, .5);
-                    Vec3 rendered = IndustrialMineAnchors.transform(controller, facing, new Vec3(x - 3.5, 0, z + .5));
+            for (int x = 3; x <= 5; x += 2) {
+                for (int z = 3; z <= 5; z += 2) {
+                    Vec3 first = Vec3.atCenterOf(MineMultiblock.getWorldPosition(origin, facing, x, 0, z));
+                    Vec3 opposite = Vec3.atCenterOf(MineMultiblock.getWorldPosition(origin, facing, x + 1, 0, z + 1));
+                    Vec3 expected = first.add(opposite).scale(.5).add(0, -.5, 0);
+                    Vec3 rendered = IndustrialMineAnchors.transform(controller, facing, new Vec3(x - 3, -1, z + 1));
                     require(expected.distanceToSqr(rendered) < 1e-12, "Drill shaft misses canonical Drill Unit");
                     drills++;
                 }

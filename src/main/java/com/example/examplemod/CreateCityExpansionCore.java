@@ -331,7 +331,6 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
                                     .mapColor(MapColor.METAL)
-                                    .noLootTable()
                     )
             );
 
@@ -622,6 +621,19 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     ).build(null)
             );
 
+    public static final DeferredItem<com.example.examplemod.machine.PanelPainterItem> PANEL_PAINTER =
+            ITEMS.registerItem("panel_painter", com.example.examplemod.machine.PanelPainterItem::new,
+                    new Item.Properties().stacksTo(1));
+
+    public static final DeferredBlock<com.example.examplemod.machine.MachineDisplayBlock> TECHNICAL_SCREEN =
+            BLOCKS.register("technical_screen", () -> new com.example.examplemod.machine.MachineDisplayBlock(
+                    BlockBehaviour.Properties.of().strength(3.0F).mapColor(MapColor.METAL)));
+    public static final DeferredItem<Item> TECHNICAL_SCREEN_ITEM = ITEMS.registerItem("technical_screen",
+            properties -> new BlockItem(TECHNICAL_SCREEN.get(), properties), new Item.Properties());
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.machine.MachineDisplayBlockEntity>> TECHNICAL_SCREEN_ENTITY =
+            BLOCK_ENTITY_TYPES.register("technical_screen", () -> BlockEntityType.Builder.of(
+                    com.example.examplemod.machine.MachineDisplayBlockEntity::new, TECHNICAL_SCREEN.get()).build(null));
+
     public static final DeferredBlock<com.example.examplemod.block.TransportRegistrationTerminalBlock> TRANSPORT_REGISTRATION_TERMINAL =
             BLOCKS.register("transport_registration_terminal", () -> new com.example.examplemod.block.TransportRegistrationTerminalBlock(
                     BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL)));
@@ -652,7 +664,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
     public static final DeferredItem<Item> DRILL_UNIT_ITEM =
             ITEMS.registerItem(
                     "drill_unit",
-                    properties -> new BlockItem(
+                    properties -> new com.example.examplemod.electrical.DrillUnitBlockItem(
                             DRILL_UNIT.get(),
                             properties
                     ),

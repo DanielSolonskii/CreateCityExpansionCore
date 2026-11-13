@@ -1,7 +1,7 @@
 package com.example.examplemod.client.screen;
 
 /**
- * Раскладка базы знаний: левый список файлов/групп, правый просмотр.
+ * Раскладка базы знаний: список статей, просмотр и оглавление.
  *
  * <p>Арифметка общая с Community/World Map окнами: масштаб выбирается по размеру
  * рабочего стола, координаты внутри — в масштабных единицах, hit-test и scissor
@@ -25,7 +25,7 @@ public record KnowledgeBaseLayout(int width, int height, float scale, float x, f
     }
 
     public static KnowledgeBaseLayout calculate(int screenW, int screenH) {
-        int width = screenW >= 720 ? 660 : 468;
+        int width = screenW >= 790 ? 780 : 580;
         float scale = Math.min(1, Math.min(Math.max(1, screenW - 24) / (float) width,
                 Math.max(1, screenH - 24) / 360f));
         int height = Math.clamp((int) ((screenH - 24) / scale), 360, 480);
@@ -43,12 +43,18 @@ public record KnowledgeBaseLayout(int width, int height, float scale, float x, f
 
     /** Меню навигации — разделитель листа и просмотрщика. */
     public Rect list() {
-        return new Rect(14, 46, 190, height - 92);
+        return new Rect(14, 46, width >= 780 ? 190 : 158, height - 92);
     }
 
     public Rect viewer() {
         Rect l = list();
-        return new Rect(l.right() + 10, l.y(), width - l.width - 44, l.height());
+        int left = l.right() + 10;
+        return new Rect(left, l.y(), outline().x() - 10 - left, l.height());
+    }
+
+    public Rect outline() {
+        int panelWidth = width >= 780 ? 118 : 108;
+        return new Rect(width - 14 - panelWidth, 46, panelWidth, height - 92);
     }
 
     /** Разделительная полоса между списком и просмотрщиком. */

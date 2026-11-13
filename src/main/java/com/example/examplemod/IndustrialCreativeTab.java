@@ -37,6 +37,7 @@ public final class IndustrialCreativeTab {
     private static final List<ItemLike> TIER1_DERIVED = List.of(
             CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
             CreateCityExpansionCore.BLUEPRINT_TERMINAL.get(),
+            CreateCityExpansionCore.PANEL_PAINTER.get(),
             CreateCityExpansionCore.INCOMPLETE_ACCESS_CONTROL_REMOTE.get(),
             CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );
@@ -111,6 +112,7 @@ public final class IndustrialCreativeTab {
     private static final List<ItemLike> MINING_MACHINES = List.of(
             CreateCityExpansionCore.MINE_CONTROLLER_ITEM.get(),
             CreateCityExpansionCore.DRILL_UNIT_ITEM.get(),
+            CreateCityExpansionCore.TECHNICAL_SCREEN_ITEM.get(),
             CreateCityExpansionCore.MINE_FRAME_ITEM.get(),
             CreateCityExpansionCore.TECHNICAL_BLOCK_ITEM.get(),
             CreateCityExpansionCore.CONTROL_BLOCK_ITEM.get(),

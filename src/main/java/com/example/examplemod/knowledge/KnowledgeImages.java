@@ -34,6 +34,11 @@ public final class KnowledgeImages {
     private KnowledgeImages() {
     }
 
+    public static void clear() {
+        LOADED.values().forEach(Minecraft.getInstance().getTextureManager()::release);
+        LOADED.clear(); SIZES.clear(); FAILED.clear();
+    }
+
     /**
      * Загружает картинку один раз. Возвращает текстуру и размеры через
      * {@code size[0]} / {@code size[1]}; null — картинка не читается.

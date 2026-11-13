@@ -25,7 +25,6 @@ import java.util.Map;
 
 public final class BlueprintEditorWorld {
     public static final int REACH = 32;
-    private static final BlockPos CONTROLLER = new BlockPos(4, 1, 0);
     private static final int BLOCK_UPDATE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
 
     private BlueprintEditorWorld() {}
@@ -39,7 +38,7 @@ public final class BlueprintEditorWorld {
             List<Part> parts = blocks.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey()).map(entry -> new Part(entry.getKey(), entry.getValue(), Tier.I))
                     .toList();
-            return new Plan(Structure.MINE, tier, MineBlueprints.ANCHOR, parts);
+            return new Plan(Structure.MINE, tier, MineBlueprints.anchorOf(blocks), parts);
         }
     }
 
@@ -55,24 +54,36 @@ public final class BlueprintEditorWorld {
                 Math.min(first.getZ(), second.getZ()));
         BlockPos max = new BlockPos(Math.max(first.getX(), second.getX()), Math.max(first.getY(), second.getY()),
                 Math.max(first.getZ(), second.getZ()));
-        if (max.getX() - min.getX() >= 24 || max.getY() - min.getY() >= 24 || max.getZ() - min.getZ() >= 24
-                || level.isOutsideBuildHeight(min) || level.isOutsideBuildHeight(max)) {
-            throw new IllegalArgumentException("Select up to 24 blocks on each axis within the build height.");
+        if (level.isOutsideBuildHeight(min) || level.isOutsideBuildHeight(max)
+                || !level.getWorldBorder().isWithinBounds(min) || !level.getWorldBorder().isWithinBounds(max)) {
+            throw new IllegalArgumentException("Selection must be within the build height and world border.");
         }
+        Map<BlockPos, BlockState> selected = new HashMap<>();
+        BlockPos controller = null;
         for (int x = min.getX() >> 4; x <= max.getX() >> 4; x++) {
             for (int z = min.getZ() >> 4; z <= max.getZ() >> 4; z++) {
-                if (!level.hasChunkAt(new BlockPos(x << 4, min.getY(), z << 4))) {
+                var chunk = level.getChunkSource().getChunkNow(x, z);
+                if (chunk == null) {
                     throw new IllegalArgumentException("Part of the selection is in an unloaded chunk.");
                 }
-            }
-        }
-        BlockPos controller = null;
-        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
-            if (level.getBlockState(pos).is(CreateCityExpansionCore.MINE_CONTROLLER.get())) {
-                if (controller != null) {
-                    throw new IllegalArgumentException("The selection must contain exactly one mine controller.");
+                for (int y = min.getY() >> 4; y <= max.getY() >> 4; y++) {
+                    var section = chunk.getSection(chunk.getSectionIndex(y << 4));
+                    if (section.hasOnlyAir()) continue;
+                    for (BlockPos pos : BlockPos.betweenClosed(
+                            Math.max(min.getX(), x << 4), Math.max(min.getY(), y << 4), Math.max(min.getZ(), z << 4),
+                            Math.min(max.getX(), (x << 4) + 15), Math.min(max.getY(), (y << 4) + 15), Math.min(max.getZ(), (z << 4) + 15))) {
+                        BlockState state = section.getBlockState(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15);
+                        if (state.isAir()) continue;
+                        BlockPos cell = pos.immutable();
+                        if (state.is(CreateCityExpansionCore.MINE_CONTROLLER.get())) {
+                            if (controller != null) {
+                                throw new IllegalArgumentException("The selection must contain exactly one mine controller.");
+                            }
+                            controller = cell;
+                        }
+                        selected.put(cell, state);
+                    }
                 }
-                controller = pos.immutable();
             }
         }
         if (controller == null) {
@@ -88,22 +99,22 @@ public final class BlueprintEditorWorld {
             default -> MineBlueprints.rotation(facing);
         };
         Map<BlockPos, BlockState> blocks = new HashMap<>();
-        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
-            BlockState state = level.getBlockState(pos);
-            BlockPos delta = pos.subtract(origin);
+        for (var entry : selected.entrySet()) {
+            BlockPos delta = entry.getKey().subtract(origin);
             BlockPos local = new BlockPos(delta.getX() * right.getStepX() + delta.getZ() * right.getStepZ(),
                     delta.getY(), delta.getX() * back.getStepX() + delta.getZ() * back.getStepZ());
-            if (!MineBlueprints.inside(local)) {
-                if (!state.isAir()) {
-                    throw new IllegalArgumentException("Block outside the mine footprint: " + pos.toShortString());
-                }
-            } else if (local.getY() < MineMultiblock.HEIGHT || !state.isAir()) {
-                blocks.put(local, MineBlueprints.rotate(state, inverse));
-            }
+            blocks.put(local, MineBlueprints.rotate(entry.getValue(), inverse));
         }
-        long baseCells = blocks.keySet().stream().filter(pos -> pos.getY() < MineMultiblock.HEIGHT).count();
-        if (baseCells != MineMultiblock.WIDTH * MineMultiblock.HEIGHT * MineMultiblock.DEPTH) {
-            throw new IllegalArgumentException("Select the entire 10 × 3 × 10 mine base and its upgrades.");
+        // Preserve explicitly empty cells of existing blueprints when they are in the selection.
+        for (var entry : MineBlueprints.current().blocks(Tier.I).entrySet()) {
+            if (!entry.getValue().isAir() || blocks.containsKey(entry.getKey())) continue;
+            BlockPos local = entry.getKey();
+            BlockPos pos = MineMultiblock.getWorldPosition(origin, facing, local.getX(), local.getY(), local.getZ());
+            if (pos.getX() >= min.getX() && pos.getX() <= max.getX()
+                    && pos.getY() >= min.getY() && pos.getY() <= max.getY()
+                    && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ()) {
+                blocks.put(local, entry.getValue());
+            }
         }
         return new Capture(min, max, blocks);
     }
@@ -116,7 +127,9 @@ public final class BlueprintEditorWorld {
                     break;
                 }
                 for (var entry : layout.blocks(lower).entrySet()) {
-                    if (!entry.getValue().equals(additions.remove(entry.getKey()))) {
+                    BlockState captured = additions.remove(entry.getKey());
+                    if (captured == null || com.example.examplemod.machine.MachinePanels.withoutColor(entry.getValue())
+                            != com.example.examplemod.machine.MachinePanels.withoutColor(captured)) {
                         throw new IllegalArgumentException("Lower tier " + lower + " differs at "
                                 + entry.getKey().toShortString());
                     }
@@ -157,7 +170,7 @@ public final class BlueprintEditorWorld {
                     throw new IllegalStateException("Could not set " + change.pos().toShortString());
                 }
             }
-            var validation = MineMultiblock.validate(level, plan.worldPosition(CONTROLLER, target, facing));
+            var validation = MineMultiblock.validate(level, plan.worldPosition(MineBlueprints.CONTROLLER, target, facing));
             if (!validation.assembled()) {
                 throw new IllegalStateException(validation.message());
             }

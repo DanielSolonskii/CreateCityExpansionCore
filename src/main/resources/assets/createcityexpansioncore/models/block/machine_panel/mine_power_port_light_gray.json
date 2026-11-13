@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:block/mine_power_port",
+  "textures": {
+    "panel": "createcityexpansioncore:block/machine_panel/light_gray"
+  }
+}

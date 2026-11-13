@@ -16,7 +16,29 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-public final class MineControllerBlockEntity extends BlockEntity {
+public final class MineControllerBlockEntity extends BlockEntity implements com.example.examplemod.machine.MachineDisplaySource {
+
+    private com.example.examplemod.machine.MachineTelemetry telemetry = com.example.examplemod.machine.MachineTelemetry.EMPTY;
+    private UUID placementCity;
+    private boolean placementCityAssigned;
+    private boolean redstoneInitialized;
+    private boolean redstoneHigh;
+
+    @Override public com.example.examplemod.machine.MachineTelemetry telemetry() { return telemetry; }
+    @Override public Role displayRole() { return Role.CONTROLLER; }
+    public void publishTelemetry(com.example.examplemod.machine.MachineTelemetry next) {
+        if (next.equals(telemetry)) return;
+        telemetry = next;
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+    }
+    public void assignPlacementCity(UUID id) { placementCity = id; placementCityAssigned = true; setChanged(); }
+    public boolean hasPlacementCity() { return placementCityAssigned; }
+    public UUID placementCity() { return placementCity; }
+    public void initializeRedstone(boolean high) { redstoneHigh = high; redstoneInitialized = true; }
+    boolean consumeRedstoneEdge(boolean high) {
+        if (!redstoneInitialized) { initializeRedstone(high); return false; }
+        boolean changed = high != redstoneHigh; redstoneHigh = high; return changed;
+    }
 
     public static final int STARTUP_DURATION_TICKS = 60;
     public static final int STOP_DURATION_TICKS = 40;
@@ -47,6 +69,18 @@ public final class MineControllerBlockEntity extends BlockEntity {
     private MineElectricalState lastSyncedElectricalState;
     private boolean lastSyncedAssembled;
     private long clientLastVisualParticleTick = Long.MIN_VALUE;
+    private java.util.List<BlockPos> effectDrills = java.util.List.of();
+    private java.util.List<BlockPos> effectVents = java.util.List.of();
+
+    public java.util.List<BlockPos> effectDrills() { return effectDrills; }
+    public java.util.List<BlockPos> effectVents() { return effectVents; }
+
+    public void publishEffectParts(java.util.List<BlockPos> drills, java.util.List<BlockPos> vents) {
+        if (effectDrills.equals(drills) && effectVents.equals(vents)) return;
+        effectDrills = java.util.List.copyOf(drills);
+        effectVents = java.util.List.copyOf(vents);
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+    }
 
     public MineControllerBlockEntity(BlockPos pos, BlockState state) {
         super(CreateCityExpansionCore.MINE_CONTROLLER_BLOCK_ENTITY.get(), pos, state);
@@ -145,26 +179,6 @@ public final class MineControllerBlockEntity extends BlockEntity {
         this.miningTicks = 0;
         setChanged();
         return true;
-    }
-
-    public void restoreFromItem(MineControllerItemData.Data data) {
-        creatorId = data.creatorId();
-        creatorName = data.creatorName();
-        activeDepositId = data.depositId();
-        specializedResourceId = data.resourceId();
-        cityId = data.commissioned() ? data.cityId() : null;
-        projectId = data.commissioned() ? data.projectId() : null;
-        commissioned = data.commissioned();
-        previewDepositId = activeDepositId;
-        runtimeState = IndustrialMineState.STOPPED;
-        electricalState = MineElectricalState.NO_POWER;
-        userRequestedStart = false;
-        startupTicks = 0;
-        shutdownTicks = 0;
-        miningTicks = 0;
-        lastResult = null;
-        statusMessage = "Контроллер восстановлен из переносимого предмета.";
-        setChanged();
     }
 
     public void decommission(UUID expectedProjectId) {
@@ -277,7 +291,10 @@ public final class MineControllerBlockEntity extends BlockEntity {
     }
 
     void setUserRequestedStart(boolean requested) {
-        userRequestedStart = requested;
+        if (userRequestedStart != requested) {
+            userRequestedStart = requested;
+            setChanged();
+        }
     }
 
     int getStartupTicks() { return startupTicks; }
@@ -336,6 +353,8 @@ public final class MineControllerBlockEntity extends BlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.putBoolean("PlacementCityAssigned", placementCityAssigned);
+        if (placementCity != null) tag.putUUID("PlacementCity", placementCity);
         if (activeDepositId != null) {
             tag.putString("ActiveDepositId", activeDepositId.toString());
         }
@@ -355,12 +374,17 @@ public final class MineControllerBlockEntity extends BlockEntity {
             tag.putUUID("ProjectId", projectId);
         }
         tag.putBoolean("Commissioned", commissioned);
+        tag.putBoolean("UserRequestedStart", userRequestedStart);
         tag.putDouble("MiningProgressTicks", miningTicks);
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        placementCityAssigned = tag.getBoolean("PlacementCityAssigned");
+        placementCity = tag.hasUUID("PlacementCity") ? tag.getUUID("PlacementCity") : null;
+        redstoneInitialized = false;
+        telemetry = com.example.examplemod.machine.MachineTelemetry.read(tag.getCompound("Instruments"));
         activeDepositId = tag.contains("ActiveDepositId")
                 ? ResourceLocation.tryParse(tag.getString("ActiveDepositId")) : null;
         previewDepositId = activeDepositId;
@@ -375,14 +399,19 @@ public final class MineControllerBlockEntity extends BlockEntity {
         miningTicks = validMiningTicks(tag.getDouble("MiningProgressTicks"));
         runtimeState = IndustrialMineState.STOPPED;
         electricalState = MineElectricalState.NO_POWER;
-        userRequestedStart = false;
+        // Restore intent only. Structure, bindings and live power must pass a fresh startup.
+        userRequestedStart = commissioned && tag.getBoolean("UserRequestedStart");
         startupTicks = 0;
         shutdownTicks = 0;
         lastResult = null;
-        statusMessage = "Шахта безопасно остановлена после загрузки мира.";
+        statusMessage = userRequestedStart
+                ? "Ожидание безопасного запуска после загрузки мира."
+                : "Шахта безопасно остановлена после загрузки мира.";
         visualAssembled = false;
         visualPowerPort = null;
         visualGateway = null;
+        effectDrills = java.util.Arrays.stream(tag.getLongArray("EffectDrills")).mapToObj(BlockPos::of).toList();
+        effectVents = java.util.Arrays.stream(tag.getLongArray("EffectVents")).mapToObj(BlockPos::of).toList();
         if (tag.contains("VisualRuntimeState")) {
             runtimeState = readEnum(tag, "VisualRuntimeState", IndustrialMineState.class,
                     IndustrialMineState.STOPPED);
@@ -398,9 +427,12 @@ public final class MineControllerBlockEntity extends BlockEntity {
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = new CompoundTag();
+        tag.put("Instruments", telemetry.save());
         tag.putString("VisualRuntimeState", runtimeState.name());
         tag.putString("VisualElectricalState", electricalState.name());
         tag.putBoolean("VisualAssembled", visualAssembled);
+        tag.putLongArray("EffectDrills", effectDrills.stream().mapToLong(BlockPos::asLong).toArray());
+        tag.putLongArray("EffectVents", effectVents.stream().mapToLong(BlockPos::asLong).toArray());
         if (visualPowerPort != null) tag.putLong("VisualPowerPort", visualPowerPort.asLong());
         if (visualGateway != null) tag.putLong("VisualGateway", visualGateway.asLong());
         return tag;

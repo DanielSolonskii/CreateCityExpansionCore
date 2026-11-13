@@ -25,6 +25,8 @@
     "TelemetryDisconnectMixin"
   ],
   "client": [
+    "PaintRifleModelPoseMixin",
+    "PaintRifleHeldItemMixin",
     "ClientTlsConnectionMixin",
     "PlayerTabPresentationMixin",
     "BossHealthOverlayAccessor",

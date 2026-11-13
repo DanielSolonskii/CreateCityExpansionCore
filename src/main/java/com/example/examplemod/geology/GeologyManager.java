@@ -287,7 +287,8 @@ public final class GeologyManager extends SavedData {
     public GeologicalRegion query(BlockPos pos) {
         int cellX = GeologyGenerator.cellXOf(pos.getX());
         int cellZ = GeologyGenerator.cellZOf(pos.getZ());
-        long key = GeologyGenerator.cellKey(cellX, cellZ);
+        // The view is contains-filtered for this exact horizontal block, not the entire cell.
+        long key = ((long) pos.getX() << 32) | (pos.getZ() & 0xffffffffL);
 
         GeologicalRegion cached = queryViews.get(key);
         if (cached != null) {

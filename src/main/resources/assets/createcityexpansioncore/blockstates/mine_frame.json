@@ -1,7 +1,52 @@
 {
   "variants": {
-    "": {
+    "color=white": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_white"
+    },
+    "color=orange": {
       "model": "createcityexpansioncore:block/mine_frame"
+    },
+    "color=magenta": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_magenta"
+    },
+    "color=light_blue": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_light_blue"
+    },
+    "color=yellow": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_yellow"
+    },
+    "color=lime": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_lime"
+    },
+    "color=pink": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_pink"
+    },
+    "color=gray": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_gray"
+    },
+    "color=light_gray": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_light_gray"
+    },
+    "color=cyan": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_cyan"
+    },
+    "color=purple": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_purple"
+    },
+    "color=blue": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_blue"
+    },
+    "color=brown": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_brown"
+    },
+    "color=green": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_green"
+    },
+    "color=red": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_red"
+    },
+    "color=black": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_frame_black"
     }
   }
 }

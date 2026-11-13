@@ -64,10 +64,12 @@ public final class KnowledgeBaseScreen extends Screen {
     private int listContentHeight;
     private int contentScroll;
     private int contentHeight;
+    private int outlineScroll;
+    private int activeHeading = -1;
     private String status;
     private long statusAt;
     private long opened, transition;
-    private Scrollbar listBar, contentBar;
+    private Scrollbar listBar, contentBar, outlineBar;
     private int drag;
     private double dragGrab;
 
@@ -77,6 +79,11 @@ public final class KnowledgeBaseScreen extends Screen {
 
     private final List<Hit> listHits = new ArrayList<>();
     private final List<LinkHit> contentHits = new ArrayList<>();
+    private final List<HeadingAnchor> headings = new ArrayList<>();
+    private final List<Hit> outlineHits = new ArrayList<>();
+
+    private record HeadingAnchor(KnowledgeMarkdown.Heading heading, int scroll) {
+    }
 
     private record Hit(KnowledgeBaseLayout.Rect rect, Runnable run) {
     }
@@ -98,6 +105,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
     /** Открытие по клавише/тултипу: path — файл, который сразу открыть. */
     public static void open(Screen parent, String path) {
+        if (!com.example.examplemod.knowledge.KnowledgeSyncClient.allowOpen()) return;
         Minecraft.getInstance().setScreen(new KnowledgeBaseScreen(parent, path));
     }
 
@@ -140,8 +148,14 @@ public final class KnowledgeBaseScreen extends Screen {
         selected = meta.path();
         document = KnowledgeBaseClient.readDocument(meta);
         contentScroll = 0;
+        outlineScroll = 0;
+        activeHeading = -1;
+        outlineHits.clear();
         String group = parentGroup(meta.path());
-        if (!group.isEmpty()) expanded.add(group);
+        while (!group.isEmpty()) {
+            expanded.add(group);
+            group = parentGroup(group);
+        }
         return true;
     }
 
@@ -163,6 +177,8 @@ public final class KnowledgeBaseScreen extends Screen {
         panel(g, 0, 0, layout.width(), layout.height());
         listHits.clear();
         contentHits.clear();
+        headings.clear();
+        outlineHits.clear();
 
         // Шапка
         g.fill(16, 15, 18, 25, ACCENT);
@@ -202,6 +218,7 @@ public final class KnowledgeBaseScreen extends Screen {
         contentScroll = Math.clamp(contentScroll, 0, Math.max(0, contentHeight - viewer.height()));
         contentBar = scrollbar(viewer, contentHeight, contentScroll);
         drawScrollbar(g, mx, my, contentBar, 2);
+        renderOutline(g, mx, my);
 
         drawDivider(g);
         renderFooter(g);
@@ -239,7 +256,7 @@ public final class KnowledgeBaseScreen extends Screen {
         }
         int y = layout.list().y() + PADDING - listScroll;
         for (KnowledgeFileMeta meta : entries) {
-            if (parentGroup(meta.path()).isEmpty()) y = fileRow(g, meta, y, mx, my);
+            if (parentGroup(meta.path()).isEmpty()) y = fileRow(g, meta, 0, y, mx, my);
         }
         List<String> topDirs = new ArrayList<>();
         for (KnowledgeFileMeta meta : entries) {
@@ -253,12 +270,12 @@ public final class KnowledgeBaseScreen extends Screen {
         for (String dir : topDirs) {
             y = groupRow(g, dir, subtree(entries, dir), 0, y, mx, my);
         }
-        listContentHeight = Math.max(0, y - layout.list().y() + PADDING);
+        listContentHeight = Math.max(0, y + listScroll - layout.list().y() + PADDING);
     }
 
     /** Ряд файла; возвращает следующий y. */
-    private int fileRow(GuiGraphics g, KnowledgeFileMeta meta, int y, double mx, double my) {
-        var rect = row(y);
+    private int fileRow(GuiGraphics g, KnowledgeFileMeta meta, int depth, int y, double mx, double my) {
+        var rect = row(y, depth);
         boolean hover = rect.contains(mx, my);
         boolean active = meta.path().equals(selected);
         rounded(g, rect.x(), rect.y(), rect.width(), ROW, 3, hover ? RAISED : INSET);
@@ -289,11 +306,11 @@ public final class KnowledgeBaseScreen extends Screen {
     private int groupRow(GuiGraphics g, String folder, List<KnowledgeFileMeta> subtree,
                          int depth, int y, double mx, double my) {
         if (subtree.isEmpty()) return y; // пустых для игрока групп не видно
-        var rect = row(y);
+        var rect = row(y, depth);
         boolean hover = rect.contains(mx, my);
         boolean open = expanded.contains(folder);
         rounded(g, rect.x(), rect.y(), rect.width(), ROW, 3, hover ? RAISED : INSET);
-        int x = rect.x() + 9 + depth * 10;
+        int x = rect.x() + 9;
         g.drawString(font, open ? "▾" : "▸", x, rect.y() + (ROW - 9) / 2, ACCENT, false);
         g.drawString(font, fit(font, Component.literal(folder.substring(folder.lastIndexOf('/') + 1)),
                 rect.right() - (x + 14) - 6), x + 14, rect.y() + (ROW - 9) / 2, TEXT, false);
@@ -305,7 +322,7 @@ public final class KnowledgeBaseScreen extends Screen {
         if (!open) return y + ROW + 2;
         int cursor = y + ROW + 2;
         for (KnowledgeFileMeta meta : subtree) {
-            if (parentGroup(meta.path()).equals(folder)) cursor = fileRow(g, meta, cursor, mx, my);
+            if (parentGroup(meta.path()).equals(folder)) cursor = fileRow(g, meta, depth + 1, cursor, mx, my);
         }
         List<String> dirs = subDirectories(folder, subtree);
         for (String dir : dirs) cursor = groupRow(g, dir, subtree(subtree, dir), depth + 1, cursor, mx, my);
@@ -335,9 +352,10 @@ public final class KnowledgeBaseScreen extends Screen {
         return dirs;
     }
 
-    private KnowledgeBaseLayout.Rect row(int y) {
-        var list = layout.list();
-        return new KnowledgeBaseLayout.Rect(list.x() + 4, y, list.width() - 8, ROW);
+    private KnowledgeBaseLayout.Rect row(int y, int depth) {
+        var row = layout.row(y, ROW);
+        int indent = Math.min(depth, 5) * 8;
+        return new KnowledgeBaseLayout.Rect(row.x() + indent, y, row.width() - indent - 3, ROW);
     }
 
     /** Иконка предмета из поля icon; поля нет или id неизвестен — иконки нет. */
@@ -373,9 +391,79 @@ public final class KnowledgeBaseScreen extends Screen {
         g.hLine(viewer.x() + PADDING, viewer.right() - PADDING, y + 12, WorldMapChrome.EDGE);
         y += 20;
         for (KnowledgeMarkdown.Block block : document.blocks()) {
+            if (block instanceof KnowledgeMarkdown.Heading heading) {
+                headings.add(new HeadingAnchor(heading, y + contentScroll - viewer.y() - PADDING));
+            }
             y = renderBlock(g, block, viewer.x() + PADDING, y, width, mx, my);
         }
         contentHeight = Math.max(0, y + contentScroll - viewer.y());
+    }
+
+    private KnowledgeBaseLayout.Rect outlineRows() {
+        var area = layout.outline();
+        return new KnowledgeBaseLayout.Rect(area.x(), area.y() + 25, area.width(), area.height() - 25);
+    }
+
+    private void renderOutline(GuiGraphics g, double mx, double my) {
+        var area = layout.outline();
+        rounded(g, area.x(), area.y(), area.width(), area.height(), 5, SURFACE);
+        g.drawString(font, tr("outline"), area.x() + 8, area.y() + 8, ACCENT, false);
+        g.hLine(area.x() + 8, area.right() - 8, area.y() + 20, WorldMapChrome.EDGE);
+
+        var rows = outlineRows();
+        int headingIndex = currentHeading();
+        if (headingIndex != activeHeading) {
+            activeHeading = headingIndex;
+            if (activeHeading >= 0) {
+                int rowTop = activeHeading * ROW;
+                outlineScroll = Math.clamp(outlineScroll, rowTop + ROW - rows.height(), rowTop);
+            }
+        }
+        outlineScroll = Math.clamp(outlineScroll, 0, Math.max(0, headings.size() * ROW - rows.height()));
+        var clip = layout.screen(rows, offset());
+        g.flush();
+        g.enableScissor(clip.x(), clip.y(), clip.right(), clip.bottom());
+        try {
+            int y = rows.y() - outlineScroll;
+            for (int index = 0; index < headings.size(); index++) {
+                HeadingAnchor anchor = headings.get(index);
+                if (y + ROW > rows.y() && y < rows.bottom()) {
+                    int indent = (anchor.heading().level() - 1) * 6;
+                    var rect = new KnowledgeBaseLayout.Rect(rows.x() + 4 + indent, y, rows.width() - 12 - indent, ROW - 2);
+                    boolean hover = rows.contains(mx, my) && rect.contains(mx, my);
+                    boolean active = index == activeHeading;
+                    rounded(g, rect.x(), rect.y(), rect.width(), rect.height(), 3, active || hover ? RAISED : INSET);
+                    if (active) {
+                        g.fill(rect.x() + 1, rect.y() + 4, rect.x() + 3, rect.bottom() - 4, ACCENT);
+                    }
+                    g.drawString(font, fit(font, Component.literal(anchor.heading().text()), rect.width() - 10),
+                            rect.x() + 5, rect.y() + 5, active || hover ? ACCENT : TEXT, false);
+                    outlineHits.add(new Hit(rect, () -> {
+                        contentScroll = Math.clamp(anchor.scroll(), 0, Math.max(0, contentHeight - layout.viewer().height()));
+                        CommunityFx.sound("click");
+                    }));
+                }
+                y += ROW;
+            }
+        } finally {
+            g.flush();
+            g.disableScissor();
+        }
+        outlineBar = scrollbar(rows, headings.size() * ROW, outlineScroll);
+        drawScrollbar(g, mx, my, outlineBar, 3);
+    }
+
+    private int currentHeading() {
+        int maxScroll = Math.max(0, contentHeight - layout.viewer().height());
+        // The last section may be too short for its heading to reach the top.
+        if (maxScroll > 0 && contentScroll == maxScroll) return headings.size() - 1;
+        for (int index = headings.size() - 1; index >= 0; index--) {
+            if (headings.get(index).scroll() <= contentScroll) return index;
+        }
+        if (!headings.isEmpty() && headings.getFirst().scroll() + PADDING < layout.viewer().height() + contentScroll) {
+            return 0;
+        }
+        return -1;
     }
 
     private int renderBlock(GuiGraphics g, KnowledgeMarkdown.Block block, int x, int y,
@@ -456,13 +544,8 @@ public final class KnowledgeBaseScreen extends Screen {
      * короткая — пробуем от корня базы (частая авторская привычка).
      */
     private Path resolveLocalFile(String relative) {
-        String target = relative.replace('\\', '/').trim();
         KnowledgeFileMeta meta = KnowledgeBaseClient.metaOf(selected);
-        if (meta == null) return Path.of(target);
-        Path direct = KnowledgeBaseClient.folderOf(meta).resolve(target);
-        if (Files.isRegularFile(direct)) return direct;
-        Path root = KnowledgeStorage.folder().resolve(target);
-        return Files.isRegularFile(root) ? root : direct;
+        return KnowledgeBaseClient.resolveLocalFile(meta, relative.trim());
     }
 
     // ======= Взаимодействие =======
@@ -471,7 +554,20 @@ public final class KnowledgeBaseScreen extends Screen {
     public boolean mouseClicked(double screenX, double screenY, int button) {
         if (button != 0) return super.mouseClicked(screenX, screenY, button);
         double mx = layout.localX(screenX);
-        double my = layout.localY(screenY);
+        double my = layout.localY(screenY) - offset();
+        if (outlineRows().contains(mx, my)) {
+            if (outlineBar != null && outlineBar.track().contains(mx, my)) {
+                startDrag(3, outlineBar, outlineBar.thumb().contains(mx, my) ? my : my - outlineBar.thumb().height() / 2.0);
+            } else {
+                for (Hit hit : outlineHits) {
+                    if (hit.rect().contains(mx, my)) {
+                        hit.run().run();
+                        break;
+                    }
+                }
+            }
+            return true;
+        }
         if (listBar != null) {
             if (listBar.track().contains(mx, my)) {
                 startDrag(1, listBar, listBar.thumb().contains(mx, my) ? my : my - listBar.thumb().height() / 2.0);
@@ -485,13 +581,13 @@ public final class KnowledgeBaseScreen extends Screen {
             }
         }
         for (int i = contentHits.size() - 1; i >= 0; i--) {
-            if (contentHits.get(i).contains(mx, my)) {
+            if (layout.viewer().contains(mx, my) && contentHits.get(i).contains(mx, my)) {
                 openLink(contentHits.get(i).link());
                 return true;
             }
         }
         for (int i = listHits.size() - 1; i >= 0; i--) {
-            if (listHits.get(i).rect().contains(mx, my)) {
+            if ((layout.list().contains(mx, my) || layout.close().contains(mx, my)) && listHits.get(i).rect().contains(mx, my)) {
                 listHits.get(i).run().run();
                 return true;
             }
@@ -502,7 +598,12 @@ public final class KnowledgeBaseScreen extends Screen {
     @Override
     public boolean mouseScrolled(double screenX, double screenY, double dx, double dy) {
         double mx = layout.localX(screenX);
-        double my = layout.localY(screenY);
+        double my = layout.localY(screenY) - offset();
+        if (layout.outline().contains(mx, my)) {
+            outlineScroll = Math.clamp(outlineScroll - (int) (dy * ROW * 2), 0,
+                    Math.max(0, headings.size() * ROW - outlineRows().height()));
+            return true;
+        }
         var viewer = layout.viewer();
         if (viewer.contains(mx, my)) {
             contentScroll = Math.clamp(contentScroll - (int) (dy * LINE * 3), 0,
@@ -521,10 +622,13 @@ public final class KnowledgeBaseScreen extends Screen {
     @Override
     public boolean mouseDragged(double screenX, double screenY, int button, double dragX, double dragY) {
         if (drag != 0) {
-            var bar = drag == 1 ? scrollbar(layout.list(), listContentHeight, listScroll)
-                    : scrollbar(layout.viewer(), contentHeight, contentScroll);
+            var bar = switch (drag) {
+                case 1 -> listBar;
+                case 2 -> contentBar;
+                default -> outlineBar;
+            };
             if (bar == null) drag = 0;
-            else dragTo(bar, layout.localY(screenY) - dragGrab);
+            else dragTo(bar, layout.localY(screenY) - offset() - dragGrab);
             return true;
         }
         return super.mouseDragged(screenX, screenY, button, dragX, dragY);
@@ -614,7 +718,7 @@ public final class KnowledgeBaseScreen extends Screen {
         g.fill(thumb.x(), thumb.y(), thumb.right(), thumb.bottom(), active ? ACCENT : RAISED);
     }
 
-    /** Тянутый ползунок: areaId 1 — список, 2 — просмотр. */
+    /** Тянутый ползунок: 1 — список, 2 — просмотр, 3 — оглавление. */
     private void startDrag(int areaId, Scrollbar bar, double my) {
         drag = areaId;
         dragGrab = Math.clamp(my - bar.thumb().y(), 0, bar.thumb().height());
@@ -626,6 +730,7 @@ public final class KnowledgeBaseScreen extends Screen {
         int target = Math.clamp((int) Math.round(thumbTop - bar.track().y()) * bar.maxScroll() / span, 0, bar.maxScroll());
         if (drag == 1) listScroll = target;
         else if (drag == 2) contentScroll = target;
+        else if (drag == 3) outlineScroll = target;
     }
 
     private void drawDivider(GuiGraphics g) {

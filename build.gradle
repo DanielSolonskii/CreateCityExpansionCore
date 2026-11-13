@@ -44,6 +44,11 @@ repositories {
         name = "createmod"
         url = "https://maven.createmod.net"
     }
+    maven {
+        name = "CurseMaven"
+        url = "https://cursemaven.com"
+        content { includeGroup "curse.maven" }
+    }
 }
 
 base {
@@ -160,6 +165,13 @@ dependencies {
     // gradle/dev-mods.gradle; compilation never depends on an existing run/.
     // Create: Electro Energetics
     implementation files("libs/electroenergetics-1.21.1-1.1.2.jar")
+
+    def tfmgJar = file(providers.gradleProperty("tfmgJar").getOrElse("../tfmg-1.2.0.jar"))
+    if (tfmgJar.isFile()) {
+        compileOnly files(tfmgJar)
+    } else {
+        compileOnly "curse.maven:create-industry-693815:7430073"
+    }
 
     // Create Simulated / Aeronautics (optional compat): compile-only,
     // в рантайме эти моды предоставляет сборка игрока. Mixin'ы в их

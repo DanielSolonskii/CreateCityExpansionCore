@@ -68,7 +68,10 @@ public final class KnowledgeStorage {
      * Так сервер и клиент не дублируют ход по каталогу.
      */
     public static void forEachMarkdown(Consumer<PathWithRel> visitor) {
-        Path folder = folder();
+        forEachMarkdown(folder(), visitor);
+    }
+
+    public static void forEachMarkdown(Path folder, Consumer<PathWithRel> visitor) {
         if (!Files.isDirectory(folder)) {
             if (!folderWarned) {
                 folderWarned = true;
@@ -78,7 +81,7 @@ public final class KnowledgeStorage {
         }
         folderWarned = false;
         try (Stream<Path> stream = Files.walk(folder)) {
-            stream.filter(Files::isRegularFile)
+            stream.filter(p -> Files.isRegularFile(p, java.nio.file.LinkOption.NOFOLLOW_LINKS))
                     .filter(p -> p.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".md"))
                     .map(p -> new PathWithRel(folder.relativize(p).toString().replace('\\', '/'), p))
                     .sorted((a, b) -> a.rel().compareTo(b.rel()))

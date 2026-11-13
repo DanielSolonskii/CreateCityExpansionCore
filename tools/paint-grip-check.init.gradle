@@ -1,0 +1,9 @@
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    p.tasks.register('checkPaintGrip', JavaExec) {
+        dependsOn p.tasks.named('mineVisualTestClasses')
+        classpath = p.sourceSets.mineVisualTest.runtimeClasspath
+        mainClass = 'com.example.examplemod.client.PaintGripCheck'
+        javaLauncher = p.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    }
+}

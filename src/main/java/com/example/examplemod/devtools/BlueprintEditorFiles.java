@@ -16,7 +16,6 @@ import java.util.UUID;
 
 public final class BlueprintEditorFiles {
     private static final Path SOURCE = Path.of("src/main/resources").resolve(MineBlueprints.RESOURCE_DIRECTORY);
-    private static final long MAX_FILE_BYTES = 256 * 1024;
 
     private BlueprintEditorFiles() {}
 
@@ -36,9 +35,6 @@ public final class BlueprintEditorFiles {
         Map<Tier, Map<BlockPos, BlockState>> tiers = new EnumMap<>(Tier.class);
         for (Tier tier : Tier.values()) {
             Path file = target(root, tier);
-            if (Files.size(file) > MAX_FILE_BYTES) {
-                throw new IOException("Blueprint file is too large: " + file.getFileName());
-            }
             String text = Files.readString(file);
             sources.put(tier, text);
             tiers.put(tier, MineBlueprints.decode(text));

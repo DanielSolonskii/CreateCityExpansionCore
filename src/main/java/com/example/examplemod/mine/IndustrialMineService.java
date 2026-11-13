@@ -35,12 +35,22 @@ public final class IndustrialMineService {
             return;
         }
 
+        MineInteraction.redstone(level, controller);
         IndustrialMineState previousState = controller.getRuntimeState();
         MineElectricalState previousElectrical = controller.getElectricalState();
         MineMultiblock.ValidationResult validation = MineMultiblock.validate(level, controllerPos);
+        ensureSelection(level, controllerPos, controller, validation);
         Tier tier = operatingTier(level, controllerPos, controller, validation);
         if (tier == null && controller.isUserRequestedStart()) {
             fail(controller, IndustrialMineState.STOPPED, BLUEPRINT_LOCKED, false);
+        }
+        if (controller.getRuntimeState() == IndustrialMineState.STOPPED && controller.isUserRequestedStart()) {
+            // A loaded machine retains intent, never its previous running/electrical state.
+            // Retry normal startup while chunks, geology, output or supply become available.
+            start(level, controllerPos, controller, validation, tier);
+            if (MinePowerAccess.isUnsafe(controller.getElectricalState())) {
+                fail(controller, IndustrialMineState.OVERLOAD, "Автозапуск отменён: авария питания.", false);
+            }
         }
         MinePowerSnapshot power = refreshPower(level, controller, validation, tier);
         MineElectricalState electrical = controller.getElectricalState();
@@ -62,12 +72,7 @@ public final class IndustrialMineService {
         boolean importantChange = previousState != controller.getRuntimeState()
                 || previousElectrical != controller.getElectricalState();
         if (importantChange || Math.floorMod(syncPhase, 10L) == 0L) {
-            MineNetworkHandlers.syncNearby(
-                    level,
-                    controllerPos,
-                    createSnapshot(level, controllerPos, controller, validation, tier),
-                    false
-            );
+            MineInstrumentation.publish(level, controller, validation, tier, power);
         }
     }
 
@@ -80,6 +85,8 @@ public final class IndustrialMineService {
         ensureSelection(level, controllerPos, controller, validation);
         Tier tier = operatingTier(level, controllerPos, controller, validation);
         refreshPower(level, controller, validation, tier);
+        MineInstrumentation.publish(level, controller, validation, tier,
+                MinePowerAccess.read(level, validation.powerPort(), usesWorkingLoad(controller), tier == null ? Tier.I : tier));
         return createSnapshot(level, controllerPos, controller, validation, tier);
     }
 
@@ -89,38 +96,8 @@ public final class IndustrialMineService {
             MineControllerBlockEntity controller,
             ResourceLocation requestedDepositId
     ) {
-        MineMultiblock.ValidationResult validation = MineMultiblock.validate(level, controllerPos);
-        Tier tier = operatingTier(level, controllerPos, controller, validation);
-        if (controller.isCommissioned() || controller.getActiveDepositId().isPresent()) {
-            controller.setRuntimeState(
-                    controller.getRuntimeState(),
-                    "Специализация этого контроллера уже зафиксирована."
-            );
-            return createSnapshot(level, controllerPos, controller, validation, tier);
-        }
-        if (controller.getRuntimeState() != IndustrialMineState.STOPPED) {
-            controller.setRuntimeState(
-                    controller.getRuntimeState(),
-                    "Выбор залежи заблокирован, пока шахта активна."
-            );
-            return createSnapshot(level, controllerPos, controller, validation, tier);
-        }
-        GeologyManager manager = GeologyManager.get(level);
-        if (!validation.assembled() || !manager.isStorageAvailable()) {
-            return inspectSnapshot(level, controllerPos, controller);
-        }
-        GeologicalRegion region = GeologyManager.getRegion(level, controllerPos);
-        if (!IndustrialMineOperation.isDepositSelectable(region, requestedDepositId)) {
-            controller.setRuntimeState(
-                    IndustrialMineState.STOPPED,
-                    "Выбор отклонён: залежь не принадлежит региону этой шахты."
-            );
-        } else {
-            controller.setPreviewDepositId(requestedDepositId);
-            controller.setRuntimeState(IndustrialMineState.STOPPED, "Выбрана руда для commissioning.");
-        }
-        refreshPower(level, controller, validation, tier);
-        return createSnapshot(level, controllerPos, controller, validation, tier);
+        // Compatibility entry point: callers cannot choose a different deposit.
+        return inspectSnapshot(level, controllerPos, controller);
     }
 
     public static MineControllerSnapshot controlSnapshot(
@@ -207,10 +184,11 @@ public final class IndustrialMineService {
     }
 
     private static void stop(MineControllerBlockEntity controller) {
+        controller.setUserRequestedStart(false);
         if (controller.getRuntimeState() == IndustrialMineState.STOPPED) {
+            controller.setRuntimeState(IndustrialMineState.STOPPED, "Шахта остановлена.");
             return;
         }
-        controller.setUserRequestedStart(false);
         controller.setShutdownTicks(0);
         controller.setRuntimeState(IndustrialMineState.STOPPING, "Выполняется штатная остановка.");
     }
@@ -233,7 +211,7 @@ public final class IndustrialMineService {
             fail(controller, IndustrialMineState.OVERLOAD, "Авария питания: перегрузка.", false);
         } else if (electrical != MineElectricalState.NORMAL) {
             fail(controller, IndustrialMineState.LOW_POWER,
-                    "Запуск отменён: " + electricalDescription(electrical), false);
+                    "Запуск приостановлен: " + electricalDescription(electrical), true);
         } else {
             controller.setStartupTicks(controller.getStartupTicks() + MACHINE_STEP_TICKS);
             if (controller.getStartupTicks() >= MineControllerBlockEntity.STARTUP_DURATION_TICKS) {
@@ -305,7 +283,9 @@ public final class IndustrialMineService {
         } else if (MinePowerAccess.isUnsafe(electrical)) {
             fail(controller, IndustrialMineState.OVERLOAD, "Авария питания: перегрузка.", false);
         } else if (electrical == MineElectricalState.NORMAL) {
-            controller.setRuntimeState(IndustrialMineState.RUNNING, "Питание восстановлено; добыча продолжена.");
+            boolean starting = controller.getStartupTicks() < MineControllerBlockEntity.STARTUP_DURATION_TICKS;
+            controller.setRuntimeState(starting ? IndustrialMineState.STARTING : IndustrialMineState.RUNNING,
+                    starting ? "Питание восстановлено; запуск продолжен." : "Питание восстановлено; добыча продолжена.");
         }
     }
 
@@ -410,22 +390,16 @@ public final class IndustrialMineService {
             MineControllerBlockEntity controller,
             MineMultiblock.ValidationResult validation
     ) {
-        if (!validation.assembled() || !GeologyManager.get(level).isStorageAvailable()) {
+        if (!GeologyManager.get(level).isStorageAvailable()) {
             return;
         }
         GeologicalRegion region = GeologyManager.getRegion(level, controllerPos);
         if (controller.isCommissioned()) {
             return;
         }
-        IndustrialMineOperation.Selection selection = IndustrialMineOperation.selectDeposit(
-                region,
-                controller.getDisplayDepositId(),
-                controllerPos.getX(),
-                controllerPos.getZ()
-        );
-        if (selection.changed()) {
-            selection.deposit().ifPresent(deposit -> controller.setPreviewDepositId(deposit.getId()));
-        }
+        controller.setPreviewDepositId(region.getDeposits().stream()
+                .filter(deposit -> deposit.localPotentialPerHour(controllerPos.getX(), controllerPos.getZ()) > 0)
+                .map(GeologicalDeposit::getId).findFirst().orElse(null));
     }
 
     private static Optional<GeologicalDeposit> selectedDeposit(
@@ -511,7 +485,7 @@ public final class IndustrialMineService {
         boolean commissioned = controller.isCommissioned();
         Optional<ResourceLocation> depositId = controller.getDisplayDepositId();
         Optional<GeologicalDeposit> selectedDeposit = Optional.empty();
-        if (validation.assembled() && GeologyManager.get(level).isStorageAvailable()) {
+        if (GeologyManager.get(level).isStorageAvailable()) {
             GeologicalRegion authoritative = GeologyManager.getRegion(level, controllerPos);
             region = Optional.of(GeologyRegionSnapshot.from(
                     authoritative,
@@ -520,6 +494,7 @@ public final class IndustrialMineService {
             ));
             selectedDeposit = depositId.flatMap(authoritative::getDeposit);
         }
+        if (!commissioned && region.isEmpty()) depositId = Optional.empty();
         long requested = controller.getLastResult().map(MineOperationResult::requestedAmount).orElse(0L);
         long extracted = controller.getLastResult().map(MineOperationResult::extractedAmount).orElse(0L);
         MineProductionProfile profile = tier == null ? MineProductionProfile.unavailable() : selectedDeposit

@@ -1,0 +1,39 @@
+{
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "tfmg"
+    }
+  ],
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "CPC",
+    "EQT",
+    "RPR"
+  ],
+  "key": {
+    "C": {
+      "item": "create:copper_sheet"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "E": {
+      "item": "electroenergetics:transformer"
+    },
+    "T": {
+      "item": "tfmg:transformer"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    },
+    "Q": {
+      "item": "minecraft:comparator"
+    }
+  },
+  "result": {
+    "id": "createcityexpansioncore:dc_power_bridge",
+    "count": 1
+  }
+}

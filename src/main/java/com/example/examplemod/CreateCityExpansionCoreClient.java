@@ -78,14 +78,12 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(
                 CityPylonModels::onBakingCompleted
         );
-        modEventBus.addListener(IndustrialMineModels::registerAdditional);
-        modEventBus.addListener(IndustrialMineModels::onBakingCompleted);
-        com.example.examplemod.client.render.AssembledBlockVisibility.registerModels(
-                "mine_frame", "technical_block", "drill_unit", "mine_controller", "mine_power_port", "mine_gateway");
-        modEventBus.addListener(com.example.examplemod.client.render.AssembledBlockVisibility::wrapModels);
-        com.example.examplemod.mine.MineControllerBlockEntity.CLIENT_VISUAL_UPDATE =
-                com.example.examplemod.client.render.IndustrialMineVisuals::changed;
-        NeoForge.EVENT_BUS.register(com.example.examplemod.client.render.IndustrialMineVisuals.class);
+        // Machines retain their placed blocks. Only their physical instrument faces have a BER.
+        com.example.examplemod.mine.MineControllerBlockEntity.CLIENT_VISUAL_UPDATE = controller -> {
+                com.example.examplemod.client.sound.MineSoundController.onState(controller.getBlockPos(),
+                        controller.isRemoved() ? com.example.examplemod.mine.IndustrialMineState.STOPPED : controller.getRuntimeState());
+                com.example.examplemod.client.render.MineWorkEffects.changed(controller);
+        };
 
 /*
          * =========================================
@@ -129,8 +127,10 @@ public class CreateCityExpansionCoreClient {
         );
         event.registerBlockEntityRenderer(
                 CreateCityExpansionCore.MINE_CONTROLLER_BLOCK_ENTITY.get(),
-                IndustrialMineRenderer::new
+                com.example.examplemod.client.render.MachineDisplayRenderer::new
         );
+        event.registerBlockEntityRenderer(CreateCityExpansionCore.TECHNICAL_SCREEN_ENTITY.get(),
+                com.example.examplemod.client.render.MachineDisplayRenderer::new);
     }
 
     /*

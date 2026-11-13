@@ -12,12 +12,13 @@ import net.minecraft.resources.ResourceLocation;
  * payload — кто их видит; интерфейс показывает пересечение. Строка — та же, что в
  * playerdata, поэтому сервер и клиент всегда согласованы по формату.
  */
-public record KnowledgeAccessPayload(String files) implements CustomPacketPayload {
+public record KnowledgeAccessPayload(String files, boolean first, boolean last) implements CustomPacketPayload {
+    public KnowledgeAccessPayload(String files) { this(files, true, true); }
     public static final Type<KnowledgeAccessPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath("createcityexpansioncore", "knowledge_access"));
     public static final StreamCodec<RegistryFriendlyByteBuf, KnowledgeAccessPayload> STREAM_CODEC = StreamCodec.of(
-            (b, payload) -> b.writeUtf(payload.files(), 32768),
-            b -> new KnowledgeAccessPayload(b.readUtf(32768)));
+            (b, payload) -> { b.writeUtf(payload.files(), 8192); b.writeBoolean(payload.first()); b.writeBoolean(payload.last()); },
+            b -> new KnowledgeAccessPayload(b.readUtf(8192), b.readBoolean(), b.readBoolean()));
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

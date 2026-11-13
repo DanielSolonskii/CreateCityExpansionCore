@@ -28,6 +28,18 @@ public final class KnowledgeCommands {
         event.getDispatcher().register(Commands.literal("ccec")
                 .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("knowledge")
+                        .then(Commands.literal("reload").requires(source -> source.hasPermission(2)).executes(context -> {
+                            var source = context.getSource();
+                            if (source.getServer().isSingleplayer()) {
+                                source.sendSuccess(() -> Component.literal("В одиночной игре база читает локальные файлы без синхронизации."), false);
+                                return 1;
+                            }
+                            if (!KnowledgeSyncServer.reload(source.getServer(), source)) {
+                                source.sendFailure(Component.literal("Обновление базы знаний уже выполняется.")); return 0;
+                            }
+                            source.sendSuccess(() -> Component.literal("Проверка базы знаний запущена в фоне."), false);
+                            return 1;
+                        }))
                         .then(Commands.literal("add")
                                 .then(Commands.argument("player", GameProfileArgument.gameProfile())
                                         .then(Commands.argument("knowledge", StringArgumentType.greedyString())

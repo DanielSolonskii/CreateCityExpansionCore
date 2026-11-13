@@ -1,5 +1,7 @@
 package com.example.examplemod.multiblock;
 
+import com.example.examplemod.electrical.DrillUnitBlock;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -90,7 +92,8 @@ public final class BlueprintCatalog {
         public Map<Item, Integer> materials(boolean additionsOnly) {
             Map<Item, Integer> counts = new LinkedHashMap<>();
             for (Part part : parts) {
-                if (!part.state().isAir() && (!additionsOnly || part.addedIn() == tier)) {
+                if (!part.state().isAir() && (!additionsOnly || part.addedIn() == tier)
+                        && (!(part.block() instanceof DrillUnitBlock) || DrillUnitBlock.isItemPart(part.state()))) {
                     counts.merge(part.block().asItem(), 1, Integer::sum);
                 }
             }
@@ -132,6 +135,7 @@ public final class BlueprintCatalog {
             if (tier.level() > unlocked.level()) {
                 break;
             }
+            if (layout.blocks(tier).isEmpty()) return active;
             for (var entry : layout.blocks(tier).entrySet()) {
                 BlockPos offset = entry.getKey();
                 BlockPos position = MineMultiblock.getWorldPosition(origin, facing,

@@ -171,7 +171,8 @@ public final class BlueprintEditorClient {
                 && (event.getAction() == GLFW.GLFW_PRESS || event.getAction() == GLFW.GLFW_REPEAT)
                 && (event.getKey() == GLFW.GLFW_KEY_UP || event.getKey() == GLFW.GLFW_KEY_DOWN)) {
             int step = event.getKey() == GLFW.GLFW_KEY_UP ? 1 : -1;
-            selectionHeight = Math.clamp(selectionHeight + step, -16, 16);
+            int height = minecraft.level == null ? 0 : minecraft.level.getHeight() - 1;
+            selectionHeight = Math.clamp(selectionHeight + step, -height, height);
             actionBar(label("selection_height", selectionHeight));
         }
     }

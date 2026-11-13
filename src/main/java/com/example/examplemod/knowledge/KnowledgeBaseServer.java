@@ -44,11 +44,11 @@ public final class KnowledgeBaseServer {
     private KnowledgeBaseServer() {
     }
 
-    /** Вход игрока: выдаём default: visible и синхронизируем актуальный список. */
+    /** Access only. Public defaults are granted from the prepared snapshot after the play-phase handshake. */
     @SubscribeEvent
     public static void login(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player) || player instanceof FakePlayer) return;
-        ensureDefaultVisibility(player);
+        if (player.getServer().isSingleplayerOwner(player.getGameProfile())) return;
         sync(player);
     }
 
@@ -57,8 +57,7 @@ public final class KnowledgeBaseServer {
      * Каталог читается на сервере; если папки нет — прав нет (однократная запись
      * в лог о факте остаётся в логах FML, без спама на каждый вход).
      */
-    private static void ensureDefaultVisibility(ServerPlayer player) {
-        List<KnowledgeFileMeta> scanned = scan();
+    static void grantDefaults(ServerPlayer player, List<KnowledgeFileMeta> scanned) {
         List<String> owned = new ArrayList<>(readList(player));
         boolean changed = false;
         for (KnowledgeFileMeta meta : scanned) {
@@ -72,8 +71,15 @@ public final class KnowledgeBaseServer {
 
     /** Отправляет игроку актуальный список. */
     public static void sync(ServerPlayer player) {
-        PacketDistributor.sendToPlayer(player, new com.example.examplemod.network.KnowledgeAccessPayload(
-                KnowledgeAccess.join(readList(player))));
+        String joined = KnowledgeAccess.join(readList(player));
+        for (int offset=0; offset<Math.max(1,joined.length()); ) {
+            int end=Math.min(joined.length(),offset+8192);
+            if (end<joined.length() && Character.isHighSurrogate(joined.charAt(end-1))) end--;
+            PacketDistributor.sendToPlayer(player, new com.example.examplemod.network.KnowledgeAccessPayload(
+                    joined.substring(offset,end), offset==0, end==joined.length()));
+            if (end==joined.length()) break;
+            offset=end;
+        }
     }
 
     /**
@@ -160,14 +166,4 @@ public final class KnowledgeBaseServer {
         data.put(Player.PERSISTED_NBT_TAG, persistent);
     }
 
-    /**
-     * Скан каталога с разбором передней части. Один проход на вход игрока: папка
-     * маленькая, а данные нужны осмысленные (default, parent_item).
-     */
-    private static List<KnowledgeFileMeta> scan() {
-        List<KnowledgeFileMeta> result = new ArrayList<>();
-        KnowledgeStorage.forEachMarkdown(path ->
-                result.add(KnowledgeFileMeta.parse(path.rel(), KnowledgeStorage.firstLines(path.file(), 8))));
-        return result;
-    }
 }

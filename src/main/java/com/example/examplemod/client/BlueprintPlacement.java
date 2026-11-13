@@ -221,7 +221,9 @@ public final class BlueprintPlacement {
             }
             BlockState actual = active.level.getBlockState(pos);
             BlockState model = cell.state();
-            if (actual.is(model.getBlock()) || (actual.isAir() && model.isAir())) {
+            boolean matches = model.getBlock() instanceof com.example.examplemod.electrical.DrillUnitBlock
+                    ? actual == model : actual.is(model.getBlock());
+            if (matches || (actual.isAir() && model.isAir())) {
                 continue;
             }
             boolean overlaps = !actual.isAir();
