@@ -38,11 +38,12 @@ public final class JourneyAuthoring {
     private static void text(String s,int max,boolean required){ensure(s.length()<=max&&(!required||!s.isBlank())&&s.chars().noneMatch(c->c==0||c==167),"text");}
     public static CompoundTag apply(JourneyData d,boolean operator,JourneyEditorPayload request,CompoundTag value) {
         ensure(operator,"permission");d.requireAvailable();identifier(request.id());
+        JourneyRouteAuthoring.requireUnmanaged(request.id());
         var old=record(d,request.group(),request.id());ensure(revision(old).equals(request.base()),"conflict");
         if(request.action().equals("delete")) {
             ensure(!old.isEmpty(),"missing");
             switch(request.group()) {
-                case "marker" -> {ensure(d.quests.values().stream().noneMatch(q->q.marker.equals(request.id())||q.objectives.stream().anyMatch(o->(o.kind()==ObjectiveKind.VISIT||o.kind()==ObjectiveKind.INTERACT)&&o.target().equals(request.id()))),"referenced");d.markers.remove(request.id());}
+                case "marker" -> {ensure(d.quests.values().stream().noneMatch(q->q.marker.equals(request.id())||q.objectives.stream().anyMatch(o->JourneyRouteAuthoring.spatial(o.kind())&&o.target().equals(request.id()))),"referenced");d.markers.remove(request.id());}
                 case "quest" -> {ensure(d.chains.values().stream().noneMatch(c->c.steps.contains(request.id()))&&d.markers.values().stream().noneMatch(m->m.afterQuest.equals(request.id())),"referenced");d.quests.remove(request.id());}
                 case "chain" -> d.chains.remove(request.id());
                 default -> throw new IllegalArgumentException("group");
@@ -59,19 +60,20 @@ public final class JourneyAuthoring {
                 ensure(value.getInt("Icon")>=0&&value.getInt("Icon")<=7,"range");
                 var m=JourneyCodec.marker(value);ensure(m.point.dimension().length()<=128,"dimension");
                 ensure(m.route.stream().allMatch(p->p.dimension().equals(m.point.dimension())),"dimension");
-                if(!m.afterQuest.isEmpty()) {var q=d.quests.get(m.afterQuest);ensure(q!=null,"reference");ensure(q.objectives.stream().noneMatch(o->(o.kind()==ObjectiveKind.VISIT||o.kind()==ObjectiveKind.INTERACT)&&o.target().equals(m.id)),"cycle");}
+                if(!m.afterQuest.isEmpty()) {JourneyRouteAuthoring.requireUnmanaged(m.afterQuest);var q=d.quests.get(m.afterQuest);ensure(q!=null,"reference");ensure(q.objectives.stream().noneMatch(o->JourneyRouteAuthoring.spatial(o.kind())&&o.target().equals(m.id)),"cycle");}
                 d.markers.put(m.id,m);
             }
             case "quest" -> {
                 ensure(!old.isEmpty()||d.quests.size()<MAX_QUESTS,"limit");var q=JourneyCodec.quest(value);
+                JourneyRouteAuthoring.requireUnmanaged(q.marker);
                 ensure(q.marker.isEmpty()||d.markers.containsKey(q.marker),"reference");
                 ensure(new HashSet<>(q.objectives.stream().map(Objective::id).toList()).size()==q.objectives.size(),"duplicate");
                 var previous=d.quests.get(q.id);
                 if(previous!=null&&!previous.objectives.equals(q.objectives))ensure(!previous.enabled,"disable_first");
                 for(int i=0;i<q.objectives.size();i++) {
                     var o=q.objectives.get(i);
-                    if(o.kind()==ObjectiveKind.VISIT||o.kind()==ObjectiveKind.INTERACT||o.kind()==ObjectiveKind.CITY_MEMBER||o.kind()==ObjectiveKind.ADVANCEMENT)ensure(o.count()==1,"range");
-                    if(o.kind()==ObjectiveKind.VISIT||o.kind()==ObjectiveKind.INTERACT){var m=d.markers.get(o.target());ensure(m!=null&&(!q.enabled||m.enabled)&&!m.afterQuest.equals(q.id),"reference");}
+                    if(JourneyRouteAuthoring.spatial(o.kind())||o.kind()==ObjectiveKind.CITY_MEMBER||o.kind()==ObjectiveKind.ADVANCEMENT)ensure(o.count()==1,"range");
+                    if(JourneyRouteAuthoring.spatial(o.kind())){JourneyRouteAuthoring.requireUnmanaged(o.target());var m=d.markers.get(o.target());ensure(m!=null&&(!q.enabled||m.enabled)&&!m.afterQuest.equals(q.id),"reference");}
                     if(o.kind()==ObjectiveKind.ITEM)ensure(ResourceLocation.tryParse(o.target())!=null&&BuiltInRegistries.ITEM.containsKey(ResourceLocation.parse(o.target())),"item");
                     if(o.kind()==ObjectiveKind.ADVANCEMENT)ensure(ResourceLocation.tryParse(o.target())!=null,"advancement");
                     // Changed conditions never inherit evidence from an old objective with the same ID.
@@ -85,7 +87,7 @@ public final class JourneyAuthoring {
                 var previous=d.chains.get(c.id);if(previous!=null&&!previous.steps.equals(c.steps))ensure(!previous.enabled,"disable_first");
                 ensure(!c.enabled||!c.steps.isEmpty(),"steps");
                 ensure(!c.automatic||d.chains.values().stream().noneMatch(v->!v.id.equals(c.id)&&v.automatic),"automatic");
-                for(var id:c.steps){var q=d.quests.get(id);ensure(q!=null&&(!c.enabled||q.enabled),"reference");ensure(d.chains.values().stream().noneMatch(v->!v.id.equals(c.id)&&v.steps.contains(id)),"duplicate");}
+                for(var id:c.steps){JourneyRouteAuthoring.requireUnmanaged(id);var q=d.quests.get(id);ensure(q!=null&&(!c.enabled||q.enabled),"reference");ensure(d.chains.values().stream().noneMatch(v->!v.id.equals(c.id)&&v.steps.contains(id)),"duplicate");}
                 d.chains.put(c.id,c);
             }
             default -> throw new IllegalArgumentException("group");
@@ -103,11 +105,15 @@ public final class JourneyAuthoring {
         int count=budget.getInt("JourneyEditorCount");if(count>=4){reply(p,"error",r.group(),r.id(),new CompoundTag(),"rate");return;}budget.putInt("JourneyEditorCount",count+1);
         try {
             var d=JourneyData.get(p.getServer());d.requireAvailable();
+            if (JourneyRouteAuthoring.GROUP.equals(r.group())) {
+                JourneyRouteAuthoring.request(p, d, r);
+                return;
+            }
             if(r.action().equals("list")) {
                 reply(p,"begin","","",new CompoundTag(),"");
-                for(var id:d.markers.keySet())reply(p,"entry","marker",id,record(d,"marker",id),"");
-                for(var id:d.quests.keySet())reply(p,"entry","quest",id,record(d,"quest",id),"");
-                for(var id:d.chains.keySet())reply(p,"entry","chain",id,record(d,"chain",id),"");
+                for(var id:d.markers.keySet())if(!JourneyRouteAuthoring.managed(id))reply(p,"entry","marker",id,record(d,"marker",id),"");
+                for(var id:d.quests.keySet())if(!JourneyRouteAuthoring.managed(id))reply(p,"entry","quest",id,record(d,"quest",id),"");
+                for(var id:d.chains.keySet())if(!JourneyRouteAuthoring.managed(id))reply(p,"entry","chain",id,record(d,"chain",id),"");
                 reply(p,"ready","","",new CompoundTag(),"");return;
             }
             var value=r.action().equals("save")?TagParser.parseTag(r.value()):new CompoundTag();

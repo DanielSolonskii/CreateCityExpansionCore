@@ -21,14 +21,41 @@ public final class JourneyCommands {
     private static LiteralArgumentBuilder<CommandSourceStack> lit(String name){return Commands.literal(name);}
     private static RequiredArgumentBuilder<CommandSourceStack,String> id(String name,String group){return Commands.argument(name,StringArgumentType.word()).suggests((c,b)->{var d=JourneyData.get(c.getSource().getServer());var names=switch(group){case "marker"->d.markers.keySet();case "quest"->d.quests.keySet();default->d.chains.keySet();};return SharedSuggestionProvider.suggest(names,b);});}
     private static String str(CommandContext<CommandSourceStack> c,String name){return StringArgumentType.getString(c,name);}
-    private static int edit(CommandContext<CommandSourceStack> c,Edit edit){try{var d=JourneyData.get(c.getSource().getServer());d.requireAvailable();edit.run(c,d);d.setDirty();c.getSource().sendSuccess(()->Component.translatable("gui.createcityexpansioncore.journey.saved"),false);for(var p:c.getSource().getServer().getPlayerList().getPlayers())JourneyServer.send(p,false,"");return 1;}catch(IllegalArgumentException e){c.getSource().sendFailure(Component.translatable("gui.createcityexpansioncore.journey.error",e.getMessage()));return 0;}}
+    private static int edit(CommandContext<CommandSourceStack> context, Edit edit) {
+        try {
+            var data = JourneyData.get(context.getSource().getServer());
+            data.requireAvailable();
+            for (String argument : List.of("id", "marker", "quest", "target")) {
+                String value;
+                try {
+                    value = context.getArgument(argument, String.class);
+                } catch (IllegalArgumentException absent) {
+                    continue;
+                }
+                JourneyRouteAuthoring.requireUnmanaged(value);
+            }
+            edit.run(context, data);
+            data.setDirty();
+            context.getSource().sendSuccess(() -> Component.translatable("gui.createcityexpansioncore.journey.saved"), false);
+            for (var player : context.getSource().getServer().getPlayerList().getPlayers()) {
+                JourneyServer.send(player, false, "");
+            }
+            return 1;
+        } catch (IllegalArgumentException failure) {
+            Component message = "route_managed".equals(failure.getMessage())
+                    ? Component.translatable("gui.createcityexpansioncore.journey.error.route_managed")
+                    : Component.translatable("gui.createcityexpansioncore.journey.error", failure.getMessage());
+            context.getSource().sendFailure(message);
+            return 0;
+        }
+    }
     private static String text(CommandContext<CommandSourceStack> c,int max){String s=str(c,"text");if(s.isBlank()||s.length()>max)throw new IllegalArgumentException("Text length: 1–"+max);return s;}
     private static Point here(CommandContext<CommandSourceStack> c){var p=c.getSource().getPosition();var b=BlockPos.containing(p);return new Point(c.getSource().getLevel().dimension().location().toString(),b.getX(),b.getY(),b.getZ());}
-    private static void questReady(JourneyData d,Quest q){if(q.objectives.isEmpty())throw new IllegalArgumentException("Add objectives first");if(!q.marker.isEmpty())d.marker(q.marker);for(var o:q.objectives)if(o.kind()==ObjectiveKind.VISIT||o.kind()==ObjectiveKind.INTERACT){if(!d.marker(o.target()).enabled)throw new IllegalArgumentException("Objective marker disabled");}}
+    private static void questReady(JourneyData d,Quest q){if(q.objectives.isEmpty())throw new IllegalArgumentException("Add objectives first");if(!q.marker.isEmpty())d.marker(q.marker);for(var o:q.objectives)if(JourneyRouteAuthoring.spatial(o.kind())){if(!d.marker(o.target()).enabled)throw new IllegalArgumentException("Objective marker disabled");}}
     private static void objective(JourneyData d,Quest q,ObjectiveKind kind,String target,int count){
         if(q.enabled)throw new IllegalArgumentException("Disable the quest before changing objectives");if(q.objectives.size()>=MAX_OBJECTIVES)throw new IllegalArgumentException("Too many objectives");
         if(kind!=ObjectiveKind.ITEM&&count!=1)throw new IllegalArgumentException("This objective requires count 1");
-        switch(kind){case VISIT,INTERACT->d.marker(target);case ITEM->{if(!BuiltInRegistries.ITEM.containsKey(ResourceLocation.parse(target)))throw new IllegalArgumentException("Unknown item");}case ADVANCEMENT->ResourceLocation.parse(target);default->{}}
+        switch(kind){case VISIT,INTERACT,OPEN_PYLON->d.marker(target);case ITEM->{if(!BuiltInRegistries.ITEM.containsKey(ResourceLocation.parse(target)))throw new IllegalArgumentException("Unknown item");}case ADVANCEMENT->ResourceLocation.parse(target);default->{}}
         q.objectives.add(new Objective(UUID.randomUUID().toString(),kind,target,count));
     }
     @SubscribeEvent public static void register(RegisterCommandsEvent event){

@@ -15,13 +15,21 @@ public final class JourneyMapLayer {
     private static final Map<CityMapPanel,int[]> controls=new WeakHashMap<>();
     public static void clear(CityMapPanel map){hits.remove(map);controls.remove(map);}
     public static void render(GuiGraphics g,CityMapPanel map,ResourceLocation dim,int x,int y,int w,int h,int mx,int my,boolean hud){
-        var mc=Minecraft.getInstance();var editor=mc.screen instanceof JourneyAtlasScreen s&&s.map==map?s:null;
-        var markers=editor==null?JourneyClient.markers.values():editor.displayMarkers();
-        String target=editor==null?JourneyClient.target:editor.selectedMarker();
+        var mc=Minecraft.getInstance();
+        if (mc.screen instanceof JourneyRouteEditorScreen route && route.uses(map)) {
+            clear(map);
+            return;
+        }
+        var editor=mc.screen instanceof JourneyAtlasScreen s&&s.map==map?s:null;
+        boolean testing = JourneyPlaytest.running();
+        Marker trialMarker = JourneyPlaytest.marker();
+        var markers=testing?(trialMarker==null?List.<Marker>of():List.of(trialMarker)):
+                editor==null?JourneyClient.markers.values():editor.displayMarkers();
+        String target=testing?(trialMarker==null?"":trialMarker.id):editor==null?JourneyClient.target:editor.selectedMarker();
         boolean reduced=map.reducedMotion()||JourneyClient.reduced();long now=net.minecraft.Util.getMillis();
         var selected=markers.stream().filter(m->m.id.equals(target)).findFirst().orElse(null);
         if(selected!=null&&selected.point.dimension().equals(dim.toString())&&!selected.route.isEmpty()){
-            var path=editor==null?JourneyClient.remaining(selected):JourneyClient.path(selected);
+            var path=editor==null?JourneyClient.displayPath(selected):JourneyClient.path(selected);
             for(int i=1;i<path.size();i++)line(g,map,path.get(i-1),path.get(i),0xb0d0ad73);
             for(int i=0;i<path.size()-1;i++){var p=path.get(i);int px=map.worldToScreenX(p.x()+.5),py=map.worldToScreenY(p.z()+.5);if(px>x+8&&px<x+w-8&&py>y+8&&py<y+h-8){diamond(g,px,py,3,BRASS);}}
         }
@@ -35,20 +43,22 @@ public final class JourneyMapLayer {
         }
         Hit hover=null;
         for(var hit:next){var m=markerById.get(hit.id);boolean active=m.id.equals(target),over=!hud&&Math.hypot(mx-hit.x,my-hit.y)<hit.radius+4;
-            int lift=active&&editor==null?(int)((1-reveal(now-JourneyClient.targetAt,reduced))*5):0;
-            boolean done=editor==null&&!active&&JourneyClient.quests.stream().anyMatch(q->q.getString("Marker").equals(m.id)&&q.getBoolean("Done"));mark(g,hit.x,hit.y-lift,m,active,over,now,reduced,done);
+            int lift=active&&editor==null?(int)((1-reveal(now-JourneyClient.displayTargetAt(),reduced))*5):0;
+            boolean done=!testing&&editor==null&&!active&&JourneyClient.quests.stream().anyMatch(q->q.getString("Marker").equals(m.id)&&q.getBoolean("Done"))
+                    &&JourneyClient.quests.stream().noneMatch(q->q.getString("Marker").equals(m.id)&&!q.getBoolean("Done"));
+            mark(g,hit.x,hit.y-lift,m,active,over,now,reduced,done);
             if(hit.count>1){g.fill(hit.x+7,hit.y+5,hit.x+23,hit.y+16,SURFACE);g.drawString(mc.font,""+hit.count,hit.x+10,hit.y+7,BRASS,false);}
             if(over)hover=hit;
         }
         // Numbered expedition steps use the same markers; completed steps stay quiet.
-        if(editor==null&&!JourneyClient.chain.isEmpty())for(var chain:JourneyClient.chains)if(chain.getString("Id").equals(JourneyClient.chain)){
+        if(!testing&&editor==null&&!JourneyClient.chain.isEmpty())for(var chain:JourneyClient.chains)if(chain.getString("Id").equals(JourneyClient.chain)){
             var steps=JourneyCodec.strings(chain,"Steps");for(int i=0;i<steps.size();i++){String id=steps.get(i);var q=JourneyClient.quests.stream().filter(v->v.getString("Id").equals(id)).findFirst().orElse(null);if(q==null)continue;var hit=next.stream().filter(v->v.id.equals(q.getString("Marker"))).findFirst().orElse(null);if(hit!=null)g.drawString(mc.font,""+(i+1),hit.x-15,hit.y-15,q.getBoolean("Done")?MUTED:BRASS,false);}
         }
-        var done=JourneyClient.completionMarker;long elapsed=now-JourneyClient.completionAt;
-        if(editor==null&&done!=null&&elapsed<1100&&done.point.dimension().equals(dim.toString())){int sx=map.worldToScreenX(done.point.x()+.5),sy=map.worldToScreenY(done.point.z()+.5);mark(g,sx,sy,done,false,false,now,true,true);if(!reduced)circle(g,sx,sy,12+elapsed*.013,((int)(100*(1-elapsed/1100d))<<24)|(BRASS&0xffffff));}
+        var done=JourneyClient.displayCompletion();long elapsed=now-JourneyClient.displayCompletionAt();
+        if(editor==null&&done!=null&&elapsed<950&&done.point.dimension().equals(dim.toString())){int sx=map.worldToScreenX(done.point.x()+.5),sy=map.worldToScreenY(done.point.z()+.5);mark(g,sx,sy,done,false,false,now,true,true);}
         if(hover!=null){var m=markerById.get(hover.id);int cw=Math.min(206,w-12),cx=Math.clamp(hover.x+18,x+6,x+w-cw-6),cy=Math.clamp(hover.y-48,y+6,y+h-55);panel(g,cx,cy,cw,49);g.drawString(mc.font,mc.font.plainSubstrByWidth(m.title,cw-16),cx+8,cy+7,TEXT,false);g.drawString(mc.font,mc.font.plainSubstrByWidth(m.description.isBlank()?JourneyClient.tr("kind."+m.kind.name()).getString():m.description,cw-16),cx+8,cy+21,MUTED,false);g.drawString(mc.font,JourneyClient.tr(hover.count>1?"cluster_hint":"marker_hint"),cx+8,cy+35,BRASS,false);}
-        hits.put(map,hud?List.of():next);
-        if(!hud&&editor==null&&mc.screen instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen&&w>=200&&h>=140){int bx=x+w-90,by=y+8;panel(g,bx,by,82,20);g.drawCenteredString(mc.font,JourneyClient.tr("markers"),bx+41,by+6,BRASS);controls.put(map,new int[]{bx,by});}else controls.remove(map);
+        hits.put(map,hud||testing?List.of():next);
+        if(!testing&&!hud&&editor==null&&mc.screen instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen&&w>=200&&h>=140){int bx=x+w-90,by=y+8;panel(g,bx,by,82,20);g.drawCenteredString(mc.font,JourneyClient.tr("markers"),bx+41,by+6,BRASS);controls.put(map,new int[]{bx,by});}else controls.remove(map);
     }
     public static void line(GuiGraphics g,CityMapPanel map,Point a,Point b,int color){
         if(!a.dimension().equals(b.dimension()))return;
