@@ -43,3 +43,29 @@ Install `industrial-propulsion` separately in the world's `datapacks` directory 
 - One pine resin and 250 mB of water produce 250 mB of turpentine in an unheated steel or firebrick-lined Chemical Vat with a mixing attachment.
 
 The recipe test loads and checks the Propulsion pack when the Propulsion mod is present in the test game.
+
+## Industrial TFMG ore recovery
+
+Requires Minecraft 1.21.1, Create 6.0.10 and TFMG 1.2.0. Copy the `industrial-tfmg-ores` folder into the world's `datapacks` folder and run `/reload`. Check `/datapack list enabled` and run `/datapack enable "file/industrial-tfmg-ores" last` if needed.
+
+Use a steel or firebrick-lined Chemical Vat with a powered Industrial Mixer. Fit the mixing blade for heated recipes and the centrifuge attachment for the other recipes. A heated vat needs at least two fed Blaze Burners underneath it with ordinary fuel. Raw ores in the table are the items dropped by mining.
+
+| Product | Inputs per batch | Guaranteed outputs | Vat setup |
+| --- | --- | --- | --- |
+| Nickel | 4 raw copper and 125 mB sulfuric acid | 1 raw nickel and 2 crushed copper | Mixing blade, heated |
+| Lead | 4 raw zinc and 250 mB water | 1 raw lead and 2 crushed zinc | Centrifuge |
+| Bauxite | 2 raw iron, 1 clay ball and 250 mB water | 1 bauxite powder and 1 crushed iron | Centrifuge |
+| Lithium | 2 clay balls, 1 redstone dust and 500 mB sulfuric acid | 1 raw lithium | Mixing blade, heated |
+| Sulfur | 4 coal and 250 mB water | 1 sulfur dust and 2 coal | Centrifuge |
+
+For the first vat and centrifuge, use the following recipes in a regular Create Mechanical Mixer and Basin. These batches yield no ore byproducts.
+
+| Inputs | Output | Heat |
+| --- | --- | --- |
+| 8 raw copper, 1 charcoal and 500 mB water | 1 raw nickel | Heated |
+| 8 raw zinc, 1 charcoal and 500 mB water | 1 raw lead | None |
+| 5 raw iron, 4 clay balls and 1000 mB water | 1 bauxite powder | None |
+
+Process the starter bauxite powder into aluminum using the stock TFMG vat recipe with two electrodes. The centrifuge then gives access to sulfur for the stock sulfuric acid recipe.
+
+For fireclay, combine 3 clay balls and 1 brick in any crafting grid to make 4 fireclay balls. The brick represents crushed fired clay mixed into the raw clay.
