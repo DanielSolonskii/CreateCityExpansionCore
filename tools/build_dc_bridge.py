@@ -108,7 +108,7 @@ def main():
  for face,rot in [('north',0),('east',90),('south',180),('west',270)]:
   for tfmg in (False,True):variants[f'facing={face},tfmg={str(tfmg).lower()}']={'model':'createcityexpansioncore:block/dc_power_bridge'+('_tfmg' if tfmg else ''),'y':rot}
  save(A/'blockstates/dc_power_bridge.json',{'variants':variants})
- display={'gui':{'rotation':[25,225,0],'translation':[-3,-1,0],'scale':[.42]*3},'ground':{'translation':[-4,2,0],'scale':[.3]*3},'fixed':{'translation':[-4,0,0],'scale':[.4]*3},'thirdperson_righthand':{'rotation':[75,45,0],'translation':[-3,2,1],'scale':[.3]*3},'firstperson_righthand':{'rotation':[0,45,0],'translation':[-2,0,0],'scale':[.35]*3}}
+ display={'gui':{'rotation':[25,225,0],'translation':[2.375,1.53125,0],'scale':[.42]*3},'ground':{'translation':[-4,2,0],'scale':[.3]*3},'fixed':{'translation':[-4,0,0],'scale':[.4]*3},'thirdperson_righthand':{'rotation':[75,45,0],'translation':[-3,2,1],'scale':[.3]*3},'firstperson_righthand':{'rotation':[0,45,0],'translation':[-2,0,0],'scale':[.35]*3}}
  item={'parent':'minecraft:block/block','textures':model['textures'],'display':display,'elements':all_elements}
  save(A/'models/item/dc_power_bridge.json',item)
  bb=[]
