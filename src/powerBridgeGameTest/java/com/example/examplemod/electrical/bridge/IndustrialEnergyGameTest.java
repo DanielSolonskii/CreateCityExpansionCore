@@ -125,24 +125,48 @@ public final class IndustrialEnergyGameTest {
         var ids = new ArrayList<>(repository.getSelectedIds());
         ids.remove("file/industrial-ee");
         ids.add("file/industrial-ee");
+        boolean propulsion = net.neoforged.fml.ModList.get().isLoaded("createpropulsion");
+        if (propulsion) {
+            h.assertTrue(repository.isAvailable("file/industrial-propulsion"), "Industrial Propulsion datapack discovered");
+            ids.remove("file/industrial-propulsion");
+            ids.add("file/industrial-propulsion");
+        }
         var reload = server.reloadResources(ids);
         h.succeedWhen(() -> {
             h.assertTrue(reload.isDone(), "Waiting for the recipe reload");
             reload.join();
             assertIndustrialRecipes(h);
+            assertVatRecipe(h, "electroenergetics:mixing/transformer_oil");
+            if (propulsion) {
+                assertVatRecipe(h, "createpropulsion:mixing/turpentine");
+                assertRecipeUses(h, "createpropulsion:crafting/solid_burner", "tfmg:gas_lamp");
+                assertRecipeUses(h, "createpropulsion:crafting/liquid_burner", "tfmg:gas_lamp");
+                assertRecipeUses(h, "createpropulsion:crafting/thruster", "tfmg:heavy_machinery_casing");
+                assertRecipeUses(h, "createpropulsion:crafting/solid_fuel_thruster", "tfmg:heavy_machinery_casing");
+                assertRecipeUses(h, "createpropulsion:crafting/ion_thruster", "tfmg:steel_mechanism");
+            }
         });
+    }
+
+    private static void assertVatRecipe(GameTestHelper h, String recipeId) {
+        var type = h.getLevel().getRecipeManager().byKey(ResourceLocation.parse(recipeId)).orElseThrow().value().getType();
+        h.assertTrue(ResourceLocation.parse("tfmg:vat_machine_recipe").equals(BuiltInRegistries.RECIPE_TYPE.getKey(type)),
+                recipeId + " is a Chemical Vat recipe");
     }
 
     private static void assertIndustrialRecipes(GameTestHelper h) {
         String[] names = {"alternator_rotor", "stator", "alternator_brushes", "three_phase_alternator_brushes"};
         String[] parts = {"tfmg:rotor", "tfmg:stator", "tfmg:capacitor_item", "tfmg:electromagnetic_coil"};
         for (int i = 0; i < names.length; i++) {
-            var id = ResourceLocation.parse("electroenergetics:crafting/" + names[i]);
-            var recipe = h.getLevel().getRecipeManager().byKey(id).orElseThrow().value();
-            var item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(parts[i]));
-            h.assertTrue(recipe.getIngredients().stream().anyMatch(ingredient -> ingredient.test(new ItemStack(item))),
-                    id + " uses " + parts[i]);
+            assertRecipeUses(h, "electroenergetics:crafting/" + names[i], parts[i]);
         }
+    }
+
+    private static void assertRecipeUses(GameTestHelper h, String recipeId, String itemId) {
+        var recipe = h.getLevel().getRecipeManager().byKey(ResourceLocation.parse(recipeId)).orElseThrow().value();
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemId));
+        h.assertTrue(recipe.getIngredients().stream().anyMatch(ingredient -> ingredient.test(new ItemStack(item))),
+                recipeId + " uses " + itemId);
     }
 
     private static void alternator(GameTestHelper h, int rpm) {

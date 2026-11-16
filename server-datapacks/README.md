@@ -15,6 +15,8 @@ rotorFullLoadCurrent = 100.0
 
 The pack replaces the rotor, stator and DC brush recipes and adds a recipe for three-phase brushes. A full EE section requires one TFMG rotor and eight TFMG stators. The rotor is made in Create mechanical crafters. The other three recipes use a normal crafting grid.
 
+Transformer oil now uses the TFMG Chemical Vat instead of the Create mixer. A heated steel or firebrick-lined vat with a mixing attachment turns 250 mB of plant oil and 250 mB of water into 125 mB of transformer oil.
+
 The datapack controls recipes. The EE config applies the power setting to both brush types and to existing alternators. A full section has one rotor and four correctly oriented stators. Its nominal output is 13.824 kW at 64 RPM, 27.648 kW at 128 RPM and 55.296 kW at 256 RPM.
 
 ## Powering a tier I mine
@@ -30,3 +32,14 @@ With the tested settings, an EE motor supplied 1,600 SU to a shaft load at 32 RP
 With the TFMG motor's stock 30 Ω resistance and base capacity of 12 SU per RPM, the maximum capacity per input watt occurs at 80 V after integer rounding. The server test measured 192 SU of available capacity and 213 W of draw at that point. The best of the tested survival generators, a fully built EE section, returns less than 1 W per input SU. Both motor ratios therefore leave a loss in the round trip, even before cable and bridge losses. These results assume Create stress is enabled and the tested generator and motor settings are applied.
 
 The `IndustrialEnergyGameTest` suite checks the loaded recipes, a four-stator EE section on a test load at each speed, and the TFMG-to-EE converter feeding an actual mine power port. For development, use `-I tools/powerbridge-gametest.init.gradle -I tools/industrial-energy-gametest.init.gradle runGameTestServer -x prepareDevMods` with both configs above in `build/checks/powerbridge-with-tfmg/config`.
+
+## Industrial Create Propulsion
+
+Install `industrial-propulsion` separately in the world's `datapacks` directory on a server with Create Propulsion 1.1.5, its required dependencies and TFMG 1.2.0. Enable it with `/datapack enable "file/industrial-propulsion" last` if needed. The two packs can be installed independently.
+
+- Both burners use a TFMG gas lamp in place of the blast furnace.
+- The liquid and solid fuel thrusters use a TFMG heavy machinery casing in place of the brass casing and chute, respectively.
+- The ion thruster uses a TFMG steel mechanism in place of the precision mechanism.
+- One pine resin and 250 mB of water produce 250 mB of turpentine in an unheated steel or firebrick-lined Chemical Vat with a mixing attachment.
+
+The recipe test loads and checks the Propulsion pack when the Propulsion mod is present in the test game.
