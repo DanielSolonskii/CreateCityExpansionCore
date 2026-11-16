@@ -1,0 +1,24 @@
+{
+  "type": "create:mechanical_crafting",
+  "pattern": [
+    " W ",
+    "RS ",
+    " W "
+  ],
+  "key": {
+    "W": {
+      "item": "electroenergetics:copper_wire_spool"
+    },
+    "R": {
+      "item": "tfmg:rotor"
+    },
+    "S": {
+      "item": "create:shaft"
+    }
+  },
+  "result": {
+    "id": "electroenergetics:alternator_rotor",
+    "count": 1
+  },
+  "accept_mirrored": false
+}

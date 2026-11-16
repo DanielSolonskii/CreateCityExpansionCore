@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "TWT"
+  ],
+  "key": {
+    "T": {
+      "item": "tfmg:stator"
+    },
+    "W": {
+      "item": "electroenergetics:copper_wire_spool"
+    }
+  },
+  "result": {
+    "id": "electroenergetics:stator",
+    "count": 1
+  }
+}
