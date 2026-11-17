@@ -11,9 +11,6 @@ import java.util.Objects;
 public record GeologyDepositSnapshot(
         ResourceLocation depositId,
         ResourceLocation resourceId,
-        long initialReserve,
-        long remainingReserve,
-        DepositStage stage,
         double grade,
         int depth,
         double hardness,
@@ -27,15 +24,8 @@ public record GeologyDepositSnapshot(
     public GeologyDepositSnapshot {
         Objects.requireNonNull(depositId, "depositId");
         Objects.requireNonNull(resourceId, "resourceId");
-        Objects.requireNonNull(stage, "stage");
         Objects.requireNonNull(qualityClass, "qualityClass");
         Objects.requireNonNull(sizeClass, "sizeClass");
-        if (initialReserve <= 0) {
-            throw new IllegalArgumentException("initialReserve must be positive");
-        }
-        if (remainingReserve < 0 || remainingReserve > initialReserve) {
-            throw new IllegalArgumentException("remainingReserve is outside deposit bounds");
-        }
         if (!Double.isFinite(grade) || grade <= 0.0 || grade > 1.0) {
             throw new IllegalArgumentException("grade must be finite and in (0, 1]");
         }
@@ -72,9 +62,6 @@ public record GeologyDepositSnapshot(
         return new GeologyDepositSnapshot(
                 deposit.getId(),
                 deposit.getResourceId(),
-                deposit.getInitialReserve(),
-                deposit.getRemainingReserve(),
-                deposit.getStage(),
                 deposit.getGrade(),
                 deposit.getDepth(),
                 deposit.getHardness(),
@@ -92,13 +79,5 @@ public record GeologyDepositSnapshot(
                 deposit.getCenterX(),
                 deposit.getCenterZ()
         );
-    }
-
-    public double remainingRatio() {
-        return (double) remainingReserve / initialReserve;
-    }
-
-    public boolean depleted() {
-        return remainingReserve == 0;
     }
 }

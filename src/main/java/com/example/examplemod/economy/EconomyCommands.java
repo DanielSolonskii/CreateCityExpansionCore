@@ -46,6 +46,7 @@ public final class EconomyCommands {
                                 .executes(context -> setTreasury(context.getSource(),StringArgumentType.getString(context,"cityId"),LongArgumentType.getLong(context,"amount"))))))
         );
     }
+
     private static int pay(CommandSourceStack source, ServerPlayer receiver, long amount) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer sender=source.getPlayerOrException();boolean ok=EconomyManager.get(sender.serverLevel()).pay(sender.getUUID(),receiver.getUUID(),amount);
         source.sendSuccess(()->Component.translatable(ok?"command.createcityexpansioncore.economy.success":"command.createcityexpansioncore.economy.failed"),false);return ok?1:0;

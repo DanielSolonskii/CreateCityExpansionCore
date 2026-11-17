@@ -1,6 +1,8 @@
 ### Gradle ###
 .gradle
 build/
+/build-mine-world/
+/.gradle-mine-world/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/**/build/
 

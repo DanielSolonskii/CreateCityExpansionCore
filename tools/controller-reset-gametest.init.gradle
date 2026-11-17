@@ -1,0 +1,5 @@
+// Isolated regression test; no dependency on the shape of user-edited mine blueprints.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    p.sourceSets.mineVisualTest.java.setIncludes(['**/MineControllerResetGameTest.java'])
+}

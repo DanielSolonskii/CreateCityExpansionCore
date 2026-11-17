@@ -1,5 +1,8 @@
 {
   "variants": {
-    "": { "model": "createcityexpansioncore:block/cargo_router" }
+    "facing=north": { "model": "createcityexpansioncore:block/cargo_router" },
+    "facing=east": { "model": "createcityexpansioncore:block/cargo_router", "y": 90 },
+    "facing=south": { "model": "createcityexpansioncore:block/cargo_router", "y": 180 },
+    "facing=west": { "model": "createcityexpansioncore:block/cargo_router", "y": 270 }
   }
 }

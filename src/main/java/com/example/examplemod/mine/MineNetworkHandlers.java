@@ -33,16 +33,7 @@ public final class MineNetworkHandlers {
             BlockPos controllerPos,
             MineControllerBlockEntity controller
     ) {
-        send(
-                player,
-                IndustrialMineService.inspectSnapshot(
-                        player.serverLevel(),
-                        controllerPos,
-                        controller
-                ),
-                true
-        );
-        sendCommissionContext(player, controllerPos);
+        IndustrialMineService.inspectSnapshot(player.serverLevel(), controllerPos, controller);
     }
 
     public static void commission(
@@ -51,95 +42,8 @@ public final class MineNetworkHandlers {
             UUID cityId,
             net.minecraft.resources.ResourceLocation depositId
     ) {
-        Optional<ControllerContext> contextResult = findController(player, controllerPos);
-        if (contextResult.isEmpty()) {
-            return;
-        }
-        ControllerContext context = contextResult.get();
-        MineControllerBlockEntity controller = context.controller();
-        CityManager manager = CityManager.get(context.level().getServer().overworld());
-        City city = manager.getCity(cityId);
-        String failureKey = null;
-        GeologicalDeposit deposit = null;
-
-        if (city == null) {
-            failureKey = "message.createcityexpansioncore.mine.commission.city_missing";
-        } else if (!city.canBuild(player.getUUID())) {
-            failureKey = "message.createcityexpansioncore.mine.commission.permission_denied";
-        } else if (city.getProjects().size() >= city.getProjectCapacity()) {
-            failureKey = "message.createcityexpansioncore.mine.commission.capacity_full";
-        } else if (controller.isCommissioned()) {
-            failureKey = "message.createcityexpansioncore.mine.commission.already_registered";
-        } else if (!MineMultiblock.validate(context.level(), controllerPos).assembled()) {
-            failureKey = "message.createcityexpansioncore.mine.commission.structure_invalid";
-        } else if (!GeologyManager.get(context.level()).isStorageAvailable()) {
-            failureKey = "message.createcityexpansioncore.mine.commission.geology_unavailable";
-        } else {
-            GeologicalRegion region = GeologyManager.getRegion(context.level(), controllerPos);
-            deposit = region.getDeposit(depositId)
-                    .filter(value -> !value.isDepleted())
-                    .orElse(null);
-            if (deposit == null) {
-                failureKey = "message.createcityexpansioncore.mine.commission.deposit_unavailable";
-            }
-        }
-
-        if (failureKey == null && controller.getActiveDepositId().isPresent()
-                && !controller.getActiveDepositId().get().equals(depositId)) {
-            failureKey = "message.createcityexpansioncore.mine.commission.specialization_locked";
-        }
-
-        if (failureKey != null) {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                    "message.createcityexpansioncore.mine.commission.failed",
-                    net.minecraft.network.chat.Component.translatable(failureKey)
-            ));
-            send(player, IndustrialMineService.inspectSnapshot(
-                    context.level(), controllerPos, controller
-            ), false);
-            sendCommissionContext(player, controllerPos);
-            return;
-        }
-
-        UUID projectId = UUID.randomUUID();
-        UUID creatorId = controller.getCreatorId().orElse(player.getUUID());
-        controller.setCreator(creatorId, com.example.examplemod.auth.PlayerNames.name(player));
-        CityProject project = new CityProject(
-                projectId,
-                city.getId(),
-                CityProjectType.INDUSTRIAL_MINE,
-                context.level().dimension().location(),
-                controllerPos,
-                creatorId,
-                depositId,
-                deposit.getResourceId(),
-                deposit.getGrade()
-        );
-        if (!manager.addProject(city, project)
-                || !controller.commission(
-                city.getId(), projectId, depositId, deposit.getResourceId()
-        )) {
-            manager.removeProject(city, projectId);
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                    "message.createcityexpansioncore.mine.commission.not_completed"
-            ));
-        } else {
-            player.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
-                    "message.createcityexpansioncore.mine.commission.complete", city.getName()
-            ));
-            // Редкое значимое событие: проект промышленной шахты введён.
-            WorldSoundHelper.playAt(
-                    context.level(),
-                    controllerPos,
-                    ModSounds.PROJECT_COMMISSION.get(),
-                    1.0F,
-                    1.0F
-            );
-        }
-        send(player, IndustrialMineService.inspectSnapshot(
-                context.level(), controllerPos, controller
-        ), false);
-        sendCommissionContext(player, controllerPos);
+        // Legacy packets cannot choose a city or resource. Apply the physical control rules.
+        MineInteraction.press(player, controllerPos);
     }
 
     public static void selectDeposit(
@@ -147,16 +51,8 @@ public final class MineNetworkHandlers {
             BlockPos controllerPos,
             net.minecraft.resources.ResourceLocation depositId
     ) {
-        findController(player, controllerPos).ifPresent(context -> send(
-                player,
-                IndustrialMineService.selectDepositSnapshot(
-                        context.level(),
-                        controllerPos,
-                        context.controller(),
-                        depositId
-                ),
-                false
-        ));
+        // Deposits are spatial and cannot be selected by a client.
+        findController(player, controllerPos).ifPresent(c -> IndustrialMineService.inspectSnapshot(c.level(), controllerPos, c.controller()));
     }
 
     public static void control(
@@ -164,16 +60,7 @@ public final class MineNetworkHandlers {
             BlockPos controllerPos,
             MineControlCommand command
     ) {
-        findController(player, controllerPos).ifPresent(context -> send(
-                player,
-                IndustrialMineService.controlSnapshot(
-                        context.level(),
-                        controllerPos,
-                        context.controller(),
-                        command
-                ),
-                false
-        ));
+        MineInteraction.command(player, controllerPos, command);
     }
 
     static void syncNearby(

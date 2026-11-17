@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "CCC",
+    "WAW"
+  ],
+  "key": {
+    "C": {
+      "item": "electroenergetics:connector"
+    },
+    "W": {
+      "item": "tfmg:electromagnetic_coil"
+    },
+    "A": {
+      "item": "electroenergetics:alternator_brushes"
+    }
+  },
+  "result": {
+    "id": "electroenergetics:three_phase_alternator_brushes",
+    "count": 1
+  }
+}

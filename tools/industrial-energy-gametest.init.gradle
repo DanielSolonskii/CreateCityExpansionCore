@@ -1,0 +1,8 @@
+// Use after powerbridge-gametest.init.gradle, with an isolated game directory.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    project.sourceSets.powerBridgeWithTfmgGameTest.java.setIncludes(['**/IndustrialEnergyGameTest.java'])
+    project.neoForge.runs.named('gameTestServer').configure {
+        systemProperty 'ccec.energyDatapacks', project.file('server-datapacks').absolutePath
+    }
+}

@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.item.MagneticAnalyzerItem;
+import com.example.examplemod.item.MagneticAnalyzerMode;
 import com.example.examplemod.item.CityPylonItem;
 import com.example.examplemod.item.MineControllerItem;
 import com.example.examplemod.item.AccessControlRemoteItem;
@@ -46,6 +47,7 @@ import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.ChangeCityRolePayload;
 import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.network.GeologyWideScanPayload;
 import com.example.examplemod.command.GeologyCommand;
 import com.example.examplemod.item.ModItems;
 import com.example.examplemod.item.IndustrialMaterials;
@@ -77,6 +79,7 @@ import net.minecraft.core.BlockPos;
 import com.example.examplemod.network.GeologyAnalysisPayload;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.core.component.DataComponentType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.MenuType;
@@ -180,6 +183,15 @@ public class CreateCityExpansionCore {
     public static PayloadHandler<GeologyAnalysisPayload> GEOLOGY_ANALYSIS_HANDLER =
             (payload, context) -> {};
 
+    /*
+     * Широкий спектр анализатора: сервер отправляет контуры
+     * залежей, клиентское состояние принимает overlay карты
+     * (см. GeologyWideScanOverlay). До замены — no-op, чтобы
+     * тип канала был известен при handshake.
+     */
+    public static PayloadHandler<GeologyWideScanPayload> GEOLOGY_WIDE_SCAN_HANDLER =
+            (payload, context) -> {};
+
     public static PayloadHandler<MineControllerSnapshotPayload> MINE_CONTROLLER_SNAPSHOT_HANDLER =
             (payload, context) -> {};
 
@@ -238,6 +250,35 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
 
     /*
      * =========================================
+     * DATA COMPONENTS
+     * =========================================
+     */
+
+    /*
+     * Компоненты предметов. Режим спектра магнитного
+     * анализатора живёт в самом предмете: переживает
+     * выкладывание и перезапуск, синхронизирован в сеть
+     * для тултипа.
+     */
+    public static final DeferredRegister<DataComponentType<?>>
+            DATA_COMPONENTS =
+            DeferredRegister.create(
+                    Registries.DATA_COMPONENT_TYPE,
+                    MODID
+            );
+
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<MagneticAnalyzerMode>>
+            ANALYZER_MODE =
+            DATA_COMPONENTS.register(
+                    "analyzer_mode",
+                    () -> DataComponentType.<MagneticAnalyzerMode>builder()
+                            .persistent(MagneticAnalyzerMode.CODEC)
+                            .networkSynchronized(MagneticAnalyzerMode.STREAM_CODEC)
+                            .build()
+            );
+
+    /*
+     * =========================================
      * MENUS
      * =========================================
      */
@@ -290,7 +331,6 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
                                     .mapColor(MapColor.METAL)
-                                    .noLootTable()
                     )
             );
 
@@ -361,7 +401,8 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                             .title(Component.translatable(
                                     "itemGroup." + MODID
                             ))
-                            .icon(() -> IndustrialMaterials.STEEL_PLATE.get()
+                            .icon(() -> CreateCityExpansionCore.CITY_PYLON_ITEM
+                                    .get()
                                     .getDefaultInstance())
                             .displayItems(
                                     (parameters, output) ->
@@ -410,6 +451,11 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     new Item.Properties()
                             .durability(10)
             );
+    public static final DeferredItem<Item> BLUEPRINT_TERMINAL =
+            ITEMS.registerItem("blueprint_terminal", Item::new, new Item.Properties().stacksTo(1));
+    public static final DeferredItem<Item> BLUEPRINT_EDITOR =
+            ITEMS.registerItem("blueprint_editor", Item::new, new Item.Properties().stacksTo(1));
+
     /*
      * Пульт управления доступом: открывает один блок города для ПКМ
      * любого игрока. Выключатель — повторное использование закрывает блок.
@@ -553,18 +599,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     "reinforced_concrete",
                     REINFORCED_CONCRETE
             );
-    public static final DeferredBlock<Block> REFRACTORY_BLOCK = BLOCKS.registerSimpleBlock(
-            "refractory_block",
-            BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BROWN).strength(3.5F)
-                    .requiresCorrectToolForDrops().sound(net.minecraft.world.level.block.SoundType.DEEPSLATE_TILES)
-    );
-    public static final DeferredItem<BlockItem> REFRACTORY_BLOCK_ITEM = ITEMS.registerSimpleBlockItem(
-            "refractory_block", REFRACTORY_BLOCK
-    );
-
-public static final DeferredItem<Item> QUICKLIME = ITEMS.registerSimpleItem("quicklime", new Item.Properties());
-
-public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
+    public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
             BLOCKS.register(
                     "mine_gateway",
                     () -> new MineGatewayBlock(
@@ -585,6 +620,19 @@ public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
                             MINE_GATEWAY.get()
                     ).build(null)
             );
+
+    public static final DeferredItem<com.example.examplemod.machine.PanelPainterItem> PANEL_PAINTER =
+            ITEMS.registerItem("panel_painter", com.example.examplemod.machine.PanelPainterItem::new,
+                    new Item.Properties().stacksTo(1));
+
+    public static final DeferredBlock<com.example.examplemod.machine.MachineDisplayBlock> TECHNICAL_SCREEN =
+            BLOCKS.register("technical_screen", () -> new com.example.examplemod.machine.MachineDisplayBlock(
+                    BlockBehaviour.Properties.of().strength(3.0F).mapColor(MapColor.METAL)));
+    public static final DeferredItem<Item> TECHNICAL_SCREEN_ITEM = ITEMS.registerItem("technical_screen",
+            properties -> new BlockItem(TECHNICAL_SCREEN.get(), properties), new Item.Properties());
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.machine.MachineDisplayBlockEntity>> TECHNICAL_SCREEN_ENTITY =
+            BLOCK_ENTITY_TYPES.register("technical_screen", () -> BlockEntityType.Builder.of(
+                    com.example.examplemod.machine.MachineDisplayBlockEntity::new, TECHNICAL_SCREEN.get()).build(null));
 
     public static final DeferredBlock<com.example.examplemod.block.TransportRegistrationTerminalBlock> TRANSPORT_REGISTRATION_TERMINAL =
             BLOCKS.register("transport_registration_terminal", () -> new com.example.examplemod.block.TransportRegistrationTerminalBlock(
@@ -616,7 +664,7 @@ public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
     public static final DeferredItem<Item> DRILL_UNIT_ITEM =
             ITEMS.registerItem(
                     "drill_unit",
-                    properties -> new BlockItem(
+                    properties -> new com.example.examplemod.electrical.DrillUnitBlockItem(
                             DRILL_UNIT.get(),
                             properties
                     ),
@@ -677,7 +725,7 @@ public static final DeferredBlock<MineGatewayBlock> MINE_GATEWAY =
          * <clinit>, регистрация предметов не произойдёт,
          * и рецепты упадут с «Unknown registry key».
          */
-        IndustrialMaterials.INDUSTRIAL_COKE.getClass();
+        IndustrialMaterials.IRON_ORE_RAW.getClass();
         com.example.examplemod.cargo.CargoBlocks.init();
 
         com.example.examplemod.auth.AuthenticationBootstrap.setup(modEventBus, modContainer);
@@ -703,6 +751,10 @@ modEventBus.addListener(
                 modEventBus
         );
 
+        DATA_COMPONENTS.register(
+                modEventBus
+        );
+
         CREATIVE_MODE_TABS.register(
                 modEventBus
         );
@@ -720,6 +772,8 @@ modEventBus.addListener(
 
         );
         NeoForge.EVENT_BUS.register(CityMapSavedData.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.knowledge.KnowledgeBaseServer.class);
+        NeoForge.EVENT_BUS.register(com.example.examplemod.knowledge.KnowledgeCommands.class);
         NeoForge.EVENT_BUS.register(com.example.examplemod.event.TransportProtectionEvents.class);
 
         modEventBus.addListener(
@@ -1015,6 +1069,9 @@ registrar.playToServer(com.example.examplemod.network.RequestCityDirectoryPayloa
         registrar.playToClient(com.example.examplemod.network.OnboardingStatePayload.TYPE,
                 com.example.examplemod.network.OnboardingStatePayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->com.example.examplemod.client.OnboardingClient.accept(payload)));
+        registrar.playToClient(com.example.examplemod.network.KnowledgeAccessPayload.TYPE,
+                com.example.examplemod.network.KnowledgeAccessPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->com.example.examplemod.knowledge.KnowledgeBaseClient.acceptAccess(payload)));
         registrar.playToServer(com.example.examplemod.network.RequestCityBoundariesPayload.TYPE,
                 com.example.examplemod.network.RequestCityBoundariesPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{if(context.player() instanceof ServerPlayer player)com.example.examplemod.city.CityBoundaryNetwork.request(player);}));
@@ -1983,13 +2040,19 @@ registrar.playToServer(
          * при NeoForge handshake (dedicated server должен знать о каналах).
          */
 
-        registrar.playToClient(
+        registrar.versioned("geology-analysis-2").playToClient(
                 GeologyAnalysisPayload.TYPE,
                 GeologyAnalysisPayload.STREAM_CODEC,
                 (payload, context) -> GEOLOGY_ANALYSIS_HANDLER.handle(payload, context)
         );
 
-        registrar.playToClient(
+        registrar.versioned("geology-wide-3").playToClient(
+                GeologyWideScanPayload.TYPE,
+                GeologyWideScanPayload.STREAM_CODEC,
+                (payload, context) -> GEOLOGY_WIDE_SCAN_HANDLER.handle(payload, context)
+        );
+
+        registrar.versioned("mine-snapshot-2").playToClient(
                 MineControllerSnapshotPayload.TYPE,
                 MineControllerSnapshotPayload.STREAM_CODEC,
                 (payload, context) -> MINE_CONTROLLER_SNAPSHOT_HANDLER.handle(payload, context)

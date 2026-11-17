@@ -1,0 +1,45 @@
+{
+  "type": "create:mixing",
+  "heat_requirement": "none",
+  "ingredients": [
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "create:raw_zinc"
+    },
+    {
+      "item": "minecraft:charcoal"
+    },
+    {
+      "type": "neoforge:single",
+      "amount": 500,
+      "fluid": "minecraft:water"
+    }
+  ],
+  "results": [
+    {
+      "id": "tfmg:raw_lead",
+      "count": 1
+    }
+  ],
+  "processing_time": 200
+}

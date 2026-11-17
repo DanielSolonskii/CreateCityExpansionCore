@@ -114,14 +114,14 @@ public final class IndustrialMineRenderer implements BlockEntityRenderer<MineCon
             }
         }
 
-        for (int localZ = 3; localZ <= 6; localZ++) {
-            for (int localX = -1; localX <= 2; localX++) {
+        for (int localZ = 3; localZ <= 5; localZ += 2) {
+            for (int localX = -1; localX <= 1; localX += 2) {
                 int group = (localZ >= 5 ? 2 : 0) + (localX >= 1 ? 1 : 0);
                 double reciprocation = Math.sin(Math.toRadians(driveAngle * 2.0D + group * 90.0D)) * .035D;
                 int drillLight = sampleLocalLight(level, pos, facing,
-                        new Vec3(localX + .5D, 2.25D, localZ + .5D));
+                        new Vec3(localX + 1.0D, 2.25D, localZ + 1.0D));
                 pose.pushPose();
-                pose.translate(localX + .5D, reciprocation, localZ + .5D);
+                pose.translate(localX + 1.0D, -1.0D + reciprocation, localZ + 1.0D);
                 pose.mulPose(Axis.YP.rotationDegrees((float)
                         (drillAngle + group * 22.5D + ((localX + localZ) & 1) * 180.0D)));
                 renderModel(controller, pose, solid, drillLight, IndustrialMineModels.drillShaft());

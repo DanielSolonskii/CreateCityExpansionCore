@@ -682,18 +682,7 @@ public final class MagneticAnalyzerScreen extends Screen {
                 count(analysis.peakPotentialPerHour()) + "/h", TEXT_MUTED
         );
         y += step;
-        row(
-                graphics, x, width, y, tr("remaining"),
-                "~" + count(analysis.remainingReserve())
-        );
-        y += step;
         row(graphics, x, width, y, tr("size"), tr("size_class." + sizeKey()));
-        y += step;
-        row(
-                graphics, x, width, y, tr("lifetime"),
-                tr("lifetime_hours", analysis.estimatedLifetimeHours()),
-                TEXT_MUTED
-        );
 
         double strength = signalStrength();
         bar(graphics, x, bottom - 24, width, strength, signalColor(strength));

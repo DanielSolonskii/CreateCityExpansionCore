@@ -1,18 +1,851 @@
 {
   "variants": {
-    "facing=north": {
+    "color=white,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white"
+    },
+    "color=white,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "y": 90
+    },
+    "color=white,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "y": 180
+    },
+    "color=white,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "y": 270
+    },
+    "color=white,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 270
+    },
+    "color=white,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 270,
+      "y": 90
+    },
+    "color=white,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 270,
+      "y": 180
+    },
+    "color=white,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 270,
+      "y": 270
+    },
+    "color=white,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 90
+    },
+    "color=white,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 90,
+      "y": 90
+    },
+    "color=white,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 90,
+      "y": 180
+    },
+    "color=white,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_white",
+      "x": 90,
+      "y": 270
+    },
+    "color=orange,facing=north": {
       "model": "createcityexpansioncore:block/mine_power_port"
     },
-    "facing=east": {
+    "color=orange,facing=east": {
       "model": "createcityexpansioncore:block/mine_power_port",
       "y": 90
     },
-    "facing=south": {
+    "color=orange,facing=south": {
       "model": "createcityexpansioncore:block/mine_power_port",
       "y": 180
     },
-    "facing=west": {
+    "color=orange,facing=west": {
       "model": "createcityexpansioncore:block/mine_power_port",
+      "y": 270
+    },
+    "color=orange,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 270
+    },
+    "color=orange,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 270,
+      "y": 90
+    },
+    "color=orange,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 270,
+      "y": 180
+    },
+    "color=orange,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 270,
+      "y": 270
+    },
+    "color=orange,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 90
+    },
+    "color=orange,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 90,
+      "y": 90
+    },
+    "color=orange,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 90,
+      "y": 180
+    },
+    "color=orange,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/mine_power_port",
+      "x": 90,
+      "y": 270
+    },
+    "color=magenta,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta"
+    },
+    "color=magenta,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "y": 90
+    },
+    "color=magenta,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "y": 180
+    },
+    "color=magenta,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "y": 270
+    },
+    "color=magenta,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 270
+    },
+    "color=magenta,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 270,
+      "y": 90
+    },
+    "color=magenta,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 270,
+      "y": 180
+    },
+    "color=magenta,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 270,
+      "y": 270
+    },
+    "color=magenta,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 90
+    },
+    "color=magenta,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 90,
+      "y": 90
+    },
+    "color=magenta,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 90,
+      "y": 180
+    },
+    "color=magenta,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_magenta",
+      "x": 90,
+      "y": 270
+    },
+    "color=light_blue,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue"
+    },
+    "color=light_blue,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "y": 90
+    },
+    "color=light_blue,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "y": 180
+    },
+    "color=light_blue,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "y": 270
+    },
+    "color=light_blue,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 270
+    },
+    "color=light_blue,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 270,
+      "y": 90
+    },
+    "color=light_blue,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 270,
+      "y": 180
+    },
+    "color=light_blue,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 270,
+      "y": 270
+    },
+    "color=light_blue,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 90
+    },
+    "color=light_blue,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 90,
+      "y": 90
+    },
+    "color=light_blue,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 90,
+      "y": 180
+    },
+    "color=light_blue,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_blue",
+      "x": 90,
+      "y": 270
+    },
+    "color=yellow,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow"
+    },
+    "color=yellow,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "y": 90
+    },
+    "color=yellow,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "y": 180
+    },
+    "color=yellow,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "y": 270
+    },
+    "color=yellow,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 270
+    },
+    "color=yellow,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 270,
+      "y": 90
+    },
+    "color=yellow,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 270,
+      "y": 180
+    },
+    "color=yellow,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 270,
+      "y": 270
+    },
+    "color=yellow,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 90
+    },
+    "color=yellow,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 90,
+      "y": 90
+    },
+    "color=yellow,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 90,
+      "y": 180
+    },
+    "color=yellow,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_yellow",
+      "x": 90,
+      "y": 270
+    },
+    "color=lime,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime"
+    },
+    "color=lime,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "y": 90
+    },
+    "color=lime,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "y": 180
+    },
+    "color=lime,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "y": 270
+    },
+    "color=lime,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 270
+    },
+    "color=lime,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 270,
+      "y": 90
+    },
+    "color=lime,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 270,
+      "y": 180
+    },
+    "color=lime,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 270,
+      "y": 270
+    },
+    "color=lime,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 90
+    },
+    "color=lime,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 90,
+      "y": 90
+    },
+    "color=lime,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 90,
+      "y": 180
+    },
+    "color=lime,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_lime",
+      "x": 90,
+      "y": 270
+    },
+    "color=pink,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink"
+    },
+    "color=pink,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "y": 90
+    },
+    "color=pink,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "y": 180
+    },
+    "color=pink,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "y": 270
+    },
+    "color=pink,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 270
+    },
+    "color=pink,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 270,
+      "y": 90
+    },
+    "color=pink,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 270,
+      "y": 180
+    },
+    "color=pink,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 270,
+      "y": 270
+    },
+    "color=pink,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 90
+    },
+    "color=pink,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 90,
+      "y": 90
+    },
+    "color=pink,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 90,
+      "y": 180
+    },
+    "color=pink,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_pink",
+      "x": 90,
+      "y": 270
+    },
+    "color=gray,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray"
+    },
+    "color=gray,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "y": 90
+    },
+    "color=gray,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "y": 180
+    },
+    "color=gray,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "y": 270
+    },
+    "color=gray,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 270
+    },
+    "color=gray,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 270,
+      "y": 90
+    },
+    "color=gray,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 270,
+      "y": 180
+    },
+    "color=gray,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 270,
+      "y": 270
+    },
+    "color=gray,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 90
+    },
+    "color=gray,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 90,
+      "y": 90
+    },
+    "color=gray,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 90,
+      "y": 180
+    },
+    "color=gray,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_gray",
+      "x": 90,
+      "y": 270
+    },
+    "color=light_gray,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray"
+    },
+    "color=light_gray,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "y": 90
+    },
+    "color=light_gray,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "y": 180
+    },
+    "color=light_gray,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "y": 270
+    },
+    "color=light_gray,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 270
+    },
+    "color=light_gray,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 270,
+      "y": 90
+    },
+    "color=light_gray,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 270,
+      "y": 180
+    },
+    "color=light_gray,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 270,
+      "y": 270
+    },
+    "color=light_gray,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 90
+    },
+    "color=light_gray,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 90,
+      "y": 90
+    },
+    "color=light_gray,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 90,
+      "y": 180
+    },
+    "color=light_gray,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_light_gray",
+      "x": 90,
+      "y": 270
+    },
+    "color=cyan,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan"
+    },
+    "color=cyan,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "y": 90
+    },
+    "color=cyan,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "y": 180
+    },
+    "color=cyan,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "y": 270
+    },
+    "color=cyan,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 270
+    },
+    "color=cyan,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 270,
+      "y": 90
+    },
+    "color=cyan,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 270,
+      "y": 180
+    },
+    "color=cyan,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 270,
+      "y": 270
+    },
+    "color=cyan,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 90
+    },
+    "color=cyan,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 90,
+      "y": 90
+    },
+    "color=cyan,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 90,
+      "y": 180
+    },
+    "color=cyan,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_cyan",
+      "x": 90,
+      "y": 270
+    },
+    "color=purple,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple"
+    },
+    "color=purple,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "y": 90
+    },
+    "color=purple,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "y": 180
+    },
+    "color=purple,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "y": 270
+    },
+    "color=purple,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 270
+    },
+    "color=purple,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 270,
+      "y": 90
+    },
+    "color=purple,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 270,
+      "y": 180
+    },
+    "color=purple,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 270,
+      "y": 270
+    },
+    "color=purple,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 90
+    },
+    "color=purple,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 90,
+      "y": 90
+    },
+    "color=purple,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 90,
+      "y": 180
+    },
+    "color=purple,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_purple",
+      "x": 90,
+      "y": 270
+    },
+    "color=blue,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue"
+    },
+    "color=blue,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "y": 90
+    },
+    "color=blue,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "y": 180
+    },
+    "color=blue,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "y": 270
+    },
+    "color=blue,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 270
+    },
+    "color=blue,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 270,
+      "y": 90
+    },
+    "color=blue,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 270,
+      "y": 180
+    },
+    "color=blue,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 270,
+      "y": 270
+    },
+    "color=blue,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 90
+    },
+    "color=blue,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 90,
+      "y": 90
+    },
+    "color=blue,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 90,
+      "y": 180
+    },
+    "color=blue,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_blue",
+      "x": 90,
+      "y": 270
+    },
+    "color=brown,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown"
+    },
+    "color=brown,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "y": 90
+    },
+    "color=brown,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "y": 180
+    },
+    "color=brown,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "y": 270
+    },
+    "color=brown,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 270
+    },
+    "color=brown,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 270,
+      "y": 90
+    },
+    "color=brown,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 270,
+      "y": 180
+    },
+    "color=brown,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 270,
+      "y": 270
+    },
+    "color=brown,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 90
+    },
+    "color=brown,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 90,
+      "y": 90
+    },
+    "color=brown,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 90,
+      "y": 180
+    },
+    "color=brown,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_brown",
+      "x": 90,
+      "y": 270
+    },
+    "color=green,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green"
+    },
+    "color=green,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "y": 90
+    },
+    "color=green,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "y": 180
+    },
+    "color=green,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "y": 270
+    },
+    "color=green,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 270
+    },
+    "color=green,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 270,
+      "y": 90
+    },
+    "color=green,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 270,
+      "y": 180
+    },
+    "color=green,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 270,
+      "y": 270
+    },
+    "color=green,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 90
+    },
+    "color=green,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 90,
+      "y": 90
+    },
+    "color=green,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 90,
+      "y": 180
+    },
+    "color=green,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_green",
+      "x": 90,
+      "y": 270
+    },
+    "color=red,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red"
+    },
+    "color=red,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "y": 90
+    },
+    "color=red,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "y": 180
+    },
+    "color=red,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "y": 270
+    },
+    "color=red,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 270
+    },
+    "color=red,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 270,
+      "y": 90
+    },
+    "color=red,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 270,
+      "y": 180
+    },
+    "color=red,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 270,
+      "y": 270
+    },
+    "color=red,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 90
+    },
+    "color=red,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 90,
+      "y": 90
+    },
+    "color=red,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 90,
+      "y": 180
+    },
+    "color=red,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_red",
+      "x": 90,
+      "y": 270
+    },
+    "color=black,facing=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black"
+    },
+    "color=black,facing=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "y": 90
+    },
+    "color=black,facing=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "y": 180
+    },
+    "color=black,facing=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "y": 270
+    },
+    "color=black,facing=up,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 270
+    },
+    "color=black,facing=up,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 270,
+      "y": 90
+    },
+    "color=black,facing=up,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 270,
+      "y": 180
+    },
+    "color=black,facing=up,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 270,
+      "y": 270
+    },
+    "color=black,facing=down,vertical_rotation=north": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 90
+    },
+    "color=black,facing=down,vertical_rotation=east": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 90,
+      "y": 90
+    },
+    "color=black,facing=down,vertical_rotation=south": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 90,
+      "y": 180
+    },
+    "color=black,facing=down,vertical_rotation=west": {
+      "model": "createcityexpansioncore:block/machine_panel/mine_power_port_black",
+      "x": 90,
       "y": 270
     }
   }

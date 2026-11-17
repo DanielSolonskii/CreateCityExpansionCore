@@ -13,6 +13,7 @@ abstract class CommunityPage extends Screen {
     protected int reservedBottom(){return 0;}
     protected SocialHubLayout.Rect body(){var r=layout.body();return new SocialHubLayout.Rect(r.x(),r.y(),r.width(),Math.max(1,r.height()-reservedBottom()));}
     protected void clearHits(){hits.clear();tooltip=null;}
+    protected void buttonArea(SocialHubLayout.Rect rect,Runnable action){hits.add(new Hit(rect,action,clipped));}
     protected CommunityPage(Screen parent,String title){super(tr(title));this.parent=parent;}
     public static Component tr(String key,Object...args){return Component.translatable("gui.createcityexpansioncore.community2."+key,args);}
     @Override protected void init(){layout=CommunityV2Layout.calculate(width,height,SocialHubScreen.geometry(this));if(changed==0)changed=net.minecraft.Util.getMillis();CommunityFx.load();}

@@ -1,0 +1,11 @@
+// ./gradlew --init-script tools/auger-gametest.init.gradle runGameTestServer
+// Test classes/resources are attached only to this dev run, never to the distributed JAR.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    p.neoForge.mods.named(p.mod_id).configure { sourceSet(p.sourceSets.mineVisualTest) }
+    p.neoForge.runs.named('gameTestServer').configure {
+        gameDirectory = p.layout.buildDirectory.dir('checks/auger-gametest/world').get().asFile
+        logLevel = org.slf4j.event.Level.INFO
+    }
+    p.tasks.named('runGameTestServer') { dependsOn p.tasks.named('mineVisualTestClasses') }
+}

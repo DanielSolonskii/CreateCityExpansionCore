@@ -1,12 +1,17 @@
 package com.example.examplemod.item;
 
+import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.geology.GeologicalDeposit;
 import com.example.examplemod.geology.GeologyManager;
 import com.example.examplemod.geology.GeologySurvey;
 import com.example.examplemod.network.GeologyAnalysisPayload;
+import com.example.examplemod.network.GeologyWideScanPayload;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -15,6 +20,7 @@ import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 
@@ -53,6 +59,21 @@ public class MagneticAnalyzerItem extends Item {
     public static final int COOLDOWN_TICKS = 60;
 
     /**
+     * Радиус широкого спектра: контуры залежей доставляются на
+     * глобальную карту игрока. Узкий спектр как был прицельным
+     * сканом с {@link GeologySurvey#SCAN_RADIUS_BLOCKS}, так и
+     * остаётся — широкой спектр не меняет его баланс.
+     */
+    public static final int WIDE_SCAN_RADIUS_BLOCKS = 1000;
+
+    /**
+     * Предел контуров в одном пакете. Залежи вычёркиваются
+     * с конца списка находок (клиент увидит «N из M»), а не
+     * молча переполняют буфер.
+     */
+    public static final int MAX_WIDE_CONTOURS = 256;
+
+    /**
      * Перезаряд хранится в persistent data игрока, а не в
      * статической таблице: состояние переживает реконнект
      * и не создаёт утечки памяти на выходе игрока.
@@ -79,6 +100,15 @@ public class MagneticAnalyzerItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
+        /*
+         * Shift+ПКМ — смена спектра: и по воздуху, и по блоку
+         * переключение должно вести себя одинаково.
+         */
+        if (context.getPlayer().isShiftKeyDown()) {
+            toggleSpectrum(player, context.getItemInHand());
+            return InteractionResult.SUCCESS;
+        }
+
         if (!performScan(player, context.getItemInHand())) {
             return InteractionResult.FAIL;
         }
@@ -98,6 +128,17 @@ public class MagneticAnalyzerItem extends Item {
             InteractionHand usedHand
     ) {
         ItemStack stack = player.getItemInHand(usedHand);
+
+        /*
+         * Shift+ПКМ — смена спектра. Замер при этом не
+         * выполняется: заряд и перезаряд не списываются.
+         */
+        if (player.isShiftKeyDown()) {
+            if (player instanceof ServerPlayer serverPlayer) {
+                toggleSpectrum(serverPlayer, stack);
+            }
+            return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
+        }
 
         if (player instanceof ServerPlayer serverPlayer) {
             boolean scanned = performScan(serverPlayer, stack);
@@ -131,6 +172,15 @@ public class MagneticAnalyzerItem extends Item {
          * поле оператора, а не конкретного блока.
          */
         BlockPos origin = player.blockPosition();
+
+        /*
+         * Широкий спектр — обзорная ветка: она делит с узким
+         * спектром перезаряд, прочность и проверку хранилища,
+         * но собирает контуры вместо прицельного замера.
+         */
+        if (spectrum(stack) == MagneticAnalyzerMode.WIDE) {
+            return performWideScan(player, stack, level, origin);
+        }
 
         /*
          * Анализатору нужен NEARBY-поиск, а не поиск «что под
@@ -176,5 +226,112 @@ public class MagneticAnalyzerItem extends Item {
         }
         long last = data.getLong(LAST_SCAN_KEY);
         return gameTime - last >= COOLDOWN_TICKS;
+    }
+
+    /**
+     * Текущий спектр замера. Отсутствие компонента — узкий
+     * спектр: это оптимизация по умолчанию и историческое
+     * поведение прибора.
+     */
+    public static MagneticAnalyzerMode spectrum(ItemStack stack) {
+        MagneticAnalyzerMode mode =
+                stack.get(CreateCityExpansionCore.ANALYZER_MODE.get());
+        return mode == null ? MagneticAnalyzerMode.NARROW : mode;
+    }
+
+    /**
+     * Shift+ПКМ: смена спектра. Составляет пару с
+     * {@link MagneticAnalyzerMode#next()}; заряд и перезаряд
+     * не расходуются — переключение не является замером.
+     */
+    private static void toggleSpectrum(
+            ServerPlayer player,
+            ItemStack stack
+    ) {
+        MagneticAnalyzerMode next = spectrum(stack).next();
+        stack.set(CreateCityExpansionCore.ANALYZER_MODE.get(), next);
+
+        /*
+         * Action bar, не чат: смена режима не должна заваливать
+         * журнал во время активной работы с прибором.
+         */
+        player.displayClientMessage(
+                Component.translatable(
+                        "gui.createcityexpansioncore.magnetic_analyzer.spectrum.switched",
+                        next.label()
+                ),
+                true
+        );
+    }
+
+    /**
+     * Широкий спектр: обзорный замер. Все залежи в радиусе
+     * {@link #WIDE_SCAN_RADIUS_BLOCKS} уходят на карту игрока
+     * контурами; прицельная разведка остаётся задачей узкого
+     * спектра.
+     *
+     * <p>Максимум с плавной координатой здесь не раскрывается —
+     * раскрывается сам абрис залежей: поиск «самого богатого
+     * участка» по-прежнему через узкий спектр на месте.
+     */
+    private boolean performWideScan(
+            ServerPlayer player,
+            ItemStack stack,
+            ServerLevel level,
+            BlockPos origin
+    ) {
+        /*
+         * Nearby-запрос с тем же фильтром по границе, что и у
+         * узкого спектра: залежь попадает в выборку, когда до
+         * неё не дальше радиуса сканирования.
+         */
+        List<GeologicalDeposit> deposits = new ArrayList<>(
+                GeologyManager.get(level).queryNearby(
+                        origin,
+                        WIDE_SCAN_RADIUS_BLOCKS
+                )
+        );
+
+        GeologyWideScanPayload payload = GeologyWideScanPayload.of(
+                level,
+                origin,
+                deposits,
+                MAX_WIDE_CONTOURS
+        );
+        player.connection.send(payload);
+
+        MutableComponent report = Component.translatable(
+                "gui.createcityexpansioncore.magnetic_analyzer.wide_scan.found",
+                payload.contours().size(),
+                payload.foundTotal()
+        );
+        if (payload.truncated()) {
+            report = report.append(" ").append(Component.translatable(
+                    "gui.createcityexpansioncore.magnetic_analyzer.wide_scan.truncated"
+            ));
+        }
+        player.displayClientMessage(report, true);
+
+        player.getPersistentData().putLong(LAST_SCAN_KEY, level.getGameTime());
+        return true;
+    }
+
+    /**
+     * Тултип прибора: текущий спектр и способ его смены.
+     */
+    @Override
+    public void appendHoverText(
+            ItemStack stack,
+            Item.TooltipContext tooltipContext,
+            List<Component> tooltip,
+            TooltipFlag tooltipFlag
+    ) {
+        tooltip.add(Component.translatable(
+                "gui.createcityexpansioncore.magnetic_analyzer.spectrum.tooltip",
+                spectrum(stack).label()
+        ).withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.translatable(
+                "gui.createcityexpansioncore.magnetic_analyzer.spectrum.hint"
+        ).withStyle(ChatFormatting.DARK_GRAY));
     }
 }

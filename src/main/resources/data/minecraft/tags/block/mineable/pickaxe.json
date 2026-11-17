@@ -1,11 +1,12 @@
 {
   "replace": false,
   "values": [
+    "createcityexpansioncore:dc_power_bridge",
     "createcityexpansioncore:transport_registration_terminal",
     "createcityexpansioncore:cargo_ticker",
     "createcityexpansioncore:cargo_router",
     "createcityexpansioncore:customs_buffer",
     "createcityexpansioncore:reinforced_concrete",
-    "createcityexpansioncore:refractory_block"
+    "createcityexpansioncore:technical_screen"
   ]
 }

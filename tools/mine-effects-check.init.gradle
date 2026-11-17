@@ -1,0 +1,9 @@
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    p.tasks.register('checkMineWorkMotion', JavaExec) {
+        dependsOn p.tasks.named('mineVisualTestClasses')
+        classpath = p.sourceSets.mineVisualTest.runtimeClasspath
+        mainClass = 'com.example.examplemod.client.render.MineWorkMotionCheck'
+        javaLauncher = p.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    }
+}

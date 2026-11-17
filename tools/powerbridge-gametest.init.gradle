@@ -1,0 +1,33 @@
+// Run with -I tools/powerbridge-gametest.init.gradle runGameTestServer -x prepareDevMods.
+// Add -PpowerBridgeWithoutTfmg to check the optional integration on its own.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def withTfmg = !p.hasProperty("powerBridgeWithoutTfmg")
+    def game = p.layout.buildDirectory.dir("checks/powerbridge-" + (withTfmg ? "with-tfmg" : "without-tfmg"))
+    def tfmg = p.file(p.providers.gradleProperty("tfmgJar").getOrElse("../tfmg-1.2.0.jar"))
+    if (withTfmg && !tfmg.isFile()) {
+        throw new GradleException("Set -PtfmgJar to the TFMG 1.2.0 JAR to run the electrical integration tests.")
+    }
+
+    def mods = p.tasks.register("preparePowerBridgeTestMods", Copy) {
+        from(p.configurations.devRuntimeMods)
+        from(p.file("libs/electroenergetics-1.21.1-1.1.2.jar"))
+        if (withTfmg) from(tfmg)
+        rename("create-1.21.1-6.0.10-280.jar", "create-1.21.1-6.0.10.jar")
+        into(game.map { it.dir("mods") })
+    }
+    def test = p.sourceSets.create(withTfmg ? "powerBridgeWithTfmgGameTest" : "powerBridgeWithoutTfmgGameTest")
+    test.java.srcDir("src/powerBridgeGameTest/java")
+    test.resources.srcDir("src/powerBridgeGameTest/resources")
+    test.java.include(withTfmg ? "**/DcBridgeGameTest.java" : "**/DcBridgeWithoutTfmgGameTest.java")
+    test.compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+    p.neoForge.mods.named(p.mod_id).configure { sourceSet(test) }
+    p.neoForge.runs.named("gameTestServer").configure {
+        gameDirectory = game.get().asFile
+        logLevel = org.slf4j.event.Level.INFO
+        systemProperty "neoforge.enableGameTest", "true"
+    }
+    p.tasks.named("runGameTestServer") {
+        dependsOn mods, p.tasks.named(test.classesTaskName)
+    }
+}

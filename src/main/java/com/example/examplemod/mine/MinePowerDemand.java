@@ -1,5 +1,6 @@
 package com.example.examplemod.mine;
 
+import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
@@ -15,10 +16,8 @@ public final class MinePowerDemand {
     private MinePowerDemand() {
     }
 
-    public static synchronized void publish(Level level, BlockPos portPos, boolean workingLoad) {
-        publishWatts(level, portPos, workingLoad
-                ? MinePowerAccess.NOMINAL_POWER_WATTS
-                : MinePowerAccess.STANDBY_POWER_WATTS);
+    public static void publish(Level level, BlockPos portPos, boolean workingLoad, Tier tier) {
+        publishWatts(level, portPos, MinePowerAccess.requiredWatts(workingLoad, tier));
     }
 
     public static synchronized void publishWatts(Level level, BlockPos portPos, double requestedWatts) {

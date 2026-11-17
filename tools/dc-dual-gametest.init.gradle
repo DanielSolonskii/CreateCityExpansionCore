@@ -1,0 +1,3 @@
+gradle.projectsEvaluated {
+    gradle.rootProject.sourceSets.powerBridgeWithTfmgGameTest.java.setIncludes(['**/DcBridgeDualGameTest.java'])
+}

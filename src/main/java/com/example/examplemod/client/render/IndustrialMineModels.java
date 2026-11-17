@@ -16,7 +16,7 @@ public final class IndustrialMineModels {
             "block/industrial_mine/power_module",
             "block/industrial_mine/main_drive",
             "block/industrial_mine/gearbox",
-            "block/industrial_mine/drill_shaft",
+            "block/industrial_auger/assembled",
             "block/industrial_mine/indicator_green",
             "block/industrial_mine/indicator_amber",
             "block/industrial_mine/indicator_red",

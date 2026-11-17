@@ -1,0 +1,3 @@
+gradle.projectsEvaluated {
+    gradle.rootProject.sourceSets.mineVisualTest.java.setIncludes(['**/MineRestartGameTest.java', '**/MineControllerResetGameTest.java'])
+}

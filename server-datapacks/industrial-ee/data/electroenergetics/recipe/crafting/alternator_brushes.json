@@ -1,0 +1,29 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " C ",
+    "SMB",
+    " TC"
+  ],
+  "key": {
+    "C": {
+      "item": "electroenergetics:connector"
+    },
+    "S": {
+      "item": "create:shaft"
+    },
+    "M": {
+      "item": "electroenergetics:commutator"
+    },
+    "B": {
+      "item": "minecraft:iron_bars"
+    },
+    "T": {
+      "item": "tfmg:capacitor_item"
+    }
+  },
+  "result": {
+    "id": "electroenergetics:alternator_brushes",
+    "count": 1
+  }
+}

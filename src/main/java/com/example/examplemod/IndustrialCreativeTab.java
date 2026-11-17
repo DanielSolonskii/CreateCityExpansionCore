@@ -36,6 +36,8 @@ public final class IndustrialCreativeTab {
 
     private static final List<ItemLike> TIER1_DERIVED = List.of(
             CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
+            CreateCityExpansionCore.BLUEPRINT_TERMINAL.get(),
+            CreateCityExpansionCore.PANEL_PAINTER.get(),
             CreateCityExpansionCore.INCOMPLETE_ACCESS_CONTROL_REMOTE.get(),
             CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );
@@ -65,16 +67,12 @@ public final class IndustrialCreativeTab {
      * =========================================
      *
      * Порядок соответствует цепочке производства:
-     * кокс -> заготовка -> плита / балка ->
+     * плита / балка (сталь через тег c:ingots/steel) ->
      * крепёж / арматура -> рельсы / шпалы ->
      * бетон / керамика / шина.
      */
 
     private static final List<ItemLike> TIER2 = List.of(
-            IndustrialMaterials.INDUSTRIAL_COKE.get(),
-            IndustrialMaterials.CRUSHED_LIMESTONE.get(),
-            CreateCityExpansionCore.QUICKLIME.get(),
-            IndustrialMaterials.STEEL_BILLET.get(),
             IndustrialMaterials.STEEL_PLATE.get(),
             IndustrialMaterials.STRUCTURAL_BEAM.get(),
             IndustrialMaterials.INDUSTRIAL_FASTENER_PACK.get(),
@@ -114,6 +112,7 @@ public final class IndustrialCreativeTab {
     private static final List<ItemLike> MINING_MACHINES = List.of(
             CreateCityExpansionCore.MINE_CONTROLLER_ITEM.get(),
             CreateCityExpansionCore.DRILL_UNIT_ITEM.get(),
+            CreateCityExpansionCore.TECHNICAL_SCREEN_ITEM.get(),
             CreateCityExpansionCore.MINE_FRAME_ITEM.get(),
             CreateCityExpansionCore.TECHNICAL_BLOCK_ITEM.get(),
             CreateCityExpansionCore.CONTROL_BLOCK_ITEM.get(),
@@ -131,8 +130,7 @@ public final class IndustrialCreativeTab {
     );
 
     private static final List<ItemLike> BUILDING_BLOCKS = List.of(
-            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get(),
-            CreateCityExpansionCore.REFRACTORY_BLOCK_ITEM.get()
+            CreateCityExpansionCore.REINFORCED_CONCRETE_ITEM.get()
     );
 
     public static void populate(

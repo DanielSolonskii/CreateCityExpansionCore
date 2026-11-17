@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:block/mine_controller",
+  "textures": {
+    "panel": "createcityexpansioncore:block/machine_panel/blue"
+  }
+}

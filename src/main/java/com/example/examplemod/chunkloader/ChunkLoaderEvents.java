@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.example.examplemod.CreateCityExpansionCore;
+import com.example.examplemod.auth.PlayerNames;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -14,6 +15,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
@@ -30,7 +32,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  *   <li><b>The limit.</b> Checked in {@link BlockEvent.EntityPlaceEvent}, which fires after the block state
  *       has been written but before the placement is accepted. Cancelling it makes the game restore the block
  *       snapshots itself and skip the stack decrement, so a refused fourth loader costs the player neither
- *       the block nor the item, and no ticket is ever issued.</li>
+ *       the block nor the item. Only an allowed placement is registered and issued a ticket.</li>
  *   <li><b>Ownership of destruction.</b> {@link PlayerInteractEvent.LeftClickBlock} stops a stranger before
  *       damage starts, {@link BlockEvent.BreakEvent} is the backstop for any break that skipped the click, and
  *       {@link ExplosionEvent.Detonate} takes the loader out of blast damage so TNT cannot delete someone
@@ -68,26 +70,29 @@ public final class ChunkLoaderEvents {
      * <p>Cancelling is the safe direction: the game rolls the placement back and leaves the item in the
      * player's hand, so a refusal can neither destroy the loader nor leave the player short an item.
      */
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onEntityPlace(BlockEvent.EntityPlaceEvent event) {
         if (!(event.getPlacedBlock().getBlock() instanceof ChunkLoaderBlock)) {
             return;
         }
-        if (!(event.getEntity() instanceof ServerPlayer player)) {
-            // Not placed by a player, so nobody can be charged for it. The reconcile sweep tidies up if this
-            // was a stray placement by some other mechanism.
+        if (!(event.getEntity() instanceof ServerPlayer player) || !(event.getLevel() instanceof ServerLevel level)) {
             return;
         }
-        MinecraftServer server = player.getServer();
-        if (server == null) {
-            return;
-        }
+        MinecraftServer server = level.getServer();
         ChunkLoaderSavedData registry = ChunkLoaderSavedData.get(server);
-        if (registry.canPlaceMore(player.getUUID())) {
+        UUID owner = player.getUUID();
+        if (!registry.canPlaceMore(owner)) {
+            event.setCanceled(true);
+            notifyRefusal(player, "message.createcityexpansioncore.chunk_loader.limit_reached",
+                    registry.used(owner), ChunkLoaderSavedData.MAX_LOADERS_PER_PLAYER);
             return;
         }
-        event.setCanceled(true);
-        notifyRefusal(player, "message.createcityexpansioncore.chunk_loader.limit_reached");
+
+        // NeoForge posts this event after BlockItem has called setPlacedBy.
+        // Check the existing count here before charging this placement and starting its ticket.
+        if (ChunkLoaderLifecycle.activate(level, event.getPos(), owner, PlayerNames.name(server, owner))) {
+            player.sendSystemMessage(ChunkLoaderLifecycle.placedMessage(server, owner));
+        }
     }
 
     // ------------------------------------------------------- ownership of destruction
@@ -188,11 +193,11 @@ public final class ChunkLoaderEvents {
     }
 
     /** Throttles a refusal so holding left click does not turn the chat into spam. */
-    private static void notifyRefusal(ServerPlayer player, String key) {
+    private static void notifyRefusal(ServerPlayer player, String key, Object... args) {
         if (!refusals(player.getUUID(), key)) {
             return;
         }
-        player.sendSystemMessage(Component.translatable(key));
+        player.sendSystemMessage(Component.translatable(key, args));
     }
 
     private static final Map<String, Long> LAST_REFUSAL = new HashMap<>();

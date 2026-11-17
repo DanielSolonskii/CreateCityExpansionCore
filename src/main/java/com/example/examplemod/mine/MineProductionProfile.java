@@ -1,37 +1,23 @@
 package com.example.examplemod.mine;
 
 import com.example.examplemod.geology.GeologicalDeposit;
+import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 
 import java.util.Objects;
 
 /**
- * Производственные значения шахты, вычисленные по выбранной
- * залежи и по позиции самой шахты.
- *
- * Шахта добывает насколько позволяет ЛОКАЛЬНЫЙ потенциал
- * залежи в её собственной точке, а не один усреднённый grade
- * на всё месторождение: шахта на краю даёт меньше, чем
- * шахта в богатом ядре, даже если это одна и та же залежь.
+ * Converts a tier's share of the local geological potential into batches for the gateway.
  */
 public record MineProductionProfile(
         double localPotentialPerHour,
         double richness,
-        double multiplier,
         long outputPerCycle,
-        int cycleDurationTicks,
+        double exactCycleTicks,
         double itemsPerMinute
 ) {
 
     public static final long BASE_OUTPUT_PER_CYCLE = 5L;
-    public static final int BASE_CYCLE_TICKS = 200;
-    public static final double MIN_MULTIPLIER = 0.5;
-    public static final double MAX_MULTIPLIER = 1.5;
-
-    /** Локальный потенциал, при котором шахта работает на полную мощность. */
-    public static final double REFERENCE_POTENTIAL_PER_HOUR = 3_000.0;
-
-    /** Ниже этого локального потенциала добыча не имеет смысла. */
-    public static final double MINIMUM_VIABLE_POTENTIAL_PER_HOUR = 100.0;
+    private static final double TICKS_PER_HOUR = 72_000.0;
 
     /** Потолок шкалы локального потенциала, единиц/ч. */
     public static final double PEAK_POTENTIAL_PER_HOUR = 10_000.0;
@@ -41,9 +27,12 @@ public record MineProductionProfile(
             int mineX,
             int mineZ
     ) {
+        return from(deposit, mineX, mineZ, Tier.I);
+    }
+
+    static MineProductionProfile from(GeologicalDeposit deposit, int mineX, int mineZ, Tier tier) {
         Objects.requireNonNull(deposit, "deposit");
-        double localPotential = deposit.localPotentialPerHour(mineX, mineZ);
-        return of(deposit, localPotential);
+        return of(deposit, deposit.localPotentialPerHour(mineX, mineZ), tier);
     }
 
     /**
@@ -52,42 +41,25 @@ public record MineProductionProfile(
      */
     public static MineProductionProfile from(GeologicalDeposit deposit) {
         Objects.requireNonNull(deposit, "deposit");
-        return of(deposit, deposit.getPeakPotentialPerHour());
+        return of(deposit, deposit.getPeakPotentialPerHour(), Tier.I);
     }
 
     private static MineProductionProfile of(
             GeologicalDeposit deposit,
-            double localPotentialPerHour
+            double localPotentialPerHour,
+            Tier tier
     ) {
-        double richness = clamp01(
-                localPotentialPerHour
-                        / REFERENCE_POTENTIAL_PER_HOUR
-        );
-        double multiplier = MIN_MULTIPLIER
-                + richness * (MAX_MULTIPLIER - MIN_MULTIPLIER);
-        int cycleTicks = Math.max(1, (int) Math.round(BASE_CYCLE_TICKS / multiplier));
-
-        /*
-         * Базовое количество считается в единицах базового
-         * ресурса (Fe-эквивалент для железа), затем переводится
-         * в физические предметы шлюза через OUTPUT_FACTORS.
-         * Длительность цикла и power-limited модель этим
-         * пересчётом не затрагиваются.
-         */
-        long baseUnits = deposit.isDepleted() ? 0L : BASE_OUTPUT_PER_CYCLE;
-        long outputPerCycle = Math.max(
-                1L,
-                MineOutputMapping.physicalAmountFor(
-                        deposit.getResourceId(),
-                        baseUnits
-                )
-        );
+        double unitsPerHour = localPotentialPerHour * tier.outputPercent() / 100.0;
+        double cycleTicks = TICKS_PER_HOUR * BASE_OUTPUT_PER_CYCLE / unitsPerHour;
+        if (unitsPerHour <= 0.0 || !Double.isFinite(cycleTicks)) {
+            return unavailable();
+        }
+        long outputPerCycle = MineOutputMapping.physicalAmountFor(deposit.getResourceId(), BASE_OUTPUT_PER_CYCLE);
         double perMinute = outputPerCycle * 1200.0 / cycleTicks;
 
         return new MineProductionProfile(
                 localPotentialPerHour,
                 clamp01(localPotentialPerHour / PEAK_POTENTIAL_PER_HOUR),
-                multiplier,
                 outputPerCycle,
                 cycleTicks,
                 perMinute
@@ -95,14 +67,15 @@ public record MineProductionProfile(
     }
 
     public static MineProductionProfile unavailable() {
-        return new MineProductionProfile(0.0, 0.0, 0.0, 0L, 0, 0.0);
+        return new MineProductionProfile(0.0, 0.0, 0L, 0.0, 0.0);
     }
 
-    /**
-     * Есть ли смысл добывать в этой точке вообще.
-     */
+    public int cycleDurationTicks() {
+        return (int) Math.ceil(exactCycleTicks);
+    }
+
     public boolean viable() {
-        return localPotentialPerHour >= MINIMUM_VIABLE_POTENTIAL_PER_HOUR;
+        return outputPerCycle > 0L;
     }
 
     private static double clamp01(double value) {

@@ -1,12 +1,7 @@
 package com.example.examplemod.electrical;
 
-import com.example.examplemod.CreateCityExpansionCore;
-import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityManager;
-import com.example.examplemod.city.CityProject;
 import com.example.examplemod.mine.MineControllerBlockEntity;
-import com.example.examplemod.mine.MineControllerItemData;
-import com.example.examplemod.mine.MineNetworkHandlers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
@@ -17,6 +12,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import com.example.examplemod.machine.MachinePanels;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -37,7 +33,7 @@ public class MineControllerBlock extends Block implements EntityBlock {
                 stateDefinition.any().setValue(
                         BlockStateProperties.HORIZONTAL_FACING,
                         Direction.NORTH
-                )
+                ).setValue(MachinePanels.COLOR, MachinePanels.DEFAULT_COLOR)
         );
     }
 
@@ -45,7 +41,7 @@ public class MineControllerBlock extends Block implements EntityBlock {
     protected void createBlockStateDefinition(
             StateDefinition.Builder<Block, BlockState> builder
     ) {
-        builder.add(BlockStateProperties.HORIZONTAL_FACING);
+        builder.add(BlockStateProperties.HORIZONTAL_FACING, MachinePanels.COLOR);
     }
 
     @Override
@@ -76,137 +72,24 @@ public class MineControllerBlock extends Block implements EntityBlock {
                 && level instanceof ServerLevel serverLevel
                 && placer instanceof Player player
                 && level.getBlockEntity(pos) instanceof MineControllerBlockEntity controller) {
-            MineControllerItemData.Data data = MineControllerItemData.read(stack).orElse(null);
-            if (data == null) {
-                controller.setCreator(player.getUUID(), com.example.examplemod.auth.PlayerNames.name(serverLevel.getServer(), player.getUUID()));
-                return;
-            }
-            if (data.commissioned()
-                    && CityManager.get(serverLevel.getServer().overworld())
-                    .getProject(data.projectId()) == null) {
-                data = data.withoutProject();
-            }
-            if (!canRestore(serverLevel, pos, player, data)) {
-                rejectPlacement(serverLevel, pos, player, stack,
-                        "message.createcityexpansioncore.controller.restore.denied");
-                return;
-            }
-            if (data.commissioned()) {
-                CityManager manager = CityManager.get(serverLevel.getServer().overworld());
-                CityProject project = manager.getProject(data.projectId());
-                if (!manager.relocateProject(
-                        project, serverLevel.dimension().location(), pos
-                )) {
-                    rejectPlacement(serverLevel, pos, player, stack,
-                            "message.createcityexpansioncore.controller.restore.project_failed");
-                    return;
+            com.example.examplemod.mine.MineInteraction.placed(serverLevel, controller, player);
+        }
+    }
+
+    @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moving) {
+        if (!state.is(newState.getBlock()) && level instanceof ServerLevel serverLevel
+                && level.getBlockEntity(pos) instanceof MineControllerBlockEntity controller) {
+            CityManager manager = CityManager.get(serverLevel.getServer().overworld());
+            controller.getProjectId().map(manager::getProject).ifPresent(project -> {
+                if (project.dimensionId().equals(serverLevel.dimension().location())
+                        && project.controllerPos().equals(pos)) {
+                    var city = manager.getCity(project.cityId());
+                    if (city != null) manager.removeProject(city, project.projectId());
                 }
-            }
-            controller.restoreFromItem(data);
+            });
         }
-    }
-
-    private static boolean canRestore(
-            ServerLevel level,
-            BlockPos pos,
-            Player player,
-            MineControllerItemData.Data data
-    ) {
-        if (data.creatorId() != null && !data.creatorId().equals(player.getUUID())) {
-            return false;
-        }
-        if (!data.commissioned()) {
-            return true;
-        }
-        CityManager manager = CityManager.get(level.getServer().overworld());
-        City city = manager.getCity(data.cityId());
-        CityProject project = manager.getProject(data.projectId());
-        if (city == null || project == null || !city.canBuild(player.getUUID())
-                || !project.cityId().equals(data.cityId())
-                || !project.creatorId().equals(data.creatorId())
-                || !project.depositId().equals(data.depositId())
-                || !project.resourceId().equals(data.resourceId())
-                || com.example.examplemod.geology.GeologyManager.getRegion(level, pos)
-                .getDeposit(data.depositId())
-                .filter(deposit -> deposit.getResourceId().equals(data.resourceId()))
-                .isEmpty()) {
-            return false;
-        }
-        ServerLevel oldLevel = level.getServer().getLevel(
-                net.minecraft.resources.ResourceKey.create(
-                        net.minecraft.core.registries.Registries.DIMENSION,
-                        project.dimensionId()
-                )
-        );
-        if (oldLevel != null
-                && (!project.dimensionId().equals(level.dimension().location())
-                || !project.controllerPos().equals(pos))
-                && oldLevel.hasChunkAt(project.controllerPos())
-                && oldLevel.getBlockEntity(project.controllerPos())
-                instanceof MineControllerBlockEntity existing
-                && existing.getProjectId().filter(project.projectId()::equals).isPresent()) {
-            return false;
-        }
-        return true;
-    }
-
-    private static void rejectPlacement(
-            ServerLevel level,
-            BlockPos pos,
-            Player player,
-            ItemStack source,
-            String message
-    ) {
-        level.removeBlock(pos, false);
-        if (!player.getAbilities().instabuild) {
-            ItemStack refund = source.copy();
-            refund.setCount(1);
-            Block.popResource(level, pos, refund);
-        }
-        player.sendSystemMessage(Component.translatable(message));
-    }
-
-    @Override
-    public BlockState playerWillDestroy(
-            Level level,
-            BlockPos pos,
-            BlockState state,
-            Player player
-    ) {
-        if (!level.isClientSide() && level instanceof ServerLevel serverLevel
-                && player.getAbilities().instabuild) {
-            Block.popResource(serverLevel, pos, transferableStack(serverLevel, pos));
-        }
-        return super.playerWillDestroy(level, pos, state, player);
-    }
-
-    @Override
-    public void playerDestroy(
-            Level level,
-            Player player,
-            BlockPos pos,
-            BlockState state,
-            BlockEntity blockEntity,
-            ItemStack tool
-    ) {
-        super.playerDestroy(level, player, pos, state, blockEntity, tool);
-        if (!level.isClientSide() && level instanceof ServerLevel serverLevel
-                && !player.getAbilities().instabuild) {
-            Block.popResource(serverLevel, pos,
-                    transferableStack(serverLevel, blockEntity));
-        }
-    }
-
-    private static ItemStack transferableStack(ServerLevel level, BlockPos pos) {
-        return transferableStack(level, level.getBlockEntity(pos));
-    }
-
-    private static ItemStack transferableStack(ServerLevel level, BlockEntity blockEntity) {
-        ItemStack result = new ItemStack(CreateCityExpansionCore.MINE_CONTROLLER_ITEM.get());
-        if (blockEntity instanceof MineControllerBlockEntity controller) {
-            MineControllerItemData.write(result, MineControllerItemData.capture(level, controller));
-        }
-        return result;
+        super.onRemove(state, level, pos, newState, moving);
     }
 
     @Override
@@ -234,6 +117,8 @@ public class MineControllerBlock extends Block implements EntityBlock {
             Player player,
             BlockHitResult hit
     ) {
+        if (hit.getDirection() != state.getValue(BlockStateProperties.HORIZONTAL_FACING)
+                || hit.getLocation().y - pos.getY() > .25) return InteractionResult.PASS;
         if (level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }
@@ -249,7 +134,7 @@ public class MineControllerBlock extends Block implements EntityBlock {
             return InteractionResult.SUCCESS;
         }
 
-        MineNetworkHandlers.open(serverPlayer, pos, controller);
+        com.example.examplemod.mine.MineInteraction.press(serverPlayer, pos);
 
         return InteractionResult.SUCCESS;
     }

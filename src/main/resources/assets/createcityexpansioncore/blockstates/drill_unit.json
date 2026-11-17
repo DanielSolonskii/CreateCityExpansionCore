@@ -1,7 +1,166 @@
 {
   "variants": {
-    "": {
+    "part=single,facing=down": {
       "model": "createcityexpansioncore:block/drill_unit"
+    },
+    "part=north_west,upper=false,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_lower"
+    },
+    "part=north_west,upper=true,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_upper"
+    },
+    "part=north_east,upper=false,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_lower"
+    },
+    "part=north_east,upper=true,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_upper"
+    },
+    "part=south_east,upper=false,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_lower"
+    },
+    "part=south_east,upper=true,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_upper"
+    },
+    "part=south_west,upper=false,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_lower"
+    },
+    "part=south_west,upper=true,facing=down": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_upper"
+    },
+    "part=single,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/single_up"
+    },
+    "part=north_west,upper=false,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_lower_up"
+    },
+    "part=north_west,upper=true,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_upper_up"
+    },
+    "part=north_east,upper=false,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_lower_up"
+    },
+    "part=north_east,upper=true,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_upper_up"
+    },
+    "part=south_east,upper=false,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_lower_up"
+    },
+    "part=south_east,upper=true,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_upper_up"
+    },
+    "part=south_west,upper=false,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_lower_up"
+    },
+    "part=south_west,upper=true,facing=up": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_upper_up"
+    },
+    "part=single,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/single_north"
+    },
+    "part=north_west,upper=false,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_lower_north"
+    },
+    "part=north_west,upper=true,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_upper_north"
+    },
+    "part=north_east,upper=false,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_lower_north"
+    },
+    "part=north_east,upper=true,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_upper_north"
+    },
+    "part=south_east,upper=false,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_lower_north"
+    },
+    "part=south_east,upper=true,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_upper_north"
+    },
+    "part=south_west,upper=false,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_lower_north"
+    },
+    "part=south_west,upper=true,facing=north": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_upper_north"
+    },
+    "part=single,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/single_south"
+    },
+    "part=north_west,upper=false,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_lower_south"
+    },
+    "part=north_west,upper=true,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_upper_south"
+    },
+    "part=north_east,upper=false,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_lower_south"
+    },
+    "part=north_east,upper=true,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_upper_south"
+    },
+    "part=south_east,upper=false,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_lower_south"
+    },
+    "part=south_east,upper=true,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_upper_south"
+    },
+    "part=south_west,upper=false,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_lower_south"
+    },
+    "part=south_west,upper=true,facing=south": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_upper_south"
+    },
+    "part=single,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/single_east"
+    },
+    "part=north_west,upper=false,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_lower_east"
+    },
+    "part=north_west,upper=true,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_upper_east"
+    },
+    "part=north_east,upper=false,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_lower_east"
+    },
+    "part=north_east,upper=true,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_upper_east"
+    },
+    "part=south_east,upper=false,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_lower_east"
+    },
+    "part=south_east,upper=true,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_upper_east"
+    },
+    "part=south_west,upper=false,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_lower_east"
+    },
+    "part=south_west,upper=true,facing=east": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_upper_east"
+    },
+    "part=single,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/single_west"
+    },
+    "part=north_west,upper=false,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_lower_west"
+    },
+    "part=north_west,upper=true,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_west_upper_west"
+    },
+    "part=north_east,upper=false,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_lower_west"
+    },
+    "part=north_east,upper=true,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/north_east_upper_west"
+    },
+    "part=south_east,upper=false,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_lower_west"
+    },
+    "part=south_east,upper=true,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_east_upper_west"
+    },
+    "part=south_west,upper=false,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_lower_west"
+    },
+    "part=south_west,upper=true,facing=west": {
+      "model": "createcityexpansioncore:block/industrial_auger/south_west_upper_west"
     }
   }
 }

@@ -1,0 +1,36 @@
+{
+  "variants": {
+    "facing=north,tfmg=false": {
+      "model": "createcityexpansioncore:block/dc_power_bridge",
+      "y": 0
+    },
+    "facing=north,tfmg=true": {
+      "model": "createcityexpansioncore:block/dc_power_bridge_tfmg",
+      "y": 0
+    },
+    "facing=east,tfmg=false": {
+      "model": "createcityexpansioncore:block/dc_power_bridge",
+      "y": 90
+    },
+    "facing=east,tfmg=true": {
+      "model": "createcityexpansioncore:block/dc_power_bridge_tfmg",
+      "y": 90
+    },
+    "facing=south,tfmg=false": {
+      "model": "createcityexpansioncore:block/dc_power_bridge",
+      "y": 180
+    },
+    "facing=south,tfmg=true": {
+      "model": "createcityexpansioncore:block/dc_power_bridge_tfmg",
+      "y": 180
+    },
+    "facing=west,tfmg=false": {
+      "model": "createcityexpansioncore:block/dc_power_bridge",
+      "y": 270
+    },
+    "facing=west,tfmg=true": {
+      "model": "createcityexpansioncore:block/dc_power_bridge_tfmg",
+      "y": 270
+    }
+  }
+}

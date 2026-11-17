@@ -1,0 +1,22 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "CCC",
+    "PBP",
+    "   "
+  ],
+  "key": {
+    "C": {
+      "item": "create:copper_sheet"
+    },
+    "B": {
+      "item": "tfmg:gas_lamp"
+    },
+    "P": {
+      "item": "create:fluid_pipe"
+    }
+  },
+  "result": {
+    "id": "createpropulsion:liquid_burner"
+  }
+}

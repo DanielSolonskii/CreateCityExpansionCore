@@ -108,8 +108,42 @@ public final class CityPylonWorkspace extends Screen {
     }
 
     private WorldMapUiLayout.Rect collectControl() {
-        return UiEditLayout.apply("collect", geometry.frameX()+7, geometry.frameY()+geometry.frameHeight()-52,
-                geometry.sidebarWidth()-14, 20, WorldMapUiLayout.Rect::new);
+        int tabWidth = 22;
+        int tabHeight = Math.min(48, Math.max(1, geometry.frameHeight() - 8));
+        int x = Math.max(0, Math.min(geometry.frameX() + geometry.frameWidth() + 4, width - tabWidth - 2));
+        int y = geometry.frameY() + geometry.frameHeight() - tabHeight - 8;
+        return UiEditLayout.apply("collect", x, y, tabWidth, tabHeight, WorldMapUiLayout.Rect::new);
+    }
+
+    private void renderCollect(GuiGraphics graphics, int mouseX, int mouseY) {
+        var tab = collectControl();
+        boolean hovered = tab.contains(mouseX, mouseY);
+        graphics.pose().pushPose();
+        SocialHubIcons.scaleButton(graphics, tab, chromeMotion.amount(tab, hovered));
+        WorldMapChrome.control(graphics, tab, false, hovered, true, false);
+        int x = tab.x() + (tab.width() - 13) / 2;
+        int y = tab.y() + (tab.height() - 16) / 2;
+        int color = hovered ? TEXT : BRASS_TEXT;
+        // Up arrow and an isometric cube outlined in one-pixel strokes.
+        graphics.fill(x + 6, y, x + 7, y + 6, color);
+        graphics.hLine(x + 5, x + 7, y + 1, color);
+        graphics.hLine(x + 4, x + 8, y + 2, color);
+        for (int step = 0; step < 3; step++) {
+            graphics.hLine(x + 4 - 2 * step, x + 5 - 2 * step, y + 7 + step, color);
+            graphics.hLine(x + 7 + 2 * step, x + 8 + 2 * step, y + 7 + step, color);
+            graphics.hLine(x + 1 + 2 * step, x + 2 + 2 * step, y + 10 + step, color);
+            graphics.hLine(x + 10 - 2 * step, x + 11 - 2 * step, y + 10 + step, color);
+            graphics.hLine(x + 1 + 2 * step, x + 2 + 2 * step, y + 14 + step, color);
+            graphics.hLine(x + 10 - 2 * step, x + 11 - 2 * step, y + 14 + step, color);
+        }
+        graphics.fill(x + 6, y + 7, x + 7, y + 8, color);
+        graphics.vLine(x, y + 8, y + 14, color);
+        graphics.vLine(x + 12, y + 8, y + 14, color);
+        graphics.vLine(x + 6, y + 11, y + 17, color);
+        graphics.pose().popPose();
+        if (hovered) {
+            graphics.renderTooltip(font, Component.translatable("gui.createcityexpansioncore.pylon.collect"), mouseX, mouseY);
+        }
     }
 
     private final java.util.Map<AbstractWidget, WorldMapUiLayout.Rect> pageWidgetBounds = new java.util.WeakHashMap<>();
@@ -238,14 +272,9 @@ public final class CityPylonWorkspace extends Screen {
         }finally{rendering=false;g.pose().popPose();g.disableScissor();}
         UiEditLayout.clearElements("newspaper.");
         if (page == overview) newspaper.render(g,font,geometry,width,mx,my);
-        if (canCollect()) {
-            var collect = collectControl();
-            button(g,font,collect.x(),collect.y(),collect.width(),collect.height(),
-                    Component.translatable("gui.createcityexpansioncore.pylon.collect"),false,
-                    collect.contains(mx,my));
-        }
+        if (canCollect()) renderCollect(g, mx, my);
     }
-    private boolean canCollect(){return section==3&&minecraft.player!=null
+    private boolean canCollect(){return page==overview&&valid()&&minecraft.gameMode!=null&&minecraft.player!=null
             &&minecraft.player.getUUID().equals(root.getMenu().getOwner());}
     private Component navLabel(int index) {return Component.translatable("gui.createcityexpansioncore.city.tab."+SECTIONS[index]);}
     private static boolean in(double x,double y,int left,int top,int w,int h) {return x>=left&&x<left+w&&y>=top&&y<top+h;}

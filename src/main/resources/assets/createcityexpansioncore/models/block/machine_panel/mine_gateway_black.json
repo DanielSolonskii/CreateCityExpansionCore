@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:block/mine_gateway",
+  "textures": {
+    "panel": "createcityexpansioncore:block/machine_panel/black"
+  }
+}

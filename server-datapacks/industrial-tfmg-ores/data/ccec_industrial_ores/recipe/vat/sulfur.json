@@ -1,0 +1,42 @@
+{
+  "type": "tfmg:vat_machine_recipe",
+  "allowed_vat_types": [
+    "tfmg:steel_vat",
+    "tfmg:firebrick_lined_vat"
+  ],
+  "heat_requirement": "none",
+  "ingredients": [
+    {
+      "item": "minecraft:coal"
+    },
+    {
+      "item": "minecraft:coal"
+    },
+    {
+      "item": "minecraft:coal"
+    },
+    {
+      "item": "minecraft:coal"
+    },
+    {
+      "type": "neoforge:single",
+      "amount": 250,
+      "fluid": "minecraft:water"
+    }
+  ],
+  "machines": [
+    "tfmg:centrifuge"
+  ],
+  "min_size": 1,
+  "processing_time": 100,
+  "results": [
+    {
+      "id": "tfmg:sulfur_dust",
+      "count": 1
+    },
+    {
+      "id": "minecraft:coal",
+      "count": 2
+    }
+  ]
+}

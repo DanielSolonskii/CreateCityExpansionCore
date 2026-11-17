@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:block/technical_screen",
+  "textures": {
+    "panel": "createcityexpansioncore:block/machine_panel/purple"
+  }
+}
