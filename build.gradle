@@ -45,6 +45,11 @@ repositories {
         url = "https://maven.createmod.net"
     }
     maven {
+        name = "modrinth"
+        url = "https://api.modrinth.com/maven"
+        content { includeGroup "maven.modrinth" }
+    }
+    maven {
         name = "CurseMaven"
         url = "https://cursemaven.com"
         content { includeGroup "curse.maven" }
@@ -140,6 +145,7 @@ configurations {
 apply from: rootProject.file('gradle/dev-mods.gradle')
 
 dependencies {
+    compileOnly("maven.modrinth:jade:eYz2YBGT") { transitive = false }
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

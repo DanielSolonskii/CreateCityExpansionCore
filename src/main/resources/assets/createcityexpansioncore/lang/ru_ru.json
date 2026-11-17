@@ -1,4 +1,7 @@
 {
+  "gui.createcityexpansioncore.blueprint.jade.projection": "Проекция",
+  "gui.createcityexpansioncore.blueprint.jade.required": "Требуется: %s",
+  "gui.createcityexpansioncore.blueprint.jade.installed": "Установлено: %s",
   "item.createcityexpansioncore.panel_painter": "Краскопульт",
   "item.createcityexpansioncore.panel_painter.selected": "Цвет: %s",
   "item.createcityexpansioncore.panel_painter.controls": "ПКМ — покрасить. ПКМ в воздухе или Shift + ПКМ — выбрать цвет.",

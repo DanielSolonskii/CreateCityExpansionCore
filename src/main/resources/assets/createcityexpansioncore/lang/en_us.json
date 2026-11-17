@@ -1,4 +1,7 @@
 {
+  "gui.createcityexpansioncore.blueprint.jade.projection": "Projection",
+  "gui.createcityexpansioncore.blueprint.jade.required": "Required: %s",
+  "gui.createcityexpansioncore.blueprint.jade.installed": "Installed: %s",
   "item.createcityexpansioncore.panel_painter": "Paint Sprayer",
   "item.createcityexpansioncore.panel_painter.selected": "Color: %s",
   "item.createcityexpansioncore.panel_painter.controls": "Right-click to paint. Right-click in air or sneak and right-click to pick a color.",

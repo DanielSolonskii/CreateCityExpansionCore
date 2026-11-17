@@ -180,15 +180,6 @@ public class MineMultiblock {
         BlockPos powerPort =
                 powerPorts.get(0);
 
-        if (!isPowerPortServiceSpaceFree(level, origin, facing, powerPort)) {
-            return ValidationResult.failed(
-                    "Рядом с Power Port нужны две свободные клетки для проводов.",
-                    correctBlocks,
-                    requiredBlocks,
-                    incorrectBlocks
-            );
-        }
-
         /*
          * =====================================================
          * GATEWAY
@@ -317,7 +308,7 @@ public class MineMultiblock {
             return MachinePanels.withoutColor(actual)
                     == MachinePanels.withoutColor(MineBlueprints.rotate(expected, rotation));
         }
-        return expected.isAir() ? actual.isAir() : actual.is(expected.getBlock());
+        return expected.isAir() || actual.is(expected.getBlock());
     }
 
     private static boolean isCorrectInterfaceBlock(BlockState state) {
@@ -491,43 +482,6 @@ public class MineMultiblock {
         }
         if (portX == 0 || portX == WIDTH - 1) {
             return x == portX && Math.abs(z - portZ) == 1;
-        }
-        return false;
-    }
-
-    private static boolean isPowerPortServiceSpaceFree(
-            Level level,
-            BlockPos origin,
-            Direction facing,
-            BlockPos powerPort
-    ) {
-        int[] local = findLocalInterfacePosition(origin, facing, powerPort);
-        int portX = local[0];
-        int portZ = local[1];
-        if (portX < 0 || portZ < 0) {
-            return false;
-        }
-        if (portZ == 0 || portZ == DEPTH - 1) {
-            for (int offset : new int[]{-1, 1}) {
-                int x = portX + offset;
-                if (x < 0 || x >= WIDTH || !level.getBlockState(
-                        getWorldPosition(origin, facing, x, 1, portZ)
-                ).isAir()) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        if (portX == 0 || portX == WIDTH - 1) {
-            for (int offset : new int[]{-1, 1}) {
-                int z = portZ + offset;
-                if (z < 0 || z >= DEPTH || !level.getBlockState(
-                        getWorldPosition(origin, facing, portX, 1, z)
-                ).isAir()) {
-                    return false;
-                }
-            }
-            return true;
         }
         return false;
     }
