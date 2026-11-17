@@ -69,3 +69,9 @@ For the first vat and centrifuge, use the following recipes in a regular Create 
 Process the starter bauxite powder into aluminum using the stock TFMG vat recipe with two electrodes. The centrifuge then gives access to sulfur for the stock sulfuric acid recipe.
 
 For fireclay, combine 3 clay balls and 1 brick in any crafting grid to make 4 fireclay balls. The brick represents crushed fired clay mixed into the raw clay.
+
+## Industrial Create Big Cannons
+
+For Minecraft 1.21.1 with Create Big Cannons 5.11.7 and TFMG 1.2.0. Copy `industrial-big-cannons.zip` into the world's `datapacks` folder and run `/reload`. Check `/datapack list enabled` and run `/datapack enable "file/industrial-big-cannons.zip" last` if needed. When installing from source, copy the `industrial-big-cannons` folder and use `file/industrial-big-cannons` as its pack ID.
+
+The pack disables 17 Big Cannons recipes that produce its own cast iron or steel items, including alloying, compacting molten metal, and converting ingots, blocks, nuggets and steel scrap. Use TFMG recipes for those metals. Big Cannons melting recipes still accept TFMG materials through shared item tags, and Nethersteel keeps its own recipes.
