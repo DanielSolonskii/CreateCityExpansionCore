@@ -97,6 +97,37 @@ class SaveCompatibilityTests(Fixtures):
         (self.data / 'ccec_cargo_new_feature.dat').write_bytes(b'unknown')
         self.assert_preflight_refuses(self.candidate(), 'cannot read SavedData: ccec_cargo_new_feature')
 
+    def test_public_fleet_must_be_supported_before_deployment(self):
+        fleet = self.data / 'ccec_public_fleet.dat'
+        fleet.write_bytes(gzip.compress(compound('', compound('data', integer('Version', 1)))))
+        self.assert_preflight_refuses(self.candidate(), 'cannot read SavedData: ccec_public_fleet.dat')
+
+        formats = metadata()
+        formats['savedData']['ccec_public_fleet'] = {'Version': {'min': 1, 'max': 1}}
+        archive = self.candidate(formats)
+        self.assertIn({'file': fleet.name, 'versions': {'Version': 1}},
+                      self.inspect(archive)['plan']['saveCompatibility'])
+        fleet.write_bytes(gzip.compress(compound('', compound('data', integer('Version', 2)))))
+        self.assert_preflight_refuses(archive, 'ccec_public_fleet.dat:Version=2')
+
+    def test_files_only_rollback_refuses_jar_without_public_fleet_before_stop(self):
+        formats = metadata()
+        formats['savedData']['ccec_public_fleet'] = {'Version': {'min': 1, 'max': 1}}
+        archive = self.candidate(formats)
+        adapter = FakeSystemd()
+        report = server.deploy(self.root, archive, 'alpha-9.0.1',
+                               self.inspect(archive)['planSha256'], adapter=adapter)
+        fleet = self.data / 'ccec_public_fleet.dat'
+        fleet_bytes = gzip.compress(compound('', compound('data', integer('Version', 1))))
+        fleet.write_bytes(fleet_bytes)
+        installed = self.installed.read_bytes()
+        events = adapter.events.copy()
+        with self.assertRaisesRegex(RuntimeError, 'cannot read SavedData: ccec_public_fleet.dat'):
+            server.rollback(self.root, report['backup'], adapter=adapter)
+        self.assertEqual(adapter.events, events)
+        self.assertEqual(self.installed.read_bytes(), installed)
+        self.assertEqual(fleet.read_bytes(), fleet_bytes)
+
     def test_optional_old_commerce_missing_but_required_version_present(self):
         self.economy.write_bytes(saved_data(0))
         report = self.inspect(self.candidate())

@@ -1,6 +1,6 @@
 # Разработка CCEC
 
-Актуализировано: **2026-11-04**. Этот документ относится к Minecraft-моду в корне репозитория. Вложенные backend, launcher и bot имеют собственные сборки: [platform/STATE.md](platform/STATE.md).
+Актуализировано 18 ноября 2026 года. Этот документ относится к Minecraft-моду в корне репозитория. Вложенные backend, launcher и bot имеют собственные сборки. [Состояние платформы](platform/STATE.md).
 
 ## Среда
 
@@ -22,11 +22,13 @@ $env:GRADLE_USER_HOME = Join-Path $env:USERPROFILE '.gradle'
 
 [gradle/dev-mods.gradle](gradle/dev-mods.gradle) разделяет compile API и полные моды:
 
-- compile: Create `6.0.10-280:slim`, Ponder `1.0.82+mc1.21.1`, EE и опциональные API из `libs/`;
-- runtime: полный Create, внешний Ponder и EE в `run/mods/`;
+- Для компиляции используются Create `6.0.10-280:slim`, Ponder `1.0.82+mc1.21.1`, EE, TFMG 1.2.0 и опциональные API из `libs/`.
+- Для запуска Gradle помещает полный Create, внешний Ponder, EE и TFMG в `run/mods/`.
 - полный Create содержит JarJar-зависимости Flywheel 1.0.6, Registrate MC1.21-1.3.0+67 и Ponder 1.0.82.
 
-`prepareDevMods` скачивает закреплённые runtime-артефакты и копирует EE. Он не удаляет пользовательские файлы и отказывает при конфликтующих версиях Create/Ponder/EE.
+`prepareDevMods` скачивает закреплённые зависимости и копирует EE из репозитория. Для TFMG можно задать `-PtfmgJar=<путь к JAR>` или положить файл в `../tfmg-1.2.0.jar`. В остальных случаях Gradle получает закреплённый артефакт из CurseMaven. При конфликтующих версиях подготовка останавливается и перечисляет файлы.
+
+Чтобы проверить обязательность TFMG, запустите `./gradlew -I tools/powerbridge-gametest.init.gradle -PpowerBridgeWithoutTfmg runGameTestServer`. Задача проверяет сообщение NeoForge об отсутствующем TFMG при запуске отдельного сервера. Без этого параметра запускаются игровые тесты DC-моста с TFMG 1.2.0.
 
 ```powershell
 .\gradlew.bat verifyDevMods

@@ -48,8 +48,13 @@ public final class CityInviteSearchCheck {
         var savedNames = restoredNames.save(new net.minecraft.nbt.CompoundTag(), net.minecraft.core.RegistryAccess.EMPTY);
         require(savedNames.getString(namedId.toString()).equals("moorgull") && savedNames.getAllKeys().size() == 1,
                 "offline display names survive persistence; technical aliases and corrupt entries are ignored");
-        var roster = new com.example.examplemod.network.SyncCityMembersPayload(BlockPos.ZERO,
+        var overworld = net.minecraft.world.level.Level.OVERWORLD.location();
+        var nether = net.minecraft.world.level.Level.NETHER.location();
+        var roster = new com.example.examplemod.network.SyncCityMembersPayload(nether, BlockPos.ZERO,
                 List.of(new com.example.examplemod.network.SyncCityMembersPayload.Entry(namedId, CityMember.Role.RESIDENT.ordinal(), "moorgull")));
+        require(roster.matchesPylon(nether, BlockPos.ZERO), "viewers of the addressed pylon receive the roster");
+        require(!roster.matchesPylon(overworld, BlockPos.ZERO), "identical coordinates in another dimension must not receive the roster");
+        require(!roster.matchesPylon(nether, BlockPos.ZERO.above()), "another pylon in the same dimension must not receive the roster");
         var nameBuffer = new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(), net.minecraft.core.RegistryAccess.EMPTY);
         try {
             com.example.examplemod.network.SyncCityMembersPayload.STREAM_CODEC.encode(nameBuffer, roster);
@@ -276,7 +281,7 @@ public final class CityInviteSearchCheck {
                 "the client applies a snapshot to the open pylon");
         require(Files.readString(sourceRoot().resolve(
                         "src/main/java/com/example/examplemod/client/screen/CityPylonScreen.java"))
-                        .contains("this.menu.getPylonPos().equals(payload.pylonPos())"),
+                        .contains("payload.matchesPylon(this.menu.getDimensionId(), this.menu.getPylonPos())"),
                 "a snapshot for another pylon is ignored instead of being applied blindly");
         require(Files.readString(sourceRoot().resolve(
                         "src/main/java/com/example/examplemod/menu/CityPylonMenu.java"))
@@ -342,8 +347,8 @@ public final class CityInviteSearchCheck {
                 directory3.indexOf("public static void reportOutcome(", publishStart));
         require(publish.contains("viewer.containerMenu instanceof com.example.examplemod.menu.CityPylonMenu menu"),
                 "a viewer is recognised by having this pylon's menu open, like the removal delta");
-        require(publish.contains("menu.getPylonPos().equals(city.getPylonPos())"),
-                "only viewers of this very pylon are included");
+        require(publish.contains("snapshot.matchesPylon(menu.getDimensionId(), menu.getPylonPos())"),
+                "server delivery checks the complete address of the open pylon");
         require(publish.contains("for (ServerPlayer viewer : server.getPlayerList().getPlayers())"),
                 "every online player is considered, so a second admin is not left stale");
         require(publish.contains("PacketDistributor.sendToPlayer(viewer, snapshot)"),

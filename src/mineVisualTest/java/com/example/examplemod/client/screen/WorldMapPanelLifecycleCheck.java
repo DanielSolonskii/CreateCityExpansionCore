@@ -74,6 +74,12 @@ public final class WorldMapPanelLifecycleCheck {
                 "the panel field is nullable, which is why this check exists");
 
         List<Method> methods = parseMethods(source);
+        require(findGuard("this.map.tick(); if (this.map == null) return;") == null,
+                "a later null check cannot protect an earlier dereference");
+        require(findGuard("var load = map::receive; if (map != null) load.run();") == null,
+                "a bound method reference also dereferences an unqualified panel");
+        require(findGuard("if (map == null) return; this.map.tick();") != null,
+                "a null check before the first access is recognised");
         require(methods.size() > 30,
                 "the screen was parsed as Java, not truncated (methods=" + methods.size() + ")");
 
@@ -312,16 +318,15 @@ public final class WorldMapPanelLifecycleCheck {
     }
 
     /**
-     * The first statement that proves the panel may be absent.
-     *
-     * <p>Recognised shapes: an early return guarded on {@code this.map == null}, an
-     * early return guarded on {@code this.map != null} (the "if it exists, tidy it
-     * up" shape used by {@code onClose}), or a ternary that already tests for null.
+     * Finds a null check before the first panel access. Package names such as
+     * {@code com.example.examplemod.client.map} do not refer to the screen field.
      */
     private static String findGuard(String body) {
-        Matcher matcher = Pattern.compile(
-                "this\\.map\\s*(==|!=)\\s*null").matcher(body);
-        return matcher.find() ? matcher.group() : null;
+        String field = "(?<![\\w$.])(?:this\\s*\\.\\s*)?map\\s*";
+        Matcher guard = Pattern.compile(field + "(?:==|!=)\\s*null\\b").matcher(body);
+        if (!guard.find()) return null;
+        Matcher access = Pattern.compile(field + "(?:\\.|::)").matcher(body);
+        return access.find() && access.start() < guard.start() ? null : guard.group();
     }
 
     private static int matchBrace(String code, int openIndex) {

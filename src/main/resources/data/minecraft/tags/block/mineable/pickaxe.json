@@ -1,6 +1,12 @@
 {
   "replace": false,
   "values": [
+    "createcityexpansioncore:chunk_loader",
+    "createcityexpansioncore:mine_frame",
+    "createcityexpansioncore:mine_gateway",
+    "createcityexpansioncore:mine_power_port",
+    "createcityexpansioncore:technical_block",
+    "createcityexpansioncore:control_block",
     "createcityexpansioncore:dc_power_bridge",
     "createcityexpansioncore:transport_registration_terminal",
     "createcityexpansioncore:cargo_ticker",

@@ -64,18 +64,17 @@ public final class MineWorldControlsGameTest {
     @GameTest(template="auger_empty", timeoutTicks=200)
     public static void placerCityAndLocalDepositAreAutomatic(GameTestHelper h) {
         var level=h.getLevel();
-        var start=h.absolutePos(new BlockPos(60,3,60));
-        BlockPos site=null;
-        search: for(int x=0;x<256;x+=8) for(int z=0;z<256;z+=8) {
-            var p=start.offset(x,0,z);
-            if(GeologyManager.getRegion(level,p).getDeposits().stream().anyMatch(d->d.localPotentialPerHour(p.getX(),p.getZ())>0)) { site=p;break search; }
-        }
-        h.assertTrue(site!=null,"Find a real, positive local geological potential");
-        var pos=site;
+        // GameTestServer has a fixed world seed but moves its test structures between runs.
+        var deposits=GeologyManager.get(level).queryNearby(BlockPos.ZERO,768);
+        int y=level.getMaxBuildHeight()-32;
+        var pos=deposits.stream().map(d->new BlockPos(d.getCenterX(),y,d.getCenterZ()))
+                .min(Comparator.comparingDouble(p->p.distSqr(BlockPos.ZERO))).orElseThrow();
         var controller=build(level,pos);
         var owner=player(level,pos); var stranger=player(level,pos);
         var cities=CityManager.get(level.getServer().overworld());
-        var city=cities.createCity("Instruments "+owner.getUUID().toString().substring(0,8),owner.getUUID(),level.dimension().location(),pos.offset(2000,0,0));
+        var city=cities.createCity("Instruments "+owner.getUUID().toString().substring(0,8),owner.getUUID(),
+                level.dimension().location(),h.absolutePos(new BlockPos(2000,3,0)));
+        h.assertTrue(city!=null,"Create test city in an unclaimed plot");
         MineInteraction.placed(level,controller,owner);
         h.assertTrue(city.getId().equals(controller.placementCity()),"City captured from placer despite distant city location");
         var expected=GeologyManager.getRegion(level,pos).getDeposits().stream().filter(d->d.localPotentialPerHour(pos.getX(),pos.getZ())>0).findFirst().orElseThrow();
@@ -119,7 +118,12 @@ public final class MineWorldControlsGameTest {
         MineInteraction.redstone(level,controller);
         h.assertTrue(!controller.isUserRequestedStart(),"Falling redstone signal stops machine");
         cities.removeProject(city,controller.getProjectId().orElseThrow());
-        level.removeBlock(pos,false);
+        cities.removeCityByOwner(owner.getUUID());
+        var plan=MineBlueprints.current().plan(BlueprintCatalog.Tier.I);
+        var target=MineMultiblock.getOrigin(pos,Direction.NORTH).offset(plan.anchor());
+        for(var part:plan.parts()) {
+            if(!part.state().isAir()) level.removeBlock(plan.worldPosition(part.position(),target,Direction.NORTH),false);
+        }
         h.succeed();
     }
 
@@ -131,12 +135,16 @@ public final class MineWorldControlsGameTest {
         CityManager.get(level.getServer().overworld()).addProject(city,new CityProject(project,city.getId(),CityProjectType.INDUSTRIAL_MINE,level.dimension().location(),pos,owner,deposit,resource,.5));
         controller.commission(city.getId(),project,deposit,resource);
         var validation=MineMultiblock.validate(level,pos);h.assertTrue(validation.assembled(),"Screens included in valid blueprint");
-        var screenPos=validation.powerPort().above();var screenState=level.getBlockState(screenPos);
+        var screenPos=MachineDisplayBlock.adjacentDisplay(validation.powerPort(),MachineDisplaySource.Role.ENERGY,level::getBlockState);
+        var outputPos=MachineDisplayBlock.adjacentDisplay(validation.gateway(),MachineDisplaySource.Role.OUTPUT,level::getBlockState);
+        h.assertTrue(screenPos!=null && level.getBlockEntity(screenPos) instanceof MachineDisplayBlockEntity,"Power port has an energy screen");
+        h.assertTrue(outputPos!=null && level.getBlockEntity(outputPos) instanceof MachineDisplayBlockEntity,"Gateway has an output screen");
+        var screenState=level.getBlockState(screenPos);
         var screen=(MachineDisplayBlockEntity)level.getBlockEntity(screenPos);
         h.assertTrue(!screen.telemetry().assembled(),"Unbound screen starts blank");
         IndustrialMineService.inspectSnapshot(level,pos,controller);
         h.assertTrue(screen.telemetry().assembled(),"Assembled machine binds energy screen");
-        var output=(MachineDisplayBlockEntity)level.getBlockEntity(validation.gateway().above());
+        var output=(MachineDisplayBlockEntity)level.getBlockEntity(outputPos);
         h.assertTrue(output.telemetry().equals(controller.telemetry()),"Both instruments share authoritative controller readings");
         level.setBlockAndUpdate(screenPos,screenState.setValue(MachineDisplayBlock.ROLE,MachineDisplaySource.Role.OUTPUT));
         h.assertTrue(!MineMultiblock.validate(level,pos).assembled(),"Wrong screen role rejects assembly");

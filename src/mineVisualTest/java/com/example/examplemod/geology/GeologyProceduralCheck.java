@@ -49,6 +49,7 @@ public final class GeologyProceduralCheck {
         qualityAndSizeAreIndependent();
         physicalOutputMultipliers();
         savedDataRoundTrip();
+        worldSeedThroughStorage();
         legacyDataIsRegenerated();
         worksOutsideStartingArea();
         lookupNeverTouchesChunks();
@@ -501,6 +502,48 @@ public final class GeologyProceduralCheck {
         )).getDeposit(restoredDeposit.getId()).orElseThrow()
                         == restoredDeposit,
                 "restored deposit is spatially discoverable again");
+    }
+
+    private static void worldSeedThroughStorage() {
+        var world = GeologyManager.factory(DIMENSION, SEED);
+        GeologyManager historical = GeologyManager.factory(DIMENSION, 0L).constructor().get();
+        for (int x = 0; x < 32; x++) {
+            historical.materialize(x, -9);
+        }
+        CompoundTag original = historical.save(new CompoundTag(), null);
+        CompoundTag legacy = original.copy();
+        legacy.putInt("FormatVersion", 6);
+        int emptyCells = 0;
+        for (Tag region : legacy.getList("Regions", Tag.TAG_COMPOUND)) {
+            ListTag deposits = ((CompoundTag) region).getList("Deposits", Tag.TAG_COMPOUND);
+            if (deposits.isEmpty()) emptyCells++;
+            for (Tag deposit : deposits) {
+                ((CompoundTag) deposit).putLong("InitialReserve", 500L);
+                ((CompoundTag) deposit).putLong("RemainingReserve", 0L);
+            }
+        }
+        require(emptyCells > 0 && emptyCells < 32, "the old save contains both empty and mined cells");
+
+        GeologyManager restored = world.deserializer().apply(legacy, null);
+        for (int x = 0; x < 32; x++) {
+            restored.materialize(x, -9);
+        }
+        require(original.equals(restored.save(new CompoundTag(), null)),
+                "revisiting old cells preserves every saved ID, coordinate and polygon, including empty cells");
+
+        GeologyManager fresh = world.constructor().get();
+        GeologyManager other = GeologyManager.factory(DIMENSION, -SEED).constructor().get();
+        for (int x = 32; x < 48; x++) {
+            fresh.materialize(x, -9);
+            other.materialize(x, -9);
+            restored.materialize(x, -9);
+        }
+        CompoundTag newCells = fresh.save(new CompoundTag(), null);
+        require(!newCells.equals(other.save(new CompoundTag(), null)),
+                "fresh worlds with different seeds generate different deposits in the same cells");
+        original.getList("Regions", Tag.TAG_COMPOUND).addAll(newCells.getList("Regions", Tag.TAG_COMPOUND));
+        require(original.equals(restored.save(new CompoundTag(), null)),
+                "unopened cells in the old save match a fresh world with its actual seed");
     }
 
     /* Форматы до 6 пересоздают раскладку жил. */

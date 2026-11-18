@@ -98,13 +98,51 @@ public final class CargoFulfillment {
     }
     public static void publish(ServerPlayer actor,UUID warehouseId,CompoundTag values,UUID nonce){var warehouse=CargoWarehouseRegistry.get(actor.getServer()).find(warehouseId).orElseThrow();if(!CargoWarehouseRegistry.manages(actor,warehouse))throw new IllegalArgumentException("Warehouse management denied");var type=stockChoice(actor,warehouse,values.getString("Stock"));MasterCityTradeService.validateCitySale(actor.getServer(),warehouse,type,CenterOperations.number(values,"Price"));var book=EconomyManager.get(actor.serverLevel()).cargo();var offer=book.publish(nonce,actor.getUUID(),CargoWarehouseRegistry.access(actor.getServer(),warehouse).owner(),warehouseId,(CompoundTag)type.save(actor.registryAccess()),type.getHoverName().getString(),Math.toIntExact(CenterOperations.number(values,"Quantity")),CenterOperations.number(values,"Price"));var owner=CargoWarehouseRegistry.access(actor.getServer(),warehouse).owner();CargoOwners.get(actor.getServer()).change(actor.getServer(),actor.getUUID(),"offer/"+offer.id(),actor.getUUID(),CargoTrainRegistry.AccessMode.PUBLIC,new CargoOwners.Access(owner,CargoTrainRegistry.AccessMode.valueOf(values.getString("Access")),Set.of(),Set.of()));}
     private static ServerPlayer operator(MinecraftServer s,CargoWarehouseRegistry.Warehouse w){var ticker=CargoWarehouseRegistry.ticker(s,w);if(ticker==null)return null;return s.getPlayerList().getPlayers().stream().filter(p->CargoWarehouseRegistry.manages(p,w)&&ticker.behaviour.mayInteract(p)).findFirst().orElse(null);}
-    @SubscribeEvent public static void tick(ServerTickEvent.Post event){var server=event.getServer();if(server.overworld().getGameTime()%20!=0)return;var registry=CargoShipmentRegistry.get(server);registry.reconcile(server);CargoCharters.get(server).tick(server);PublicFleetRegistry.get(server).tick(server);var book=EconomyManager.get(server.overworld()).cargo();int budget=4;
+    /** Reconcile independently saved financial and physical receipts without dispatching or paying again. */
+    static boolean reconcileOrder(CargoCommerceBook book, RailTollBook tolls, CargoShipmentRegistry registry,
+                                  CargoCommerceBook.Order order, CargoShipmentRegistry.Shipment shipment) {
+        if (order.state() == CargoCommerceBook.State.SETTLED) {
+            if (shipment.stage() == CargoShipmentRegistry.Stage.DELIVERED
+                    && order.quantity() == shipment.quantity() && shipment.physicalComplete()) {
+                registry.completed(shipment.id());
+            }
+            return true;
+        }
+        if (order.state() == CargoCommerceBook.State.CANCELLED) {
+            if (shipment.stage() != CargoShipmentRegistry.Stage.CANCELLED && shipment.cancellationResolved()) {
+                registry.cancellationCompleted(shipment.id());
+            }
+            return true;
+        }
+        if (order.state() == CargoCommerceBook.State.REFUNDED) {
+            // A half-save can lose the fleet job that normally refunds the remaining toll budget.
+            tolls.finishTrip(order.id());
+            if (shipment.stage() != CargoShipmentRegistry.Stage.CANCELLED
+                    && (shipment.closedBeforeDispatch() || (shipment.stage() == CargoShipmentRegistry.Stage.REQUESTED
+                    && !shipment.packagingClaimed() && shipment.parcelCount() == 0))) {
+                registry.cancelled(shipment.id());
+            }
+            return true;
+        }
+        if (book.refundRejectedShipment(shipment)) {
+            registry.cancelled(shipment.id());
+            return true;
+        }
+        return false;
+    }
+    @SubscribeEvent public static void tick(ServerTickEvent.Post event){var server=event.getServer();if(server.overworld().getGameTime()%20!=0)return;var registry=CargoShipmentRegistry.get(server);registry.reconcile(server);CargoCharters.get(server).tick(server);PublicFleetRegistry.get(server).tick(server);var economy=EconomyManager.get(server.overworld());var book=economy.cargo();int budget=4;
         for(var order:book.orders()){var shipment=registry.find(order.shipment()).orElse(null);if(shipment==null)continue;
-            if((order.state()==CargoCommerceBook.State.HELD||order.state()==CargoCommerceBook.State.ATTEMPTED)&&shipment.stage()!=CargoShipmentRegistry.Stage.BLOCKED&&shipment.stage()!=CargoShipmentRegistry.Stage.CANCELLED){try{prepareDispatch(server,shipment);}catch(RuntimeException invalid){registry.blocked(shipment.id(),"charter_dispatch_blocked");continue;}}
-            // Economy and physical metadata are separate SavedData files. Repair a completed
-            // half-save without issuing another native request or repeating a credit.
-            if(order.state()==CargoCommerceBook.State.CANCELLED){if(shipment.cancellationResolved()&&shipment.stage()!=CargoShipmentRegistry.Stage.CANCELLED)registry.cancellationCompleted(shipment.id());continue;}
-            if(order.state()==CargoCommerceBook.State.REFUNDED){if(shipment.stage()==CargoShipmentRegistry.Stage.REQUESTED&&!shipment.packagingClaimed()&&shipment.parcelCount()==0)registry.cancelled(shipment.id());continue;}
+            if (reconcileOrder(book, economy.roadTolls(), registry, order, shipment)) continue;
+            if ((order.state() == CargoCommerceBook.State.HELD || order.state() == CargoCommerceBook.State.ATTEMPTED)
+                    && shipment.stage() != CargoShipmentRegistry.Stage.BLOCKED && shipment.stage() != CargoShipmentRegistry.Stage.CANCELLED) {
+                try {
+                    prepareDispatch(server, shipment);
+                } catch (RuntimeException invalid) {
+                    if (order.state() == CargoCommerceBook.State.HELD) registry.rejectBeforeDispatch(shipment, "charter_dispatch_blocked");
+                    else registry.blocked(shipment.id(), "charter_dispatch_blocked");
+                    continue;
+                }
+            }
             if(shipment.cancellationRequested()&&order.state()!=CargoCommerceBook.State.CANCELLING){book.requestCancellation(order.id());continue;}
             if(order.state()==CargoCommerceBook.State.CANCELLING){
                 registry.requestCancellation(shipment.id());
@@ -117,8 +155,8 @@ public final class CargoFulfillment {
             if(order.seller().available(server)&&order.fees().stream().allMatch(f->f.recipient().available(server))&&shipment.receivingOwnerValid(server)&&shipment.physicalComplete()&&(!shipment.trip().getBoolean("Fleet")||PublicFleetRegistry.get(server).complete(shipment.id()))&&book.settle(order.id(),true,shipment::hopComplete))registry.completed(shipment.id());
             if(order.state()!=CargoCommerceBook.State.HELD||budget<=0||shipment.stage()!=CargoShipmentRegistry.Stage.REQUESTED)continue;
             var warehouse=CargoWarehouseRegistry.get(server).find(shipment.sourceWarehouse()).orElse(null);if(warehouse==null)continue;var ticker=CargoWarehouseRegistry.ticker(server,warehouse);if(ticker==null||!CargoWarehouseRegistry.nativeAuthorized(server,warehouse))continue;
-            if(!order.seller().equals(EconomyManager.get(server.overworld()).accounts().saleRecipient(order.offer(),CargoWarehouseRegistry.access(server,warehouse).owner()))||!shipment.receivingOwnerValid(server)){registry.blocked(shipment.id(),"Warehouse ownership changed before packaging");book.block(order.id(),"Ownership changed");continue;}
-            try{MasterCityTradeService.ensureSourceReady(server,warehouse);}catch(IllegalArgumentException pending){registry.blocked(shipment.id(),pending.getMessage());book.block(order.id(),pending.getMessage());continue;}if(ticker.shipmentStock(server,warehouse.id(),shipment.id())<shipment.quantity())continue;
+            if(!order.seller().equals(EconomyManager.get(server.overworld()).accounts().saleRecipient(order.offer(),CargoWarehouseRegistry.access(server,warehouse).owner()))||!shipment.receivingOwnerValid(server)){registry.rejectBeforeDispatch(shipment,"Warehouse ownership changed before packaging");book.block(order.id(),"Ownership changed");continue;}
+            try{MasterCityTradeService.ensureSourceReady(server,warehouse);}catch(IllegalArgumentException pending){registry.rejectBeforeDispatch(shipment,pending.getMessage());book.block(order.id(),pending.getMessage());continue;}if(ticker.shipmentStock(server,warehouse.id(),shipment.id())<shipment.quantity())continue;
             if(!(shipment.trip().getBoolean("Fleet")?PublicFleetRegistry.get(server).prepared(server,shipment):CargoCharters.get(server).prepared(server,shipment)))continue;
             if(!book.markAttempted(order.id()))continue;budget--;
             try{var result=ticker.requestShipment(server,warehouse.id(),shipment.id());if(result!=CargoTickerBlockEntity.RequestResult.DISPATCH_ATTEMPTED){registry.blocked(shipment.id(),result.name());book.block(order.id(),result.name());}}

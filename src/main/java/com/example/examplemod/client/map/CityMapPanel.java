@@ -8,8 +8,6 @@ import com.example.examplemod.city.CityColors;
 import com.example.examplemod.city.CityPlot;
 import com.example.examplemod.city.CityProjectSnapshot;
 import com.example.examplemod.network.CityRelationSnapshot;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -1344,19 +1342,6 @@ this.markerPositions.clear();
     }
 
     /**
-     * Level of detail for the terrain textures.
-     * <p>
-     * One sample per world block means a sample is only smaller than two screen pixels when the map
-     * is zoomed out; past that point the tile texture is rebuilt once with a coarser stride instead
-     * of drawing a smaller square for every sample.
-     *
-     * @return 1 — one texel per sample, больше — area-averaged blocks
-     */
-    private int terrainStride() {
-        return terrainStrideFor(CityMapTilePayload.SAMPLE_STEP * this.zoom);
-    }
-
-    /**
      * Pure level-of-detail rule: how many samples one texel covers.
      *
      * <p>Split out so the LOD ladder is verified headless rather than only by looking at the map.
@@ -2131,15 +2116,6 @@ if (!this.showCities) continue;
         drawLine(graphics, anchorX, anchorY, x, y, 0x907C6C50);
     }
 
-private static void renderLayerButton(GuiGraphics graphics, int x, int y, Component label,
-                                          boolean enabled, int mouseX, int mouseY) {
-        boolean hovered = inside(mouseX, mouseY, x, y, 30, 12);
-        graphics.fill(x, y, x + 30, y + 12, enabled ? 0xD04A3A20 : 0xD0202729);
-        graphics.renderOutline(x, y, 30, 12, hovered ? ACCENT_COLOR : FRAME_COLOR);
-        graphics.drawCenteredString(Minecraft.getInstance().font, label, x + 15, y + 2,
-                enabled ? 0xFFF2D39A : 0xFF7A8589);
-    }
-
     private void drawLine(GuiGraphics graphics, int x0, int y0, int x1, int y1, int color) {
         var clipped=MapLineClip.clip(x0,y0,x1,y1,viewportX-3,viewportY-3,viewportX+viewportWidth+3,viewportY+viewportHeight+3);
         if(clipped==null)return;
@@ -2480,9 +2456,6 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
     public record ScreenPoint(int x, int y) {}
 
     private record MarkerKey(SelectionKind kind, UUID id, BlockPos pos) {
-        private String stableId() {
-            return this.id != null ? this.id.toString() : this.pos.getX() + ":" + this.pos.getZ();
-        }
     }
 
     private record MarkerEntry(MarkerKey key, double worldX, double worldZ, int priority) {}
@@ -2528,8 +2501,6 @@ private Selection projectSelection(CityProjectSnapshot project) {
                         Math.round(project.richness() * 100.0)), projectStatus(project.status())),
                 this.mineIcon, !"RUNNING".equals(project.status()));
     }
-
-private static double distanceToSegment(double px,double py,double x1,double y1,double x2,double y2){double dx=x2-x1,dy=y2-y1;if(dx==0&&dy==0)return Math.hypot(px-x1,py-y1);double t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy)));return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));}
 
 /**
      * Classifies one section from data the server already sends. Deliberately takes primitives so
@@ -2626,10 +2597,6 @@ private static boolean sameTarget(Selection first, Selection second) {
 
     public double screenToWorldZ(double screenY) {
         return this.centerZ + (screenY - this.viewportY - this.viewportHeight / 2.0) / this.zoom;
-    }
-
-    private int worldToTile(double worldCoordinate) {
-        return (int) Math.floor(worldCoordinate / CityMapTilePayload.WORLD_SIZE);
     }
 
     private boolean insideViewport(double mouseX, double mouseY) {

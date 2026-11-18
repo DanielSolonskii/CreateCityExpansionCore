@@ -2,17 +2,6 @@ package com.example.examplemod.mine;
 
 import com.example.examplemod.electrical.MineControllerBlock;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
-import com.example.examplemod.network.MineCommissionContextPayload;
-import com.example.examplemod.city.City;
-import com.example.examplemod.city.CityManager;
-import com.example.examplemod.city.CityProject;
-import com.example.examplemod.sound.ModSounds;
-import com.example.examplemod.sound.WorldSoundHelper;
-import com.example.examplemod.city.CityProjectType;
-import com.example.examplemod.geology.GeologicalDeposit;
-import com.example.examplemod.geology.GeologicalRegion;
-import com.example.examplemod.geology.GeologyManager;
-import com.example.examplemod.multiblock.MineMultiblock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -116,23 +105,6 @@ public final class MineNetworkHandlers {
                         openScreen
                 )
         );
-    }
-
-    private static void sendCommissionContext(ServerPlayer player, BlockPos controllerPos) {
-        City city = CityManager.get(player.getServer().overworld())
-                .getCityByMember(player.getUUID());
-        boolean allowed = city != null && city.canBuild(player.getUUID());
-        String message = city == null
-                ? "gui.createcityexpansioncore.mine.commission.no_city"
-                : allowed ? "gui.createcityexpansioncore.mine.commission.available"
-                : "gui.createcityexpansioncore.mine.commission.permission_denied";
-        PacketDistributor.sendToPlayer(player, new MineCommissionContextPayload(
-                controllerPos,
-                city == null ? Optional.empty() : Optional.of(city.getId()),
-                city == null ? "" : city.getName(),
-                allowed,
-                message
-        ));
     }
 
     private record ControllerContext(

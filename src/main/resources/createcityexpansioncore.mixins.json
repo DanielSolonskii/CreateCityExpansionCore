@@ -11,6 +11,7 @@
     "PackagerCargoReceiptMixin",
     "GlobalStationCargoMixin",
     "CarriageBogeyAccessor",
+    "PlayerListSaveInvoker",
     "LevelBlockGrantMixin",
     "ContraptionInteractionPacketMixin",
     "TrainRelocationPacketMixin",

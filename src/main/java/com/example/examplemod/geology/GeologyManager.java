@@ -141,19 +141,17 @@ public final class GeologyManager extends SavedData {
     }
 
     public static GeologyManager get(ServerLevel level) {
-        ResourceLocation dimensionId = level.dimension().location();
         return level.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(
-                        () -> new GeologyManager(dimensionId),
-                        (tag, registries) -> load(
-                                tag,
-                                registries,
-                                dimensionId,
-                                level.getSeed()
-                        ),
-                        null
-                ),
+                factory(level.dimension().location(), level.getSeed()),
                 DATA_NAME
+        );
+    }
+
+    static SavedData.Factory<GeologyManager> factory(ResourceLocation dimensionId, long worldSeed) {
+        return new SavedData.Factory<>(
+                () -> new GeologyManager(dimensionId, worldSeed, true, null),
+                (tag, registries) -> load(tag, registries, dimensionId, worldSeed),
+                null
         );
     }
 

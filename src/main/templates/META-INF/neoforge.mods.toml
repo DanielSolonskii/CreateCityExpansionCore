@@ -119,6 +119,14 @@ config="${mod_id}.powerbridge.mixins.json"
     ordering="NONE"
     side="BOTH"
 
+[[dependencies.${mod_id}]]
+    modId="tfmg"
+    type="required"
+    versionRange="[1.2.0]"
+    reason="Industrial mine blueprints use TFMG blocks and the DC bridge uses the TFMG 1.2.0 electrical API."
+    ordering="NONE"
+    side="BOTH"
+
 # Features are specific properties of the game environment, that you may want to declare you require. This example declares
 # that your mod requires GL version 3.2 or higher. Other features will be added. They are side aware so declaring this won't
 # stop your mod loading on the server for example.

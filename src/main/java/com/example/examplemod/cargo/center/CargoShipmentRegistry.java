@@ -26,6 +26,7 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         private final List<String> history=new ArrayList<>();
         private Stage stage=Stage.REQUESTED;
         private boolean packagingClaimed;
+        private boolean rejectedBeforeDispatch;
         private boolean cancellationRequested;
         private OwnerRef receiverOwner;
         private String problem="";
@@ -38,6 +39,17 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         public ItemStack type(){return type.copy();} public int quantity(){return quantity;} public List<CargoRoutePlanner.Leg> route(){return route;}
         public CompoundTag trip(){return trip.copy();}
         public boolean packagingClaimed(){return packagingClaimed;}
+        boolean closedBeforeDispatch() {
+            if (packagingClaimed || !parcels.isEmpty()) return false;
+            if (stage == Stage.CANCELLED) return true;
+            if (stage != Stage.BLOCKED) return false;
+            // Older worlds stored the reason alone. Only these reasons were exclusive to preflight.
+            return rejectedBeforeDispatch || switch (problem) {
+                case "Warehouse ownership changed before packaging", "master_import_reconciliation_required",
+                     "master_buffer_unavailable", "master_import_receipt_missing" -> true;
+                default -> false;
+            };
+        }
         public int parcelCount(){return parcels.size();}
         public boolean cancellationRequested(){return cancellationRequested;}
         public Stage stage(){return stage;} public String problem(){return problem;} public List<String> history(){return List.copyOf(history);}
@@ -73,7 +85,18 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
     public boolean claimPackaging(UUID id){var shipment=entries.get(id);if(shipment==null||shipment.cancellationRequested||shipment.packagingClaimed||shipment.stage!=Stage.REQUESTED)return false;
         shipment.packagingClaimed=true;setDirty();return true;}
     /** Called on the server thread after the same order was refunded. No physical goods are touched. */
-    public void cancelled(UUID id){var shipment=entries.get(id);if(shipment==null||shipment.stage!=Stage.REQUESTED||shipment.packagingClaimed||!shipment.parcels.isEmpty())throw new IllegalArgumentException("shipment_not_cancellable");shipment.cancellationRequested=true;shipment.stage=Stage.CANCELLED;shipment.problem="";event(shipment,"CANCELLED");}
+    public void cancelled(UUID id) {
+        var shipment = entries.get(id);
+        if (shipment == null || shipment.packagingClaimed || !shipment.parcels.isEmpty()
+                || (shipment.stage != Stage.REQUESTED && !shipment.closedBeforeDispatch())) {
+            throw new IllegalArgumentException("shipment_not_cancellable");
+        }
+        if (shipment.stage == Stage.CANCELLED) return;
+        shipment.cancellationRequested = true;
+        shipment.stage = Stage.CANCELLED;
+        shipment.problem = "";
+        event(shipment, "CANCELLED");
+    }
     public void requestCancellation(UUID id){var shipment=entries.get(id);if(shipment==null)throw new IllegalArgumentException("Unknown shipment");if(!shipment.cancellationRequested){shipment.cancellationRequested=true;event(shipment,"CANCELLATION_REQUESTED");}}
     public void cancellationCompleted(UUID id){var shipment=entries.get(id);if(shipment==null||!shipment.cancellationResolved())throw new IllegalArgumentException("Physical cargo unresolved");shipment.stage=Stage.CANCELLED;shipment.problem="";event(shipment,"CANCELLED");}
     public boolean recoveredParcel(UUID parcel){var id=parcelShipments.get(parcel);var shipment=id==null?null:entries.get(id);return shipment!=null&&shipment.parcels.get(parcel).getBoolean("Recovered");}
@@ -91,6 +114,12 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         var value=new Shipment(id,creator,owner,source.id(),destination.id(),source.point(),destination.point(),type,count,route.legs(),destination.receiver(),inventory);value.trip=route.trip();value.receiverOwner=CargoWarehouseRegistry.access(server,destination).owner();entries.put(id,value);event(value,"REQUESTED");return value;
     }
     public void blocked(UUID id,String reason){var value=entries.get(id);if(value==null)return;value.stage=Stage.BLOCKED;value.problem=reason;event(value,"BLOCKED: "+reason);}
+    void rejectBeforeDispatch(Shipment shipment, String reason) {
+        if (shipment.stage == Stage.REQUESTED && !shipment.packagingClaimed && shipment.parcels.isEmpty()) {
+            shipment.rejectedBeforeDispatch = true;
+        }
+        blocked(shipment.id, reason);
+    }
     public void failed(UUID id,String reason){var value=entries.get(id);if(value==null)return;value.stage=Stage.FAILED;value.problem=reason;event(value,"FAILED: "+reason);}
     public void completed(UUID id){var value=entries.get(id);if(value!=null&&value.physicalComplete()&&value.stage!=Stage.COMPLETED){value.stage=Stage.COMPLETED;event(value,"COMPLETED");}}
     private void event(Shipment value,String text){if(value.history.isEmpty()||!value.history.getLast().equals(text)){value.history.add(text);if(value.history.size()>64)value.history.removeFirst();}setDirty();}
@@ -131,6 +160,6 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
             if(receipt==null||!shipment.finalPoint.equals(receipt.finalPoint())||!shipment.inventory.dimension().equals(receipt.dimension())||!shipment.inventory.pos().equals(receipt.inventory())||!shipment.receiver.pos().equals(receipt.packager()))continue;p.putBoolean("Delivered",true);event(shipment,"DELIVERED "+shipment.delivered()+"/"+shipment.quantity);}
         if(shipment.physicalComplete()&&shipment.stage!=Stage.DELIVERED){if(!shipment.receivingOwnerValid(server)){blocked(shipment.id,"Receiving warehouse ownership changed");continue;}shipment.stage=Stage.DELIVERED;event(shipment,"DELIVERED");}}}
     public static CargoShipmentRegistry load(CompoundTag root,HolderLookup.Provider lookup){if(root.getInt("Version")<1||root.getInt("Version")>3)throw new IllegalArgumentException("Shipment version");var data=new CargoShipmentRegistry();for(Tag raw:root.getList("Entries",10)){var t=(CompoundTag)raw;var route=new ArrayList<CargoRoutePlanner.Leg>();for(Tag value:t.getList("Route",10)){var v=(CompoundTag)value;route.add(new CargoRoutePlanner.Leg(v.getUUID("Line"),v.getUUID("From"),v.getUUID("Next"),v.getUUID("Train"),v.getLong("Tariff")));}
-        var shipment=new Shipment(t.getUUID("Id"),t.getUUID("Creator"),OwnerRef.load(t.getCompound("Owner")),t.getUUID("SourceWarehouse"),t.getUUID("DestinationWarehouse"),t.getUUID("Source"),t.getUUID("Final"),ItemStack.parseOptional(lookup,t.getCompound("Item")),t.getInt("Quantity"),route,CargoInfrastructure.Location.load(t.getCompound("Receiver")),CargoInfrastructure.Location.load(t.getCompound("Inventory")));shipment.trip=t.getCompound("Trip").copy();shipment.receiverOwner=t.contains("ReceiverOwner")?OwnerRef.load(t.getCompound("ReceiverOwner")):null;shipment.packagingClaimed=t.getBoolean("PackagingClaimed");shipment.cancellationRequested=t.getBoolean("CancellationRequested");shipment.stage=Stage.valueOf(t.getString("Stage"));shipment.problem=t.getString("Problem");for(Tag value:t.getList("History",8))shipment.history.add(value.getAsString());for(Tag value:t.getList("Parcels",10)){var parcel=((CompoundTag)value).copy();UUID id=parcel.getUUID("Id");if(shipment.parcels.putIfAbsent(id,parcel)!=null||data.parcelShipments.putIfAbsent(id,shipment.id)!=null)throw new IllegalArgumentException("Duplicate physical parcel");}if(data.entries.putIfAbsent(shipment.id,shipment)!=null)throw new IllegalArgumentException("Duplicate shipment");}return data;}
-    @Override public CompoundTag save(CompoundTag root,HolderLookup.Provider lookup){if(unavailableData!=null)return unavailableData.copy();root.putInt("Version",3);var list=new ListTag();for(var shipment:entries.values()){var t=new CompoundTag();t.putUUID("Id",shipment.id);t.putUUID("Creator",shipment.creator);t.put("Owner",shipment.owner.save());t.putUUID("SourceWarehouse",shipment.sourceWarehouse);t.putUUID("DestinationWarehouse",shipment.destinationWarehouse);t.putUUID("Source",shipment.source);t.putUUID("Final",shipment.finalPoint);t.put("Trip",shipment.trip.copy());t.put("Item",shipment.type.save(lookup));t.putInt("Quantity",shipment.quantity);t.put("Receiver",shipment.receiver.save());t.put("Inventory",shipment.inventory.save());if(shipment.receiverOwner!=null)t.put("ReceiverOwner",shipment.receiverOwner.save());t.putBoolean("PackagingClaimed",shipment.packagingClaimed);t.putBoolean("CancellationRequested",shipment.cancellationRequested);t.putString("Stage",shipment.stage.name());t.putString("Problem",shipment.problem);var history=new ListTag();for(String event:shipment.history)history.add(StringTag.valueOf(event));t.put("History",history);var parcels=new ListTag();for(var p:shipment.parcels.values())parcels.add(p.copy());t.put("Parcels",parcels);var route=new ListTag();for(var leg:shipment.route){var v=new CompoundTag();v.putUUID("Line",leg.line());v.putUUID("From",leg.from());v.putUUID("Next",leg.next());v.putUUID("Train",leg.train());v.putLong("Tariff",leg.tariff());route.add(v);}t.put("Route",route);list.add(t);}root.put("Entries",list);return root;}
+        var shipment=new Shipment(t.getUUID("Id"),t.getUUID("Creator"),OwnerRef.load(t.getCompound("Owner")),t.getUUID("SourceWarehouse"),t.getUUID("DestinationWarehouse"),t.getUUID("Source"),t.getUUID("Final"),ItemStack.parseOptional(lookup,t.getCompound("Item")),t.getInt("Quantity"),route,CargoInfrastructure.Location.load(t.getCompound("Receiver")),CargoInfrastructure.Location.load(t.getCompound("Inventory")));shipment.trip=t.getCompound("Trip").copy();shipment.receiverOwner=t.contains("ReceiverOwner")?OwnerRef.load(t.getCompound("ReceiverOwner")):null;shipment.packagingClaimed=t.getBoolean("PackagingClaimed");shipment.rejectedBeforeDispatch=t.getBoolean("RejectedBeforeDispatch");shipment.cancellationRequested=t.getBoolean("CancellationRequested");shipment.stage=Stage.valueOf(t.getString("Stage"));shipment.problem=t.getString("Problem");for(Tag value:t.getList("History",8))shipment.history.add(value.getAsString());for(Tag value:t.getList("Parcels",10)){var parcel=((CompoundTag)value).copy();UUID id=parcel.getUUID("Id");if(shipment.parcels.putIfAbsent(id,parcel)!=null||data.parcelShipments.putIfAbsent(id,shipment.id)!=null)throw new IllegalArgumentException("Duplicate physical parcel");}if(data.entries.putIfAbsent(shipment.id,shipment)!=null)throw new IllegalArgumentException("Duplicate shipment");}return data;}
+    @Override public CompoundTag save(CompoundTag root,HolderLookup.Provider lookup){if(unavailableData!=null)return unavailableData.copy();root.putInt("Version",3);var list=new ListTag();for(var shipment:entries.values()){var t=new CompoundTag();t.putUUID("Id",shipment.id);t.putUUID("Creator",shipment.creator);t.put("Owner",shipment.owner.save());t.putUUID("SourceWarehouse",shipment.sourceWarehouse);t.putUUID("DestinationWarehouse",shipment.destinationWarehouse);t.putUUID("Source",shipment.source);t.putUUID("Final",shipment.finalPoint);t.put("Trip",shipment.trip.copy());t.put("Item",shipment.type.save(lookup));t.putInt("Quantity",shipment.quantity);t.put("Receiver",shipment.receiver.save());t.put("Inventory",shipment.inventory.save());if(shipment.receiverOwner!=null)t.put("ReceiverOwner",shipment.receiverOwner.save());t.putBoolean("PackagingClaimed",shipment.packagingClaimed);if(shipment.rejectedBeforeDispatch)t.putBoolean("RejectedBeforeDispatch",true);t.putBoolean("CancellationRequested",shipment.cancellationRequested);t.putString("Stage",shipment.stage.name());t.putString("Problem",shipment.problem);var history=new ListTag();for(String event:shipment.history)history.add(StringTag.valueOf(event));t.put("History",history);var parcels=new ListTag();for(var p:shipment.parcels.values())parcels.add(p.copy());t.put("Parcels",parcels);var route=new ListTag();for(var leg:shipment.route){var v=new CompoundTag();v.putUUID("Line",leg.line());v.putUUID("From",leg.from());v.putUUID("Next",leg.next());v.putUUID("Train",leg.train());v.putLong("Tariff",leg.tariff());route.add(v);}t.put("Route",route);list.add(t);}root.put("Entries",list);return root;}
 }

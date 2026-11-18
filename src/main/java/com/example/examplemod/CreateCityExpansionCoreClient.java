@@ -8,8 +8,6 @@ import com.example.examplemod.client.BuildGuideKeyMappings;
 import com.example.examplemod.client.ModFluidClientExtensions;
 import com.example.examplemod.client.render.CityPylonModels;
 import com.example.examplemod.client.render.CityPylonRenderer;
-import com.example.examplemod.client.render.IndustrialMineModels;
-import com.example.examplemod.client.render.IndustrialMineRenderer;
 import com.example.examplemod.client.screen.CityPylonScreen;
 import com.example.examplemod.client.screen.MagneticAnalyzerScreen;
 import com.example.examplemod.client.screen.MineControllerScreen;

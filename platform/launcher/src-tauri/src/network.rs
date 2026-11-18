@@ -38,11 +38,26 @@ pub(crate) fn blocking_send(builder:reqwest::blocking::RequestBuilder)->Result<r
             assert!(!production(&Url::parse(value).unwrap()));
         }
     }
-    #[test] fn response_timeout_does_not_replay_post(){
-        use std::{io::Read,net::TcpListener};
-        let server=TcpListener::bind("127.0.0.1:0").unwrap();let address=server.local_addr().unwrap();
-        let task=std::thread::spawn(move||{let(mut stream,_)=server.accept().unwrap();let mut bytes=[0;1024];let _=stream.read(&mut bytes);std::thread::sleep(Duration::from_millis(200));server.set_nonblocking(true).unwrap();assert!(server.accept().is_err());});
-        let client=reqwest::blocking::Client::builder().timeout(Duration::from_millis(100)).build().unwrap();
-        assert!(blocking_send(client.post(format!("http://{address}/")).body("data")).unwrap_err().is_timeout());task.join().unwrap();
+    #[test]
+    fn response_timeout_does_not_replay_post() {
+        use std::{io::{ErrorKind, Read}, net::TcpListener, sync::mpsc};
+
+        let server = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = server.local_addr().unwrap();
+        let (finished, wait_for_client) = mpsc::channel();
+        let task = std::thread::spawn(move || {
+            // The listening socket queues the POST without replying until the timeout.
+            wait_for_client.recv().unwrap();
+            server.set_nonblocking(true).unwrap();
+            let (mut stream, _) = server.accept().unwrap();
+            let mut request = [0; 1024];
+            assert!(stream.read(&mut request).unwrap() > 0);
+            assert_eq!(server.accept().unwrap_err().kind(), ErrorKind::WouldBlock);
+        });
+        let client = reqwest::blocking::Client::builder().timeout(Duration::from_millis(100)).build().unwrap();
+        let result = blocking_send(client.post(format!("http://{address}/")).body("data"));
+        finished.send(()).unwrap();
+        task.join().unwrap();
+        assert!(result.unwrap_err().is_timeout());
     }
 }

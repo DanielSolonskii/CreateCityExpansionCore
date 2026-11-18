@@ -28,7 +28,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.PlayerSkin;
@@ -130,30 +129,6 @@ private int helpContentHeight;
 
     /*
      * =========================================
-     * БРЕНД В HEADER
-     * =========================================
-     *
-     * Небольшой знак проекта в правом верхнем углу шапки.
-     * Это branding element, а не декоративная картинка:
-     * он не трогает название города, уровень и статусы —
-     * заголовок просто обрезается по его левой границе.
-     *
-     * Текстура подготовлена из исходной эмблемы
-     * (textures/gui/city_emblem.png) и лежит отдельным
-     * ресурсом, чтобы каждый кадр не грузить большую PNG.
-     */
-    private static final ResourceLocation HEADER_EMBLEM =
-            ResourceLocation.fromNamespaceAndPath(
-                    CreateCityExpansionCore.MODID,
-                    "textures/gui/city_emblem_badge.png"
-            );
-    private static final int HEADER_EMBLEM_TEXTURE_SIZE = 64;
-    private static final int HEADER_EMBLEM_SIZE = 32;
-    private static final int HEADER_EMBLEM_Y = 9;
-    private static final int HEADER_EMBLEM_GAP = 10;
-
-/*
-     * =========================================
      * ГЕОМЕТРИЯ ТЕЛА «УЧАСТНИКИ»
      * =========================================
      *
@@ -176,22 +151,6 @@ private int helpContentHeight;
                  */
                 this.font.lineHeight
         );
-    }
-
-    /**
-     * The invite CTA is only offered when the viewer may actually invite, so the button never leads
-     * to a refusal. Same permission source the member rows already use.
-     */
-    private boolean canInviteMembers() {
-        if (this.minecraft == null || this.minecraft.player == null) {
-            return false;
-        }
-        UUID currentPlayer = this.minecraft.player.getUUID();
-        return this.menu.getMembers().stream()
-                .filter(member -> member.getPlayerId().equals(currentPlayer))
-                .findFirst()
-                .map(member -> member.isOwner() || member.isAdmin())
-                .orElse(false);
     }
 
     /* Инфраструктура: сколько строк помещается между заголовком и низом. */
@@ -1321,7 +1280,6 @@ if (this.activeTab == 3 && button == 0) {
                     this.minecraft.setScreen(
                             new CityRoleScreen(
                                     this,
-                                    this.menu.getPylonPos(),
                                     member.getPlayerId(),
                                     playerName
                             )
@@ -1674,25 +1632,13 @@ if (this.activeTab == 3 && button == 0) {
          * =====================================
          */
 
-        /*
-         * =====================================
-         * ЭМБЛЕМА (BRANDING)
-         * =====================================
-         *
-         * Знак рисуется первым и занимает фиксированный угол HEADER,
-         * поэтому он не может наехать на название города или уровень:
-         * заголовок ниже обрезается по левой границе знака.
-         */
-        int emblemX =
-                left + PANEL_WIDTH - OUTER_PADDING - HEADER_EMBLEM_SIZE;
-
-guiGraphics.drawString(
+        guiGraphics.drawString(
                 this.font,
                 ellipsize(
                         this.menu.hasCity()
                                 ? Component.literal(this.menu.getCityName())
                                 : Component.translatable("gui.createcityexpansioncore.city.pylon"),
-                        emblemX - (left + 15) - HEADER_EMBLEM_GAP
+                        PANEL_WIDTH - OUTER_PADDING - 15
                 ),
                 left + 15,
                 top + 10,
@@ -3272,7 +3218,7 @@ private CityPylonUiLayout.ManagementBody managementBody(int contentTop) {
      * and an out-of-order arrival still converges because every snapshot is complete.
      */
     public void applyMembersSnapshot(SyncCityMembersPayload payload) {
-        if (!this.menu.getPylonPos().equals(payload.pylonPos())) {
+        if (!payload.matchesPylon(this.menu.getDimensionId(), this.menu.getPylonPos())) {
             return;
         }
         List<CityMember> members = new ArrayList<>();

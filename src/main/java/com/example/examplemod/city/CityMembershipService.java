@@ -25,7 +25,13 @@ public final class CityMembershipService {
         // Close existing containers as well as revoking future interaction checks.
         var affected=s.getPlayerList().getPlayer(target);if(action!=Action.TRANSFER&&affected!=null&&(action==Action.KICK||affected.containerMenu!=affected.inventoryMenu))affected.closeContainer();
         var entries=city.getMembers().stream().map(m->new SyncCityMembersPayload.Entry(m.getPlayerId(),m.getRole().ordinal(),com.example.examplemod.auth.PlayerNames.name(s,m.getPlayerId()))).toList();
-        for(var viewer:s.getPlayerList().getPlayers())if(viewer.containerMenu instanceof CityPylonMenu m&&viewer.level().dimension().location().equals(city.getPylonDimension())&&m.getPylonPos().equals(city.getPylonPos())){if(action==Action.TRANSFER)viewer.closeContainer();else PacketDistributor.sendToPlayer(viewer,new SyncCityMembersPayload(city.getPylonPos(),entries));}
+        var snapshot = new SyncCityMembersPayload(city.getPylonDimension(), city.getPylonPos(), entries);
+        for (var viewer : s.getPlayerList().getPlayers()) {
+            if (viewer.containerMenu instanceof CityPylonMenu menu && snapshot.matchesPylon(menu.getDimensionId(), menu.getPylonPos())) {
+                if (action == Action.TRANSFER) viewer.closeContainer();
+                else PacketDistributor.sendToPlayer(viewer, snapshot);
+            }
+        }
         if(action==Action.KICK)events.notify(s,target,"kicked",city.getName());if(action==Action.TRANSFER)events.notify(s,target,"owner",city.getName());
         if(action==Action.LEAVE)p.sendSystemMessage(net.minecraft.network.chat.Component.translatable("gui.createcityexpansioncore.community.membership.notice.left",city.getName()));
         if(action==Action.TRANSFER)p.sendSystemMessage(net.minecraft.network.chat.Component.translatable("gui.createcityexpansioncore.community.membership.notice.transferred",city.getName()));
