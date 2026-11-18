@@ -8,6 +8,10 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,6 +38,7 @@ import java.util.Map;
  * обещать активность устаревших границ. Пейлоад привязан
  * к измерению — снимки другого мира не рисуются.
  */
+@EventBusSubscriber(modid = "createcityexpansioncore", value = Dist.CLIENT)
 public final class GeologyWideScanOverlay {
 
     /**
@@ -95,6 +100,14 @@ public final class GeologyWideScanOverlay {
         foundTotal = payload.foundTotal();
         receivedAt = Util.getMillis();
         contours = payload.contours();
+    }
+
+    @SubscribeEvent
+    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        snapshotDimension = null;
+        contours = List.of();
+        foundTotal = 0;
+        receivedAt = 0;
     }
 
     /**

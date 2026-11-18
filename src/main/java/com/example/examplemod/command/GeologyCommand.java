@@ -2,6 +2,8 @@ package com.example.examplemod.command;
 
 import com.example.examplemod.geology.GeologicalRegion;
 import com.example.examplemod.geology.GeologyManager;
+import com.example.examplemod.network.GeologyWideScanPayload;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -9,6 +11,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
 
@@ -28,6 +31,16 @@ public class GeologyCommand {
     public static void register(
             CommandDispatcher<CommandSourceStack> dispatcher
     ) {
+
+        dispatcher.register(Commands.literal("ccec").then(Commands.literal("geology")
+                .then(Commands.literal("setseed")
+                        .requires(source -> source.hasPermission(4))
+                        .then(Commands.argument("seed", LongArgumentType.longArg())
+                                .executes(context -> setSeed(context.getSource(),
+                                        LongArgumentType.getLong(context, "seed"), false))
+                                .then(Commands.literal("confirm")
+                                        .executes(context -> setSeed(context.getSource(),
+                                                LongArgumentType.getLong(context, "seed"), true)))))));
 
         dispatcher.register(
                 Commands.literal("geology")
@@ -202,6 +215,40 @@ public class GeologyCommand {
                             return 1;
                         })
         );
+    }
+
+    private static int setSeed(CommandSourceStack source, long seed, boolean confirm) {
+        GeologyManager.SeedChange change;
+        try {
+            change = GeologyManager.changeSeed(source.getServer(), seed, confirm);
+        } catch (IllegalStateException failure) {
+            source.sendFailure(Component.literal(failure.getMessage()));
+            return 0;
+        }
+        if (change.unchanged()) {
+            source.sendSuccess(() -> Component.literal(
+                    "Сид геологии " + seed + " уже действует. Будет удалено залежей: 0."
+            ), false);
+            return 0;
+        }
+        if (!confirm) {
+            source.sendSuccess(() -> Component.literal(
+                    "Будет удалено залежей во всех измерениях: " + change.deposits()
+                            + ". Для подтверждения: /ccec geology setseed " + seed + " confirm"
+            ), false);
+            return 1;
+        }
+        for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) {
+            if (player.connection.hasChannel(GeologyWideScanPayload.TYPE)) {
+                PacketDistributor.sendToPlayer(player, new GeologyWideScanPayload(
+                        player.level().dimension().location(), player.blockPosition(), 0, false, List.of()
+                ));
+            }
+        }
+        source.sendSuccess(() -> Component.literal(
+                "Установлен сид геологии " + seed + ". Удалено залежей: " + change.deposits() + "."
+        ), true);
+        return 1;
     }
 
     /**

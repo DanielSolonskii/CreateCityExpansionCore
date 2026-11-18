@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Headless-проверки процедурной геологии Alpha v1.
@@ -50,6 +51,7 @@ public final class GeologyProceduralCheck {
         physicalOutputMultipliers();
         savedDataRoundTrip();
         worldSeedThroughStorage();
+        seedResetRoundTrip();
         legacyDataIsRegenerated();
         worksOutsideStartingArea();
         lookupNeverTouchesChunks();
@@ -544,6 +546,47 @@ public final class GeologyProceduralCheck {
         original.getList("Regions", Tag.TAG_COMPOUND).addAll(newCells.getList("Regions", Tag.TAG_COMPOUND));
         require(original.equals(restored.save(new CompoundTag(), null)),
                 "unopened cells in the old save match a fresh world with its actual seed");
+    }
+
+    private static void seedResetRoundTrip() {
+        ResourceLocation nether = ResourceLocation.withDefaultNamespace("the_nether");
+        long newSeed = -SEED;
+        var generation = new GeologyManager.SeedOverride(newSeed, new UUID(7L, 13L));
+        for (ResourceLocation dimension : List.of(DIMENSION, nether)) {
+            var factory = GeologyManager.factory(dimension, SEED);
+            GeologyManager manager = factory.constructor().get();
+            BlockPos origin = new BlockPos(115, 64, -270);
+            GeologicalRegion oldView = manager.query(origin);
+            GeologicalDeposit oldDeposit = manager.ownedRegions().stream()
+                    .flatMap(region -> region.getDeposits().stream()).findFirst().orElseThrow();
+            manager.setDirty(false);
+            manager.applySeed(generation);
+            require(manager.isDirty() && manager.ownedRegions().isEmpty(),
+                    "reset clears materialized regions and marks storage dirty in " + dimension);
+            require(manager.findDeposit(oldDeposit.getId()).isEmpty(),
+                    "reset clears the old ID index in " + dimension);
+
+            CompoundTag cleared = manager.save(new CompoundTag(), null);
+            GeologyManager restored = factory.deserializer().apply(cleared, null);
+            require(restored.effectiveSeed() == newSeed && generation.generation().equals(restored.generation()),
+                    "reset seed and generation survive storage with no deposits in " + dimension);
+
+            GeologyManager expected = GeologyManager.factory(dimension, newSeed).constructor().get();
+            GeologicalRegion newView = manager.query(origin);
+            expected.query(origin);
+            restored.query(origin);
+            CompoundTag regenerated = manager.save(new CompoundTag(), null);
+            ListTag expectedRegions = expected.save(new CompoundTag(), null).getList("Regions", Tag.TAG_COMPOUND);
+            require(newView != oldView && expectedRegions.equals(regenerated.getList("Regions", Tag.TAG_COMPOUND)),
+                    "known coordinates use the new seed with empty caches in " + dimension);
+            require(regenerated.equals(restored.save(new CompoundTag(), null)),
+                    "reopening the reset save reproduces the same layout in " + dimension);
+
+            manager.setDirty(false);
+            manager.applySeed(generation);
+            require(!manager.isDirty() && regenerated.equals(manager.save(new CompoundTag(), null)),
+                    "reapplying the same generation preserves the new deposits in " + dimension);
+        }
     }
 
     /* Форматы до 6 пересоздают раскладку жил. */
