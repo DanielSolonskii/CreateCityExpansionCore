@@ -3,7 +3,9 @@ package com.example.examplemod.geology;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Хранит материализованные жилы и индексирует их по ячейкам. */
 public final class GeologyManager extends SavedData {
@@ -24,12 +27,15 @@ public final class GeologyManager extends SavedData {
 
     private static final String DATA_NAME =
             "createcityexpansioncore_geology";
+    private static final String GEOLOGY_SEED = "GeologySeed";
+    private static final String GEOLOGY_GENERATION = "GeologyGeneration";
 
     /** Верхняя граница кэша временных поисковых представлений. */
     private static final int QUERY_VIEW_CACHE_LIMIT = 128;
 
     private final ResourceLocation dimensionId;
     private final long worldSeed;
+    private SeedOverride seedOverride;
 
     /**
      * Владельцы месторождений: macro-cell -> её собственные залежи.
@@ -97,6 +103,12 @@ public final class GeologyManager extends SavedData {
         Objects.requireNonNull(tag, "tag");
         Objects.requireNonNull(dimensionId, "dimensionId");
 
+        boolean hasSeedOverride = tag.contains(GEOLOGY_SEED) || tag.contains(GEOLOGY_GENERATION);
+        if (hasSeedOverride && (!tag.contains(GEOLOGY_SEED, Tag.TAG_LONG)
+                || !tag.hasUUID(GEOLOGY_GENERATION))) {
+            return new GeologyManager(dimensionId, worldSeed, false, tag.copy());
+        }
+
         GeologySavedDataCodec.LoadResult result =
                 GeologySavedDataCodec.load(tag, dimensionId);
         GeologyManager manager = new GeologyManager(
@@ -105,6 +117,11 @@ public final class GeologyManager extends SavedData {
                 result.storageAvailable(),
                 result.preservedFallbackData()
         );
+        if (result.storageAvailable() && hasSeedOverride) {
+            manager.seedOverride = new SeedOverride(
+                    tag.getLong(GEOLOGY_SEED), tag.getUUID(GEOLOGY_GENERATION)
+            );
+        }
         manager.adopt(result);
 
         if (result.migrated()) {
@@ -133,6 +150,10 @@ public final class GeologyManager extends SavedData {
             return preservedFallbackData.copy();
         }
 
+        if (seedOverride != null) {
+            tag.putLong(GEOLOGY_SEED, seedOverride.seed());
+            tag.putUUID(GEOLOGY_GENERATION, seedOverride.generation());
+        }
         return GeologySavedDataCodec.save(
                 tag,
                 dimensionId,
@@ -141,11 +162,83 @@ public final class GeologyManager extends SavedData {
     }
 
     public static GeologyManager get(ServerLevel level) {
+        GeologyManager manager = getLocal(level);
+        ServerLevel overworld = level.getServer().overworld();
+        if (level != overworld && overworld != null && manager.storageAvailable) {
+            GeologyManager authority = getLocal(overworld);
+            if (authority.storageAvailable) {
+                manager.applySeed(authority.seedOverride);
+            }
+        }
+        return manager;
+    }
+
+    private static GeologyManager getLocal(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(
                 factory(level.dimension().location(), level.getSeed()),
                 DATA_NAME
         );
     }
+
+    long effectiveSeed() {
+        return seedOverride == null ? worldSeed : seedOverride.seed();
+    }
+
+    public UUID generation() {
+        return seedOverride == null ? null : seedOverride.generation();
+    }
+
+    public static SeedChange changeSeed(MinecraftServer server, long seed, boolean confirm) {
+        GeologyManager authority = getLocal(server.overworld());
+        requireWritable(authority);
+        if (authority.effectiveSeed() == seed) {
+            return new SeedChange(0, true);
+        }
+
+        List<GeologyManager> managers = new ArrayList<>();
+        long depositCount = 0;
+        for (ServerLevel level : server.getAllLevels()) {
+            GeologyManager manager = getLocal(level);
+            requireWritable(manager);
+            managers.add(manager);
+            if (Objects.equals(authority.seedOverride, manager.seedOverride)) {
+                depositCount += manager.depositsById.size();
+            }
+        }
+        if (confirm) {
+            SeedOverride next = new SeedOverride(seed, UUID.randomUUID());
+            authority.applySeed(next);
+            for (GeologyManager manager : managers) {
+                manager.applySeed(next);
+            }
+        }
+        return new SeedChange(depositCount, false);
+    }
+
+    private static void requireWritable(GeologyManager manager) {
+        if (!manager.storageAvailable) {
+            throw new IllegalStateException(
+                    "Хранилище геологии недоступно в измерении " + manager.dimensionId + "."
+            );
+        }
+    }
+
+    // Верхний мир задаёт поколение для всех измерений, в том числе добавленных позднее.
+    void applySeed(SeedOverride next) {
+        if (Objects.equals(seedOverride, next)) {
+            return;
+        }
+        seedOverride = next;
+        regions.clear();
+        depositsById.clear();
+        byCell.clear();
+        queryViews.clear();
+        setDirty();
+    }
+
+    public record SeedChange(long deposits, boolean unchanged) {}
+
+    record SeedOverride(long seed, UUID generation) {}
 
     static SavedData.Factory<GeologyManager> factory(ResourceLocation dimensionId, long worldSeed) {
         return new SavedData.Factory<>(
@@ -374,7 +467,7 @@ public final class GeologyManager extends SavedData {
         for (GeologicalDeposit candidate
                 : GeologyGenerator.createDeposits(
                         dimensionId,
-                        worldSeed,
+                        effectiveSeed(),
                         cellX,
                         cellZ
                 )) {

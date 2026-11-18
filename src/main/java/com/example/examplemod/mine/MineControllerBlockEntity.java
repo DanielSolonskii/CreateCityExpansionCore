@@ -1,6 +1,7 @@
 package com.example.examplemod.mine;
 
 import com.example.examplemod.CreateCityExpansionCore;
+import com.example.examplemod.geology.GeologyManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -44,6 +45,7 @@ public final class MineControllerBlockEntity extends BlockEntity implements com.
     public static final int STOP_DURATION_TICKS = 40;
 
     private ResourceLocation activeDepositId;
+    private UUID geologyGeneration;
     private ResourceLocation specializedResourceId;
     private ResourceLocation previewDepositId;
     private UUID creatorId;
@@ -165,15 +167,20 @@ public final class MineControllerBlockEntity extends BlockEntity implements com.
             ResourceLocation depositId,
             ResourceLocation resourceId
     ) {
-        if (commissioned || cityId == null || projectId == null || depositId == null
-                || resourceId == null
-                || (activeDepositId != null && !activeDepositId.equals(depositId))) {
+        if (commissioned || cityId == null || projectId == null || depositId == null || resourceId == null) {
+            return false;
+        }
+        UUID generation = level instanceof ServerLevel serverLevel
+                ? GeologyManager.get(serverLevel).generation() : null;
+        if (activeDepositId != null && !activeDepositId.equals(depositId)
+                && !needsGeologySelection(generation)) {
             return false;
         }
         this.cityId = cityId;
         this.projectId = projectId;
         this.activeDepositId = depositId;
         this.specializedResourceId = resourceId;
+        geologyGeneration = generation;
         this.previewDepositId = null;
         this.commissioned = true;
         this.miningTicks = 0;
@@ -199,6 +206,21 @@ public final class MineControllerBlockEntity extends BlockEntity implements com.
             activeDepositId = depositId;
             setChanged();
         }
+    }
+
+    boolean needsGeologySelection(UUID generation) {
+        return generation != null && !generation.equals(geologyGeneration);
+    }
+
+    void rebindGeology(UUID generation, ResourceLocation depositId) {
+        geologyGeneration = generation;
+        activeDepositId = depositId;
+        miningTicks = 0;
+        lastResult = null;
+        if (depositId != null && runtimeState == IndustrialMineState.NO_DEPOSIT) {
+            setRuntimeState(IndustrialMineState.STOPPED, "Под шахтой найдена новая залежь.");
+        }
+        setChanged();
     }
 
     public IndustrialMineState getRuntimeState() {
@@ -358,6 +380,9 @@ public final class MineControllerBlockEntity extends BlockEntity implements com.
         if (activeDepositId != null) {
             tag.putString("ActiveDepositId", activeDepositId.toString());
         }
+        if (geologyGeneration != null) {
+            tag.putUUID("GeologyGeneration", geologyGeneration);
+        }
         if (creatorId != null) {
             tag.putUUID("Creator", creatorId);
         }
@@ -388,6 +413,7 @@ public final class MineControllerBlockEntity extends BlockEntity implements com.
         activeDepositId = tag.contains("ActiveDepositId")
                 ? ResourceLocation.tryParse(tag.getString("ActiveDepositId")) : null;
         previewDepositId = activeDepositId;
+        geologyGeneration = tag.hasUUID("GeologyGeneration") ? tag.getUUID("GeologyGeneration") : null;
         creatorId = tag.hasUUID("Creator") ? tag.getUUID("Creator") : null;
         creatorName = tag.getString("CreatorName");
         specializedResourceId = tag.contains("SpecializedResource")
@@ -395,7 +421,8 @@ public final class MineControllerBlockEntity extends BlockEntity implements com.
         cityId = tag.hasUUID("CityId") ? tag.getUUID("CityId") : null;
         projectId = tag.hasUUID("ProjectId") ? tag.getUUID("ProjectId") : null;
         commissioned = tag.getBoolean("Commissioned")
-                && cityId != null && projectId != null && activeDepositId != null;
+                && cityId != null && projectId != null
+                && (activeDepositId != null || geologyGeneration != null);
         miningTicks = validMiningTicks(tag.getDouble("MiningProgressTicks"));
         runtimeState = IndustrialMineState.STOPPED;
         electricalState = MineElectricalState.NO_POWER;

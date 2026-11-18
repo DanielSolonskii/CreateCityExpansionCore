@@ -16,6 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public final class IndustrialMineService {
 
@@ -390,13 +391,26 @@ public final class IndustrialMineService {
             MineControllerBlockEntity controller,
             MineMultiblock.ValidationResult validation
     ) {
-        if (!GeologyManager.get(level).isStorageAvailable()) {
+        GeologyManager geology = GeologyManager.get(level);
+        if (!geology.isStorageAvailable()) {
             return;
         }
-        GeologicalRegion region = GeologyManager.getRegion(level, controllerPos);
+        UUID generation = geology.generation();
         if (controller.isCommissioned()) {
+            if (controller.needsGeologySelection(generation)) {
+                GeologicalRegion region = geology.query(controllerPos);
+                int x = controllerPos.getX();
+                int z = controllerPos.getZ();
+                ResourceLocation depositId = IndustrialMineOperation.selectDeposit(region, Optional.empty(), x, z)
+                        .deposit()
+                        .filter(deposit -> deposit.localPotentialPerHour(x, z) > 0)
+                        .map(GeologicalDeposit::getId)
+                        .orElse(null);
+                controller.rebindGeology(generation, depositId);
+            }
             return;
         }
+        GeologicalRegion region = geology.query(controllerPos);
         controller.setPreviewDepositId(region.getDeposits().stream()
                 .filter(deposit -> deposit.localPotentialPerHour(controllerPos.getX(), controllerPos.getZ()) > 0)
                 .map(GeologicalDeposit::getId).findFirst().orElse(null));
