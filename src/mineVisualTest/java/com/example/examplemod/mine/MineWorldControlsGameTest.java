@@ -32,8 +32,33 @@ public final class MineWorldControlsGameTest {
     private static MineControllerBlockEntity build(ServerLevel level, BlockPos pos) {
         var origin = pos.offset(-4,-1,0);
         for (int x : new int[]{0,9}) for (int z : new int[]{0,9}) level.getChunkAt(origin.offset(x,0,z));
-        BlueprintEditorWorld.place(level, MineBlueprints.current().plan(BlueprintCatalog.Tier.I), origin.offset(MineBlueprints.ANCHOR), Direction.NORTH);
+        BlueprintEditorWorld.place(level, MineBlueprints.current().plan(BlueprintCatalog.Tier.I), origin.offset(MineBlueprints.current().plan(BlueprintCatalog.Tier.I).anchor()), Direction.NORTH);
         return (MineControllerBlockEntity) level.getBlockEntity(pos);
+    }
+
+    @GameTest(template="auger_empty")
+    public static void decorationInBlueprintAirKeepsMineAssembled(GameTestHelper h) {
+        var level = h.getLevel();
+        var pos = h.absolutePos(new BlockPos(5, 3, 1));
+        build(level, pos);
+        var origin = MineMultiblock.getOrigin(pos, Direction.NORTH);
+        var blueprint = MineBlueprints.current();
+        int decorated = 0;
+        for (var entry : blueprint.blocks(BlueprintCatalog.Tier.I).entrySet()) {
+            if (!entry.getValue().isAir()) continue;
+            var local = entry.getKey();
+            var world = MineMultiblock.getWorldPosition(origin, Direction.NORTH,
+                    local.getX(), local.getY(), local.getZ());
+            level.setBlockAndUpdate(world, decorated++ % 2 == 0
+                    ? Blocks.STONE.defaultBlockState() : Blocks.OAK_PLANKS.defaultBlockState());
+        }
+        h.assertTrue(decorated > 0, "Test fills blueprint air cells");
+        h.assertTrue(MineMultiblock.validate(level, pos).assembled(), "Decoration preserves assembly: " + MineMultiblock.validate(level, pos));
+        h.assertTrue(MineMultiblock.getAssemblyProgress(level, pos) == 1, "Decoration preserves full progress");
+        var power = MineMultiblock.validate(level, pos).powerPort();
+        level.setBlockAndUpdate(power, Blocks.AIR.defaultBlockState());
+        h.assertTrue(!MineMultiblock.validate(level, pos).assembled(), "Required port is still mandatory");
+        h.succeed();
     }
 
     @GameTest(template="auger_empty", timeoutTicks=200)

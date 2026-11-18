@@ -25,6 +25,7 @@
     "TelemetryDisconnectMixin"
   ],
   "client": [
+    "JadeProjectionRayTraceMixin",
     "PaintRifleModelPoseMixin",
     "PaintRifleHeldItemMixin",
     "ClientTlsConnectionMixin",

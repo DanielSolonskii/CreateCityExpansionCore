@@ -85,6 +85,42 @@ public final class BlueprintPlacement {
                 .toList();
     }
 
+    public record ProjectionHit(BlockHitResult hit, BlockState required, BlockState installed) {}
+
+    public static ProjectionHit pickProjection() {
+        Minecraft minecraft = Minecraft.getInstance();
+        clearIfLevelChanged(minecraft);
+        if (active == null || active.fixedAnchor == null || minecraft.player == null
+                || minecraft.screen != null || net.minecraft.client.gui.screens.Screen.hasShiftDown()) {
+            return null;
+        }
+        float partialTick = minecraft.getTimer().getGameTimeDeltaPartialTick(true);
+        var start = minecraft.player.getEyePosition(partialTick);
+        var end = start.add(minecraft.player.getViewVector(partialTick)
+                .scale(minecraft.player.blockInteractionRange()));
+        var obstacle = active.level.clip(new net.minecraft.world.level.ClipContext(start, end,
+                net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                net.minecraft.world.level.ClipContext.Fluid.NONE, minecraft.player));
+        double nearest = obstacle.getType() == HitResult.Type.MISS ? start.distanceToSqr(end)
+                : start.distanceToSqr(obstacle.getLocation());
+        ProjectionHit result = null;
+        for (GhostCell cell : active.cells) {
+            if (cell.state().isAir() || cell.offset().getY() > active.visibleTopLayer) continue;
+            BlockPos pos = active.fixedAnchor.offset(cell.offset());
+            if (!active.level.hasChunkAt(pos)) continue;
+            BlockHitResult hit = net.minecraft.world.phys.shapes.Shapes.block().clip(start, end, pos);
+            if (hit == null) continue;
+            double distance = start.distanceToSqr(hit.getLocation());
+            if (distance > nearest + 1.0e-7) continue;
+            BlockState installed = active.level.getBlockState(pos);
+            if (com.example.examplemod.machine.MachinePanels.withoutColor(installed)
+                    == com.example.examplemod.machine.MachinePanels.withoutColor(cell.state())) continue;
+            nearest = distance;
+            result = new ProjectionHit(hit, cell.state(), installed);
+        }
+        return result;
+    }
+
     public static void begin(Plan plan) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null) {
@@ -212,7 +248,7 @@ public final class BlueprintPlacement {
         MultiBufferSource obstruction = tinted(ghostVertices, 255, 171, 91, 144);
         var renderer = minecraft.getBlockRenderer();
         for (GhostCell cell : active.cells) {
-            if (cell.offset().getY() > active.visibleTopLayer) {
+            if (cell.state().isAir() || cell.offset().getY() > active.visibleTopLayer) {
                 continue;
             }
             BlockPos pos = target.offset(cell.offset());
@@ -267,7 +303,7 @@ public final class BlueprintPlacement {
     private void updateAim(Minecraft minecraft) {
         HitResult hit = minecraft.player.pick(AIM_DISTANCE, 1.0F, false);
         if (hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK) {
-            aimedBlock = block.getBlockPos().immutable();
+            aimedBlock = block.getBlockPos().above().immutable();
         }
     }
 
