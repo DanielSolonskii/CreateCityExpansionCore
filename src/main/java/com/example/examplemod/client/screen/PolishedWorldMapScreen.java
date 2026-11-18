@@ -151,7 +151,6 @@ private AtlasPreferences preferences;
     private final double[] surfaceAlpha = new double[5];
     private final java.util.Map<String,DispatchMotion.Change> dispatchChanges = new java.util.HashMap<>();
 
-    private long logisticsSnapshotAt;
     private DispatchMotion.Transition deliveredBar = new DispatchMotion.Transition(0), inFlightBar = new DispatchMotion.Transition(0);
 
     /** Атлас из вкладки «Карта»: панель и данные — из открытого пилона. */
@@ -812,10 +811,7 @@ private int layersRowCount() {
             ((int)(120*(1-reveal))<<24)|(MapPalette.PAPER&0xFFFFFF));
     }
 
-    private static Component shipmentMapText(String key,Object... args){return Component.translatable("gui.createcityexpansioncore.world_map.shipment."+key,args);}
     private static Component dispatchText(String key,Object... args){return Component.translatable("gui.createcityexpansioncore.world_map.dispatch."+key,args);}
-    private Component logisticsFreshness(){return this.logisticsSnapshotAt==0?dispatchText("waiting"):
-            dispatchText("snapshot_age",Math.max(0,(System.currentTimeMillis()-this.logisticsSnapshotAt)/1000));}
     private double changed(String key,Object value,long duration){return this.dispatchChanges.computeIfAbsent(key,ignored->new DispatchMotion.Change())
             .observe(value,System.nanoTime(),this.map.reducedMotion(),duration);}
     private boolean closingModal(){
@@ -1077,11 +1073,6 @@ case ENERGY->List.of();
 
     private static void plate(GuiGraphics graphics, int x, int y, int width, int height) {
         WorldMapChrome.dispatchPanel(graphics,x,y,width,height);
-    }
-
-    private static void statusChip(GuiGraphics graphics, int x, int y, int width) {
-        graphics.fill(x, y, x + width, y + 18, 0xD5182023);
-        graphics.fill(x, y, x + 2, y + 18, 0xA9596064);
     }
 
     @Override
@@ -1589,15 +1580,6 @@ case ENERGY -> setOverlays(false,false);
         if (profile != null && profile.editable()) actions.add(Component.translatable("gui.createcityexpansioncore.city.identity.edit"));
         if(value.kind()==CityMapPanel.SelectionKind.CITY)actions.add(AllianceScreen.tr("city_entry"));
         return actions;
-    }
-    private void handleNavigationAction(CityMapPanel.Selection value,int index){
-        if(value.kind()==CityMapPanel.SelectionKind.CITY&&index==navigationActions(value).size()-1){AllianceScreen.open(this,value.id());return;}
-        if(index==0){this.map.centerOn(value.pos());return;}
-        if(index==1&&value.kind()==CityMapPanel.SelectionKind.WAYPOINT)this.map.removeSelectedPin();
-        else if(index==1&&value.kind()==CityMapPanel.SelectionKind.CITY){
-            var profile=com.example.examplemod.client.CityPublicDirectory.profile(value.id());
-            if(profile!=null&&profile.editable()){openingIdentityEditor=true;com.example.examplemod.client.CityPublicDirectory.cancelLoading();this.minecraft.setScreen(new CityIdentityEditorScreen(this,profile));}
-        }
     }
     private int searchRows() { return Math.max(1, Math.min(8, (this.height - popoverY() - 96) / 25)); }
     private List<CityMapPanel.Selection> visibleSearchResults() {

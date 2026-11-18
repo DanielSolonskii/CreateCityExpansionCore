@@ -61,7 +61,22 @@ public final class CargoCommerceBook {
     /** Mark before invoking Create. Ambiguous interrupted attempts are held, never automatically rebroadcast/refunded. */
     public boolean markAttempted(UUID id){var o=orders.get(id);if(o==null||o.state()!=State.HELD)return false;orders.put(id,o.with(State.ATTEMPTED,""));accounts.dirty();return true;}
     public void block(UUID id,String reason){var o=orders.get(id);if(o==null||o.state()==State.SETTLED||o.state()==State.REFUNDED||o.state()==State.CANCELLED||o.state()==State.CANCELLING)return;orders.put(id,o.with(State.BLOCKED,reason));accounts.dirty();}
-    public boolean refundUnattempted(UUID id){var o=orders.get(id);if(o==null||o.state()!=State.HELD)return false;long refund=Math.subtractExact(o.total(),carrierEarned(id));if(!accounts.canCredit(o.payer(),refund))return false;
+    public boolean refundUnattempted(UUID id) {
+        var order = orders.get(id);
+        return order != null && order.state() == State.HELD && refundReservation(order);
+    }
+    boolean refundRejectedShipment(CargoShipmentRegistry.Shipment shipment) {
+        var order = orders.get(shipment.id());
+        if (order == null || !order.shipment().equals(shipment.id()) || order.quantity() != shipment.quantity()
+                || !shipment.closedBeforeDispatch() || paidGoods.contains(order.id())) return false;
+        return switch (order.state()) {
+            case HELD, BLOCKED, CANCELLING -> refundReservation(order);
+            default -> false;
+        };
+    }
+    private boolean refundReservation(Order o) {
+        UUID id = o.id();
+        long refund=Math.subtractExact(o.total(),carrierEarned(id));if(!accounts.canCredit(o.payer(),refund))return false;
         var offer=o.offer()==null?null:offers.get(o.offer());if(offer!=null)offers.put(offer.id(),new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),Math.addExact(offer.remaining(),o.quantity()),offer.unitPrice(),offer.active()));
         accounts.credit(o.payer(),refund);refunds.put(id,refund);orders.put(id,o.with(State.REFUNDED,"Cancelled before Create request"));accounts.dirty();return true;}
     /** Stop dispatch without treating an attempted Create call as proof that no box exists. */

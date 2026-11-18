@@ -158,7 +158,7 @@ def check_save_compatibility(world, manifest, objects):
         return report
     for filename in sorted(directory.glob('*.dat')):
         stem = filename.stem
-        if stem != 'createcityexpansioncore_economy' and not stem.startswith('ccec_cargo_'):
+        if stem not in formats and stem != 'ccec_public_fleet' and not stem.startswith('ccec_cargo_'):
             continue
         if stem not in formats:
             raise RuntimeError('CCEC candidate cannot read SavedData: ' + filename.name)

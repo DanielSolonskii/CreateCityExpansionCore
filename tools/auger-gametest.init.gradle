@@ -2,10 +2,17 @@
 // Test classes/resources are attached only to this dev run, never to the distributed JAR.
 gradle.projectsEvaluated {
     def p = gradle.rootProject
+    def gameDir = p.layout.buildDirectory.dir('checks/auger-gametest/world')
+    def verifiedMods = p.tasks.named('verifyDevMods').get()
+    def prepareMods = p.tasks.register('prepareAugerGameTestMods', Copy) {
+        dependsOn verifiedMods
+        from(verifiedMods.inputs.files)
+        into(gameDir.map { it.dir('mods') })
+    }
     p.neoForge.mods.named(p.mod_id).configure { sourceSet(p.sourceSets.mineVisualTest) }
     p.neoForge.runs.named('gameTestServer').configure {
-        gameDirectory = p.layout.buildDirectory.dir('checks/auger-gametest/world').get().asFile
+        gameDirectory = gameDir.get().asFile
         logLevel = org.slf4j.event.Level.INFO
     }
-    p.tasks.named('runGameTestServer') { dependsOn p.tasks.named('mineVisualTestClasses') }
+    p.tasks.named('runGameTestServer') { dependsOn prepareMods, p.tasks.named('mineVisualTestClasses') }
 }

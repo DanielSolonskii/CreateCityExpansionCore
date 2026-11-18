@@ -1,33 +1,23 @@
 package com.example.examplemod.client.screen;
 
-import com.example.examplemod.city.CityMember;
-import com.example.examplemod.network.ChangeCityRolePayload;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.network.PacketDistributor;
-import com.example.examplemod.client.screen.CityRemoveMemberConfirmScreen;
 import java.util.UUID;
-import com.example.examplemod.client.gui.CityButton;
 public class CityRoleScreen extends ModalOverlayScreen {
 
     private final Screen parent;
-    private final BlockPos pylonPos;
     private final UUID targetPlayer;
     private final String playerName;
 
     public CityRoleScreen(
             Screen parent,
-            BlockPos pylonPos,
             UUID targetPlayer,
             String playerName
     ) {
         super(parent, Component.translatable("gui.createcityexpansioncore.city.role.title"));
 
         this.parent = parent;
-        this.pylonPos = pylonPos;
         this.targetPlayer = targetPlayer;
         this.playerName = playerName;
     }
@@ -35,32 +25,6 @@ public class CityRoleScreen extends ModalOverlayScreen {
     @Override
     protected void init() {
         CommunityScreen.openRoles(this.parent,this.targetPlayer);
-    }
-
-    private void selectRole(
-            CityMember.Role role
-    ) {
-
-        /*
-         * OWNER никогда не должен назначаться
-         * через это меню.
-         *
-         * Дополнительная защита на клиенте.
-         */
-
-        if (role == CityMember.Role.OWNER || role == CityMember.Role.OPERATOR_MANAGER) {
-            return;
-        }
-
-        PacketDistributor.sendToServer(
-                new ChangeCityRolePayload(
-                        this.pylonPos,
-                        this.targetPlayer,
-                        role.ordinal()
-                )
-        );
-
-        this.onClose();
     }
 
     /*

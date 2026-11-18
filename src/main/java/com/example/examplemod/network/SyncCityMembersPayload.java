@@ -26,6 +26,7 @@ import java.util.UUID;
  * pylon matches, and membership stays entirely server-authoritative.
  */
 public record SyncCityMembersPayload(
+        ResourceLocation dimension,
         BlockPos pylonPos,
         List<Entry> members
 ) implements CustomPacketPayload {
@@ -55,12 +56,19 @@ public record SyncCityMembersPayload(
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SyncCityMembersPayload> STREAM_CODEC =
             StreamCodec.composite(
+                    ResourceLocation.STREAM_CODEC, SyncCityMembersPayload::dimension,
                     BlockPos.STREAM_CODEC, SyncCityMembersPayload::pylonPos,
                     ENTRY_CODEC.apply(ByteBufCodecs.list(MAX_MEMBERS)), SyncCityMembersPayload::members,
                     SyncCityMembersPayload::new);
 
     public SyncCityMembersPayload {
+        java.util.Objects.requireNonNull(dimension, "dimension");
+        pylonPos = pylonPos.immutable();
         members = List.copyOf(members);
+    }
+
+    public boolean matchesPylon(ResourceLocation menuDimension, BlockPos menuPos) {
+        return dimension.equals(menuDimension) && pylonPos.equals(menuPos);
     }
 
     @Override

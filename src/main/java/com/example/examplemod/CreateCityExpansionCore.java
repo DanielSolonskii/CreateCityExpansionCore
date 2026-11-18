@@ -2097,7 +2097,7 @@ registrar.playToClient(
                 (payload, context) -> CITY_INVITE_OUTCOME_HANDLER.handle(payload, context)
         );
 
-        registrar.playToClient(
+        event.registrar("city-members-4").playToClient(
                 SyncCityMembersPayload.TYPE,
                 SyncCityMembersPayload.STREAM_CODEC,
                 (payload, context) -> SYNC_CITY_MEMBERS_HANDLER.handle(payload, context)

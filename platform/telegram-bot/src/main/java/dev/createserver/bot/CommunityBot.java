@@ -32,14 +32,21 @@ final class CommunityBot {
         catch(IOException unavailable){telegram.send(actor,"Действие недоступно, устарело или аккаунт не привязан. Откройте «Сообщество» в игре и проверьте состояние.",null);}
     }
     static void deliver(BackendClient backend,TelegramClient telegram)throws InterruptedException {
-        try{var rows=backend.deviceRequest("/api/internal/community/claim",Map.of());if(!rows.isArray()||rows.size()>3)throw new IOException();
-            for(var n:rows){UUID id=UUID.fromString(n.path("id").asText()),token=UUID.fromString(n.path("attemptToken").asText());long actor=n.path("telegramUserId").asLong();String kind=n.path("kind").asText(),peer=n.path("peer").asText(),body=n.path("text").asText();if(actor<=0||body.length()>500||peer.length()>64)throw new IOException();
-                var buttons=new ArrayList<List<Map<String,String>>>();String title;
-                if(kind.equals("MESSAGE")){title="RE:CREATED · Сообщение от "+peer;buttons.add(List.of(Map.of("text","Ответить","callback_data","community:reply:"+id),Map.of("text","Отключить диалог","callback_data","community:mute:"+id)));}
-                else if(kind.equals("INVITE")){title="RE:CREATED · Приглашение в город от "+peer;if(n.path("invitation").asBoolean())buttons.add(List.of(Map.of("text","Принять","callback_data","community:accept:"+id),Map.of("text","Отклонить","callback_data","community:decline:"+id)));}
-                else title="RE:CREATED · Результат действия";
-                String outcome="UNCERTAIN";try{telegram.sendPage(actor,new BotPage(title+(body.isBlank()?"\nПодробности доступны в «Сообществе» в игре.":"\n"+body),buttons));outcome="SENT";}catch(TelegramClient.Rejected failure){outcome="FAILED";}catch(IOException uncertain){}
-                backend.deviceRequest("/api/internal/community/ack",Map.of("id",id,"attemptToken",token,"outcome",outcome));
+        try {
+            for (int attempted = 0; attempted < 3;) {
+                var rows = backend.deviceRequest("/api/internal/community/claim", Map.of());
+                if (!rows.isArray() || rows.size() > 3) throw new IOException("Invalid notice batch");
+                if (rows.isEmpty()) return;
+                attempted += rows.size();
+                for (var n : rows) {
+                    UUID id=UUID.fromString(n.path("id").asText()),token=UUID.fromString(n.path("attemptToken").asText());long actor=n.path("telegramUserId").asLong();String kind=n.path("kind").asText(),peer=n.path("peer").asText(),body=n.path("text").asText();if(actor<=0||body.length()>500||peer.length()>64)throw new IOException();
+                    var buttons=new ArrayList<List<Map<String,String>>>();String title;
+                    if(kind.equals("MESSAGE")){title="RE:CREATED · Сообщение от "+peer;buttons.add(List.of(Map.of("text","Ответить","callback_data","community:reply:"+id),Map.of("text","Отключить диалог","callback_data","community:mute:"+id)));}
+                    else if(kind.equals("INVITE")){title="RE:CREATED · Приглашение в город от "+peer;if(n.path("invitation").asBoolean())buttons.add(List.of(Map.of("text","Принять","callback_data","community:accept:"+id),Map.of("text","Отклонить","callback_data","community:decline:"+id)));}
+                    else title="RE:CREATED · Результат действия";
+                    String outcome="UNCERTAIN";try{telegram.sendPage(actor,new BotPage(title+(body.isBlank()?"\nПодробности доступны в «Сообществе» в игре.":"\n"+body),buttons));outcome="SENT";}catch(TelegramClient.Rejected failure){outcome="FAILED";}catch(IOException uncertain){}
+                    backend.deviceRequest("/api/internal/community/ack",Map.of("id",id,"attemptToken",token,"outcome",outcome));
+                }
             }
         }catch(IOException|IllegalArgumentException unavailable){System.err.println("Community notifications deferred.");}
     }

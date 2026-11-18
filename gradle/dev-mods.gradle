@@ -6,9 +6,17 @@ configurations {
         canBeResolved = true
         transitive = false
     }
+    tfmgDevMod {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+    compileOnly.extendsFrom(tfmgDevMod)
 }
 
+def tfmgJar = file(providers.gradleProperty('tfmgJar').getOrElse('../tfmg-1.2.0.jar'))
 dependencies {
+    tfmgDevMod(tfmgJar.isFile() ? files(tfmgJar) : 'curse.maven:create-industry-693815:7430073')
     // KineticBlockEntity exposes Ponder's VirtualBlockEntity in its hierarchy.
     // Maven replaces the old compileOnly files('run/mods/...') prerequisite.
     compileOnly('net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1') {
@@ -22,13 +30,15 @@ def devModsDirectory = layout.projectDirectory.dir('run/mods').asFile
 def expectedDevMods = [
     'create-1.21.1-6.0.10.jar',
     'ponder-neoforge-1.0.82+mc1.21.1.jar',
-    'electroenergetics-1.21.1-1.1.2.jar'
+    'electroenergetics-1.21.1-1.1.2.jar',
+    'tfmg-1.2.0.jar'
 ]
 
 def prepareDevMods = tasks.register('prepareDevMods', Copy) {
     group = 'mod development'
     description = 'Download pinned Create/Ponder and copy required runtime mods to run/mods without deleting other files.'
     from(configurations.devRuntimeMods)
+    from(configurations.tfmgDevMod) { rename { 'tfmg-1.2.0.jar' } }
     // Existing dependency is already tracked in Git; never copy a user's instance.
     from(layout.projectDirectory.file('libs/electroenergetics-1.21.1-1.1.2.jar'))
     into(devModsDirectory)
@@ -40,7 +50,7 @@ def prepareDevMods = tasks.register('prepareDevMods', Copy) {
     doFirst {
         def conflicts = (devModsDirectory.listFiles() ?: []).findAll { candidate ->
             candidate.name.endsWith('.jar') &&
-                ['create-', 'ponder-', 'electroenergetics-'].any { candidate.name.startsWith(it) } &&
+                ['create-', 'ponder-', 'electroenergetics-', 'tfmg-'].any { candidate.name.startsWith(it) } &&
                 !expectedDevMods.contains(candidate.name)
         }
         if (!conflicts.empty) {
@@ -71,6 +81,6 @@ tasks.register('verifyDevMods') {
                 if (zip.getEntry(name) == null) throw new GradleException("Full Create jar missing embedded companion: ${name}")
             }
         }
-        logger.lifecycle('Verified Create 6.0.10, Ponder 1.0.82, Electro Energetics 1.1.2 and embedded Flywheel 1.0.6 / Registrate.')
+        logger.lifecycle('Verified Create 6.0.10, Ponder 1.0.82, Electro Energetics 1.1.2, TFMG 1.2.0 and embedded Flywheel 1.0.6 / Registrate.')
     }
 }

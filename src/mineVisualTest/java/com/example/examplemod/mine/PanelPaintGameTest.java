@@ -34,9 +34,10 @@ public final class PanelPaintGameTest {
     public static void paintedMachineKeepsItsAssemblyAndBlockEntities(GameTestHelper helper) {
         var level = helper.getLevel();
         var origin = helper.absolutePos(new BlockPos(1, 2, 1));
-        var controller = origin.offset(4, 1, 0);
-        BlueprintEditorWorld.place(level, MineBlueprints.current().plan(Tier.I),
-                origin.offset(MineBlueprints.ANCHOR), Direction.NORTH);
+        var plan = MineBlueprints.current().plan(Tier.I);
+        var target = origin.offset(plan.anchor());
+        var controller = plan.worldPosition(MineBlueprints.CONTROLLER, target, Direction.NORTH);
+        BlueprintEditorWorld.place(level, plan, target, Direction.NORTH);
         var player = new ServerPlayer(level.getServer(), level,
                 new GameProfile(UUID.randomUUID(), "PaintTest"), ClientInformation.createDefault());
         var tool = new ItemStack(CreateCityExpansionCore.PANEL_PAINTER.get());
@@ -44,7 +45,8 @@ public final class PanelPaintGameTest {
         CustomData.update(DataComponents.CUSTOM_DATA, tool, tag -> tag.putString("PanelColor", "blue"));
 
         var paintedBlocks = new HashSet<>();
-        for (BlockPos pos : BlockPos.betweenClosed(origin, origin.offset(9, 2, 9))) {
+        for (var part : plan.parts()) {
+            BlockPos pos = plan.worldPosition(part.position(), target, Direction.NORTH);
             var state = level.getBlockState(pos);
             if (!state.hasProperty(MachinePanels.COLOR) || !paintedBlocks.add(state.getBlock())) continue;
             var blockEntity = level.getBlockEntity(pos);

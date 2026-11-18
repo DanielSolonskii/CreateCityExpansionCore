@@ -52,6 +52,7 @@ public final class CargoWorkflowCheck {
         require(book.markAttempted(attemptedId),"native request entered attempted state");
         require(ShipmentCancellation.allowed(book.order(attemptedId).orElseThrow(),CargoShipmentRegistry.Stage.REQUESTED,false,0,true)&&!book.refundUnattempted(attemptedId),"attempted native request allows cancellation but no automatic refund before physical proof");
         CargoCancellationCheck.run();
+        checkSplitSaves();
 
         UUID start=UUID.randomUUID(),via=UUID.randomUUID(),second=UUID.randomUUID(),end=UUID.randomUUID(),service=UUID.randomUUID(),throughTrain=UUID.randomUUID();
         var through=List.of(new CargoRoutePlanner.Leg(service,start,via,throughTrain,1),new CargoRoutePlanner.Leg(service,via,second,throughTrain,1),new CargoRoutePlanner.Leg(service,second,end,throughTrain,1),new CargoRoutePlanner.Leg(UUID.randomUUID(),start,end,UUID.randomUUID(),9));
@@ -83,5 +84,120 @@ public final class CargoWorkflowCheck {
             require(!ShipmentLocks.blocks(stage,"line",UUID.randomUUID(),refs),"unrelated infrastructure remains editable");
         }
         System.out.println("PASS: "+checks+" shipment cancellation, refund replay and actual transfer checks");
+    }
+
+    private static void checkSplitSaves() {
+        if (net.neoforged.fml.loading.LoadingModList.get() == null) {
+            net.neoforged.fml.loading.LoadingModList.of(List.of(), List.of(), List.of(), List.of(), Map.of());
+        }
+        net.minecraft.SharedConstants.tryDetectVersion();
+        net.minecraft.server.Bootstrap.bootStrap();
+        var lookup = net.minecraft.core.RegistryAccess.fromRegistryOfRegistries(net.minecraft.core.registries.BuiltInRegistries.REGISTRY);
+        var payer = OwnerRef.player(UUID.randomUUID());
+        var seller = OwnerRef.player(UUID.randomUUID());
+        var accounts = new Accounts();
+        accounts.balances.put(payer, 1000L);
+        var book = new CargoCommerceBook(accounts);
+        var tolls = new RailTollBook(accounts);
+        UUID offer = UUID.randomUUID();
+        var item = new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_INGOT);
+        book.publish(offer, seller.id(), seller, UUID.randomUUID(), (CompoundTag) item.save(lookup), "Iron", 10, 5);
+
+        for (boolean legacy : List.of(false, true)) {
+            UUID id = UUID.randomUUID();
+            book.reserve(id, payer, seller, id, offer, 2, 10, List.of());
+            var physical = loadShipment(id, lookup, item, legacy ? "BLOCKED" : "REQUESTED",
+                    legacy ? "master_buffer_unavailable" : "", false, 0);
+            if (!legacy) physical.rejectBeforeDispatch(physical.find(id).orElseThrow(), "charter_dispatch_blocked");
+            book.block(id, "Preflight failed");
+            book.requestCancellation(id);
+            physical.requestCancellation(id);
+            var pendingFinance = book.save();
+            var blockedPhysical = physical.save(new CompoundTag(), lookup);
+            physical = CargoShipmentRegistry.load(blockedPhysical, lookup);
+            var shipment = physical.find(id).orElseThrow();
+            accounts.balances.put(payer, 9999L);
+            require(!CargoFulfillment.reconcileOrder(book, tolls, physical, book.order(id).orElseThrow(), shipment)
+                    && shipment.stage() == CargoShipmentRegistry.Stage.BLOCKED, "overflow keeps the reservation for a later refund");
+            accounts.balances.put(payer, 990L);
+            require(CargoFulfillment.reconcileOrder(book, tolls, physical, book.order(id).orElseThrow(), shipment)
+                    && accounts.balance(payer) == 1000 && book.offer(offer).orElseThrow().remaining() == 10
+                    && shipment.stage() == CargoShipmentRegistry.Stage.CANCELLED, "preflight rejection returns escrow and releases its lock");
+
+            var cancelledPhysical = physical.save(new CompoundTag(), lookup);
+            physical = CargoShipmentRegistry.load(blockedPhysical, lookup);
+            tolls.reserveTrip(id, payer, 3, new CompoundTag());
+            require(CargoFulfillment.reconcileOrder(book, tolls, physical, book.order(id).orElseThrow(), physical.find(id).orElseThrow())
+                    && physical.find(id).orElseThrow().stage() == CargoShipmentRegistry.Stage.CANCELLED
+                    && tolls.tripClosed(id) && accounts.balance(payer) == 1000 && book.offer(offer).orElseThrow().remaining() == 10,
+                    "persisted refund repairs an older physical snapshot once");
+            accounts.balances.put(payer, 990L);
+            book.load(pendingFinance);
+            physical = CargoShipmentRegistry.load(cancelledPhysical, lookup);
+            require(CargoFulfillment.reconcileOrder(book, tolls, physical, book.order(id).orElseThrow(), physical.find(id).orElseThrow())
+                    && accounts.balance(payer) == 1000 && book.offer(offer).orElseThrow().remaining() == 10,
+                    "physical pre-dispatch cancellation repairs an older financial snapshot once");
+        }
+
+        UUID attempted = UUID.randomUUID();
+        book.reserve(attempted, payer, seller, attempted, offer, 2, 10, List.of());
+        book.markAttempted(attempted);
+        book.block(attempted, "Create request interrupted");
+        book.requestCancellation(attempted);
+        var ambiguous = loadShipment(attempted, lookup, item, "BLOCKED", "charter_dispatch_blocked", false, 0);
+        require(!CargoFulfillment.reconcileOrder(book, tolls, ambiguous, book.order(attempted).orElseThrow(), ambiguous.find(attempted).orElseThrow())
+                && accounts.balance(payer) == 990, "an untracked native request never authorizes a refund");
+        var claimed = loadShipment(attempted, lookup, item, "BLOCKED", "master_buffer_unavailable", true, 0);
+        require(!book.refundRejectedShipment(claimed.find(attempted).orElseThrow()), "a packaging claim takes precedence over a legacy reason");
+        var boxed = loadShipment(attempted, lookup, item, "BLOCKED", "master_buffer_unavailable", false, 1);
+        require(!book.refundRejectedShipment(boxed.find(attempted).orElseThrow()), "physical parcels take precedence over a legacy reason");
+
+        UUID settled = UUID.randomUUID();
+        book.reserve(settled, payer, seller, settled, offer, 2, 10, List.of());
+        require(book.markAttempted(settled) && book.settle(settled, true, hop -> true), "settlement fixture pays the seller");
+        book.load(book.save());
+        for (int delivered : List.of(1, 2)) {
+            var physical = loadShipment(settled, lookup, item, "DELIVERED", "", true, delivered);
+            var shipment = physical.find(settled).orElseThrow();
+            for (int replay = 0; replay < 2; replay++) {
+                require(CargoFulfillment.reconcileOrder(book, tolls, physical, book.order(settled).orElseThrow(), shipment)
+                        && shipment.stage() == (delivered == 2 ? CargoShipmentRegistry.Stage.COMPLETED : CargoShipmentRegistry.Stage.DELIVERED)
+                        && physical.inUse("warehouse", shipment.sourceWarehouse()) == (delivered != 2)
+                        && accounts.balance(seller) == 10, "financial settlement releases locks only with complete physical proof and never pays twice");
+            }
+        }
+    }
+
+    private static CargoShipmentRegistry loadShipment(UUID id, net.minecraft.core.HolderLookup.Provider lookup,
+            net.minecraft.world.item.ItemStack item, String stage, String problem, boolean claimed, int delivered) {
+        var entry = new CompoundTag();
+        entry.putUUID("Id", id);
+        for (String field : List.of("Creator", "SourceWarehouse", "DestinationWarehouse", "Source", "Final")) {
+            entry.putUUID(field, UUID.randomUUID());
+        }
+        entry.put("Owner", OwnerRef.player(entry.getUUID("Creator")).save());
+        entry.put("Item", item.save(lookup));
+        entry.putInt("Quantity", 2);
+        var location = new CargoInfrastructure.Location(net.minecraft.world.level.Level.OVERWORLD.location(), net.minecraft.core.BlockPos.ZERO);
+        entry.put("Receiver", location.save());
+        entry.put("Inventory", location.save());
+        entry.putString("Stage", stage);
+        entry.putString("Problem", problem);
+        entry.putBoolean("PackagingClaimed", claimed);
+        if (delivered > 0) {
+            var parcel = new CompoundTag();
+            parcel.putUUID("Id", UUID.randomUUID());
+            parcel.putInt("Units", delivered);
+            parcel.putBoolean("Delivered", true);
+            var parcels = new net.minecraft.nbt.ListTag();
+            parcels.add(parcel);
+            entry.put("Parcels", parcels);
+        }
+        var entries = new net.minecraft.nbt.ListTag();
+        entries.add(entry);
+        var root = new CompoundTag();
+        root.putInt("Version", 3);
+        root.put("Entries", entries);
+        return CargoShipmentRegistry.load(root, lookup);
     }
 }

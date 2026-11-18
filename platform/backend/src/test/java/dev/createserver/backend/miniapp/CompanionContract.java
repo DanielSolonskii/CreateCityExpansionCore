@@ -54,6 +54,34 @@ abstract class CompanionContract extends MiniAppContract {
         assertThat(response.statusCode()).isEqualTo(200);assertThat(companion.account(telegram).preferences().maintenance()).isFalse();
         db.update("UPDATE platform_user SET status='DISABLED' WHERE id=?",owner);assertThat(request("/api/mini-app/account",proof(telegram)).statusCode()).isEqualTo(403);
     }
+    @Test void lostAcknowledgementLeavesOtherReportNoticesAvailable() {
+        var actor = new CompanionNoticeController.Actor(111);
+        var expected = new HashSet<UUID>();
+        for (int i = 0; i < 3; i++) {
+            var report = reports.submit(new ReportService.Submission(UUID.randomUUID(), mc, "mini-test", "Report " + i,
+                    "minecraft:overworld", 1, 2, 3, Instant.now()));
+            UUID actionId = UUID.randomUUID();
+            reports.action(report.id(), new ReportService.Action(actionId, 111, "TAKE"));
+            expected.add(actionId);
+            // The fixture represents three reports filed outside the per-player submission cooldown.
+            db.update("UPDATE player_report SET created_at=? WHERE id=?",
+                    Timestamp.from(Instant.now().minusSeconds(180 - 61L * i)), report.id());
+        }
+        var firstClaim = notices.claim(actor);
+        assertThat(firstClaim).hasSize(1);
+        UUID first = firstClaim.getFirst().actionId();
+        db.update("UPDATE companion_notice SET started_at=? WHERE action_id=?", Timestamp.from(Instant.now().minusSeconds(180)), first);
+        expected.remove(first);
+        for (int i = 0; i < 2; i++) {
+            var claim = notices.claim(actor);
+            assertThat(claim).hasSize(1);
+            var notice = claim.getFirst();
+            assertThat(expected.remove(notice.actionId())).isTrue();
+            notices.ack(notice.actionId(), new CompanionNoticeController.Ack(111, notice.attemptToken(), "SENT"));
+        }
+        assertThat(notices.claim(actor)).isEmpty();
+        assertThat(db.queryForObject("SELECT state FROM companion_notice WHERE action_id=?", String.class, first)).isEqualTo("UNCERTAIN");
+    }
     @Test void notificationsRespectPreferencesAndClaimsAreOnce(){
         var r=reports.submit(new ReportService.Submission(UUID.randomUUID(),mc,"mini-test","Мой репорт","minecraft:overworld",1,2,3,Instant.now()));
         reports.action(r.id(),new ReportService.Action(UUID.randomUUID(),111,"TAKE"));

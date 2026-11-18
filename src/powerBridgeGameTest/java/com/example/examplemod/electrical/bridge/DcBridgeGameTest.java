@@ -18,6 +18,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.neoforge.capabilities.Capabilities;
@@ -110,20 +111,19 @@ public final class DcBridgeGameTest {
 
     @GameTest(template = "power_bridge_empty", timeoutTicks = 145)
     public static void nativeGeneratorSharesBusAndRedstoneDisablesBridge(GameTestHelper helper) {
-        if (!PowerBridge.tfmgSupported()) { helper.succeed(); return; }
         var level = helper.getLevel();
-        BlockPos hub = helper.absolutePos(new BlockPos(4, 2, 4));
-        BlockPos bridgePos = hub.west();
+        BlockPos hub = helper.absolutePos(new BlockPos(4, 3, 4));
+        BlockPos bridgePos = hub.below().west();
         BlockPos generatorPos = hub.south();
         BlockPos motorPos = generatorPos.south();
         BlockPos loadPos = hub.east();
         level.setBlockAndUpdate(hub, tfmg("heavy_cable_hub"));
-        level.setBlockAndUpdate(bridgePos, PowerBridge.BLOCK.get().defaultBlockState());
+        var terminal = placeBridge(helper, bridgePos);
         level.setBlockAndUpdate(generatorPos, tfmg("generator").setValue(BlockStateProperties.FACING, Direction.SOUTH));
         var motorBlock = BuiltInRegistries.BLOCK.get(ResourceLocation.parse("create:creative_motor"));
         level.setBlockAndUpdate(motorPos, motorBlock.defaultBlockState().setValue(BlockStateProperties.FACING, Direction.NORTH));
         level.setBlockAndUpdate(loadPos, tfmg("resistor").setValue(BlockStateProperties.FACING, Direction.EAST));
-        var bridge = (TfmgBridgePort) level.getBlockEntity(bridgePos);
+        var bridge = terminal.controller();
         var generator = (GeneratorBlockEntity) level.getBlockEntity(generatorPos);
         var load = (ResistorBlockEntity) level.getBlockEntity(loadPos);
         load.resistance = 5;
@@ -134,15 +134,16 @@ public final class DcBridgeGameTest {
         helper.runAfterDelay(10, () -> {
             var motor = (CreativeMotorBlockEntity) level.getBlockEntity(motorPos);
             motor.generatedSpeed.setValue(128);
+            motor.updateGeneratedRotation();
         });
         helper.runAfterDelay(65, () -> {
             helper.assertTrue(generator.powerGeneration() > 0, "Native generator is running");
-            helper.assertTrue(bridge.getOrCreateElectricNetwork() == generator.getOrCreateElectricNetwork(), "Shared native bus");
+            helper.assertTrue(terminal.getOrCreateElectricNetwork() == generator.getOrCreateElectricNetwork(), "Shared native bus");
             helper.assertTrue(bridge.outputWatts() > 1_000 && load.getData().getVoltage() >= 200,
                     "Bridge supplements the native generator: " + bridge.readings(false));
             bridge.cycleRedstone();
             helper.runAfterDelay(10, () -> {
-                helper.assertTrue(bridge.powerGeneration() == 0 && !bridge.enabled(), "No redstone signal disables the bridge");
+                helper.assertTrue(terminal.powerGeneration() == 0 && !bridge.enabled(), "No redstone signal disables the bridge");
                 level.setBlockAndUpdate(bridgePos.above(), Blocks.REDSTONE_BLOCK.defaultBlockState());
                 helper.runAfterDelay(25, () -> {
                     NeoForge.EVENT_BUS.unregister(circuit);
@@ -155,14 +156,14 @@ public final class DcBridgeGameTest {
 
     @GameTest(template = "power_bridge_empty", timeoutTicks = 120)
     public static void parallelEeToTfmgAndSourceLoss(GameTestHelper helper) {
-        if (!PowerBridge.tfmgSupported()) { helper.succeed(); return; }
         var level = helper.getLevel();
-        BlockPos hub = helper.absolutePos(new BlockPos(4, 2, 4));
-        BlockPos first = hub.west();
-        BlockPos second = hub.north();
+        BlockPos hub = helper.absolutePos(new BlockPos(4, 3, 4));
+        BlockPos first = hub.below().west();
+        BlockPos second = first.north();
         level.setBlockAndUpdate(hub, tfmg("heavy_cable_hub"));
-        level.setBlockAndUpdate(first, PowerBridge.BLOCK.get().defaultBlockState().setValue(DcBridgeBlock.FACING, Direction.NORTH));
-        level.setBlockAndUpdate(second, PowerBridge.BLOCK.get().defaultBlockState().setValue(DcBridgeBlock.FACING, Direction.EAST));
+        level.setBlockAndUpdate(hub.north(), tfmg("heavy_cable_hub"));
+        var a = placeBridge(helper, first);
+        var b = placeBridge(helper, second);
         BlockPos load = hub.east();
         level.setBlockAndUpdate(load, tfmg("resistor").setValue(BlockStateProperties.FACING, Direction.EAST));
         boolean[] supply = {true, true};
@@ -174,8 +175,6 @@ public final class DcBridgeGameTest {
         };
         NeoForge.EVENT_BUS.addListener(circuit);
         helper.runAfterDelay(50, () -> {
-            var a = (TfmgBridgePort) level.getBlockEntity(first);
-            var b = (TfmgBridgePort) level.getBlockEntity(second);
             helper.assertTrue(a.getOrCreateElectricNetwork() == b.getOrCreateElectricNetwork(), "Shared TFMG bus");
             helper.assertTrue(a.powerGeneration() > 0 && b.powerGeneration() > 0, "Both bridges supply the bus");
             helper.assertTrue(((IElectric) level.getBlockEntity(load)).getData().getVoltage() >= 200, "TFMG load receives voltage");
@@ -196,31 +195,59 @@ public final class DcBridgeGameTest {
 
     @GameTest(template = "power_bridge_empty", timeoutTicks = 120)
     public static void tfmgToEeUnderLoad(GameTestHelper helper) {
-        if (!PowerBridge.tfmgSupported()) { helper.succeed(); return; }
         var level = helper.getLevel();
         BlockPos pos = helper.absolutePos(new BlockPos(4, 2, 4));
-        level.setBlockAndUpdate(pos, PowerBridge.BLOCK.get().defaultBlockState());
-        level.setBlockAndUpdate(pos.east(), tfmg("creative_generator"));
-        var bridge = (DcBridgeEntity) level.getBlockEntity(pos);
+        var terminal = placeBridge(helper, pos);
+        var generatorPos = terminal.getBlockPos().above();
+        level.setBlockAndUpdate(generatorPos, tfmg("creative_generator"));
+        var bridge = terminal.controller();
         bridge.reverse();
         Consumer<AddToElectricGraphEvent> circuit = event -> {
             if (event.level != level) return;
             var returnNode = new InWorldNode(24, pos);
             var negative = new InWorldNode(0, pos);
             var positive = new InWorldNode(1, pos);
+            event.builder.defaultZeroPotential(negative, 100);
             event.builder.connect(negative, returnNode, ElectricalProperties.resistor(.01));
             event.builder.connect(returnNode, positive, ElectricalProperties.resistor(500));
         };
         NeoForge.EVENT_BUS.addListener(circuit);
         helper.runAfterDelay(55, () -> {
-            NeoForge.EVENT_BUS.unregister(circuit);
             helper.assertTrue(bridge.outputWatts() > 40, "EE load receives real DC power: " + bridge.readings(false));
-            level.setBlockAndUpdate(pos.east(), Blocks.AIR.defaultBlockState());
-            helper.runAfterDelay(12, () -> {
-                helper.assertTrue(bridge.outputWatts() == 0, "No output after TFMG generator removal");
+            // Below the output limit, availableWatts is exactly the stored joules divided by one tick.
+            double available = bridge.availableWatts();
+            helper.assertTrue(available < bridge.outputLimitWatts(bridge.volts()), "The test load is below the output limit");
+            double storedJoules = available / 20;
+            level.setBlockAndUpdate(generatorPos, Blocks.AIR.defaultBlockState());
+            double[] deliveredJoules = {0};
+            int dischargeTicks = 40;
+            for (int tick = 1; tick <= dischargeTicks; tick++) {
+                helper.runAfterDelay(tick, () -> {
+                    helper.assertTrue(bridge.readingWatts(true) == 0, "The removed generator supplies no input");
+                    deliveredJoules[0] += bridge.outputWatts() / 20;
+                });
+            }
+            helper.runAfterDelay(dischargeTicks + 1, () -> {
+                NeoForge.EVENT_BUS.unregister(circuit);
+                double roundingJoules = 2 * dischargeTicks * Math.ulp(storedJoules);
+                helper.assertTrue(deliveredJoules[0] <= storedJoules + roundingJoules,
+                        "Load received " + deliveredJoules[0] + " J from an initial reserve of " + storedJoules + " J");
+                helper.assertTrue(bridge.outputWatts() <= .01, "Output falls below the running threshold: " + bridge.outputWatts() + " W");
                 helper.succeed();
             });
         });
+    }
+
+    private static TfmgBridgePort placeBridge(GameTestHelper helper, BlockPos controllerPos) {
+        var level = helper.getLevel();
+        var block = PowerBridge.BLOCK.get();
+        var state = block.defaultBlockState().setValue(DcBridgeBlock.FACING, Direction.NORTH);
+        level.setBlockAndUpdate(controllerPos, state);
+        block.setPlacedBy(level, controllerPos, state, null, new ItemStack(PowerBridge.ITEM.get()));
+        var terminal = level.getBlockEntity(DcBridgeBlock.partner(controllerPos, state));
+        helper.assertTrue(terminal instanceof TfmgBridgePort port && port.isTfmgSection() && port.assembled(),
+                "Both bridge sections and the native TFMG terminal are installed");
+        return (TfmgBridgePort) terminal;
     }
 
     private static void connectEeSource(AddToElectricGraphEvent event, BlockPos pos) {

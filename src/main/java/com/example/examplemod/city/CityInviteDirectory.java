@@ -262,10 +262,10 @@ public final class CityInviteDirectory {
         // admin looking at the same city with a stale list until they reopened the screen, and
         // sending to everyone online would leak one city's roster to unrelated players.
         com.example.examplemod.network.SyncCityMembersPayload snapshot =
-                new com.example.examplemod.network.SyncCityMembersPayload(city.getPylonPos(), entries);
+                new com.example.examplemod.network.SyncCityMembersPayload(city.getPylonDimension(), city.getPylonPos(), entries);
         for (ServerPlayer viewer : server.getPlayerList().getPlayers()) {
             if (viewer.containerMenu instanceof com.example.examplemod.menu.CityPylonMenu menu
-                    && menu.getPylonPos().equals(city.getPylonPos())) {
+                    && snapshot.matchesPylon(menu.getDimensionId(), menu.getPylonPos())) {
                 PacketDistributor.sendToPlayer(viewer, snapshot);
             }
         }

@@ -1,6 +1,7 @@
 package com.example.examplemod.mine;
 
 import com.example.examplemod.CreateCityExpansionCore;
+import com.example.examplemod.chunkloader.ChunkLoaderSavedData;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityProject;
 import com.example.examplemod.city.CityProjectType;
@@ -11,18 +12,29 @@ import com.example.examplemod.multiblock.MineBlueprints;
 import com.example.examplemod.multiblock.MineMultiblock;
 import com.example.examplemod.network.DrillPlacementFeedback;
 import com.mojang.authlib.GameProfile;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.ForcedChunksSavedData;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.Rotation;
@@ -35,12 +47,113 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
 
 @GameTestHolder(CreateCityExpansionCore.MODID)
 @PrefixGameTestTemplate(false)
 public final class IndustrialAugerGameTest {
+    @GameTest(template = "auger_empty")
+    public static void survivalMachinePartsDropThemselves(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var miner = survivalMiner(helper);
+        var pickaxe = new ItemStack(Items.IRON_PICKAXE);
+        BlockPos pos = helper.absolutePos(new BlockPos(1, 2, 1));
+        for (Block block : List.of(
+                CreateCityExpansionCore.CHUNK_LOADER.get(), CreateCityExpansionCore.MINE_FRAME.get(),
+                CreateCityExpansionCore.MINE_GATEWAY.get(), CreateCityExpansionCore.MINE_POWER_PORT.get(),
+                CreateCityExpansionCore.TECHNICAL_BLOCK.get(), CreateCityExpansionCore.CONTROL_BLOCK.get())) {
+            miner.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(block));
+            helper.assertTrue(placeHeldBlock(miner, pos).consumesAction() && level.getBlockState(pos).is(block),
+                    "Survival placement of " + block);
+            miner.setItemInHand(InteractionHand.MAIN_HAND, pickaxe);
+            var state = level.getBlockState(pos);
+            helper.assertTrue(state.is(BlockTags.MINEABLE_WITH_PICKAXE) && miner.hasCorrectToolForDrops(state, level, pos),
+                    "Iron pickaxe should harvest " + block);
+            helper.assertTrue(miner.gameMode.destroyBlock(pos) && level.isEmptyBlock(pos), "Survival harvest of " + block);
+            var dropped = singleDroppedItem(helper, pos, block);
+            dropped.discard();
+        }
+        var loader = CreateCityExpansionCore.CHUNK_LOADER.get();
+        miner.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(loader));
+        helper.assertTrue(placeHeldBlock(miner, pos).consumesAction(), "Owner replaces the loader");
+        miner.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+        helper.assertTrue(miner.gameMode.destroyBlock(pos) && level.isEmptyBlock(pos), "Owner can remove the loader by hand");
+        helper.assertTrue(level.getEntitiesOfClass(ItemEntity.class, new AABB(pos)).isEmpty(), "Empty hand yields no loader");
+        helper.succeed();
+    }
+
+    @GameTest(template = "auger_empty")
+    public static void ownerHarvestReleasesChunkTicketAndLoaderSlot(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var miner = survivalMiner(helper);
+        var owner = miner.getUUID();
+        var registry = ChunkLoaderSavedData.get(level.getServer());
+        var forced = level.getDataStorage().computeIfAbsent(ForcedChunksSavedData.factory(), ForcedChunksSavedData.FILE_ID);
+        Map<?, LongSet> tickingTickets = forced.getBlockForcedChunks().getTickingChunks();
+        var previousTickets = Set.copyOf(tickingTickets.keySet());
+        var loader = CreateCityExpansionCore.CHUNK_LOADER.get();
+        var first = helper.absolutePos(new BlockPos(2, 2, 2));
+        int limit = ChunkLoaderSavedData.MAX_LOADERS_PER_PLAYER;
+        miner.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(loader, limit + 1));
+        helper.assertTrue(placeHeldBlock(miner, first).consumesAction() && owner.equals(registry.ownerAt(level.dimension().location(), first)),
+                "Survival placement registers this loader to its owner");
+        var addedTickets = new HashSet<>(tickingTickets.keySet());
+        addedTickets.removeAll(previousTickets);
+        helper.assertTrue(addedTickets.size() == 1, "One new ticking-ticket owner");
+        var firstTicket = addedTickets.iterator().next();
+        helper.assertTrue(tickingTickets.get(firstTicket).size() == 1 && tickingTickets.get(firstTicket).contains(new ChunkPos(first).toLong()),
+                "First loader forces only its own chunk");
+        for (int n = 1; n < limit; n++) {
+            helper.assertTrue(placeHeldBlock(miner, first.east(n)).consumesAction(), "Fill owner slot " + (n + 1));
+        }
+        var replacement = first.east(limit);
+        helper.assertTrue(!placeHeldBlock(miner, replacement).consumesAction() && level.isEmptyBlock(replacement)
+                        && registry.count(owner) == limit && miner.getMainHandItem().getCount() == 1,
+                "Fourth loader is refused without consuming its item");
+        var fullTickets = new HashSet<>(tickingTickets.keySet());
+        fullTickets.remove(firstTicket);
+        miner.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_PICKAXE));
+        helper.assertTrue(miner.gameMode.destroyBlock(first) && level.isEmptyBlock(first), "Owner harvests the first loader");
+        helper.assertTrue(tickingTickets.keySet().equals(fullTickets), "Owner harvest releases exactly the first loader's ticket");
+        helper.assertTrue(registry.count(owner) == limit - 1 && registry.ownerAt(level.dimension().location(), first) == null,
+                "Owner immediately regains one slot");
+        var dropped = singleDroppedItem(helper, first, loader);
+        miner.setItemInHand(InteractionHand.MAIN_HAND, dropped.getItem().copy());
+        dropped.discard();
+        helper.assertTrue(placeHeldBlock(miner, replacement).consumesAction() && level.getBlockState(replacement).is(loader)
+                        && owner.equals(registry.ownerAt(level.dimension().location(), replacement)) && registry.count(owner) == limit,
+                "Owner reuses the freed slot with the harvested loader");
+        for (int n = 1; n <= limit; n++) level.removeBlock(first.east(n), false);
+        helper.succeed();
+    }
+
+    private static ServerPlayer survivalMiner(GameTestHelper helper) {
+        var miner = player(helper);
+        var cookie = CommonListenerCookie.createInitial(miner.getGameProfile(), false);
+        new ServerGamePacketListenerImpl(miner.server, new Connection(PacketFlow.SERVERBOUND), miner, cookie);
+        miner.setGameMode(GameType.SURVIVAL);
+        return miner;
+    }
+
+    private static InteractionResult placeHeldBlock(ServerPlayer miner, BlockPos pos) {
+        var support = pos.below();
+        miner.serverLevel().setBlockAndUpdate(support, Blocks.STONE.defaultBlockState());
+        var hit = new BlockHitResult(Vec3.atBottomCenterOf(pos), Direction.UP, support, false);
+        return miner.getMainHandItem().useOn(new UseOnContext(miner, InteractionHand.MAIN_HAND, hit));
+    }
+
+    private static ItemEntity singleDroppedItem(GameTestHelper helper, BlockPos pos, Block block) {
+        var drops = helper.getLevel().getEntitiesOfClass(ItemEntity.class, new AABB(pos));
+        helper.assertTrue(drops.size() == 1 && drops.getFirst().getItem().is(block.asItem()) && drops.getFirst().getItem().getCount() == 1,
+                "Expected one dropped " + block + " at " + pos + ", got " + drops);
+        return drops.getFirst();
+    }
+
     private static ServerPlayer player(GameTestHelper helper) {
         var player = new ServerPlayer(helper.getLevel().getServer(), helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "AugerTest"), ClientInformation.createDefault());
@@ -214,11 +327,13 @@ public final class IndustrialAugerGameTest {
         var target = helper.absolutePos(new BlockPos(10, 2, 10));
         for (Tier tier : Tier.values()) {
             var plan = MineBlueprints.current().plan(tier);
-            helper.assertTrue(plan.materials(false).get(CreateCityExpansionCore.DRILL_UNIT_ITEM.get()) == 4,
-                    "Every mine requires four auger items");
+            long augerCells = plan.parts().stream().filter(part -> part.state().is(CreateCityExpansionCore.DRILL_UNIT.get())).count();
+            helper.assertTrue(augerCells > 0 && augerCells % 8 == 0, "Tier " + tier + " contains complete augers");
+            helper.assertTrue(plan.materials(false).getOrDefault(CreateCityExpansionCore.DRILL_UNIT_ITEM.get(), 0) == augerCells / 8,
+                    "Tier " + tier + " requires one item per eight auger cells");
             for (Direction facing : Direction.Plane.HORIZONTAL) {
                 BlueprintEditorWorld.place(level, plan, target, facing);
-                var controller = plan.worldPosition(new BlockPos(4, 1, 0), target, facing);
+                var controller = plan.worldPosition(MineBlueprints.CONTROLLER, target, facing);
                 helper.assertTrue(MineMultiblock.validate(level, controller).assembled(), "Mine rotates as one structure");
                 var positions = plan.parts().stream().map(part -> plan.worldPosition(part.position(), target, facing)).toList();
                 var min = new BlockPos(positions.stream().mapToInt(BlockPos::getX).min().orElseThrow(),
@@ -240,9 +355,10 @@ public final class IndustrialAugerGameTest {
     public static void breakingUpperAugerStopsMineAndKeepsBinding(GameTestHelper helper) {
         var level = helper.getLevel();
         var origin = helper.absolutePos(new BlockPos(1, 2, 1));
-        var controllerPos = origin.offset(4, 1, 0);
         var plan = MineBlueprints.current().plan(Tier.I);
-        BlueprintEditorWorld.place(level, plan, origin.offset(MineBlueprints.ANCHOR), Direction.NORTH);
+        var target = origin.offset(plan.anchor());
+        var controllerPos = plan.worldPosition(MineBlueprints.CONTROLLER, target, Direction.NORTH);
+        BlueprintEditorWorld.place(level, plan, target, Direction.NORTH);
         var controller = (MineControllerBlockEntity) level.getBlockEntity(controllerPos);
         var owner = UUID.randomUUID();
         var project = UUID.randomUUID();
@@ -256,7 +372,10 @@ public final class IndustrialAugerGameTest {
         controller.setRuntimeState(IndustrialMineState.RUNNING, "GameTest");
         controller.setUserRequestedStart(true);
         controller.setMiningTicks(37);
-        var base = origin.offset(3, 0, 3);
+        var auger = plan.parts().stream().filter(part -> part.state().is(CreateCityExpansionCore.DRILL_UNIT.get())
+                && DrillUnitBlock.isItemPart(part.state())).findFirst().orElseThrow();
+        var base = plan.worldPosition(auger.position(), target, Direction.NORTH);
+        var augerFacing = auger.state().getValue(DrillUnitBlock.FACING);
         level.destroyBlock(base.offset(1, 1, 1), true);
         assertVolume(helper, base, false);
         helper.runAfterDelay(7, () -> {
@@ -269,7 +388,7 @@ public final class IndustrialAugerGameTest {
                     && snapshot.selectedDepositId().orElseThrow().equals(deposit), "All bindings survive destruction");
             for (BlockPos offset : BlockPos.betweenClosed(0, 0, 0, 1, 1, 1)) {
                 level.setBlockAndUpdate(base.offset(offset), CreateCityExpansionCore.DRILL_UNIT.get()
-                        .partState(offset.getX(), offset.getY(), offset.getZ()));
+                        .partState(offset.getX(), offset.getY(), offset.getZ(), augerFacing));
             }
             helper.assertTrue(MineMultiblock.validate(level, controllerPos).assembled(), "Replacing auger repairs mine");
             helper.succeed();

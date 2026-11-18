@@ -1,7 +1,6 @@
-"""Industrial Mine source, runtime parts and exact-geometry previews.
+"""Archived Industrial Mine visual v2 sources, model exports and previews.
 Python + Pillow + numpy. Coordinates in blocks relative to NORTH Controller.
-Runtime JSON coordinates are reduced by 8 to respect Java's [-16,32] limit;
-the renderer restores scale 8. UVs remain independent of geometry scale.
+Exported model coordinates use the original renderer's 1:8 geometry scale.
 """
 from pathlib import Path
 import base64, json, math, uuid
@@ -10,10 +9,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT/'art/industrial_mine'
-ASSETS = ROOT/'src/main/resources/assets/createcityexpansioncore'
+ASSETS = OUT/'runtime/assets/createcityexpansioncore'
 PARTS = ASSETS/'models/block/industrial_mine'
 OUT.mkdir(exist_ok=True, parents=True)
 PARTS.mkdir(exist_ok=True, parents=True)
+(ASSETS/'textures/block').mkdir(exist_ok=True, parents=True)
 SCALE = 8
 PALETTE = {
     'steel':[(48,54,57),(58,64,67),(67,73,75),(88,95,96)],

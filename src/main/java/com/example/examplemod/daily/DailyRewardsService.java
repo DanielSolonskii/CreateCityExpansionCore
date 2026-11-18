@@ -1,6 +1,7 @@
 package com.example.examplemod.daily;
 
 import com.example.examplemod.auth.PlayerNames;
+import com.example.examplemod.mixin.PlayerListSaveInvoker;
 import com.example.examplemod.network.*;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
@@ -39,7 +40,7 @@ public final class DailyRewardsService {
         try{if(request.claim())result=claim(player,request);send(player,request.request(),result,false,false);}
         catch(Exception failure){com.mojang.logging.LogUtils.getLogger().error("Daily rewards request failed for {}",player.getUUID(),failure);error(player,request.request());}
     }
-    private static String claim(ServerPlayer player,DailyRewardsRequest request)throws IOException{
+    static String claim(ServerPlayer player,DailyRewardsRequest request)throws IOException{
         var server=player.getServer();var config=config(server);long today=config.today();if(request.expectedDate()!=today)return "date_changed";
         if(player.isDeadOrDying()||player.isSpectator())return "unavailable";
         var data=DailyRewardsData.get(server);var id=player.getUUID();var entry=data.entry(id);
@@ -59,8 +60,8 @@ public final class DailyRewardsService {
             if(pending.levels()>0)player.giveExperienceLevels(pending.levels());
             receipt.putUUID(RECEIPT,pending.id());player.getInventory().setChanged();player.inventoryMenu.broadcastChanges();player.containerMenu.broadcastChanges();
         }
-        // Public vanilla save path retains other mods' player-save hooks. Rare daily action, never a tick loop.
-        server.getPlayerList().saveAll();
+        // Persist the claimant through the same virtual save used during autosave and logout.
+        ((PlayerListSaveInvoker) server.getPlayerList()).ccec$savePlayer(player);
         Path file=server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(id+".dat");
         var disk=NbtIo.readCompressed(file,NbtAccounter.create(32L*1024*1024));var stored=disk.getCompound("NeoForgeData").getCompound(receiptScope);
         if(!stored.hasUUID(RECEIPT)||!pending.id().equals(stored.getUUID(RECEIPT)))throw new IOException("Player delivery receipt did not reach disk");

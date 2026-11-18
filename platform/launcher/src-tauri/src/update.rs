@@ -209,10 +209,13 @@ fn reconcile_inner(root: &Path, settings: &Settings, progress: &SharedProgress, 
     let downloads=safe(root,".recreated/downloads")?;
     fs::create_dir_all(&downloads).map_err(|_|"Не удалось создать кэш докачки")?;
     download::batch(root,&client,&pending,progress)?;
-    for (index,entry) in pending.iter().enumerate(){
-        let cached=safe(root,&format!(".recreated/downloads/{}.part",entry.sha256))?;
-        let staged=staging.join(format!("{index}.part"));
-        fs::hard_link(&cached,&staged).or_else(|_|fs::copy(&cached,&staged).map(|_|())).map_err(|_|"Не удалось подготовить скачанный файл")?;
+    for (index, entry) in pending.iter().enumerate() {
+        let cached = safe(root, &format!(".recreated/downloads/{}.part", entry.sha256))?;
+        let staged = staging.join(format!("{index}.part"));
+        // An editable seed needs its own inode before create-if-absent publishes it.
+        if entry.mode == "seed" || fs::hard_link(&cached, &staged).is_err() {
+            fs::copy(&cached, &staged).map_err(|_| "Не удалось подготовить скачанный файл")?;
+        }
     }
     phase(progress, "VERIFYING", "Проверка SHA-256");
     for(i,entry)in pending.iter().enumerate(){let p=staging.join(format!("{i}.part"));let before=cache::stamp(&p)?;if !matches(&p,entry)?||before!=cache::stamp(&p)?{return Err("Staged hash mismatch".into());}proof.remember(entry,before);}
@@ -382,6 +385,29 @@ mod tests {
         assert!(fixture.apply().unwrap_err().contains("SHA-256"));
         assert_eq!(fs::read(fixture.root.join("instances/alpha/mods/a.jar")).unwrap(), b"jar A");
         assert!(!fixture.root.join("instances/alpha/mods/b.jar").exists());
+    }
+    #[test]
+    fn identical_seeds_are_independent_and_existing_configs_survive_reconcile() {
+        let f = Fixture::new();
+        let first = "instances/alpha/config/first.toml";
+        let second = "instances/alpha/defaultconfigs/second.toml";
+        let existing = "instances/alpha/config/personal.toml";
+        let managed = "libraries/defaults.jar";
+        let defaults: &[u8] = b"default";
+        fs::create_dir_all(f.root.join("instances/alpha/config")).unwrap();
+        fs::write(f.root.join(existing), b"already customized").unwrap();
+        f.release(1, &[(first, "seed", defaults), (second, "seed", defaults),
+                       (existing, "seed", defaults), (managed, "managed", defaults)]);
+
+        assert_eq!(f.apply().unwrap().changed_files, 3);
+        assert_eq!(f.data.lock().unwrap().2, 1, "identical content downloads once");
+        assert_eq!(fs::read(f.root.join(first)).unwrap(), defaults);
+        fs::write(f.root.join(first), b"edited in place").unwrap();
+        assert_eq!(fs::read(f.root.join(second)).unwrap(), defaults);
+        assert_eq!(fs::read(f.root.join(managed)).unwrap(), defaults);
+        assert_eq!(fs::read(f.root.join(existing)).unwrap(), b"already customized");
+        assert_eq!(f.apply().unwrap().changed_files, 0);
+        assert_eq!(fs::read(f.root.join(first)).unwrap(), b"edited in place");
     }
     #[test]
     fn deletes_only_previously_owned_files_and_never_overwrites_user_or_seed_data() {

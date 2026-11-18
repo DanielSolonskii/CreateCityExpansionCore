@@ -18,6 +18,28 @@ class CommunityRelayTest {
     @BeforeEach void fixture(){var now=Timestamp.from(Instant.now());db.update("INSERT INTO platform_user(id,status,created_at,updated_at) VALUES(?,'ACTIVE',?,?)",owner,now,now);db.update("INSERT INTO minecraft_identity(minecraft_uuid,platform_user_id,current_name) VALUES(?,?,'Friend')",minecraft,owner);db.update("INSERT INTO telegram_identity(telegram_user_id,platform_user_id,verified_at) VALUES(?,?,?)",telegram,owner,now);}
     CommunityRelayController.Notice notice(String kind){long now=System.currentTimeMillis();return new CommunityRelayController.Notice(UUID.randomUUID(),minecraft,peer,"Friend",kind,"",kind.equals("INVITE")?UUID.randomUUID():null,kind.equals("INVITE")?UUID.randomUUID():null,now,now);}
     void enqueue(CommunityRelayController.Notice n){service.exchange(new CommunityRelayController.Exchange("community-test",List.of(n),List.of(),List.of(new CommunityRelayController.Policy(minecraft,true,false,true,false))));}
+    @Test void lostAcknowledgementOnlyMarksTheAttemptedNoticeUncertain() {
+        var expected = new HashSet<UUID>();
+        for (int i = 0; i < 3; i++) {
+            var invitation = notice("INVITE");
+            enqueue(invitation);
+            expected.add(invitation.id());
+        }
+        var firstClaim = service.claim();
+        assertThat(firstClaim).hasSize(1);
+        UUID first = firstClaim.getFirst().id();
+        db.update("UPDATE community_notice SET started_at=? WHERE id=?", Timestamp.from(Instant.now().minusSeconds(180)), first);
+        expected.remove(first);
+        for (int i = 0; i < 2; i++) {
+            var claim = service.claim();
+            assertThat(claim).hasSize(1);
+            var notice = claim.getFirst();
+            assertThat(expected.remove(notice.id())).isTrue();
+            service.ack(new CommunityRelayController.DeliveryAck(notice.id(), notice.attemptToken(), "SENT"));
+        }
+        assertThat(service.claim()).isEmpty();
+        assertThat(db.queryForObject("SELECT state FROM community_notice WHERE id=?", String.class, first)).isEqualTo("UNCERTAIN");
+    }
     @Test void privateOwnerAndIdempotentDelivery(){var n=notice("MESSAGE");enqueue(n);enqueue(n);assertThat(db.queryForObject("SELECT COUNT(*) FROM community_notice WHERE id=?",Integer.class,n.id())).isOne();
         var deliveries=service.claim();assertThat(deliveries).hasSize(1);assertThat(service.claim()).isEmpty();var d=deliveries.getFirst();assertThat(d.telegramUserId()).isEqualTo(telegram);
         assertThatThrownBy(()->service.action(new CommunityRelayController.BotAction(telegram+1,n.id(),"REPLY","secret",UUID.randomUUID()))).isInstanceOf(RuntimeException.class);
