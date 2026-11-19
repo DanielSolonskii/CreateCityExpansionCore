@@ -1,28 +1,53 @@
 {
-  "parent": "minecraft:item/handheld",
-  "textures": {
-    "layer0": "createcityexpansioncore:item/magnetic_analyzer"
-  },
-  "display": {
-    "firstperson_righthand": {
-      "rotation": [0, -90, 25],
-      "translation": [0, 1, 0],
-      "scale": [1.35, 1.35, 1.35]
+  "parent": "createcityexpansioncore:item/field_instruments/magnetic_analyzer",
+  "overrides": [
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.125
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_1"
     },
-    "firstperson_lefthand": {
-      "rotation": [0, 90, -25],
-      "translation": [0, 1, 0],
-      "scale": [1.35, 1.35, 1.35]
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.25
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_2"
     },
-    "thirdperson_righthand": {
-      "rotation": [0, -90, 25],
-      "translation": [0, 1, 0],
-      "scale": [1.1, 1.1, 1.1]
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.375
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_3"
     },
-    "thirdperson_lefthand": {
-      "rotation": [0, 90, -25],
-      "translation": [0, 1, 0],
-      "scale": [1.1, 1.1, 1.1]
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.5
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_4"
+    },
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.625
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_5"
+    },
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.75
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_6"
+    },
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 0.875
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring_7"
+    },
+    {
+      "predicate": {
+        "createcityexpansioncore:measuring": 1
+      },
+      "model": "createcityexpansioncore:item/field_instruments/magnetic_analyzer_measuring"
     }
-  }
+  ]
 }

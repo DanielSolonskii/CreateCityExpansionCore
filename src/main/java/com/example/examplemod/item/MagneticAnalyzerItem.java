@@ -11,7 +11,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -300,17 +299,9 @@ public class MagneticAnalyzerItem extends Item {
         );
         player.connection.send(payload);
 
-        MutableComponent report = Component.translatable(
-                "gui.createcityexpansioncore.magnetic_analyzer.wide_scan.found",
-                payload.contours().size(),
-                payload.foundTotal()
-        );
-        if (payload.truncated()) {
-            report = report.append(" ").append(Component.translatable(
-                    "gui.createcityexpansioncore.magnetic_analyzer.wide_scan.truncated"
-            ));
-        }
-        player.displayClientMessage(report, true);
+        player.displayClientMessage(Component.translatable(
+                "gui.createcityexpansioncore.magnetic_analyzer.wide_scan.success"
+        ).withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD), true);
 
         player.getPersistentData().putLong(LAST_SCAN_KEY, level.getGameTime());
         return true;

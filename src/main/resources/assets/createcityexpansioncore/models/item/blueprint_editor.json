@@ -1,3 +1,6 @@
 {
-  "parent": "createcityexpansioncore:item/blueprint_terminal"
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "createcityexpansioncore:item/blueprint_terminal"
+  }
 }

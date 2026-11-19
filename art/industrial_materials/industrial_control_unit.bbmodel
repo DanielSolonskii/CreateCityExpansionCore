@@ -1,0 +1,1811 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "java_block",
+    "box_uv": false
+  },
+  "name": "industrial_control_unit",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "display": {
+    "gui": {
+      "rotation": [
+        25,
+        215,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.85,
+        0.85,
+        0.85
+      ]
+    }
+  },
+  "elements": [
+    {
+      "name": "Steel mounting shoe",
+      "from": [
+        1.5,
+        3.5,
+        3
+      ],
+      "to": [
+        14.5,
+        4.5,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            15.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            15.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            15.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            15.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "27ee0182-2371-55c5-ae50-37f305ce0793",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Insulating base",
+      "from": [
+        2,
+        4.5,
+        2.7
+      ],
+      "to": [
+        14,
+        5.65,
+        12.8
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            18.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            31.150000000000002,
+            18.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            18.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            31.150000000000002,
+            18.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            31.150000000000002
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            31.150000000000002
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "f984b8bd-998c-58b2-a400-9b625128a74a",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Relay yoke",
+      "from": [
+        2.8,
+        5.65,
+        5.1
+      ],
+      "to": [
+        6.8999999999999995,
+        6.6,
+        11.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            41.9,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            41.9,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            9.899999999999999
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            9.899999999999999
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "abd52dbf-df67-5253-9d37-9f836f65bf63",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Enamelled winding",
+      "from": [
+        3.1999999999999997,
+        6.6,
+        6.1
+      ],
+      "to": [
+        6.5,
+        10.2,
+        10.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            16.0,
+            4.95,
+            21.4
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            16.0,
+            6.8999999999999995,
+            21.4
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            16.0,
+            4.95,
+            21.4
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            16.0,
+            6.8999999999999995,
+            21.4
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            16.0,
+            4.95,
+            22.9
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            16.0,
+            4.95,
+            22.9
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "3d82a6b1-2fa7-5a5c-a1c9-e199a6b58b20",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Bobbin flange",
+      "from": [
+        2.9,
+        6.6,
+        5.55
+      ],
+      "to": [
+        6.8,
+        10.6,
+        6.1
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "d09a389b-052f-5de2-a62a-60eacce40182",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Bobbin flange",
+      "from": [
+        2.9,
+        6.6,
+        10.7
+      ],
+      "to": [
+        6.8,
+        10.6,
+        11.25
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6897bceb-4a3c-55e2-bf60-ff8af072405b",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Iron armature",
+      "from": [
+        4.15,
+        10.2,
+        6.05
+      ],
+      "to": [
+        5.55,
+        11.1,
+        10.95
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            18.099999999999998,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            23.35,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            18.099999999999998,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            23.35,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            18.099999999999998,
+            7.35
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            18.099999999999998,
+            7.35
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "120c9b29-da95-516a-8f18-239e4a4be65e",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Relay yoke",
+      "from": [
+        7.8,
+        5.65,
+        5.1
+      ],
+      "to": [
+        11.899999999999999,
+        6.6,
+        11.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            41.9,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            41.9,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            9.899999999999999
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            38.15,
+            9.899999999999999
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "bc6ba158-375c-56ae-81ef-41f3203e44bb",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Enamelled winding",
+      "from": [
+        8.2,
+        6.6,
+        6.1
+      ],
+      "to": [
+        11.5,
+        10.2,
+        10.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            16.0,
+            4.950000000000001,
+            21.4
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            16.0,
+            6.8999999999999995,
+            21.4
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            16.0,
+            4.950000000000001,
+            21.4
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            16.0,
+            6.8999999999999995,
+            21.4
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            16.0,
+            4.950000000000001,
+            22.9
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            16.0,
+            4.950000000000001,
+            22.9
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "0167a111-39b7-528d-a080-561855b2c8e2",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Bobbin flange",
+      "from": [
+        7.8999999999999995,
+        6.6,
+        5.55
+      ],
+      "to": [
+        11.8,
+        10.6,
+        6.1
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6cf7bd31-2064-53f3-8396-75afb24a3502",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Bobbin flange",
+      "from": [
+        7.8999999999999995,
+        6.6,
+        10.7
+      ],
+      "to": [
+        11.8,
+        10.6,
+        11.25
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            6.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            34.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            37.85,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "b10ead6a-867d-5236-9387-2eaf2c1dc88f",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Iron armature",
+      "from": [
+        9.15,
+        10.2,
+        6.05
+      ],
+      "to": [
+        10.55,
+        11.1,
+        10.95
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            18.1,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            23.35,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            18.1,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            23.35,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            18.1,
+            7.35
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            18.1,
+            7.35
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "3b0a01c7-bd0d-5b76-9f1b-411be3af70c9",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Ceramic terminal strip",
+      "from": [
+        2.7,
+        5.65,
+        2.85
+      ],
+      "to": [
+        13.3,
+        7.3,
+        4.85
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            16.0,
+            47.900000000000006,
+            18.474999999999998
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            16.0,
+            35.0,
+            18.474999999999998
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            16.0,
+            47.900000000000006,
+            18.474999999999998
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            16.0,
+            35.0,
+            18.474999999999998
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            16.0,
+            47.900000000000006,
+            19.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            16.0,
+            47.900000000000006,
+            19.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "24265f21-c2e7-542b-a5e7-83efd2183475",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Plug blade",
+      "from": [
+        3.5,
+        5.7,
+        1
+      ],
+      "to": [
+        4.5,
+        6.45,
+        2.85
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "453f1e9f-cf4e-50ff-9f3b-7f95ff518a1b",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Terminal screw",
+      "from": [
+        3.5,
+        7.3,
+        3.45
+      ],
+      "to": [
+        4.5,
+        7.75,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "dff2474c-f971-5c4a-afeb-41128aecdff6",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Plug blade",
+      "from": [
+        6.2,
+        5.7,
+        1
+      ],
+      "to": [
+        7.2,
+        6.45,
+        2.85
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6c0e3786-3df9-56db-b7f5-11f8719e34d9",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Terminal screw",
+      "from": [
+        6.2,
+        7.3,
+        3.45
+      ],
+      "to": [
+        7.2,
+        7.75,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "c1544978-d311-5f80-87be-55e9ad7e5011",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Plug blade",
+      "from": [
+        8.9,
+        5.7,
+        1
+      ],
+      "to": [
+        9.9,
+        6.45,
+        2.85
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "b97fe0bd-b3fe-54b8-a4d1-f26c6460a905",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Terminal screw",
+      "from": [
+        8.9,
+        7.3,
+        3.45
+      ],
+      "to": [
+        9.9,
+        7.75,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "c4959700-dedf-596b-8996-a849da223764",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Plug blade",
+      "from": [
+        11.6,
+        5.7,
+        1
+      ],
+      "to": [
+        12.6,
+        6.45,
+        2.85
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            50.775,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            2.7750000000000004
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "e61c2d44-dec0-5a89-8d42-462b19151d87",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Terminal screw",
+      "from": [
+        11.6,
+        7.3,
+        3.45
+      ],
+      "to": [
+        12.6,
+        7.75,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            2.0,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "154732c8-44e9-5c71-a6b7-e840565667d4",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    }
+  ],
+  "outliner": [
+    "27ee0182-2371-55c5-ae50-37f305ce0793",
+    "f984b8bd-998c-58b2-a400-9b625128a74a",
+    "abd52dbf-df67-5253-9d37-9f836f65bf63",
+    "3d82a6b1-2fa7-5a5c-a1c9-e199a6b58b20",
+    "d09a389b-052f-5de2-a62a-60eacce40182",
+    "6897bceb-4a3c-55e2-bf60-ff8af072405b",
+    "120c9b29-da95-516a-8f18-239e4a4be65e",
+    "bc6ba158-375c-56ae-81ef-41f3203e44bb",
+    "0167a111-39b7-528d-a080-561855b2c8e2",
+    "6cf7bd31-2064-53f3-8396-75afb24a3502",
+    "b10ead6a-867d-5236-9387-2eaf2c1dc88f",
+    "3b0a01c7-bd0d-5b76-9f1b-411be3af70c9",
+    "24265f21-c2e7-542b-a5e7-83efd2183475",
+    "453f1e9f-cf4e-50ff-9f3b-7f95ff518a1b",
+    "dff2474c-f971-5c4a-afeb-41128aecdff6",
+    "6c0e3786-3df9-56db-b7f5-11f8719e34d9",
+    "c1544978-d311-5f80-87be-55e9ad7e5011",
+    "b97fe0bd-b3fe-54b8-a4d1-f26c6460a905",
+    "c4959700-dedf-596b-8996-a849da223764",
+    "e61c2d44-dec0-5a89-8d42-462b19151d87",
+    "154732c8-44e9-5c71-a6b7-e840565667d4"
+  ],
+  "textures": [
+    {
+      "id": "0",
+      "name": "industrial_control_unit.png",
+      "uuid": "21ab8d8c-f238-56f1-beb7-7aeb76804384",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAB/ElEQVR4nO3Wz0obURQG8C8fsy+R5FohUTRiq9BN6LKLbgSRbpW6c1UQV76DdNOWdtNH6LZPYXcSCsK0iqNUBe0oig8glDB4CVnM3Jlk/nzQ3yIcmHMv55AD59bWN98hjZWV16nyP7z/lCr/49tGqnwP+Vt6sZSYc/P3GkAY9n8r10DEP/CNaY79WqIQ/oGf082ejeoTEza+u71NPPms07bxYXAen2xMszHZHBqYeK1ZY+OL0zC5AZeiByUWPcSl6EExRZcwQvkhxBHiCHFe/Oery8soeDo15XLd0XEQBQvzHZf88HFzOa6I3vF9FHTnnzg14Fi35Vi3ZVKuNlt3tUaoMdnM8IioUAP+CHu6iLdQ4gozI7yRimgg83i4qH3fWv0RhNtr3Z+9CwCJ8e7ZA9L4urORKv/zl2+5/wMvX3UTc4I//ZfM3Xm/+Vx5mU/u7/Xq7RbKxmzH9vd6qAYv27F6u9WZMUMDE296btbGZyenKH2EAoeiB42x6MotslH8b6BshDhvvNfZzeW4In79PomCxedzlWgg7WpbzFp3viPUmTEFPCJybKDIPe3lscKKfCN5Gc4UNh4uautvlqGMEEeII8QR4ghxhDhCHCGOEEeII8QR4ghxhDhCHCGOEEeII8QR4ghxhDhCHCGOEEeII8QR4ghxhDiWXcCo/gHMNIhCny4VBwAAAABJRU5ErkJggg=="
+    }
+  ]
+}

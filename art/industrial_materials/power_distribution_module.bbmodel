@@ -1,0 +1,1559 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "java_block",
+    "box_uv": false
+  },
+  "name": "power_distribution_module",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "display": {
+    "gui": {
+      "rotation": [
+        25,
+        215,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.85,
+        0.85,
+        0.85
+      ]
+    }
+  },
+  "elements": [
+    {
+      "name": "Lower manifold",
+      "from": [
+        2.3,
+        2,
+        2.3
+      ],
+      "to": [
+        13.7,
+        4,
+        13.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            32.0,
+            0.0,
+            48.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            0.0,
+            48.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            32.0,
+            0.0,
+            48.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            0.0,
+            48.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            32.0,
+            0.0,
+            48.0,
+            16.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            32.0,
+            0.0,
+            48.0,
+            16.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "d46c031f-414e-5c8c-9d5a-65d1044b5698",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Upper manifold",
+      "from": [
+        2.3,
+        12,
+        2.3
+      ],
+      "to": [
+        13.7,
+        14,
+        13.7
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            16.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            16.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "ee999b02-6322-5f8f-8fb6-b18fb999d26e",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Pressure chamber",
+      "from": [
+        4,
+        4,
+        4
+      ],
+      "to": [
+        12,
+        12,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "25d4986a-581d-5487-98cf-705eef36f3ac",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Tie bolt",
+      "from": [
+        2.5,
+        4,
+        2.5
+      ],
+      "to": [
+        4.1,
+        12,
+        4.1
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "f61006ab-a6e3-5583-a51a-e081e31f9edd",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Captive nut",
+      "from": [
+        2.25,
+        14,
+        2.25
+      ],
+      "to": [
+        4.35,
+        14.65,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "886459b8-2502-5d3e-bde1-bd12840bf268",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Tie bolt",
+      "from": [
+        2.5,
+        4,
+        11.9
+      ],
+      "to": [
+        4.1,
+        12,
+        13.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "2c25567d-839b-52ef-88b6-f3910a6e799e",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Captive nut",
+      "from": [
+        2.25,
+        14,
+        11.65
+      ],
+      "to": [
+        4.35,
+        14.65,
+        13.75
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "50a43541-ebf6-54bf-997b-5a9e958d522c",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Tie bolt",
+      "from": [
+        11.9,
+        4,
+        2.5
+      ],
+      "to": [
+        13.5,
+        12,
+        4.1
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "0b5ed043-6db5-55d8-96f6-602ff40a7f13",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Captive nut",
+      "from": [
+        11.65,
+        14,
+        2.25
+      ],
+      "to": [
+        13.75,
+        14.65,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "7c2cbd16-0c7f-55e7-9f2d-7b95f6b42092",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Tie bolt",
+      "from": [
+        11.9,
+        4,
+        11.9
+      ],
+      "to": [
+        13.5,
+        12,
+        13.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            18.4,
+            2.3999999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "a6194eaf-d786-5f3e-91ad-f4bb00eaa0a5",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Captive nut",
+      "from": [
+        11.65,
+        14,
+        11.65
+      ],
+      "to": [
+        13.75,
+        14.65,
+        13.75
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            2.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            51.15,
+            3.1499999999999995
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "e0691625-a453-5160-ae91-292d12bc16fa",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Winding",
+      "from": [
+        5,
+        5,
+        3
+      ],
+      "to": [
+        11,
+        11,
+        4.2
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            18.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            18.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "a3259b9b-5294-5889-8461-059059f4b4ac",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Ceramic clamp",
+      "from": [
+        7.2,
+        4.7,
+        2.85
+      ],
+      "to": [
+        8.8,
+        11.3,
+        4.35
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            9.9
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            2.249999999999999,
+            9.9
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            9.9
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            2.249999999999999,
+            9.9
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            2.249999999999999
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            2.249999999999999
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6a3f708b-dd57-59e9-83a9-2ace685cf243",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Winding",
+      "from": [
+        5,
+        5,
+        11.8
+      ],
+      "to": [
+        11,
+        11,
+        13.0
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            18.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            16.0,
+            9.0,
+            18.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "c688f01d-02f7-5370-abae-458bb89a61cd",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Ceramic clamp",
+      "from": [
+        7.2,
+        4.7,
+        11.65
+      ],
+      "to": [
+        8.8,
+        11.3,
+        13.15
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            9.9
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            2.25,
+            9.9
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            9.9
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            2.25,
+            9.9
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            2.25
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            2.400000000000001,
+            2.25
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "23b16ebf-3505-58d6-abd3-7aa120688ff8",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Inspection plate",
+      "from": [
+        3,
+        6,
+        5
+      ],
+      "to": [
+        4,
+        10,
+        11
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            16.0,
+            48.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            16.0,
+            48.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            9.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            9.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "fe268357-09c5-5559-8d66-b3faf4d505a3",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Inspection plate",
+      "from": [
+        12,
+        6,
+        5
+      ],
+      "to": [
+        13,
+        10,
+        11
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            32.0,
+            16.0,
+            48.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            6.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            32.0,
+            16.0,
+            48.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            9.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            9.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "e6cfcdef-6f67-53cc-810c-7c780ae3c725",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Lid boss",
+      "from": [
+        5.4,
+        14,
+        5.4
+      ],
+      "to": [
+        10.6,
+        14.65,
+        10.6
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "44a416cf-1978-5327-8ee3-9ef227a746dc",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    }
+  ],
+  "outliner": [
+    "d46c031f-414e-5c8c-9d5a-65d1044b5698",
+    "ee999b02-6322-5f8f-8fb6-b18fb999d26e",
+    "25d4986a-581d-5487-98cf-705eef36f3ac",
+    "f61006ab-a6e3-5583-a51a-e081e31f9edd",
+    "886459b8-2502-5d3e-bde1-bd12840bf268",
+    "2c25567d-839b-52ef-88b6-f3910a6e799e",
+    "50a43541-ebf6-54bf-997b-5a9e958d522c",
+    "0b5ed043-6db5-55d8-96f6-602ff40a7f13",
+    "7c2cbd16-0c7f-55e7-9f2d-7b95f6b42092",
+    "a6194eaf-d786-5f3e-91ad-f4bb00eaa0a5",
+    "e0691625-a453-5160-ae91-292d12bc16fa",
+    "a3259b9b-5294-5889-8461-059059f4b4ac",
+    "6a3f708b-dd57-59e9-83a9-2ace685cf243",
+    "c688f01d-02f7-5370-abae-458bb89a61cd",
+    "23b16ebf-3505-58d6-abd3-7aa120688ff8",
+    "fe268357-09c5-5559-8d66-b3faf4d505a3",
+    "e6cfcdef-6f67-53cc-810c-7c780ae3c725",
+    "44a416cf-1978-5327-8ee3-9ef227a746dc"
+  ],
+  "textures": [
+    {
+      "id": "0",
+      "name": "power_distribution_module.png",
+      "uuid": "628e9fe0-8e4c-5441-aa9c-7a9c536a7a97",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAACFklEQVR4nO3XQUvbYBgH8H//hN3GprRx0nmQyiRCqfQTeBnI5k0sHgQ9Dca+x3Zw+x7iYbd+hF1LJRBxtHhQsYtD8QvIcMEg3Zb3TWpi/rDfoTzQJ+F5kyd53lQ6O++QxurqSqr83Y9fUuV/3qymyneQv6XmkjHn548LAGF4+1u6BUQCP3Dd2oOflihE4Ac5ndmJo6np6Ti+urw0HrnYmIvjo+FJcrLr1qoztbGGSfZy3o3j0+PQvACbou8zFj3Gpuj7Eop+hBbKDyGOEEeIc5L/Hp2fR8GL2Vmb030fDKPg1ULDJj+8m1yWI6I3uI6C9sIzqwVY1h2zrDvmphxtcd3laqHqTC3DJqJECwgmmNNF7IWMI8ydYI9UxAIyt4eNytf3b74Nww8b7X7vFIAx/nTxFGncjEap8hvPn+R+B95udow5/QMfwNnhIYDtrXVjvv/7Megd3OYX1ELdvf2651kmR/Xlwcl2WHdvP+0hyVe33bK9Fg+zgLrnLbeaYw2TrN3ymv/+tvSz3qLsLWRTdAGN5KAo5WqhDErXQhn8b6H870A0uaLXlGQL1RNHm0wLLbeaf85ppbdQ929zukQt1DeNsLFrHxdXlhY6u3tSLWXYY9qrdNZeQxkhjhBHiCPEEeIIcYQ4QhwhjhBHiCPEEeIIcYQ4QhwhjhBHiCPEEeIIcYQ4QhwhjhBHiCPEEeIIcXzsAib1C4yKrrIVqcmLAAAAAElFTkSuQmCC"
+    }
+  ]
+}

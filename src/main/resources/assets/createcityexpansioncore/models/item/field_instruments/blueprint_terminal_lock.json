@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:item/field_instruments/blueprint_terminal",
+  "textures": {
+    "optic": "createcityexpansioncore:item/field_instruments/lens_flash"
+  }
+}

@@ -1,6 +1,17 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "createcityexpansioncore:item/blueprint_terminal"
-  }
+  "parent": "createcityexpansioncore:item/field_instruments/blueprint_terminal",
+  "overrides": [
+    {
+      "predicate": {
+        "createcityexpansioncore:projection_lens": 0.5
+      },
+      "model": "createcityexpansioncore:item/field_instruments/blueprint_terminal_aim"
+    },
+    {
+      "predicate": {
+        "createcityexpansioncore:projection_lens": 1
+      },
+      "model": "createcityexpansioncore:item/field_instruments/blueprint_terminal_lock"
+    }
+  ]
 }
