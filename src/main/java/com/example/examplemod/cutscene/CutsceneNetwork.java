@@ -71,10 +71,12 @@ public final class CutsceneNetwork {
     }
 
     static void play(ServerPlayer player, String json, boolean intro) {
+        CutsceneChunks.authorize(player, json);
         PacketDistributor.sendToPlayer(player, new Play(json, intro));
     }
 
     static void stop(ServerPlayer player) {
+        CutsceneChunks.stop(player);
         PacketDistributor.sendToPlayer(player, new Stop());
     }
 

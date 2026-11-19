@@ -5,6 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "plugin": "com.example.examplemod.mixin.TransportMixinPlugin",
   "mixins": [
+    "CutsceneChunkTrackingMixin",
+    "CutsceneChunkTrackingAccess",
     "CarriageRailTravelMixin",
     "TravellingPointRailTollMixin",
     "NavigationFleetPathMixin",
@@ -26,6 +28,7 @@
     "TelemetryDisconnectMixin"
   ],
   "client": [
+    "CutsceneLevelRendererMixin",
     "JadeProjectionRayTraceMixin",
     "PaintRifleModelPoseMixin",
     "PaintRifleHeldItemMixin",
