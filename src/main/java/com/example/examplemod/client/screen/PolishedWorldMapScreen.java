@@ -1658,11 +1658,14 @@ case ENERGY->List.of();
                 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) return true;
 
         pendingSelection=null;
-        this.map.clearSelection();
+        CityMapPanel panel = this.map;
+        panel.clearSelection();
         dismissTutorial();
         CityMapPanel.Selection before = selected;
-        boolean handled = this.map.mouseClicked(mouseX, mouseY, button);
-        CityMapPanel.Selection after = this.map.getSelection();
+        boolean handled = panel.mouseClicked(mouseX, mouseY, button);
+        // Opening a project from a marker can replace this screen during the click.
+        if (this.map != panel || this.minecraft.screen != this) return true;
+        CityMapPanel.Selection after = panel.getSelection();
         if (handled && after != null && !after.equals(before)) {
             pushTarget(backHistory,before);
             this.forwardHistory.clear();

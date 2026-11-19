@@ -1,0 +1,10 @@
+{
+  "cutscene.intro": {
+    "sounds": [
+      {
+        "name": "recreated:cutscenes/intro",
+        "stream": true
+      }
+    ]
+  }
+}
