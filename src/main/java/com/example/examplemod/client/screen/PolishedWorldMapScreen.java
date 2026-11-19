@@ -2360,7 +2360,7 @@ case ENERGY -> setOverlays(false,false);
         }
     }
 
-    private int searchRows() { return Math.max(1,Math.min(8,(height-popoverY()-96)/25)); }
+    private int searchRows() { return Math.max(1,Math.min(8,(height-popoverY()-95)/25)); }
     private List<?> allSearchRows() {return searchTab==AtlasSearch.Tab.VIEWS?visibleViews:searchResults;}
     private List<?> visibleSearchResults() {
         List<?> all=allSearchRows();
