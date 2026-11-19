@@ -9,13 +9,12 @@ import com.example.examplemod.client.ModFluidClientExtensions;
 import com.example.examplemod.client.render.CityPylonModels;
 import com.example.examplemod.client.render.CityPylonRenderer;
 import com.example.examplemod.client.screen.CityPylonScreen;
-import com.example.examplemod.client.screen.MagneticAnalyzerScreen;
+import com.example.examplemod.client.HandheldInstruments;
 import com.example.examplemod.client.screen.MineControllerScreen;
 import com.example.examplemod.multiblock.MultiblockPreviewRenderer;
 import com.example.examplemod.network.CityInviteNotificationPayload;
 import com.example.examplemod.network.CityMapPeersPayload;
 import com.example.examplemod.network.CityNotificationPayload;
-import com.example.examplemod.network.GeologyAnalysisPayload;
 import com.example.examplemod.client.map.GeologyWideScanOverlay;
 import com.example.examplemod.network.MineControllerSnapshotPayload;
 import com.example.examplemod.network.MineCommissionContextPayload;
@@ -92,6 +91,7 @@ public class CreateCityExpansionCoreClient {
         modEventBus.addListener(
                 this::registerClientPayloads
         );
+        modEventBus.addListener(HandheldInstruments::register);
         modEventBus.addListener(BuildGuideKeyMappings::register);
         modEventBus.addListener(CityWorldMapKey::register);
         modEventBus.addListener(com.example.examplemod.client.PlayerProfileKey::register);
@@ -164,11 +164,14 @@ public class CreateCityExpansionCoreClient {
             RegisterPayloadHandlersEvent event
     ) {
         CreateCityExpansionCore.GEOLOGY_ANALYSIS_HANDLER = (payload, context) -> {
-            invokeEnqueueWork(context, () -> MagneticAnalyzerScreen.open(payload));
+            invokeEnqueueWork(context, () -> HandheldInstruments.receiveReport(payload));
         };
 
         CreateCityExpansionCore.GEOLOGY_WIDE_SCAN_HANDLER = (payload, context) -> {
-            invokeEnqueueWork(context, () -> GeologyWideScanOverlay.accept(payload));
+            invokeEnqueueWork(context, () -> {
+                HandheldInstruments.beginSweep();
+                GeologyWideScanOverlay.accept(payload);
+            });
         };
 
         CreateCityExpansionCore.MINE_CONTROLLER_SNAPSHOT_HANDLER = (payload, context) -> {

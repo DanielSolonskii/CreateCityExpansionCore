@@ -1,0 +1,2231 @@
+{
+  "meta": {
+    "format_version": "4.10",
+    "model_format": "java_block",
+    "box_uv": false
+  },
+  "name": "heavy_machine_frame",
+  "resolution": {
+    "width": 64,
+    "height": 64
+  },
+  "display": {
+    "gui": {
+      "rotation": [
+        25,
+        215,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.85,
+        0.85,
+        0.85
+      ]
+    }
+  },
+  "elements": [
+    {
+      "name": "Crossmember",
+      "from": [
+        2,
+        2,
+        2
+      ],
+      "to": [
+        14,
+        4,
+        4
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "eaf2a143-8d71-5348-98d3-3d734db4268f",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Crossmember",
+      "from": [
+        2,
+        2,
+        12
+      ],
+      "to": [
+        14,
+        4,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "a5de78e5-a361-5e64-b1c2-391af1b81beb",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Side rail",
+      "from": [
+        2,
+        2,
+        4
+      ],
+      "to": [
+        4,
+        4,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6427af9e-7d8a-5c77-a830-683b412a91ad",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Side rail",
+      "from": [
+        12,
+        2,
+        4
+      ],
+      "to": [
+        14,
+        4,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "8ad855c5-00bd-5bc4-9f88-1930a1a83b0d",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Crossmember",
+      "from": [
+        2,
+        12,
+        2
+      ],
+      "to": [
+        14,
+        14,
+        4
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "2e2ea98c-7c31-559a-bb13-3063cfcc0ed5",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Crossmember",
+      "from": [
+        2,
+        12,
+        12
+      ],
+      "to": [
+        14,
+        14,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            16.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "c2380fac-d3ad-5671-8b2c-6f3285db3917",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Side rail",
+      "from": [
+        2,
+        12,
+        4
+      ],
+      "to": [
+        4,
+        14,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "a1af43de-d415-5581-a7f0-93538a83cf65",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Side rail",
+      "from": [
+        12,
+        12,
+        4
+      ],
+      "to": [
+        14,
+        14,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            3.0,
+            12.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "54a15a92-ce5c-58e5-b72e-6b5b3573e53b",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Upright",
+      "from": [
+        2,
+        4,
+        2
+      ],
+      "to": [
+        4,
+        12,
+        4
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "79ecf81b-3610-5b17-bb5d-c638629fb89a",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        1.55,
+        1.6,
+        1.55
+      ],
+      "to": [
+        4.45,
+        4.15,
+        4.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6b020526-6fe5-5d57-96ab-55945255939c",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        1.55,
+        11.8,
+        1.55
+      ],
+      "to": [
+        4.45,
+        14.350000000000001,
+        4.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "8b71023d-b25c-53a3-ae64-da8b4faef700",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Upright",
+      "from": [
+        2,
+        4,
+        12
+      ],
+      "to": [
+        4,
+        12,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "0b75487e-fa58-5497-840f-68df813c528f",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        1.55,
+        1.6,
+        11.55
+      ],
+      "to": [
+        4.45,
+        4.15,
+        14.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "f72ed27f-1fee-505f-b8a5-b25115cde9a7",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        1.55,
+        11.8,
+        11.55
+      ],
+      "to": [
+        4.45,
+        14.350000000000001,
+        14.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "f0636e31-04fb-5bad-bd4e-9c04433c987f",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Upright",
+      "from": [
+        12,
+        4,
+        2
+      ],
+      "to": [
+        14,
+        12,
+        4
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "f363036c-1389-5cb9-b37a-52c9c9027cd6",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        11.55,
+        1.6,
+        1.55
+      ],
+      "to": [
+        14.45,
+        4.15,
+        4.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "ed421e7e-3bad-553b-8ce5-7eacf903feb8",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        11.55,
+        11.8,
+        1.55
+      ],
+      "to": [
+        14.45,
+        14.350000000000001,
+        4.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "f3f9c46b-52e5-59fc-a27a-7203971134ef",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Upright",
+      "from": [
+        12,
+        4,
+        12
+      ],
+      "to": [
+        14,
+        12,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            0.0,
+            19.0,
+            3.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "6d2c166a-b7c4-5f35-936d-142e58f3df87",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        11.55,
+        1.6,
+        11.55
+      ],
+      "to": [
+        14.45,
+        4.15,
+        14.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "c3c78bb2-b496-5fe2-b340-6b00e43b5c33",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Welded corner shoe",
+      "from": [
+        11.55,
+        11.8,
+        11.55
+      ],
+      "to": [
+        14.45,
+        14.350000000000001,
+        14.45
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            16.0,
+            16.0,
+            32.0,
+            32.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "859b66ca-e32d-5fa9-bae6-002d2d778f64",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Diagonal gusset",
+      "from": [
+        7.2,
+        2.4,
+        2.2
+      ],
+      "to": [
+        8.8,
+        13.6,
+        3.3000000000000003
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            16.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            16.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            16.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            16.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "cb324e20-abce-5e41-8196-4e359417dceb",
+      "type": "cube",
+      "origin": [
+        8.0,
+        8.0,
+        2.75
+      ],
+      "rotation": [
+        0,
+        0,
+        -45
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Diagonal gusset",
+      "from": [
+        7.2,
+        2.4,
+        12.4
+      ],
+      "to": [
+        8.8,
+        13.6,
+        13.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            16.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            16.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            16.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            48.0,
+            0.0,
+            50.0,
+            16.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            2.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            48.0,
+            0.0,
+            50.4,
+            2.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "ad4346c5-8afe-5417-b3fa-e1e8769f417c",
+      "type": "cube",
+      "origin": [
+        8.0,
+        8.0,
+        12.95
+      ],
+      "rotation": [
+        0,
+        0,
+        -45
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Pressure vessel",
+      "from": [
+        5,
+        5,
+        4
+      ],
+      "to": [
+        11,
+        11,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            9.0,
+            9.0
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            9.0
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            9.0,
+            9.0
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            12.0,
+            9.0
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            9.0,
+            12.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            9.0,
+            12.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "b4cf4f91-1e3b-5580-918c-35bad6033c1a",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Tank crown",
+      "from": [
+        5.8,
+        4.4,
+        4.15
+      ],
+      "to": [
+        10.2,
+        11.6,
+        11.85
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            0.0,
+            6.6,
+            10.799999999999999
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            0.0,
+            11.549999999999999,
+            10.799999999999999
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            0.0,
+            6.6,
+            10.799999999999999
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            0.0,
+            11.549999999999999,
+            10.799999999999999
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            0.0,
+            6.6,
+            11.549999999999999
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            0.0,
+            6.6,
+            11.549999999999999
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "da4a48ee-9f7c-514b-8419-195897b5348a",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Retaining band",
+      "from": [
+        4.7,
+        4.8,
+        5
+      ],
+      "to": [
+        11.3,
+        11.2,
+        6.1
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            25.6
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.6
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            25.6
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.6
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            18.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            18.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "0a570525-3586-586e-918b-04c6e24d6bcd",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    },
+    {
+      "name": "Retaining band",
+      "from": [
+        4.7,
+        4.8,
+        9.4
+      ],
+      "to": [
+        11.3,
+        11.2,
+        10.5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            25.6
+          ],
+          "texture": 0
+        },
+        "east": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.6
+          ],
+          "texture": 0
+        },
+        "south": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            25.6
+          ],
+          "texture": 0
+        },
+        "west": {
+          "uv": [
+            0.0,
+            16.0,
+            2.0,
+            25.6
+          ],
+          "texture": 0
+        },
+        "up": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            18.0
+          ],
+          "texture": 0
+        },
+        "down": {
+          "uv": [
+            0.0,
+            16.0,
+            9.9,
+            18.0
+          ],
+          "texture": 0
+        }
+      },
+      "uuid": "1cd5948f-875a-5170-a2b9-7ac14122ea5b",
+      "type": "cube",
+      "origin": [
+        8,
+        8,
+        8
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "box_uv": false,
+      "autouv": 0
+    }
+  ],
+  "outliner": [
+    "eaf2a143-8d71-5348-98d3-3d734db4268f",
+    "a5de78e5-a361-5e64-b1c2-391af1b81beb",
+    "6427af9e-7d8a-5c77-a830-683b412a91ad",
+    "8ad855c5-00bd-5bc4-9f88-1930a1a83b0d",
+    "2e2ea98c-7c31-559a-bb13-3063cfcc0ed5",
+    "c2380fac-d3ad-5671-8b2c-6f3285db3917",
+    "a1af43de-d415-5581-a7f0-93538a83cf65",
+    "54a15a92-ce5c-58e5-b72e-6b5b3573e53b",
+    "79ecf81b-3610-5b17-bb5d-c638629fb89a",
+    "6b020526-6fe5-5d57-96ab-55945255939c",
+    "8b71023d-b25c-53a3-ae64-da8b4faef700",
+    "0b75487e-fa58-5497-840f-68df813c528f",
+    "f72ed27f-1fee-505f-b8a5-b25115cde9a7",
+    "f0636e31-04fb-5bad-bd4e-9c04433c987f",
+    "f363036c-1389-5cb9-b37a-52c9c9027cd6",
+    "ed421e7e-3bad-553b-8ce5-7eacf903feb8",
+    "f3f9c46b-52e5-59fc-a27a-7203971134ef",
+    "6d2c166a-b7c4-5f35-936d-142e58f3df87",
+    "c3c78bb2-b496-5fe2-b340-6b00e43b5c33",
+    "859b66ca-e32d-5fa9-bae6-002d2d778f64",
+    "cb324e20-abce-5e41-8196-4e359417dceb",
+    "ad4346c5-8afe-5417-b3fa-e1e8769f417c",
+    "b4cf4f91-1e3b-5580-918c-35bad6033c1a",
+    "da4a48ee-9f7c-514b-8419-195897b5348a",
+    "0a570525-3586-586e-918b-04c6e24d6bcd",
+    "1cd5948f-875a-5170-a2b9-7ac14122ea5b"
+  ],
+  "textures": [
+    {
+      "id": "0",
+      "name": "heavy_machine_frame.png",
+      "uuid": "8a577816-5d86-5aad-b950-c674fa80c7e2",
+      "width": 64,
+      "height": 64,
+      "uv_width": 64,
+      "uv_height": 64,
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAB2UlEQVR4nO3Wv0oDQRAG8C8f21iIGJJLRFMERUGwSZFSbAQRsVMsrQTxPWzUV7HwEQQbCxECh4rBQkU9/2GjrUjwkBS5vUtu7z7wVxwDN7vMwMBsYX1zC3EsLS3Eyt/bPYiVv79RipVvkL7ZudnInJenZwBB8PPNXQMdfsv3vPLAryWc8Ft+SjebMBotFsP4/e0t8uTMZC2ML9u3vZM9r1yqlLsGpreJuhfGdzdBdAM2Rf8VWXQXm6L/6lF0BiOUHkIcIY4QZ3r/fnx46ATVsTGb666u251gemrSJj/43VyWK+Ls+qMTNKZGrBqwrDtkWXfIi7nawrrzNUKlSjnBIyJHDfh97GkXb6HIFeb18UZy0UDi8bBRONxePmkHO2uN87M7AJHxxWu8F8f55zDSZBKcWZ0fj8x5vP3p8/TmCykziU8eHd8360PIGpMdOzq+Rz6YZMea9aFqrdg1MJkwiU9mWHTuFlk//hvIGiHODPa6cHM5WxFmsNe5X21M49JqrejgEZFiAy73tEljhbkcJJPgjLPxsFFYX1mEMkIcIY4QR4gjxBHiCHGEOEIcIY4QR4gjxBHiCHGEOEIcIY4QR4gjxBHiCHGEOEIcIY4QR4gjxBHimHUB/foGrvJ+XhqrWPEAAAAASUVORK5CYII="
+    }
+  ]
+}

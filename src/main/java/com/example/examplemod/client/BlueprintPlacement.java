@@ -57,6 +57,13 @@ public final class BlueprintPlacement {
     private BlockPos aimedBlock;
     private BlockPos offset = BlockPos.ZERO;
     private BlockPos fixedAnchor;
+    private long fixedAt;
+
+    static float lensState(ClientLevel level) {
+        if (active == null || active.level != level) return 0;
+        if (active.fixedAnchor == null) return 0.5F;
+        return level.getGameTime() - active.fixedAt < 12 ? 1 : 0;
+    }
 
     private record GhostCell(BlockPos offset, BlockState state, boolean addition) {}
 
@@ -157,6 +164,7 @@ public final class BlueprintPlacement {
                 return;
             }
             active.fixedAnchor = target;
+            active.fixedAt = active.level.getGameTime();
             showMessage(minecraft, "projection_fixed",
                     Component.keybind("key.createcityexpansioncore.build_guide.next_layer"),
                     Component.keybind("key.createcityexpansioncore.build_guide.previous_layer"));

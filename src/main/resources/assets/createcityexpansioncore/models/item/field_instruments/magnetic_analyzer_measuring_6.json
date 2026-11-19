@@ -1,0 +1,6 @@
+{
+  "parent": "createcityexpansioncore:item/field_instruments/magnetic_analyzer",
+  "textures": {
+    "panel": "createcityexpansioncore:item/field_instruments/analyzer_sweep_6"
+  }
+}
