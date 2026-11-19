@@ -1,7 +1,7 @@
 package com.example.examplemod.client.journey;
 
-import com.example.examplemod.client.map.MinimapClient;
-import com.example.examplemod.client.map.MinimapLayout;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import org.joml.Vector4f;
 import com.example.examplemod.journey.JourneyModel.Marker;
 import com.example.examplemod.journey.JourneyModel.Point;
 import java.lang.ref.WeakReference;
@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import net.minecraft.Util;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -26,7 +25,8 @@ import static com.example.examplemod.client.journey.JourneyAtlasStyle.*;
 /** Context card for a visible world sign, using the same candidates as the world renderer. */
 final class JourneyWaypointHint {
     private static final double LOOK_RANGE = 24;
-    private static final double NEAR_RANGE = 6;
+    private static float anchorX;
+    private static float anchorY;
     private static final double LOOK_ALIGNMENT = .994;
     private static WeakReference<ClientLevel> level = new WeakReference<>(null);
     private static Focus focus;
@@ -41,8 +41,9 @@ final class JourneyWaypointHint {
 
     private record Candidate(Focus focus, Vec3 anchor, double score, boolean hit) {}
 
-    static Focus capture(Minecraft client, Camera camera, List<Marker> markers,
+    static Focus capture(Minecraft client, RenderLevelStageEvent event, List<Marker> markers,
                          Marker target, JourneyWorldRenderer.Turn turn) {
+        var camera = event.getCamera();
         Vec3 eye = camera.getPosition();
         var cameraForward = camera.getLookVector();
         Vec3 forward = new Vec3(cameraForward.x(), cameraForward.y(), cameraForward.z());
@@ -58,6 +59,13 @@ final class JourneyWaypointHint {
         Focus next = null;
         for (Candidate candidate : candidates) {
             if (candidate.hit() || unobstructed(client, eye, candidate)) {
+                Vec3 relative = candidate.anchor().subtract(eye);
+                var clip = new Vector4f((float) relative.x, (float) relative.y, (float) relative.z, 1)
+                        .mul(event.getModelViewMatrix()).mul(event.getProjectionMatrix());
+                if (clip.w <= 0 || Math.abs(clip.x) > clip.w || Math.abs(clip.y) > clip.w
+                        || Math.abs(clip.z) > clip.w) continue;
+                anchorX = (1 + clip.x / clip.w) * .5f;
+                anchorY = (1 - clip.y / clip.w) * .5f;
                 next = candidate.focus();
                 break;
             }
@@ -89,10 +97,10 @@ final class JourneyWaypointHint {
         double aim = forward.dot(offset.normalize());
         boolean hit = !turn && client.hitResult instanceof BlockHitResult block && block.getType() == HitResult.Type.BLOCK
                 && atPoint(block.getBlockPos(), point);
-        if (!hit && aim < LOOK_ALIGNMENT && distance > NEAR_RANGE) return;
+        if (!hit && aim < LOOK_ALIGNMENT) return;
 
-        // Direct aim wins over proximity. A turn at the same spot as its goal is the next useful cue.
-        double score = hit ? 1000 : aim >= LOOK_ALIGNMENT ? 100 + aim * 8 : 0;
+        // A direct block hit takes precedence. A turn at the same spot as its goal is the next useful cue.
+        double score = hit ? 1000 : 100 + aim * 8;
         score += (current ? .25 : 0) + (turn ? .10 : 0) - distance * .10;
         candidates.add(new Candidate(new Focus(marker, point, turn, distance), anchor, score, hit));
     }
@@ -109,10 +117,8 @@ final class JourneyWaypointHint {
 
     static void draw(GuiGraphics graphics, Minecraft client, Focus focused, boolean active, Component title,
                      Component action, Component footer, long now) {
-        int center = graphics.guiWidth() / 2;
-        int leftSpace = center - 24;
-        int width = Math.min(202, leftSpace >= 126 ? leftSpace : graphics.guiWidth() - 16);
-        int x = leftSpace >= 126 ? center - 16 - width : (graphics.guiWidth() - width) / 2;
+        int width = Math.min(202, graphics.guiWidth() - 16);
+        int x = Math.clamp(Math.round(anchorX * graphics.guiWidth()) - width / 2, 8, graphics.guiWidth() - width - 8);
         int textWidth = width - 20;
         var font = client.font;
         Component description = Component.literal(focused.turn() ? "" : focused.marker().description);
@@ -123,14 +129,7 @@ final class JourneyWaypointHint {
         int footerHeight = footer.getString().isBlank() ? 0 : 12;
         int height = 39 + descriptionCount * 11 + actionCount * 11 + footerHeight;
         int lift = (int) (3 * (1 - reveal(now - appearedAt, JourneyClient.reduced())));
-        int y = Math.max(8, graphics.guiHeight() / 2 - 10 - height + lift);
-        var minimap = MinimapClient.settings();
-        if (minimap.enabled && minimap.corner == 1 && !client.getDebugOverlay().showDebugScreen()) {
-            var view = MinimapLayout.view(graphics.guiWidth(), graphics.guiHeight(), minimap.size, minimap.corner);
-            int mapRight = view.frameX() + view.frameWidth();
-            if (view.size() >= 64 && x < mapRight && y < view.frameY() + view.frameHeight()
-                    && mapRight + 6 + width <= graphics.guiWidth() - 8) x = mapRight + 6;
-        }
+        int y = Math.max(4, Math.round(anchorY * graphics.guiHeight()) - 10 - height + lift);
 
         panel(graphics, x, y, width, height);
         graphics.fill(x, y + 7, x + 2, y + height - 7, BRASS);

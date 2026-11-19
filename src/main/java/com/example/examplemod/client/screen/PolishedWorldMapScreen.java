@@ -2265,7 +2265,7 @@ case ENERGY -> setOverlays(false,false);
         trainActionVisible = this.mode==Mode.CITIES && com.example.examplemod.client.logistics.LogisticsMapOverlay.selectedTrain(map.dimensionId())!=null;
         int[] labels=new int[(trainActionVisible ? 7 : 6)+(AtlasTripScreen.needsRecalculation()?1:0)];
         for(int i=0;i<labels.length;i++)labels[i]=this.font.width(viewLabel(viewActionAt(i)));
-        this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,start,labels));
+        this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,this.height,start,labels));
         return this.viewButtons.getLast().bottom()+NORMAL;
     }
     private int viewActionAt(int index) {
@@ -2292,7 +2292,7 @@ case ENERGY -> setOverlays(false,false);
             boolean enabled=switch(i){case PLAN_TOOL->planningAvailable();case PLACE_TOOL->canAddPlace();default->true;};
             WorldMapChrome.dispatchControl(g,r,active,r.contains(mx,my),enabled,false);
             Component label=viewLabel(i);
-            if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL)))
+            if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL),this.height))
                 WorldMapChrome.viewIcon(g,i,r.x()+(r.width()-16)/2,r.y()+(r.height()-16)/2,enabled?TEXT:MapPalette.TEXT_FAINT);
             else g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-SECTION),r.x()+6,r.y()+(r.height()-8)/2,enabled?TEXT:MapPalette.TEXT_FAINT,false);
             if(mainControls()) {

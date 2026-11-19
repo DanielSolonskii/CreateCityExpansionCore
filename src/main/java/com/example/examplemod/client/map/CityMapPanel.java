@@ -11,6 +11,9 @@ import com.example.examplemod.network.CityRelationSnapshot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import org.joml.Matrix4fc;
+import org.joml.Vector3f;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -832,9 +835,9 @@ for (int index = 0; index < this.personalPins.size(); index++) {
         animateTo(pos.getX()+.5, pos.getZ()+.5, zoom);
     }
 
-/**
-     * Масштаб интерфейса. Панель рисуется внутри pose().scale(...),
-     * а GuiGraphics.enableScissor ожидает экранные координаты.
+    /**
+     * Initial UI scale for tile requests before the first render. Each render reads the actual
+     * pose so embedded pages and hover motion cannot leave this shared panel with a stale scale.
      */
     public void setGuiScale(float guiScale) {
         this.guiScale = guiScale <= 0.0F ? 1.0F : guiScale;
@@ -864,6 +867,17 @@ for (int index = 0; index < this.personalPins.size(); index++) {
         if (reducedMotion != display.reducedMotion) setMotion(motionEnabled, display.reducedMotion);
         setInertiaEnabled(display.inertia);
         setSmoothTerrain(display.smoothTerrain);
+    }
+
+    /** Map bounds live in the same local coordinates as terrain and markers. */
+    static ScreenRectangle viewportBounds(Matrix4fc pose, int x, int y, int width, int height) {
+        Vector3f first = pose.transformPosition(new Vector3f(x, y, 0));
+        Vector3f last = pose.transformPosition(new Vector3f(x + width, y + height, 0));
+        int left = (int) Math.floor(Math.min(first.x, last.x));
+        int top = (int) Math.floor(Math.min(first.y, last.y));
+        int right = (int) Math.ceil(Math.max(first.x, last.x));
+        int bottom = (int) Math.ceil(Math.max(first.y, last.y));
+        return new ScreenRectangle(left, top, right - left, bottom - top);
     }
 
     public void render(
@@ -903,6 +917,9 @@ for (int index = 0; index < this.personalPins.size(); index++) {
     private void renderFrame(GuiGraphics guiGraphics, int x, int y, int width, int height, int mouseX, int mouseY) {
         MinimapClient.applyDisplay(this);
         bindTerrain();
+        // Includes embedded page scaling, translations and the minimap hover animation.
+        var pose = guiGraphics.pose().last().pose();
+        this.guiScale = (float) Math.hypot(pose.m00(), pose.m01());
         this.viewportX = x;
         this.viewportY = y;
         this.viewportWidth = width;
@@ -931,11 +948,8 @@ for (int index = 0; index < this.personalPins.size(); index++) {
 
         requestVisibleTiles();
 
-        com.example.examplemod.client.screen.CityPylonWorkspace.clip(guiGraphics,
-                Math.round(x * this.guiScale),
-                Math.round(y * this.guiScale),
-                Math.round((x + width) * this.guiScale),
-                Math.round((y + this.viewportHeight) * this.guiScale));
+        var clip = viewportBounds(pose, x, y, width, this.viewportHeight);
+        guiGraphics.enableScissor(clip.left(), clip.top(), clip.right(), clip.bottom());
         try {
             /*
              * GuiGraphics вызывает endBatch() после КАЖДОЙ fill()/blit(), пока блок

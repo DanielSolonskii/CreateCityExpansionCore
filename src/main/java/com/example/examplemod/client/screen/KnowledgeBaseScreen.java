@@ -56,6 +56,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
     private final Screen parent;
     private final String initialPath;
+    private final KnowledgeHomeScreen.Topic topic;
     private KnowledgeBaseLayout layout;
     private String selected;
     private KnowledgeMarkdown.Document document;
@@ -97,16 +98,18 @@ public final class KnowledgeBaseScreen extends Screen {
     private record Scrollbar(KnowledgeBaseLayout.Rect track, KnowledgeBaseLayout.Rect thumb, int maxScroll) {
     }
 
-    private KnowledgeBaseScreen(Screen parent, String initialPath) {
+    KnowledgeBaseScreen(Screen parent, String initialPath, KnowledgeHomeScreen.Topic topic) {
         super(Component.translatable("gui.createcityexpansioncore.knowledge.title"));
         this.parent = parent;
+        this.topic = topic;
         this.initialPath = initialPath;
     }
 
     /** Открытие по клавише/тултипу: path — файл, который сразу открыть. */
     public static void open(Screen parent, String path) {
         if (!com.example.examplemod.knowledge.KnowledgeSyncClient.allowOpen()) return;
-        Minecraft.getInstance().setScreen(new KnowledgeBaseScreen(parent, path));
+        Minecraft.getInstance().setScreen(path == null ? new KnowledgeHomeScreen(parent)
+                : new KnowledgeBaseScreen(parent, path, null));
     }
 
     public static void open(Screen parent) {
@@ -182,7 +185,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
         // Шапка
         g.fill(16, 15, 18, 25, ACCENT);
-        g.drawString(font, fit(font, tr("title"), layout.width() - 170), 25, 17, ACCENT, false);
+        g.drawString(font, fit(font, topic == null ? tr("title") : topic.label(), layout.width() - 170), 25, 17, ACCENT, false);
         drawCloseButton(g, mx, my);
 
         // Левый список
@@ -244,9 +247,10 @@ public final class KnowledgeBaseScreen extends Screen {
     /** Список: файлы корня + свёрнутые группы верхнего уровня; вложенность — рекурсивно. */
     private void renderList(GuiGraphics g, double mx, double my) {
         List<KnowledgeFileMeta> entries = KnowledgeBaseClient.visibleEntries();
+        if (topic != null) entries = entries.stream().filter(meta -> topic == KnowledgeHomeScreen.Topic.forPath(meta.path())).toList();
         if (entries.isEmpty()) {
             int y = layout.list().y() + PADDING;
-            for (var line : font.split(Component.translatable("gui.createcityexpansioncore.knowledge.empty_list"),
+            for (var line : font.split(tr(topic == null ? "empty_list" : "empty_section"),
                     layout.list().width() - 16)) {
                 g.drawString(font, line, layout.list().x() + 8, y, MUTED, false);
                 y += LINE;
@@ -748,7 +752,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.setScreen(null);
+        minecraft.setScreen(topic == null ? null : parent);
     }
 
     @Override

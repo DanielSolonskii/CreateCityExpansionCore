@@ -37,7 +37,7 @@ public final class JourneyWorldRenderer {
         boolean completing = done != null && now - JourneyClient.displayCompletionAt() < 950 && visible(mc, done);
         List<Marker> shown = new ArrayList<>(markersForView(mc, target));
         Turn turn = nextTurn(mc, target);
-        var focused = JourneyWaypointHint.capture(mc, event.getCamera(), shown, target, turn);
+        var focused = JourneyWaypointHint.capture(mc, event, shown, target, turn);
         if (completing && shown.stream().noneMatch(marker -> marker.id.equals(done.id))) shown.add(done);
 
         var poses = event.getPoseStack();
