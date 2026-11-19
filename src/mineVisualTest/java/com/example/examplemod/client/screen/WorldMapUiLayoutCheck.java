@@ -45,6 +45,28 @@ public final class WorldMapUiLayoutCheck {
         }
         int[] modes = modeLabels();
         int[] globals = globalLabels();
+        for (int width : new int[]{320, 427, 480, 640, 854, 1280}) {
+            for (int height : new int[]{240, 270, 300, 360, 480}) {
+                int mapWidth = WorldMapUiLayout.contextPanelLeft(width) - WorldMapUiLayout.EDGE - WorldMapUiLayout.NORMAL;
+                int top = WorldMapUiLayout.popoverY(width,modes,globals) + WorldMapUiLayout.NORMAL;
+                var controls = WorldMapUiLayout.viewButtons(mapWidth,height,top,new int[]{90,100,96,84});
+                require(controls.getLast().bottom() + WorldMapUiLayout.NORMAL
+                                < WorldMapUiLayout.statusStrip(width,height).y() - 60,
+                        "large GUI keeps usable map height below the navigation controls");
+                for (var control : controls) require(WorldMapUiLayout.withinScreen(width,height,control),
+                        "atlas navigation controls fit at each GUI size");
+                if (height < 320) require(controls.getFirst().y() == controls.getLast().y(),
+                        "short atlas windows use one compact navigation row");
+                if (height < 320) {
+                    var legend = WorldMapUiLayout.legend(width,height);
+                    var context = WorldMapUiLayout.contextPanel(width,height,modes,globals,Integer.MAX_VALUE);
+                    require(legend.height() == WorldMapUiLayout.COMPACT_LEGEND_HEADER + WorldMapUiLayout.LEGEND_ROW,
+                            "short atlas windows show one scrollable legend row");
+                    require(context.height() >= WorldMapUiLayout.CARD_HEADER + WorldMapUiLayout.ACTION_HEIGHT,
+                            "the compact legend leaves space for a complete selected-object action");
+                }
+            }
+        }
 
         // ------------------------------------------------- mode tabs never overlap each other
         for (int width : WorldMapUiLayout.RESPONSIVE_WIDTHS) {

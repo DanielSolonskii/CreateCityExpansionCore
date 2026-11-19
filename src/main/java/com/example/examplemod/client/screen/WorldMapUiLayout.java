@@ -310,7 +310,8 @@ final class WorldMapUiLayout {
     static int utilityGroupExtra(int width){return width>=320?MICRO:0;}
     static Rect legend(int width,int height) {
         int minimum=COMPACT_LEGEND_HEADER+LEGEND_ROW;
-        int w=contextPanelWidth(width),h=Math.min(LEGEND_HEADER+6*LEGEND_ROW,Math.max(minimum,height/3));
+        int w=contextPanelWidth(width);
+        int h=height<320 ? minimum : Math.min(LEGEND_HEADER+6*LEGEND_ROW,Math.max(minimum,height/3));
         // Leave at least one complete action visible in a short, two-row-header GUI.
         int contextTop=EDGE+TAB_HEIGHT+MICRO+BUTTON_HEIGHT+NORMAL;
         int maximum=statusStrip(width,height).y()-NORMAL*2-contextTop-CARD_HEADER-ACTION_HEIGHT-MICRO;
@@ -339,13 +340,17 @@ final class WorldMapUiLayout {
         return new Rect(panel.x()+CARD_PADDING,top+index*ACTION_PITCH,panel.width()-2*CARD_PADDING,ACTION_HEIGHT);
     }
     static java.util.List<Rect> viewButtons(int width,int startY,int[] labels) {
+        return viewButtons(width, Integer.MAX_VALUE, startY, labels);
+    }
+    static java.util.List<Rect> viewButtons(int width,int height,int startY,int[] labels) {
         var result=new java.util.ArrayList<Rect>();int x=EDGE,y=startY;
-        for(int label:labels){int w=Math.min(width,viewButtonsCompact(width)?BUTTON_HEIGHT:label+SECTION);
+        for(int label:labels){int w=Math.min(width,viewButtonsCompact(width,height)?BUTTON_HEIGHT:label+SECTION);
             if(x>EDGE&&x+w>EDGE+width){x=EDGE;y+=BUTTON_HEIGHT+MICRO;}
             result.add(new Rect(x,y,w,BUTTON_HEIGHT));x+=w+MICRO;
         }return result;
     }
     static boolean viewButtonsCompact(int width) { return width < 240; }
+    static boolean viewButtonsCompact(int width,int height) { return viewButtonsCompact(width) || height < 320; }
 
     static final int TOOLTIP_PADDING=6;
     static Rect tooltip(int width,int height,int mouseX,int mouseY,int textWidth,int textHeight) {

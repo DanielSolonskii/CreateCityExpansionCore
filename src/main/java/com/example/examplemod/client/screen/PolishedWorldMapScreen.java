@@ -1527,7 +1527,7 @@ case ENERGY -> setOverlays(false,false);
         int start=WorldMapUiLayout.popoverY(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL;
         int[] labels=new int[4];
         for(int i=0;i<labels.length;i++)labels[i]=this.font.width(Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i<2?i:i+1]));
-        this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,start,labels));
+        this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,this.height,start,labels));
         return this.viewButtons.getLast().bottom()+NORMAL;
     }
     private void renderViewButtons(GuiGraphics g,int mx,int my) {
@@ -1539,7 +1539,7 @@ case ENERGY -> setOverlays(false,false);
             boolean enabled=i!=2;
             WorldMapChrome.dispatchControl(g,r,active,r.contains(mx,my),enabled,false);
             Component label=Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i]);
-            if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL)))
+            if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL),this.height))
                 WorldMapChrome.viewIcon(g,i,r.x()+(r.width()-16)/2,r.y()+(r.height()-16)/2,enabled?TEXT:MapPalette.TEXT_FAINT);
             else g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-SECTION),r.x()+6,r.y()+(r.height()-8)/2,enabled?TEXT:MapPalette.TEXT_FAINT,false);
             offerTooltip(label,r.contains(mx,my));

@@ -9,6 +9,19 @@ public final class AtlasExperienceCheck {
     private static int checks;
     private static void require(boolean value, String message) { checks++; if (!value) throw new AssertionError(message); }
     public static void main(String[] args) throws Exception {
+        for (float scale : new float[]{0.25f, 0.5f, 0.75f, 1f, 1.06f}) {
+            var pose = new org.joml.Matrix4f().translation(71.25f, 39.75f, 0).scale(scale);
+            var bounds = CityMapPanel.viewportBounds(pose, 33, 25, 127, 151);
+            require(bounds.left() == (int) Math.floor(71.25f + 33 * scale)
+                    && bounds.top() == (int) Math.floor(39.75f + 25 * scale),
+                    "map clipping follows the translated and scaled page origin");
+            require(bounds.right() == (int) Math.ceil(71.25f + 160 * scale)
+                    && bounds.bottom() == (int) Math.ceil(39.75f + 176 * scale),
+                    "fractional map edges remain visible during hover and GUI scaling");
+        }
+        var fullscreen = CityMapPanel.viewportBounds(new org.joml.Matrix4f(), 8, 108, 168, 105);
+        require(fullscreen.left() == 8 && fullscreen.top() == 108 && fullscreen.right() == 176
+                && fullscreen.bottom() == 213, "standalone atlas keeps absolute viewport bounds");
         for (boolean authorized : new boolean[]{false, true}) for (boolean anchor : new boolean[]{false, true}) for (boolean dimension : new boolean[]{false, true})
             require(AtlasTileAccess.allowed(authorized, anchor, dimension) == (authorized && anchor && dimension), "wrong anchor/dimension/nonmember denied");
         var signatures = new HashSet<String>();
