@@ -11,6 +11,8 @@ public final class DispatchPresentationCheck {
     private static RouteRevealGeometry.Segment edge(double x1,double z1,double x2,double z2){return new RouteRevealGeometry.Segment(point(x1,z1),point(x2,z2));}
 
     public static void main(String[] args) {
+        MapCameraCheck.run();
+        com.example.examplemod.client.logistics.RailMeshCheck.run();
         long start=1_000_000_000L;
         for(int fps:new int[]{30,60,144}) {
             var fade=new DispatchMotion.Transition(0);

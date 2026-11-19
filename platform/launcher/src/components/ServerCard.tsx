@@ -8,7 +8,7 @@ export function ServerCard({ status }: { status: ServerStatus }) {
         <div className="status-heading">
           <span className={`status-light status-light--${status.state}`} />
           <div>
-            <span className="eyebrow">СТАТУС СЕТИ</span>
+            <span className="eyebrow">Сервер</span>
             <strong>{status.label}</strong>
           </div>
         </div>
@@ -18,7 +18,7 @@ export function ServerCard({ status }: { status: ServerStatus }) {
       <div className="server-card__players">
         <Users size={16} />
         <span>{status.playersOnline === null || status.playersMax === null ? "Игроки: нет данных" : <><strong>{status.playersOnline}</strong> / {status.playersMax} игроков</>}</span>
-        <div className="capacity"><span style={{ width: `${status.playersOnline !== null && status.playersMax ? Math.min(100, Math.max(0, status.playersOnline / status.playersMax * 100)) : 0}%` }} /></div>
+        {status.playersOnline !== null && !!status.playersMax && <div className="capacity"><span style={{ width: `${status.playersOnline !== null && status.playersMax ? Math.min(100, Math.max(0, status.playersOnline / status.playersMax * 100)) : 0}%` }} /></div>}
       </div>
     </section>
   );

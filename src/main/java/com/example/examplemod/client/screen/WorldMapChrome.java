@@ -66,6 +66,9 @@ final class WorldMapChrome {
             case 2 -> com.example.examplemod.client.map.MapMarkerRenderer.drawGlyph(g,com.example.examplemod.client.map.AtlasGlyph.TRAIN,x,y,color);
             case 3 -> {g.renderOutline(x+4,y+2,8,7,color);g.fill(x+6,y+4,x+10,y+7,color);g.fill(x+7,y+9,x+9,y+14,color);}
             case 4 -> {g.renderOutline(x+1,y+5,14,7,color);for(int i=3;i<14;i+=3)g.vLine(x+i,y+5,y+8,color);}
+            case 13 -> {g.renderOutline(x+1,y+2,5,5,color);g.renderOutline(x+10,y+9,5,5,color);g.hLine(x+5,x+12,y+4,color);g.vLine(x+12,y+5,y+8,color);}
+            case 14 -> {g.renderOutline(x+1,y+2,10,9,color);g.vLine(x+6,y+11,y+14,color);g.hLine(x+9,x+15,y+12,color);g.vLine(x+12,y+9,y+15,color);}
+            case 15 -> {g.hLine(x+2,x+12,y+4,color);g.vLine(x+12,y+4,y+12,color);g.hLine(x+5,x+12,y+12,color);g.hLine(x+2,x+4,y+5,color);}
             default -> throw new IllegalArgumentException("Unknown view tool: "+index);
         }
     }

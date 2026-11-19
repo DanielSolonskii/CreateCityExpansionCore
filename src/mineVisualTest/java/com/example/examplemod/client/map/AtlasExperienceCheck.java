@@ -9,6 +9,8 @@ public final class AtlasExperienceCheck {
     private static int checks;
     private static void require(boolean value, String message) { checks++; if (!value) throw new AssertionError(message); }
     public static void main(String[] args) throws Exception {
+        MapLabelLayoutCheck.run();
+        com.example.examplemod.client.screen.AtlasWorkspaceCheck.run();
         for (boolean authorized : new boolean[]{false, true}) for (boolean anchor : new boolean[]{false, true}) for (boolean dimension : new boolean[]{false, true})
             require(AtlasTileAccess.allowed(authorized, anchor, dimension) == (authorized && anchor && dimension), "wrong anchor/dimension/nonmember denied");
         var signatures = new HashSet<String>();

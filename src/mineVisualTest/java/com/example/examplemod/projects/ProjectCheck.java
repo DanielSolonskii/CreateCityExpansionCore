@@ -69,6 +69,8 @@ public final class ProjectCheck {
         UUID id=serverDraft(f,500);Project p=f.manager().get(id);
         require(p.city()==null&&p.scope()==Scope.SERVER,"SERVER has no Master City or city binding");
         require(f.manager().visible(player,0).isEmpty()&&f.manager().visible(op,0).size()==1,"only OP sees SERVER drafts");
+        require(ProjectManager.visibleTo(op,p) && !ProjectManager.visibleTo(player,p),
+                "single-object navigation rechecks current rights, including loss of OP");
         require(f.manager().execute(player,serverCommand(f,Action.CREATE,ZERO,ZERO,false,new Draft(Scope.SERVER,p.title(),p.description(),p.category(),p.zone(),p.stages(),p.funding(),p.reward()))).equals("permission"),"non-OP cannot create SERVER");
         for(Action a:List.of(Action.UPDATE,Action.PUBLISH,Action.CANCEL,Action.ASSIGN,Action.ACCEPT,Action.RETURN))
             require(f.manager().execute(player,serverCommand(f,a,id,f.worker,false,null)).equals("permission"),"forged SERVER management denied: "+a);
@@ -77,6 +79,7 @@ public final class ProjectCheck {
         require(f.manager().serverReserved()==0&&f.economy.wallet(f.worker)==0,"rejected publication never reserves or issues");
         require(f.manager().execute(conflicts,serverCommand(f,Action.PUBLISH,id,ZERO,true,null)).equals("ok"),"OP confirms territorial overlap separately");
         require(f.manager().visible(player,0).size()==1,"outsider sees published SERVER projects");
+        require(ProjectManager.visibleTo(player, f.manager().get(id)), "published project can be followed without management rights");
         require(f.manager().serverReserved()==500&&f.manager().serverIssued()==0&&f.economy.wallet(f.author)==1000,"publication only reserves capacity, no debit or emission");
         f.economy=reload(f.economy);require(f.manager().serverReserved()==500,"SERVER reservation survives restart");
         require(f.manager().execute(player,serverCommand(f,Action.APPLY,id,ZERO,false,null)).equals("ok"),"player without city applies");
@@ -280,6 +283,15 @@ public final class ProjectCheck {
         pending.set(null,payload);CompoundTag busy=new CompoundTag();busy.putUUID("Request",command.request());busy.putBoolean("KeepState",true);busy.putString("Result","busy");
         com.example.examplemod.client.ProjectClientState.accept(new com.example.examplemod.network.ProjectStatePayload(busy));
         require(com.example.examplemod.client.ProjectClientState.records.size()==1&&!com.example.examplemod.client.ProjectClientState.pending(),"rate rejection preserves last valid map snapshot");
+        require(com.example.examplemod.client.ProjectClientState.mapMarkers().size()==1
+                &&com.example.examplemod.client.ProjectClientState.mapRecords().size()==1,"bounded permission snapshot is readable in overlay and workspace");
+        long receipt=com.example.examplemod.client.ProjectClientState.mapReceipt();
+        require(!com.example.examplemod.client.ProjectClientState.recentReceipt(receipt,receipt+30_000_000_000L),"HUD pointer expires without a validating response");
+        var denied=busy.copy();denied.putString("Result","permission");denied.putBoolean("Op",false);
+        pending.set(null,payload);
+        com.example.examplemod.client.ProjectClientState.accept(new com.example.examplemod.network.ProjectStatePayload(denied));
+        require(com.example.examplemod.client.ProjectClientState.mapMarkers().isEmpty()
+                &&com.example.examplemod.client.ProjectClientState.mapRecords().isEmpty(),"permission rejection hides project markers and list immediately");
         com.example.examplemod.client.ProjectClientState.op=true;com.example.examplemod.client.ProjectClientState.serverIssued=10;
         com.example.examplemod.client.ProjectClientState.clear();
         require(!com.example.examplemod.client.ProjectClientState.op&&com.example.examplemod.client.ProjectClientState.serverIssued==0,"closed session clears OP capability and budget snapshot");

@@ -1,10 +1,17 @@
 package com.example.examplemod.client.screen;
 
+import com.example.examplemod.client.logistics.AtlasTradeDirectory;
+
 import com.example.examplemod.client.CityWorldMapSession;
+import com.example.examplemod.client.CityPublicDirectory;
+import com.example.examplemod.client.CommunityFx;
+import com.example.examplemod.client.logistics.LogisticsMapOverlay;
+import com.example.examplemod.client.journey.JourneyClient;
 import com.example.examplemod.network.RequestCityWorldMapPayload;
 import com.example.examplemod.client.WorldMapDataSource;
 import com.example.examplemod.client.map.CityMapPanel;
 import com.example.examplemod.client.map.MapMarkerRenderer;
+import com.example.examplemod.client.map.AtlasPlaceIcon;
 import com.example.examplemod.client.map.MapPalette;
 import com.example.examplemod.client.map.AtlasGlyph;
 import com.example.examplemod.client.map.AtlasPreferences;
@@ -65,18 +72,53 @@ public final class PolishedWorldMapScreen extends Screen {
      * готовности рисуется экран загрузки.
      */
     private CityMapPanel map;
+    private static final AtlasViewContext VIEWS = new AtlasViewContext();
+    private final java.lang.ref.WeakReference<Object> connection =
+            new java.lang.ref.WeakReference<>(net.minecraft.client.Minecraft.getInstance() == null ? null
+                    : net.minecraft.client.Minecraft.getInstance().getConnection());
+    private boolean finished, initialized;
+    private AtlasViewContext.State journeyReturn;
+    private AtlasViewContext.Target pendingSelection;
+    private int pendingCardScroll;
+    private String pendingCardKey="";
+    private String restoredQuery = "";
+    private UUID preferenceWorldId;
+    private UUID directoryView = com.example.examplemod.client.CityPublicDirectory.viewId();
+    private ResourceLocation returnDimension;
+    private static java.lang.ref.WeakReference<PolishedWorldMapScreen> workspaceOwner =
+            new java.lang.ref.WeakReference<>(null);
+    public static PolishedWorldMapScreen activeView() {
+        var mc=net.minecraft.client.Minecraft.getInstance();
+        if (mc.screen instanceof PolishedWorldMapScreen atlas) return atlas.validReturn()?atlas:null;
+        var owner=workspaceOwner.get();
+        return owner!=null && owner.journeyWorkspaceOpen && owner.validReturn()?owner:null;
+    }
     private boolean journeyWorkspaceOpen;
     /** Transfer the live map to its marker workspace without tearing down the shared session. */
     public void openJourneyWorkspace(String marker) {
         if (this.map == null) return;
+        journeyReturn = captureView();
         journeyWorkspaceOpen = true;
+        workspaceOwner = new java.lang.ref.WeakReference<>(this);
         minecraft.setScreen(new com.example.examplemod.client.journey.JourneyAtlasScreen(this, this.map, marker));
     }
     public void tickJourneyWorkspace() {
         if (this.map != null) this.data.drainMapTiles().forEach(this.map::receive);
     }
+    public boolean ownsJourneyPanel(CityMapPanel shown) {
+        return journeyWorkspaceOpen && !finished && shown == map && validReturn()
+                && (!readOnly || java.util.Objects.equals(directoryView,com.example.examplemod.client.CityPublicDirectory.viewId()));
+    }
+    public static void disconnected() {
+        AtlasPlaces.clear();
+        workspaceOwner.clear();
+        VIEWS.clear();
+    }
     public void finishJourneyWorkspace(boolean returning) {
         journeyWorkspaceOpen = false;
+        workspaceOwner.clear();
+        if (returning && journeyReturn != null && validReturn()) restoreView(journeyReturn);
+        journeyReturn = null;
         if (!returning) removed();
     }
     /** Legacy map management stays read-only by key; projects use their own membership-checked commands. */
@@ -112,17 +154,72 @@ public final class PolishedWorldMapScreen extends Screen {
     private boolean layersOpen;
     private boolean searchOpen;
     private EditBox searchBox;
-    private List<CityMapPanel.Selection> searchResults = List.of();
-    private Component hoveredTooltip;
-    private Component tooltipCandidate;
-    private long tooltipCandidateSince;
+    private List<AtlasSearch.Entry> searchResults = List.of(), searchCatalog = List.of();
+    private AtlasSearch.Tab searchTab = AtlasSearch.Tab.ALL;
+    private int searchFocus = -1, searchCursor, searchTicks;
+    private String searchMessage = "", queryBeforeNaming = "", queryBeforeViews = "";
+    private enum ViewEdit { NONE, CREATE, RENAME, DELETE }
+    private ViewEdit viewEdit = ViewEdit.NONE;
+    private UUID selectedView;
+    private AtlasWorkspace library;
+    private AtlasPlanEditor planEditor;
+    private static final int PLAN_TOOL = 13;
+    private static final int PLACE_TOOL=14, RECALCULATE_TOOL=15;
+    private Screen atlasTool;
+    private UUID toolWorld;
+    private ResourceLocation toolDimension;
+    private long toolEpoch;
+    public void openAtlasTool(Screen tool) {
+        if(map==null || !planningAvailable() || tool==null)return;
+        closeAtlasTool();
+        map.cancelPersonalTools();map.interruptCamera();LogisticsMapOverlay.cancelAutomaticFocus();
+        toolDimension=map.dimensionId();toolWorld=CityPublicDirectory.worldId(toolDimension);toolEpoch=CityPublicDirectory.accessEpoch();
+        atlasTool=tool;tool.init(minecraft,width,height);
+    }
+    public boolean ownsAtlasTool(Screen tool){return tool!=null && atlasTool==tool && !finished;}
+    public void closeAtlasTool() {
+        var previous=atlasTool;atlasTool=null;toolWorld=null;toolDimension=null;
+        if(previous!=null)previous.removed();
+    }
+    private boolean planningAvailable() {
+        return library != null && data != null && library.area.dimension().equals(data.getDimensionId().toString())
+                && library.area.world().equals(com.example.examplemod.client.CityPublicDirectory.worldId(data.getDimensionId()));
+    }
+    private void exitPlanEditor() {
+        planEditor=null;
+        if(map!=null)map.setPrecisionInput(false);
+    }
+    private void openPlanEditor() {
+        if(!planningAvailable() || map==null)return;
+        map.cancelPersonalTools();map.interruptCamera();map.setPrecisionInput(true);
+        LogisticsMapOverlay.cancelAutomaticFocus();
+        planEditor=new AtlasPlanEditor(map,library.engineeringDrafts(),this::exitPlanEditor);
+        planEditor.init(minecraft,width,height);
+    }
+    private final java.util.Map<AtlasWorkspace.Area, AtlasWorkspace> viewLibraries = new java.util.LinkedHashMap<>();
+    private static java.lang.ref.WeakReference<Object> lastLibraryConnection = new java.lang.ref.WeakReference<>(null);
+    private static Path lastLibraryDirectory;
+    private static AtlasWorkspace.Area lastLibraryArea;
+    private record ViewRow(AtlasWorkspace library, AtlasWorkspace.View view) {}
+    private List<ViewRow> visibleViews = List.of();
+    private record SearchJump(UUID view, ResourceLocation dimension, String objectKey, AtlasWorkspace.Area area, UUID savedView) {}
+    private SearchJump searchJump;
+    private long searchJumpDeadline;
+    private boolean jumpDirectoryReady;
+    private final AtlasHoverDelay hoverDelay = new AtlasHoverDelay(TOOLTIP_DELAY_MILLIS);
     private int cardX, cardY, cardWidth, cardHeight;
     /** Top pixel of the first action row inside the context card, -1 when there is no action. */
     private int cardActionY = -1;
     private int cardActionCount;
-    private final List<Component> cardActions = new java.util.ArrayList<>();
-    private final Deque<CityMapPanel.Selection> backHistory = new ArrayDeque<>();
-    private final Deque<CityMapPanel.Selection> forwardHistory = new ArrayDeque<>();
+    private List<AtlasObjectCard.Row> cardActions = List.of();
+    private AtlasDirections directions;
+    private String cardNotice = "";
+    private int noticeTicks;
+    private final AtlasFocus keyboard = new AtlasFocus();
+    private Component tooltipOffered;
+    private String focusSurface="";
+    private final Deque<AtlasViewContext.Target> backHistory = new ArrayDeque<>();
+    private final Deque<AtlasViewContext.Target> forwardHistory = new ArrayDeque<>();
     private boolean problemCenterOpen;
     private boolean guideOpen;
     private int searchOffset, searchType, searchOwner;
@@ -144,7 +241,8 @@ private AtlasPreferences preferences;
     private Runnable pendingMutation;
     private Component mutationTitle;
     private final List<WorldMapUiLayout.Rect> viewButtons = new ArrayList<>();
-    private static final String[] VIEW_KEYS = {"player", "fit", "follow", "pin", "measure", "overview", "grid", "retry", "player_profile", "reduce_motion"};
+    private boolean trainActionVisible;
+    private static final String[] VIEW_KEYS = {"player", "fit", "follow", "pin", "measure", "overview", "grid", "retry", "player_profile", "reduce_motion", "inertia", "terrain_filter", "context_hints"};
     private final DispatchMotion.Transition[] surfaceMotion = {
             new DispatchMotion.Transition(0), new DispatchMotion.Transition(0), new DispatchMotion.Transition(0),
             new DispatchMotion.Transition(0), new DispatchMotion.Transition(0)};
@@ -198,6 +296,7 @@ private AtlasPreferences preferences;
                 this.data.getPylonPos(), this.data.getDimensionId(), this.data.getProjects());
         panel.setDrawInternalControls(false);
         this.map = panel;
+        com.example.examplemod.client.map.MapDiagnostics.created();
         panel.receivePublicCities(com.example.examplemod.client.CityPublicDirectory.profiles(this.data.getDimensionId()));
         /*
          * Новая панель поднимается сразу в том режиме, который уже выбран.
@@ -234,7 +333,6 @@ private AtlasPreferences preferences;
         return this.readOnly;
     }
 
-    private boolean openingIdentityEditor;
     private net.minecraft.resources.ResourceLocation requestedDimension;
     public boolean acceptsDirectory(com.example.examplemod.network.CityDirectoryPayload payload) {
         if (requestedDimension != null) {
@@ -244,7 +342,7 @@ private AtlasPreferences preferences;
         }
         boolean accepted = this.data.getPylonPos() == null || payload.dimension().equals(this.data.getDimensionId());
         if (accepted && this.readOnly && payload.offset() == 0 && this.data.getPylonPos() != null && !payload.anchor().equals(this.data.getPylonPos())) {
-            savePreferences(); if (map != null) map.releaseTerrainTextures(); map = null; preferences = null; sessionForcedTracks = false;
+            savePreferences(); discardOwnedPanel(); preferences = null; sessionForcedTracks = false;
             CityWorldMapSession.INSTANCE.begin(payload.anchor(), payload.dimension());
         }
         return accepted;
@@ -253,7 +351,11 @@ private AtlasPreferences preferences;
         requestedDimension = null;
         ensurePanel();
         if (map != null) map.receivePublicCities(com.example.examplemod.client.CityPublicDirectory.profiles(this.data.getDimensionId()));
-        updateSearchResults();
+        loadPreferences();
+        resolvePending(true);
+        rebuildSearchCatalog();
+        jumpDirectoryReady=true;
+        completeSearchJump();
     }
     public void acceptTerritories(com.example.examplemod.network.CityMapPeersPayload payload) {
         if (!payload.dimensionId().equals(data.getDimensionId())) return;
@@ -263,20 +365,29 @@ private AtlasPreferences preferences;
 
     @Override
     protected void init() {
-        String searchText=this.searchBox==null?"":this.searchBox.getValue();
-        openingIdentityEditor = false;
-        com.example.examplemod.client.ProjectClientState.begin();
+        if (finished && validReturn()) {
+            if (readOnly) {
+                com.example.examplemod.client.CityPublicDirectory.open(returnDimension);
+                directoryView=com.example.examplemod.client.CityPublicDirectory.viewId();
+                map=null;preferences=null;preferenceWorld=null;
+            }
+            finished=false;initialized=false;
+        }
+        if (!initialized) com.example.examplemod.client.map.MapDiagnostics.opened();
+        String searchText=this.searchBox==null?null:this.searchBox.getValue();
+        if (!initialized) com.example.examplemod.client.ProjectClientState.begin();
         ensurePanel();
         loadPreferences();
-        if (this.map != null) { this.map.setMotion(true,this.preferences!=null && this.preferences.reducedMotion); this.map.setGuiScale(1.0F); this.map.setDrawInternalControls(false); }
+        if (this.map != null) { this.map.setMotion(true,com.example.examplemod.client.map.MinimapClient.settings().reducedMotion); this.map.setGuiScale(1.0F); this.map.setDrawInternalControls(false); }
         applyMode(this.mode);
-        requestSnapshots(true);
+        if (!initialized) requestSnapshots(true);
+        initialized = true;
         this.tutorialTicks = 0; // Persistent contextual onboarding replaces the session-only intro banner.
         measureLabels();
         // The search field is positioned from the same popover the renderer uses, so the box and the
         // plate around it cannot drift apart at any width.
         WorldMapUiLayout.Rect search = WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, 0, 228);
-        this.searchBox = new EditBox(this.font, search.x() + 11, search.y() + 6, 208, 14,
+        this.searchBox = new EditBox(this.font, search.x() + 11, search.y() + 6, Math.max(8, search.width() - 22), 14,
                 Component.translatable("gui.createcityexpansioncore.world_map.search"));
         this.searchBox.setBordered(false);
         this.searchBox.setMaxLength(64);
@@ -286,10 +397,14 @@ private AtlasPreferences preferences;
          * Ответчик вызывается позже, когда панель уже есть, но поле может быть и
          * раньше: без проверки первый же символ до загрузки ронял бы тик.
          */
-        this.searchBox.setResponder(query -> { this.searchOffset = 0; updateSearchResults(); });
-        this.searchBox.setValue(searchText);
+        this.searchBox.setResponder(query -> { searchOffset = searchCursor = 0;searchMessage="";updateSearchResults(); });
+        int retainedOffset = this.searchOffset;
+        this.searchBox.setValue(searchText == null ? restoredQuery : searchText);
+        this.searchOffset = retainedOffset;
         addWidget(this.searchBox); // Painted with its popover so opacity and content stay together.
         if(this.searchOpen)setFocused(this.searchBox);
+        if(planEditor!=null)planEditor.init(minecraft,width,height);
+        if(atlasTool!=null)atlasTool.init(minecraft,width,height);
     }
 
     /**
@@ -307,52 +422,56 @@ private AtlasPreferences preferences;
     }
 
     private Screen communityReturn;
+    private com.example.examplemod.client.logistics.LogisticsCenterScreen.View centerReturn;
+    public com.example.examplemod.client.logistics.LogisticsCenterScreen.View logisticsOrigin(){return centerReturn;}
     private boolean planningSession;
 
-public void returnToCommunity(Screen screen){communityReturn=screen;}
+    public void returnToCommunity(Screen screen){
+        if (screen instanceof com.example.examplemod.client.logistics.LogisticsCenterScreen center) {
+            centerReturn=center.view(); communityReturn=null;
+        } else communityReturn=screen;
+    }
     public void planningDimension(ResourceLocation dimension){requestedDimension=dimension;mode=Mode.CITIES;planningSession=true;}
 
     @Override
     public void onClose() {
-        com.example.examplemod.client.logistics.LogisticsMapOverlay.deactivate();
-        com.example.examplemod.client.screen.ProjectWorkspaceClient.clear();
-        if (this.map != null) {
-            this.map.setDrawInternalControls(true);
-            this.map.setRailOverlay(null);
-            this.map.setTrackCount(0);
-            // The terrain textures are derived from the cached samples and the panel is shared with the
-            // pylon screen, so they are released here instead of lingering on the GPU between openings.
-            this.map.releaseTerrainTextures();
-        }
-        if (this.readOnly) {
-            // Данные принадлежат сессии, а не этому экрану: держать их открытыми
-            // после закрытия незачем, иначе к городу можно было бы вернуться без
-            // нового запроса и увидеть устаревшую карту.
-            CityWorldMapSession.INSTANCE.clear();
-        }
-        /*
-         * Экран закрывается всегда, в том числе в режиме чтения.
-         *
-         * <p>Раньше здесь стоял `return` внутри ветки readOnly, и ESC не закрывал
-         * карту вообще: setScreen не вызывался, экран оставался на месте, а данные
-         * сессии уже были стёрты. Игрок без города, открывший карту по M, получал
-         * экран, из которого нельзя выйти никак.
-         *
-         * <p>parent у карты по клавише M равен null, и setScreen(null) возвращает в
-         * игру — это и есть нужное место. У карты из пилона parent не null, и
-         * игрок возвращается к пилону как и раньше.
-         */
-        if (this.minecraft != null) this.minecraft.setScreen(communityReturn==null?this.parent:communityReturn);
+        if(atlasTool!=null){atlasTool.onClose();return;}
+        if(planEditor!=null){planEditor.onClose();return;}
+        if (this.minecraft != null) closeTo(this.minecraft::setScreen);
+    }
+    void closeTo(java.util.function.Consumer<Screen> navigation) {
+        Screen target = null;
+        if (validReturn()) target=communityReturn!=null?communityReturn:centerReturn!=null?centerReturn.restore():parent;
+        navigation.accept(target);
     }
 
     private java.util.UUID framedAlliance;
+    public boolean validReturn() {
+        if (minecraft == null || minecraft.player == null || minecraft.getConnection() == null
+                || minecraft.getConnection() != connection.get()) return false;
+        return AtlasViewContext.canReturn(minecraft.player.containerMenu, parent == null ? null : parent.getMenu(),
+                parent == null || minecraft.level != null && minecraft.level.dimension().location().equals(parent.getMenu().getDimensionId()));
+    }
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
     @Override
     public void tick() {
 
+        if (!validReturn()) { minecraft.setScreen(null); return; }
+        if(planEditor!=null){
+            if(planEditor.map!=map || !planningAvailable()) {planEditor.detach();exitPlanEditor();}
+            else planEditor.tick();
+        }
         com.example.examplemod.client.AllianceClient.ensure();
         if(this.map!=null&&com.example.examplemod.client.AllianceClient.focusedAlliance!=null&&!com.example.examplemod.client.AllianceClient.focusedAlliance.equals(framedAlliance)&&this.map.focusAlliance(com.example.examplemod.client.AllianceClient.focusedCities))framedAlliance=com.example.examplemod.client.AllianceClient.focusedAlliance;
         if (!this.readOnly && this.parent != null) this.parent.refreshMapClaimAccess();
         com.example.examplemod.client.ProjectClientState.tick();
+        if (searchOpen && (++searchTicks % 10 == 0 || map!=null &&
+                listedPlaces!=AtlasPlaces.selections(map.dimensionId()))) rebuildSearchCatalog();
+        if (searchJump!=null && jumpDirectoryReady) completeSearchJump();
         if (this.tutorialTicks > 0 && --this.tutorialTicks == 0) tutorialSeen = true;
         if (this.map == null) {
             /*
@@ -372,6 +491,46 @@ public void returnToCommunity(Screen screen){communityReturn=screen;}
             this.map.setGuiScale(1.0F);
             requestSnapshots(false);
         }
+        if (noticeTicks > 0) noticeTicks--;
+        if (directions != null && !directions.matches(map.getSelection(), map.dimensionId())) directions = null;
+        if (directions != null || searchOpen || pendingSelection != null && pendingSelection.kind()==CityMapPanel.SelectionKind.LOGISTICS) {
+            LogisticsMapOverlay.attach(map.dimensionId(),true);
+        }
+        var pinned=map.getSelection();
+        AtlasPlaces.tick(map.dimensionId(),pinned);
+        if(atlasTool!=null){
+            if(!map.dimensionId().equals(toolDimension) || !java.util.Objects.equals(toolWorld,CityPublicDirectory.worldId(toolDimension))
+                    || toolEpoch!=CityPublicDirectory.accessEpoch())closeAtlasTool();
+            else atlasTool.tick();
+        }
+        AtlasTradeDirectory.tick(map.dimensionId(),searchOpen && searchTab!=AtlasSearch.Tab.VIEWS,
+                searchBox==null?"":searchBox.getValue(),pinned==null?null:pinned.id(),
+                pendingSelection!=null && pendingSelection.kind()==CityMapPanel.SelectionKind.LOGISTICS ? pendingSelection.id() : null);
+        LogisticsMapOverlay.maintainInspection(pinned);
+        LogisticsMapOverlay.maintainDirectory(directions != null || searchOpen || pinned!=null && pinned.kind()==CityMapPanel.SelectionKind.LOGISTICS
+                || pendingSelection!=null && pendingSelection.kind()==CityMapPanel.SelectionKind.LOGISTICS);
+        resolvePending(false);
+        var selected=map.getSelection();
+        if (selected!=null) {
+            var updated=map.resolveSelection(selected.kind(),selected.id(),selected.pos());
+            boolean waitForSnapshot=switch(selected.kind()) {
+                case LOGISTICS -> true;
+                case PROJECT -> !com.example.examplemod.client.ProjectClientState.hasMapSnapshot();
+                case PLACE -> !AtlasPlaces.ready(map.dimensionId());
+                default -> false;
+            };
+            if (updated==null && waitForSnapshot) {
+                pendingSelection=new AtlasViewContext.Target(selected.kind(),selected.id(),net.minecraft.core.BlockPos.ZERO);
+                pendingCardScroll=cardScroll;
+                pendingCardKey=cardKey;
+            } else if (updated==null) showCardNotice("unavailable");
+            map.setSelection(updated);
+        }
+        JourneyClient.refreshNavigation(map, data.getDimensionId());
+        if (directions != null && directions.matches(map.getSelection(), map.dimensionId())) {
+            var origin = minecraft.player.level().dimension().location().equals(map.dimensionId()) ? minecraft.player.blockPosition() : null;
+            directions.update(origin, map.getSelection().pos(), net.minecraft.Util.getMillis());
+        }
         if (++this.refreshTicks >= (this.readOnly ? 100 : 20)) {
             this.refreshTicks = 0;
             requestSnapshots(false);
@@ -383,39 +542,34 @@ public void returnToCommunity(Screen screen){communityReturn=screen;}
     }
 
     private void requestSnapshots(boolean includeMap) {
-        if (this.requestedDimension != null) return;
-        if (com.example.examplemod.client.CityPublicDirectory.loading()) {requestVisibleTerritories();return;}
-        if (!this.readOnly && this.data.getPylonPos() != null) PacketDistributor.sendToServer(
-                new com.example.examplemod.network.RequestCityDirectoryPayload(this.data.getDimensionId(), com.example.examplemod.network.RequestCityDirectoryPayload.NEW, 0));
-        if (this.readOnly) {
-            if (this.data.getPylonPos() != null) PacketDistributor.sendToServer(new com.example.examplemod.network.RequestCityDirectoryPayload(
-                    this.data.getDimensionId(), com.example.examplemod.network.RequestCityDirectoryPayload.NEW, 0));
-            /*
-             * В режиме чтения данные запрашиваются одним пакетом без координат:
-             * сервер сам определяет город по членству игрока. Запросы пилона здесь
-             * не работали бы — они требуют открытое меню, которого у этого экрана нет.
-             */
-            PacketDistributor.sendToServer(new RequestCityWorldMapPayload());
-            requestVisibleTerritories();
-            return;
-        }
-
-/*
-         * Атлас использует ту же панель, что и вкладка «Карта», поэтому он
-         * обязан переспрашивать и снимок территорий. Раньше он полагался
-         * только на отправку при открытии пилона: если снимок не дошёл,
-         * в атласе не было ни заливки, ни фронтира, и ПКМ было нечего
-         * принимать. Периодический запрос делает данные устойчивыми и в
-         * этом экране.
-         */
+        com.example.examplemod.client.CityPublicDirectory.refresh();
         requestVisibleTerritories();
     }
 
     private void requestVisibleTerritories() {
         if(this.map==null||this.data.getPylonPos()==null)return;
         int range=(int)Math.ceil(Math.max(this.width,this.height)/Math.max(.0625,this.map.zoom())/2)+100;
+        if (this.readOnly) {
+            com.example.examplemod.client.CityPublicDirectory.requestTerritories(
+                    new net.minecraft.core.BlockPos((int)this.map.centerX(),0,(int)this.map.centerZ()),range);
+            return;
+        }
         PacketDistributor.sendToServer(new RequestCityTerritoriesPayload(this.data.getPylonPos(),
                 new net.minecraft.core.BlockPos((int)this.map.centerX(),0,(int)this.map.centerZ()),range));
+    }
+
+    private long privateAccessEpoch = com.example.examplemod.client.CityPublicDirectory.accessEpoch();
+    public void expireMapAccess() {
+        privateAccessEpoch = com.example.examplemod.client.CityPublicDirectory.accessEpoch();
+        if (!readOnly || map == null) return;
+        if (pendingSelection == null) pendingSelection=AtlasViewContext.Target.from(map.getSelection());
+        map.setProjects(List.of());
+        map.setRelations(List.of());
+        map.receivePeers(List.of());
+        map.receivePublicCities(com.example.examplemod.client.CityPublicDirectory.profiles(data.getDimensionId()));
+        map.clearSelection();
+        pendingMutation = null;
+        rebuildSearchCatalog();
     }
 
     private void syncMapData() {
@@ -425,8 +579,12 @@ public void returnToCommunity(Screen screen){communityReturn=screen;}
 this.map.setProjects(this.data.getProjects());
 
 if (this.data.getRelationsState() != null) this.map.setRelations(this.data.getRelationsState().cities());
+else if (this.readOnly) this.map.setRelations(List.of());
+if (this.readOnly && privateAccessEpoch != com.example.examplemod.client.CityPublicDirectory.accessEpoch()) {
+    privateAccessEpoch = com.example.examplemod.client.CityPublicDirectory.accessEpoch();
+    if (!com.example.examplemod.client.CityPublicDirectory.hasPrivateAccess()) expireMapAccess();
+}
 
-if (this.searchOpen) updateSearchResults();
     }
 
     /**
@@ -469,6 +627,13 @@ if (this.searchOpen) updateSearchResults();
             graphics.drawCenteredString(this.font,
                     Component.translatable("gui.createcityexpansioncore.world_map.no_city_hint"),
                     this.width / 2, y + 52, MUTED);
+        } else if (com.example.examplemod.client.CityPublicDirectory.failed()) {
+            graphics.drawCenteredString(this.font,Component.translatable("gui.createcityexpansioncore.world_map.terrain.failed"),
+                    this.width/2, y+32,TEXT);
+            var retry = directoryRetryBounds();
+            WorldMapChrome.dispatchControl(graphics,retry,false,false,true,false);
+            graphics.drawCenteredString(this.font,Component.translatable("gui.createcityexpansioncore.world_map.view.retry"),
+                    this.width/2,retry.y()+4,TEXT);
         } else {
             graphics.drawCenteredString(this.font,
                     Component.translatable("gui.createcityexpansioncore.map.territory_pending"),
@@ -485,6 +650,10 @@ if (this.searchOpen) updateSearchResults();
      * <p>Ответ приходит в CityWorldMapSession, а не в экран: экран создаётся раньше
      * ответа, и сессия — единственное, что живёт дольше одного открытия.
      */
+    private WorldMapUiLayout.Rect directoryRetryBounds() {
+        return new WorldMapUiLayout.Rect(width/2-42,(height-74)/2+48,84,20);
+    }
+
     private boolean isDenied() {
         return this.data instanceof CityWorldMapSession session && session.isDenied();
     }
@@ -523,15 +692,23 @@ if (this.searchOpen) updateSearchResults();
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (!validReturn()) return;
         UiEditLayout.clearElements("map.");
         this.mouseXNow=mouseX;this.mouseYNow=mouseY;
         syncMapData();
+        if(atlasTool!=null){atlasTool.render(graphics,mouseX,mouseY,partialTick);return;}
+        if(planEditor!=null) {
+            if(planEditor.map==map && planningAvailable()){planEditor.render(graphics,mouseX,mouseY,partialTick);return;}
+            planEditor.detach();exitPlanEditor();
+        }
         if (this.map == null) {
             renderLoading(graphics);
             super.render(graphics, mouseX, mouseY, partialTick);
             return;
         }
-        this.hoveredTooltip = null;
+        tooltipOffered=null;
+        keyboard.begin();
+        if (!focusSurface.equals(focusSurface())) { keyboard.reset(); focusSurface=focusSurface(); }
         boolean modalOpen = this.guideOpen || this.problemCenterOpen || this.pendingMutation != null || this.tutorialTicks > 0;
         long now=System.nanoTime();
         boolean[] surfaces={this.layersOpen&&!modalOpen,this.searchOpen&&!modalOpen,this.problemCenterOpen,this.guideOpen,this.pendingMutation!=null};
@@ -554,34 +731,54 @@ if (this.searchOpen) updateSearchResults();
         int mapBottom = WorldMapUiLayout.statusStrip(this.width, this.height).y() - MICRO;
         projectWorkspace.prepareMap(this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY);
         this.map.setProjectFocus(projectWorkspace.open() && this.mode==Mode.CITIES,projectWorkspace.territoryPicking() && this.mode==Mode.CITIES);
+        this.map.setPrecisionInput(false);
+        if (this.mode==Mode.CITIES && !modal) com.example.examplemod.client.logistics.LogisticsMapOverlay.updateFollow(this.map);
         this.map.setVisualOverlay(this.mode==Mode.CITIES && projectWorkspace.mapLayerVisible() && !modal ? projectWorkspace::renderMapLayer : null);
         this.map.setRailOverlay(this.mode==Mode.CITIES && this.map.isOverlayEnabled(CityMapPanel.Overlay.TRACKS)
                 ? com.example.examplemod.client.logistics.LogisticsMapOverlay::renderRails : null);
         this.map.setTrackCount(this.mode==Mode.CITIES
                 ? com.example.examplemod.client.logistics.LogisticsMapOverlay.railCount(this.data.getDimensionId()) : 0);
+        if (this.mode == Mode.CITIES) com.example.examplemod.client.logistics.LogisticsMapOverlay.prepareView(this.map,this.data.getDimensionId(),mapWidth,Math.max(1,mapBottom-mapTop));
+        this.map.deferLabels();
         this.map.render(graphics, mapLeft, mapTop, mapWidth, Math.max(1, mapBottom - mapTop), mouseX, mouseY);
         com.example.examplemod.client.screen.ProjectWorkspaceClient.render(graphics,this.map,this.data.getDimensionId(),new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
         com.example.examplemod.client.logistics.LogisticsMapOverlay.render(graphics,this.map,this.data.getDimensionId(),mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
         com.example.examplemod.client.map.GeologyWideScanOverlay.render(graphics,this.map,this.data.getDimensionId(),mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop),mouseX,mouseY,this.mode==Mode.CITIES&&!modal&&!this.layersOpen&&!this.searchOpen&&!projectWorkspace.open());
+        if (surfaceAlpha[0]>0) reserveCaptionSpace(layersPopoverBounds());
+        if (surfaceAlpha[1]>0) reserveCaptionSpace(WorldMapUiLayout.searchPopover(
+                width,modeLabelWidths,globalLabelWidths,visibleSearchResults().size(),228));
+        this.map.drawLabels(graphics);
         // 3-4: markers are inside the panel render above; 5-6: chrome and the context column.
         renderTitle(graphics);
         renderModeToolbar(graphics, mouseX, mouseY);
         renderActionToolbar(graphics, mouseX, mouseY);
         renderViewButtons(graphics, mouseX, mouseY);
-        if (!projectWorkspace.open() || this.mode != Mode.CITIES) { renderContextCard(graphics); renderModeLegend(graphics); }
+        if (!projectWorkspace.open() || this.mode != Mode.CITIES) { renderContextCard(graphics); if(!expandedSelectionCard()) renderModeLegend(graphics); }
         renderStatus(graphics, mouseX, mouseY);
-        if(surfaceAlpha[0]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[0],()->renderLayers(graphics,mouseX,mouseY));
-        if(surfaceAlpha[1]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[1],()->renderSearchPanel(graphics,mouseX,mouseY));
+        if(surfaceAlpha[0]>0)MapPresentationDraw.foreground(graphics,200,surfaceAlpha[0],()->renderLayers(graphics,mouseX,mouseY));
+        if(surfaceAlpha[1]>0)MapPresentationDraw.foreground(graphics,200,surfaceAlpha[1],()->renderSearchPanel(graphics,mouseX,mouseY));
         projectWorkspace.render(graphics,this.font,this.map,this.data.getDimensionId(),this.width,this.height,
                 WorldMapUiLayout.headerBottom(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL,
                 new WorldMapUiLayout.Rect(mapLeft,mapTop,mapWidth,Math.max(1,mapBottom-mapTop)),mouseX,mouseY,partialTick,this.mode==Mode.CITIES && !modal && !this.layersOpen && !this.searchOpen);
         // 7-10: dim, tutorial target, modal surface and its widgets, then the tooltip last.
         super.render(graphics, mouseX, mouseY, partialTick);
         if (this.tutorialTicks > 0) renderTutorial(graphics);
-        if(surfaceAlpha[2]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[2],()->renderProblemCenter(graphics));
-        if(surfaceAlpha[3]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[3],()->renderGuide(graphics));
-        if(surfaceAlpha[4]>0)MapPresentationDraw.opacity(graphics,surfaceAlpha[4],()->renderMutation(graphics));
-        if (!modal && this.hoveredTooltip != null) renderTooltip(graphics, this.hoveredTooltip, mouseX, mouseY);
+        if(surfaceAlpha[2]>0)MapPresentationDraw.foreground(graphics,300,surfaceAlpha[2],()->renderProblemCenter(graphics));
+        if(surfaceAlpha[3]>0)MapPresentationDraw.foreground(graphics,300,surfaceAlpha[3],()->renderGuide(graphics));
+        if(surfaceAlpha[4]>0)MapPresentationDraw.foreground(graphics,300,surfaceAlpha[4],()->renderMutation(graphics));
+        var focus=keyboard.current();
+        if (focus!=null) {
+            var r=focus.bounds();
+            if (focus.id().startsWith("card.")) {
+                var body=WorldMapUiLayout.cardBody(new WorldMapUiLayout.Rect(cardX,cardY,cardWidth,cardHeight));
+                graphics.enableScissor(body.x(),body.y(),body.right(),body.bottom());
+                try { MapPresentationDraw.foreground(graphics,340,1,()->graphics.renderOutline(r.x(),r.y(),r.width(),r.height(),0xFFFFFFFF)); }
+                finally { graphics.disableScissor(); }
+            } else MapPresentationDraw.foreground(graphics,340,1,()->graphics.renderOutline(r.x(),r.y(),r.width(),r.height(),0xFFFFFFFF));
+        }
+        Component tooltip=hoverDelay.samplePointer(map.isMapDragging() || closingModal() ? null : tooltipOffered,
+                net.minecraft.Util.getMillis(),mouseX,mouseY);
+        if (tooltip!=null) MapPresentationDraw.foreground(graphics,350,1,()->renderTooltip(graphics,tooltip,mouseX,mouseY));
     }
 
     private void renderTitle(GuiGraphics graphics) {
@@ -638,7 +835,11 @@ if (this.searchOpen) updateSearchResults();
             Component hint = !enabled
                     ? Component.translatable("gui.createcityexpansioncore.world_map.mode.energy.soon")
                     : value.label();
-            offerTooltip(hint, hover || (!enabled && bounds.contains(mouseX, mouseY)));
+            if (enabled) hint=atlasText("mode");
+            if (mainControls()) {
+                keyboard.add("mode."+index,value.label(),hint,bounds,()->{if(value.available())applyMode(value);});
+                offerTooltip(hint,bounds.contains(mouseX,mouseY));
+            }
         }
         graphics.fill((int)Math.round(tabLeft),activeTab.bottom()-3,(int)Math.round(tabRight),activeTab.bottom()-1,ACCENT);
     }
@@ -683,7 +884,12 @@ if (this.searchOpen) updateSearchResults();
                 graphics.fill(bounds.right() - 6, bounds.y() + 3, bounds.right() - 2, bounds.y() + 7, 0xFFE8856B);
                 label = label.copy().append(": " + problems);
             }
-            offerTooltip(label, hover);
+            final int action=index;
+            Component help=atlasText(!enabled ? "history_empty" : "global."+index);
+            if(mainControls()) {
+                keyboard.add("global."+index,label,help,bounds,()->{if(enabled) handleGlobalAction(action);});
+                offerTooltip(help,hover);
+            }
 
         }
     }
@@ -709,6 +915,10 @@ private int layersRowCount() {
         return activeOverlays().size() + 2 + (VIEW_KEYS.length - 5);
     }
 
+    private void reserveCaptionSpace(WorldMapUiLayout.Rect rect) {
+        map.labels().reserve(rect.x(),rect.y(),rect.width(),rect.height());
+    }
+
     private void renderLayers(GuiGraphics graphics, int mouseX, int mouseY) {
         int contentWidth = 228;
         int rows = layersRowCount();
@@ -729,7 +939,11 @@ private int layersRowCount() {
             String count = Integer.toString(this.map.overlayCount(overlay));
             Component label = Component.translatable("gui.createcityexpansioncore.world_map.overlay." + overlay.name().toLowerCase(Locale.ROOT));
             graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), bounds.width() - this.font.width(count) - 24), bounds.x() + 14, bounds.y() + 5, enabled ? TEXT : MUTED, false);
-            offerTooltip(label, hover && panel.contains(mouseX, mouseY));
+            if (layersOpen && "layers".equals(focusSurface())) {
+                var help=atlasText("toggle_layer",label);
+                keyboard.add("layer."+row,label,help,bounds,()->map.setOverlay(overlay,!map.isOverlayEnabled(overlay)));
+                offerTooltip(help, hover && panel.contains(mouseX,mouseY));
+            }
             graphics.drawString(this.font, count, bounds.right() - this.font.width(count) - MICRO, bounds.y() + 5, MUTED, false);
         }
         for(int option=0;option<2;option++) {
@@ -737,50 +951,97 @@ private int layersRowCount() {
             if(hover)graphics.fill(bounds.x(),bounds.y(),bounds.right(),bounds.bottom(),PANEL_ALT);
             Component label=Component.translatable("gui.createcityexpansioncore.world_map."+(option==0?"territory_mode."+this.map.territoryMode():"plot_grid."+this.map.plotGrid()));
             graphics.drawString(this.font,WorldMapChrome.fit(this.font,label,bounds.width()-12),bounds.x()+6,bounds.y()+5,TEXT,false);
+            final int presentation=option;
+            if ("layers".equals(focusSurface())) {
+                var hint=atlasText("presentation."+option);
+                keyboard.add("layer."+row,label,hint,bounds,()->map.setTerritoryPresentation(presentation==0?(map.territoryMode()+1)%3:map.territoryMode(),presentation==1?!map.plotGrid():map.plotGrid()));
+                offerTooltip(hint,hover);
+            }
         }
         for (int index = 5; index < VIEW_KEYS.length; index++) {
             var bounds = layerRow(row++);
-            boolean enabled = index == 5 && this.map.overviewVisible() || index == 6 && this.map.coordinateGrid() || index == 9 && this.map.reducedMotion();
+            boolean enabled = index == 5 && this.map.overviewVisible() || index == 6 && this.map.coordinateGrid() || index == 9 && this.map.reducedMotion() || index == 10 && com.example.examplemod.client.map.MinimapClient.settings().inertia || index == 12 && com.example.examplemod.client.map.MinimapClient.settings().contextHints;
             boolean hover = bounds.contains(mouseX, mouseY) && panel.contains(mouseX, mouseY);
             if (hover) graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), PANEL_ALT);
-            Component label = Component.translatable("gui.createcityexpansioncore.world_map.view." + VIEW_KEYS[index]);
+            String option = index == 11 ? "terrain_filter." + (com.example.examplemod.client.map.MinimapClient.settings().smoothTerrain ? "smooth" : "sharp") : VIEW_KEYS[index];
+            Component label = Component.translatable("gui.createcityexpansioncore.world_map.view." + option);
             graphics.drawString(this.font, index == 8 ? "▣" : index == 7 ? "↻" : enabled ? "◆" : "◇", bounds.x() + MICRO, bounds.y() + 5, ACCENT, false);
             graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), bounds.width() - 20), bounds.x() + 14, bounds.y() + 5, TEXT, false);
-            offerTooltip(label, hover);
+            final int setting=index;
+            if ("layers".equals(focusSurface())) {
+                var hint=atlasText("view."+index);
+                keyboard.add("layer."+row,label,hint,bounds,()->handleViewAction(setting));
+                offerTooltip(hint,hover);
+            }
         }
 
         } finally { graphics.disableScissor(); }
     }
 
-    private void renderSearchPanel(GuiGraphics graphics, int mouseX, int mouseY) {
-        List<CityMapPanel.Selection> visible = visibleSearchResults();
-        var panel = WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, visible.size(), 228);
-        plate(graphics, panel.x(), panel.y(), panel.width(), panel.height());
-        graphics.fill(panel.x() + 7, panel.y() + 5, panel.right() - 7, panel.y() + 25, 0xFF111719);
-        graphics.renderOutline(panel.x() + 7, panel.y() + 5, panel.width() - 14, 20, ACCENT);
-        for (int index = 0; index < 3; index++) {
-            var rect = searchFilterBounds(index);
-            graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), PANEL_ALT);
-            Component label = index == 0 ? searchTypeLabel() : index == 1
-                    ? Component.translatable("gui.createcityexpansioncore.world_map.filter.owner." + this.searchOwner)
-                    : Component.translatable("gui.createcityexpansioncore.world_map.filter." + (this.searchProblems ? "problems" : "any_status"));
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(label.getString(), rect.width() - 6), rect.x() + 3, rect.y() + 5, TEXT, false);
-            offerTooltip(label, rect.contains(mouseX, mouseY));
+    private void renderSearchPanel(GuiGraphics g,int mx,int my) {
+        var rows=visibleSearchResults(); var p=searchPanelBounds();
+        plate(g,p.x(),p.y(),p.width(),p.height());
+        g.renderOutline(p.x()+7,p.y()+5,p.width()-14,20,searchFocus==-1?ACCENT:FRAME);
+        for(int i=0;i<3;i++) {
+            var label=i==0?searchTypeLabel():i==1?Component.translatable("gui.createcityexpansioncore.world_map.filter.owner."+searchOwner)
+                    :Component.translatable("gui.createcityexpansioncore.world_map.filter."+(searchProblems?"problems":"any_status"));
+            searchButton(g,searchFilterBounds(i),label,i,mx,my,AtlasSearch.tr("filter_help",label));
         }
-        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.search.count", this.searchResults.size()), panel.x() + 8, panel.y() + 53, MUTED, false);
-        if (visible.isEmpty()) graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.world_map.search.empty"), panel.x() + 8, panel.y() + 73, panel.width() - 16, MUTED);
-        for (int index = 0; index < visible.size(); index++) {
-            var result = visible.get(index);
-            var row = searchResultControl(index);
-            graphics.fill(row.x(), row.y(), row.right(), row.bottom(), row.contains(mouseX, mouseY) ? 0xFF303A3D : PANEL_ALT);
-            MapMarkerRenderer.drawGlyph(graphics, MapMarkerRenderer.glyph(result.icon()), row.x() + 3, row.y() + 2, result.warning() ? MapPalette.ALERT : TEXT);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(result.title().getString(), row.width() - 30), row.x() + 24, row.y() + 3, TEXT, false);
-            graphics.drawString(this.font, this.font.plainSubstrByWidth(selectionType(result).getString(), row.width() - 30), row.x() + 24, row.y() + 13, MUTED, false);
-            offerTooltip(result.title(), row.contains(mouseX, mouseY));
+        for(var tab:AtlasSearch.Tab.values()) {
+            var label=AtlasSearch.tr("tab."+tab.name().toLowerCase(Locale.ROOT));
+            searchButton(g,searchTabBounds(tab.ordinal()),label,3+tab.ordinal(),mx,my,AtlasSearch.tr("tab_help",label));
         }
-        graphics.drawString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.search.page", visible.isEmpty() ? 0 : this.searchOffset + 1, this.searchOffset + visible.size(), this.searchResults.size()), panel.x() + 8, panel.bottom() - 14, MUTED, false);
-        boolean visibleBefore=this.searchBox.isVisible();this.searchBox.setVisible(true);
-        try{this.searchBox.render(graphics,mouseX,mouseY,0);}finally{this.searchBox.setVisible(visibleBefore);}
+        for(int i=0;i<rows.size();i++) {
+            var r=searchResultControl(i);var value=rows.get(i);
+            String title,context;
+            if(value instanceof AtlasSearch.Entry e) {title=e.name();context=e.context();}
+            else {var v=(ViewRow)value; title=v.view.name();context=v.library.area.dimension()+" · "+Math.round(v.view.camera().x())+", "+Math.round(v.view.camera().z());}
+            boolean active=searchCursor==searchOffset+i;
+            g.fill(r.x(),r.y(),r.right(),r.bottom(),active||r.contains(mx,my)?0xFF303A3D:PANEL_ALT);
+            if(active&&searchFocus==7)g.renderOutline(r.x(),r.y(),r.width(),r.height(),ACCENT);
+            int textX=r.x()+4;
+            if(value instanceof AtlasSearch.Entry entry){
+                var icon=AtlasPlaceIcon.forSelection(entry.selection(),entry.dimension());
+                if(icon!=null){
+                    icon.draw(g,textX,r.y()+(r.height()-16)/2,16);
+                    textX+=20;
+                }
+            }
+            int w=Math.max(1,r.right()-textX-(value instanceof AtlasSearch.Entry?21:5));
+            g.drawString(font,font.plainSubstrByWidth(title,w),textX,r.y()+2,TEXT,false);
+            g.drawString(font,font.plainSubstrByWidth(context,w),textX,r.y()+13,MUTED,false);
+            if(value instanceof AtlasSearch.Entry e) {
+                g.drawString(font,library!=null&&library.favorite(e.key())?"★":"☆",r.right()-16,r.y()+7,ACCENT,false);
+                if(r.contains(mx,my)&&mx>=r.right()-20)offerTooltip(AtlasSearch.tr("star_help"),true);
+                else offerTooltip(Component.literal(title+" · "+context),r.contains(mx,my));
+            } else offerTooltip(Component.literal(title+" · "+context),r.contains(mx,my));
+        }
+        if(rows.isEmpty() || viewEdit!=ViewEdit.NONE || !searchMessage.isEmpty()) {
+            Component message=AtlasSearch.tr(!searchMessage.isEmpty()?searchMessage:viewEdit==ViewEdit.NONE?"empty":"edit."+viewEdit.name().toLowerCase(Locale.ROOT));
+            g.fill(p.x()+5,p.y()+68,p.right()-5,p.y()+91,PANEL_ALT);
+            g.drawWordWrap(font,message,p.x()+8,p.y()+71,p.width()-16,MUTED);
+        }
+        if(searchTab==AtlasSearch.Tab.VIEWS) {
+            String[] actions=viewActions();
+            for(int i=0;i<actions.length;i++)searchButton(g,searchFooter(i,actions.length),AtlasSearch.tr(actions[i]),8+i,mx,my,AtlasSearch.tr(actions[i]+"_help"));
+        } else {
+            var dimension=data.getDimensionId();
+            boolean waiting=com.example.examplemod.client.CityPublicDirectory.loading() || !LogisticsMapOverlay.hasDirectory(dimension);
+            boolean tradeFilter=searchType==AtlasSearch.Type.TRADE.ordinal();
+            var status=tradeFilter && !waiting && !LogisticsMapOverlay.supportsTrade(dimension)
+                    ? Component.translatable("gui.createcityexpansioncore.atlas.trade.unsupported")
+                    : AtlasSearch.tr(waiting || tradeFilter && AtlasTradeDirectory.loading(dimension)?"loading":"local",searchResults.size());
+            g.drawString(font,font.plainSubstrByWidth(status.getString(),p.width()-12),p.x()+6,p.bottom()-14,MUTED,false);
+        }
+        boolean shown=searchBox.isVisible();searchBox.setVisible(true);
+        try {searchBox.render(g,mx,my,0);} finally {searchBox.setVisible(shown);}
+    }
+    private void searchButton(GuiGraphics g,WorldMapUiLayout.Rect r,Component label,int index,int mx,int my,Component help) {
+        boolean active=index>=3&&index<7&&searchTab.ordinal()==index-3;
+        g.fill(r.x(),r.y(),r.right(),r.bottom(),active?0xFF493E2E:PANEL_ALT);
+        if(index==searchFocus)g.renderOutline(r.x(),r.y(),r.width(),r.height(),ACCENT);
+        g.drawString(font,font.plainSubstrByWidth(label.getString(),Math.max(1,r.width()-5)),r.x()+3,r.y()+Math.max(0,(r.height()-8)/2),active?ACCENT:TEXT,false);
+        offerTooltip(help,r.contains(mx,my));
     }
 
     /**
@@ -795,7 +1056,7 @@ private int layersRowCount() {
         boolean pinned = value != null;
         if (!pinned) value = this.map.getHoveredSelection();
         if (value == null) {
-            this.cardActions.clear();
+            this.cardActions = List.of();
             this.cardActionCount = 0;
             this.cardActionY = -1;
             motionCardKey="";
@@ -878,16 +1139,18 @@ case ENERGY->List.of();
      */
     private void renderSelectionPanel(GuiGraphics g,CityMapPanel.Selection value,boolean pinned) {
         var profile=value.kind()==CityMapPanel.SelectionKind.CITY?com.example.examplemod.client.CityPublicDirectory.profile(value.id()):null;
-        this.cardActions.clear();if(pinned){this.cardActions.addAll(contextActions(value));this.cardActions.addAll(navigationActions(value));}
+        this.cardActions = pinned ? actionsFor(value) : List.of();
         int pad=WorldMapUiLayout.CARD_PADDING;
-        var panel=WorldMapUiLayout.contextPanel(this.width,this.height,this.modeLabelWidths,this.globalLabelWidths,Integer.MAX_VALUE);
+        var panel=selectionBounds();
         int x=panel.x()+pad,w=panel.width()-2*pad;
         String key=value.kind()+":"+(value.id()==null?value.pos().asLong():value.id());
         if(!key.equals(this.cardKey)){this.cardKey=key;this.cardScroll=0;this.dispatchChanges.clear();}
         this.cardX=panel.x();this.cardY=panel.y();this.cardWidth=panel.width();this.cardHeight=panel.height();
         plate(g,panel.x(),panel.y(),panel.width(),panel.height());
         g.enableScissor(panel.x()+1,panel.y()+1,panel.right()-1,panel.bottom()-1);
-        if(profile!=null)com.example.examplemod.client.map.CityEmblemRenderer.draw(g,profile.identity(),profile.colour(),x,panel.y()+pad,1);
+        var placeIcon=AtlasPlaceIcon.forSelection(value,map.dimensionId());
+        if(placeIcon!=null)placeIcon.badge(g,x+13,panel.y()+pad+13,13,pinned,false);
+        else if(profile!=null)com.example.examplemod.client.map.CityEmblemRenderer.draw(g,profile.identity(),profile.colour(),x,panel.y()+pad,1);
         else MapMarkerRenderer.renderCardIcon(g,x,panel.y()+pad,value.icon(),value.own(),value.warning());
         int titleX=x+32;
         g.drawString(this.font,WorldMapChrome.fit(this.font,value.title(),w-32),titleX,panel.y()+pad,TEXT,false);
@@ -898,15 +1161,66 @@ case ENERGY->List.of();
         g.enableScissor(body.x(),body.y(),body.right(),body.bottom());
         int cursor=panel.y()+WorldMapUiLayout.CARD_HEADER-this.cardScroll;
         try {
-            if(pinned) {
-                double statusFlash=changed("selection-status:"+key,value.warning(),180);
-                WorldMapChrome.rounded(g,x,cursor,w,WorldMapUiLayout.STATUS_HEIGHT,4,
-                        DispatchMotion.tint(value.warning()?0xFF452D2B:0xFF263A33,0xFF31575B,statusFlash));
-                g.fill(x+7,cursor+8,x+11,cursor+12,value.warning()?MapPalette.ALERT:MapPalette.GOOD);
-                g.drawString(this.font,WorldMapChrome.fit(this.font,Component.translatable("gui.createcityexpansioncore.world_map.context.status."+(value.warning()?"attention":"clear")),w-24),x+17,cursor+7,value.warning()?0xFFE4A297:0xFFB3D1BE,false);
-                cursor+=WorldMapUiLayout.STATUS_HEIGHT+SECTION;
-                Component owner=Component.translatable("gui.createcityexpansioncore.world_map.context.owner."+(value.own()?"own":"foreign"));
-                g.drawString(this.font,WorldMapChrome.fit(this.font,owner,w),x,cursor,MUTED,false);cursor+=SECTION+4;
+            Component state=switch(value.kind()) {
+                case LOGISTICS -> {
+                    var offer=AtlasTradeDirectory.row(value.id(),map.dimensionId());
+                    if (offer==null) yield Component.literal(com.example.examplemod.client.logistics.LogisticsSkin.value(
+                            LogisticsMapOverlay.markerStatus(value.id(),map.dimensionId())));
+                    yield offer.itemId().isEmpty() ? Component.translatable("gui.createcityexpansioncore.atlas.trade.available")
+                            : offer.details().getFirst();
+                }
+                case INDUSTRY -> value.details().getLast();
+                case PROJECT -> value.details().isEmpty()?atlasText("listed"):value.details().getFirst();
+                case PLAYER -> atlasText("player_state");
+                case WAYPOINT -> atlasText("pin_state");
+                case PLACE -> {
+                    var place=AtlasPlaces.get(value.id(),map.dimensionId());
+                    yield AtlasPlaces.text(place!=null && place.published()?"public":"personal");
+                }
+                case CITY -> atlasText("listed");
+            };
+            g.drawWordWrap(this.font,atlasText("state",state),x,cursor,w,value.warning()?MapPalette.ALERT:TEXT);
+            cursor+=this.font.wordWrapHeight(atlasText("state",state),w)+MICRO;
+            Component freshness=switch(value.kind()) {
+                case WAYPOINT -> atlasText("local");
+                case PLAYER -> atlasText("live");
+                case LOGISTICS -> AtlasTradeDirectory.row(value.id(),map.dimensionId())!=null
+                        ? Component.translatable("gui.createcityexpansioncore.atlas.trade.checked",AtlasTradeDirectory.ageSeconds())
+                        : LogisticsMapOverlay.freshness(value.id(),map.dimensionId());
+                default -> atlasText("snapshot");
+            };
+            g.drawWordWrap(this.font,freshness,x,cursor,w,MUTED);
+            cursor+=this.font.wordWrapHeight(freshness,w)+SECTION;
+            if (pinned && directions != null && directions.matches(value, map.dimensionId())) {
+                Component note = directions.description();
+                g.drawWordWrap(font, note, x, cursor, w, TEXT);
+                cursor += font.wordWrapHeight(note, w) + SECTION;
+            }
+            this.cardActionY=cursor;
+            this.cardActionCount=cardActions.size();
+            for(int i=0;i<cardActions.size();i++) {
+                var row=cardActions.get(i);
+                var action=editControl("card.action["+i+"]",WorldMapUiLayout.cardAction(panel,cardActionY,i));
+                String name=row.action().name().toLowerCase(Locale.ROOT);
+                var station = row.station();
+                Component label=station == null ? atlasText("action."+name) : atlasText("action."+name,station.name(),station.distance());
+                Component help=row.enabled()? (station == null ? atlasText("hint."+name) : atlasText("hint.station_landmark",label)) : atlasText(row.unavailable());
+                if(!row.enabled()) label=atlasText("disabled",label);
+                WorldMapChrome.dispatchControl(g,action,false,action.contains(mouseXNow,mouseYNow),row.enabled(),i==0);
+                g.drawCenteredString(font,WorldMapChrome.fit(font,label,action.width()-SECTION),action.x()+action.width()/2,
+                        action.y()+(action.height()-8)/2,row.enabled()?TEXT:MUTED);
+                final int index=i;
+                if(mainControls()) {
+                    keyboard.add("card."+i,label,help,action,()->handleContextAction(value,index));
+                    if(body.contains(mouseXNow,mouseYNow)) offerTooltip(help,action.contains(mouseXNow,mouseYNow));
+                }
+            }
+            cursor+=cardActions.size()*WorldMapUiLayout.ACTION_PITCH+MICRO;
+            if(pinned && value.kind()==CityMapPanel.SelectionKind.LOGISTICS) {
+                for(var fact:LogisticsMapOverlay.inspectionLines(value.id(),map.dimensionId())) {
+                    g.drawWordWrap(font,fact,x,cursor,w,TEXT);
+                    cursor+=font.wordWrapHeight(fact,w)+MICRO;
+                }
             }
             if(profile!=null) {
                 var alliance=com.example.examplemod.client.AllianceClient.forCity(profile.id());
@@ -926,33 +1240,113 @@ case ENERGY->List.of();
                 Component coords=Component.translatable("gui.createcityexpansioncore.world_map.context.coordinates",value.pos().getX(),value.pos().getZ());
                 g.drawString(this.font,WorldMapChrome.fit(this.font,coords,w),x,cursor,MUTED,false);cursor+=SECTION+4;
             }
-            this.cardActionY=-1;this.cardActionCount=this.cardActions.size();
-            if(!this.cardActions.isEmpty()) {
-                cursor+=MICRO;this.cardActionY=cursor;
-                for(int i=0;i<this.cardActions.size();i++) {
-                    var action=editControl("card.action[" + i + "]", WorldMapUiLayout.cardAction(panel,this.cardActionY,i));
-                    WorldMapChrome.dispatchControl(g,action,false,action.contains(this.mouseXNow,this.mouseYNow),true,i==0);
-                    g.drawCenteredString(this.font,WorldMapChrome.fit(this.font,this.cardActions.get(i),action.width()-SECTION),action.x()+action.width()/2,action.y()+(action.height()-8)/2,TEXT);
-                }
-                cursor+=this.cardActions.size()*WorldMapUiLayout.ACTION_PITCH;
-            }else if(!pinned){g.drawWordWrap(this.font,Component.translatable("gui.createcityexpansioncore.world_map.hover.details"),x,cursor,w,ACCENT);cursor+=24;}
+            if(!pinned) {
+                var more=Component.translatable("gui.createcityexpansioncore.world_map.hover.details");
+                g.drawWordWrap(font,more,x,cursor,w,ACCENT);cursor+=font.wordWrapHeight(more,w)+MICRO;
+            }
             this.cardMaxScroll=Math.max(0,cursor+this.cardScroll+pad-panel.bottom());
             this.cardScroll=Math.min(this.cardScroll,this.cardMaxScroll);
         }finally{g.disableScissor();g.disableScissor();}
         renderCardScroll(g,panel);
     }
 
-    /**
-     * Action rows of the pinned context card. Trains and unregistered Create trains get a small
-     * management list instead of the single generic action so registration, type changes and route
-     * selection are reachable straight from the World Map; everything else keeps one action.
-     * An empty list means "read-only card": the viewer has no rights on that selection.
-     */
-    private List<Component> contextActions(CityMapPanel.Selection value){return value==null?List.of():List.of(contextAction(value));}
+    static Component atlasText(String key, Object... args) {
+        return Component.translatable("gui.createcityexpansioncore.atlas3.ui."+key, args);
+    }
 
-    private void handleContextAction(CityMapPanel.Selection value,int index){handleContextAction(value);}
+    public void pinMapObject(CityMapPanel.Selection value) {
+        if (map==null || value==null) return;
+        var before=map.getSelection();
+        if (before==null || before.kind()!=value.kind() || !java.util.Objects.equals(before.id(),value.id())) {
+            pushTarget(backHistory,before);
+            forwardHistory.clear();
+            CommunityFx.sound("map_select");
+        }
+        pendingSelection=null;
+        map.setSelection(value);
+    }
 
-    private Component contextAction(CityMapPanel.Selection value){return Component.translatable(value.kind()==CityMapPanel.SelectionKind.CITY?"gui.createcityexpansioncore.world_map.action.open_relations":"gui.createcityexpansioncore.world_map.action.center");}
+    private List<AtlasObjectCard.Row> actionsFor(CityMapPanel.Selection value) {
+        if (directions != null && directions.matches(value, map.dimensionId())) return directions.rows(map, value);
+        var profile=value.kind()==CityMapPanel.SelectionKind.CITY ? com.example.examplemod.client.CityPublicDirectory.profile(value.id()) : null;
+        if (value.kind()==CityMapPanel.SelectionKind.LOGISTICS && LogisticsMapOverlay.inspecting(value.id(),map.dimensionId()))
+            return List.of(new AtlasObjectCard.Row(AtlasObjectCard.Action.CARGO,""),new AtlasObjectCard.Row(AtlasObjectCard.Action.BACK_TO_OBJECT,""));
+        var rows=AtlasObjectCard.rows(value.kind(),value.kind()==CityMapPanel.SelectionKind.LOGISTICS ? LogisticsMapOverlay.canOpenObject(value.id(),map.dimensionId()) : value.id()!=null,JourneyClient.canTrack(map,map.dimensionId(),value),
+                JourneyClient.isTracking(map.dimensionId(),value),profile!=null && profile.editable(),
+                !readOnly && value.own() && validReturn());
+        if(value.kind()==CityMapPanel.SelectionKind.LOGISTICS && LogisticsMapOverlay.canInspect(value.id(),map.dimensionId())) {
+            var inspectionRows=new ArrayList<>(rows);
+            inspectionRows.addFirst(new AtlasObjectCard.Row(AtlasObjectCard.Action.INSPECT_SHIPMENT,""));
+            return inspectionRows;
+        }
+        var actions=new ArrayList<>(rows);
+        if(value.kind()==CityMapPanel.SelectionKind.PLACE){
+            String key="PLACE/"+map.dimensionId()+"/"+value.id();
+            actions.add(new AtlasObjectCard.Row(library!=null && library.favorite(key)?AtlasObjectCard.Action.UNFAVORITE_PLACE:AtlasObjectCard.Action.FAVORITE_PLACE,""));
+            var place=AtlasPlaces.get(value.id(),map.dimensionId());
+            if(place==null || place.entrances().isEmpty())actions.removeIf(row->
+                    row.action()==AtlasObjectCard.Action.ROUTE || row.action()==AtlasObjectCard.Action.FROM);
+            if(place!=null && place.published())actions.add(new AtlasObjectCard.Row(AtlasObjectCard.Action.SHARE_PLACE,""));
+            if(value.own())actions.add(new AtlasObjectCard.Row(AtlasObjectCard.Action.EDIT_PLACE,""));
+        }else if(AtlasPlaces.canLink(AtlasPlaces.source(value,map.dimensionId())))actions.add(new AtlasObjectCard.Row(AtlasObjectCard.Action.LINK_PLACE,""));
+        return actions;
+    }
+
+    void showCardNotice(String key) { cardNotice=key; noticeTicks=80; }
+
+    private void handleContextAction(CityMapPanel.Selection selected,int index) {
+        if (!validReturn() || map==null || selected==null || index<0 || index>=cardActions.size()) return;
+        String shown=selected.kind()+":"+(selected.id()==null?selected.pos().asLong():selected.id());
+        var actual=map.getSelection();
+        if (!shown.equals(cardKey) || actual==null || actual.kind()!=selected.kind() || !java.util.Objects.equals(actual.id(),selected.id())) return;
+        var current=map.resolveSelection(selected.kind(),selected.id(),selected.pos());
+        if (current==null) { map.clearSelection(); showCardNotice("unavailable"); return; }
+        var id=cardActions.get(index).action();
+        var row=actionsFor(current).stream().filter(r->r.action()==id).findFirst().orElse(null);
+        if (row==null || !row.enabled()) { showCardNotice(row==null?"unavailable":row.unavailable()); return; }
+        if (!java.util.Objects.equals(row.station(),cardActions.get(index).station())) { showCardNotice("directions_changed"); return; }
+        switch (id) {
+            case ROUTE -> AtlasTripScreen.open(this,map,current);
+            case FROM -> AtlasTripScreen.from(this,map,current);
+            case FAVORITE_PLACE,UNFAVORITE_PLACE -> {
+                if(library!=null && library.toggle("PLACE/"+map.dimensionId()+"/"+current.id()))writeLibrary(library,true);
+            }
+            case EDIT_PLACE -> {
+                var place=AtlasPlaces.get(current.id(),map.dimensionId());
+                if(place!=null && place.owner().equals(minecraft.player.getUUID()))openAtlasTool(new AtlasPlaceEditor(this,map,place,null));
+            }
+            case LINK_PLACE -> {
+                if(AtlasPlaces.canLink(AtlasPlaces.source(current,map.dimensionId())))openAtlasTool(new AtlasPlaceEditor(this,map,null,current));
+            }
+            case SHARE_PLACE -> {
+                var place=AtlasPlaces.get(current.id(),map.dimensionId());
+                if(place!=null && place.published()){minecraft.keyboardHandler.setClipboard("place:"+place.id());showCardNotice("place_copied");}
+            }
+            case DIRECTIONS -> { directions = new AtlasDirections(current,map.dimensionId()); cardScroll = 0; keyboard.reset(); }
+            case INSPECT_SHIPMENT -> { LogisticsMapOverlay.inspect(current.id(),map.dimensionId());cardScroll=0;keyboard.reset(); }
+            case BACK_TO_OBJECT -> { LogisticsMapOverlay.finishInspection(); directions = null; cardScroll = 0; keyboard.reset(); }
+            case ORIGIN_STATION, DESTINATION_STATION, DIRECT -> {
+                var landmark = row.station();
+                var goal = landmark == null ? current : LogisticsMapOverlay.resolveMapSelection(landmark.id(),map.dimensionId());
+                if (goal != null && (JourneyClient.isTracking(map.dimensionId(),goal) || JourneyClient.track(map,map.dimensionId(),goal))) {
+                    directions = null;
+                    cardScroll = 0;
+                } else showCardNotice("target_unavailable");
+            }
+            case PROJECT -> ProjectWorkspaceScreen.open(this,current.id());
+            case CARGO -> LogisticsMapOverlay.openObject(current.id(),map.dimensionId());
+            case CENTER -> map.centerOn(current.pos());
+            case TRACK -> JourneyClient.track(map,map.dimensionId(),current);
+            case STOP -> JourneyClient.cancelNavigation();
+            case REMOVE_PIN -> { map.removeSelectedPin(); showCardNotice("pin_removed"); CommunityFx.sound("map_save"); }
+            case ALLIANCE -> AllianceScreen.open(this,current.id());
+            case RELATIONS -> CommunityScreen.openRelations(this);
+            case EDIT_CITY -> {
+                var profile=com.example.examplemod.client.CityPublicDirectory.profile(current.id());
+                if (profile!=null && profile.editable()) minecraft.setScreen(new CityIdentityEditorScreen(this,profile));
+            }
+        }
+    }
 
     private int problemCount(){return problemObjects().size();}
 
@@ -970,6 +1364,10 @@ case ENERGY->List.of();
                 panel.x() + SECTION, panel.bottom() - 30, panel.width() - SECTION * 2, 24));
     }
 
+    private WorldMapUiLayout.Rect inboxBounds(WorldMapUiLayout.Rect panel) {
+        return new WorldMapUiLayout.Rect(panel.x()+SECTION,panel.bottom()-53,panel.width()-2*SECTION,19);
+    }
+
     private void renderProblemCenter(GuiGraphics graphics) {
         graphics.fill(0, 0, this.width, this.height, 0x66101517);
         var panel = WorldMapUiLayout.problemModal(this.width, this.height);
@@ -983,6 +1381,7 @@ case ENERGY->List.of();
         for (int index = 0; index < Math.min(problemRows(), objects.size() - this.problemOffset); index++) {
             var value = objects.get(index + this.problemOffset);
             var row = problemRow(panel, index);
+            if(problemCenterOpen) keyboard.add("problem."+index,value.title(),atlasText("hint.center"),row,()->{selectObject(value);problemCenterOpen=false;});
             int y = row.y();
             graphics.fill(row.x(), y, row.right(), row.bottom(), PANEL_ALT);
             MapMarkerRenderer.drawGlyph(graphics, MapMarkerRenderer.glyph(value.icon()), row.x() + 3, y + 3, MapPalette.ALERT);
@@ -990,8 +1389,13 @@ case ENERGY->List.of();
             String detail = value.details().isEmpty() ? selectionType(value).getString() : value.details().getFirst().getString();
             graphics.drawString(this.font, this.font.plainSubstrByWidth(detail, row.width() - 30), row.x() + 24, y + 13, MUTED, false);
         }
-        graphics.drawWordWrap(this.font, Component.translatable("gui.createcityexpansioncore.world_map.problems.located", objects.size(), problemCount()), panel.x() + SECTION, panel.bottom() - 52, panel.width() - SECTION * 2, MUTED);
+        var journal=inboxBounds(panel);
+        var journalLabel=atlasText("inbox");
+        WorldMapChrome.dispatchControl(graphics,journal,false,journal.contains(mouseXNow,mouseYNow),true,false);
+        graphics.drawCenteredString(font,journalLabel,journal.x()+journal.width()/2,journal.y()+5,TEXT);
+        if(problemCenterOpen) keyboard.add("problems.inbox",journalLabel,atlasText("inbox_hint"),journal,()->SocialHubScreen.openInbox(this));
         var close = modalFooter("problemClose", panel);
+        if (problemCenterOpen) keyboard.add("problems.close",atlasText("close"),atlasText("dismiss"),close,()->problemCenterOpen=false);
         graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.world_map.close"),
                 close.x() + close.width()/2, close.y() + (close.height()-8)/2 + 2, ACCENT);
     }
@@ -1011,16 +1415,44 @@ case ENERGY->List.of();
         graphics.drawWordWrap(this.font, text, panel.x() + LARGE, top - this.guideScroll, panel.width() - LARGE * 2, TEXT);
         graphics.disableScissor();
         var close = modalFooter("guideClose", panel);
+        if (guideOpen) keyboard.add("guide.close",atlasText("close"),atlasText("dismiss"),close,()->guideOpen=false);
         graphics.drawCenteredString(this.font, Component.translatable("gui.createcityexpansioncore.city.hub.guide.dismiss"),
                 close.x() + close.width()/2, close.y() + (close.height()-8)/2 + 2, MUTED);
     }
 
     private void renderStatus(GuiGraphics graphics, int mouseX, int mouseY) {
         var strip = WorldMapUiLayout.statusStrip(this.width, this.height);
+        if(mainControls() && mode==Mode.CITIES) {
+            var toggle=ProjectLayout.toggle(width,height);
+            keyboard.add("projects",Component.translatable("gui.createcityexpansioncore.projects.open_workspace"),atlasText("workspace"),toggle,
+                    ()->projectWorkspace.click(toggle.x()+1,toggle.y()+1,0,true));
+        }
         plate(graphics, strip.x(), strip.y(), strip.width(), strip.height());
         Component coordinates = this.map.coordinateStatus(mouseX, mouseY);
         int right = (this.mode==Mode.CITIES ? ProjectLayout.toggle(this.width,this.height).x() : strip.right()) - 6;
         int available = Math.max(0,right-strip.x());
+        var navigation=JourneyClient.navigationSummary();
+        var stop=stopNavigationBounds();
+        boolean notice=noticeTicks>0;
+        int hint=com.example.examplemod.client.OnboardingClient.inlineAtlasHint();
+        if (stop!=null || notice || hint>=0) {
+            Component message=notice ? atlasText(cardNotice) : stop!=null ? navigation : hint==1 ?
+                    atlasText(map.getSelection()==null?"first.1":"first.2") : com.example.examplemod.client.OnboardingClient.body(hint);
+            int textRight=stop!=null?stop.x()-3:right;
+            graphics.drawString(font,WorldMapChrome.fit(font,message,Math.max(1,textRight-strip.x()-8)),strip.x()+5,strip.y()+5,TEXT,false);
+            if(mainControls()) offerTooltip(message,strip.contains(mouseX,mouseY));
+            if (stop!=null) {
+                Component label=atlasText("action.stop");
+                graphics.renderOutline(stop.x(),stop.y(),stop.width(),stop.height(),FRAME);
+                graphics.drawCenteredString(font,WorldMapChrome.fit(font,label,stop.width()-4),stop.x()+stop.width()/2,stop.y()+3,ACCENT);
+                if(mainControls()) {
+                    var stopHint=atlasText("hint.stop");
+                    keyboard.add("navigation.stop",label,stopHint,stop,JourneyClient::cancelNavigation);
+                    offerTooltip(stopHint,stop.contains(mouseX,mouseY));
+                }
+            }
+            return;
+        }
         int coordinateWidth = Math.min(available / 2, this.font.width(coordinates));
         graphics.drawString(this.font, this.font.plainSubstrByWidth(coordinates.getString(), coordinateWidth), right - coordinateWidth, strip.y() + 5, MUTED, false);
         String access = projectWorkspace.open() && this.mode==Mode.CITIES ? Component.translatable("gui.createcityexpansioncore.projects.title").getString() : Component.translatable("gui.createcityexpansioncore.world_map." + (this.readOnly ? "read_only_short" : "management_short")).getString();
@@ -1033,9 +1465,22 @@ case ENERGY->List.of();
         Component statusTooltip=this.map.terrainStatus();
         offerTooltip(statusTooltip, strip.contains(mouseX, mouseY));
         if(statusWidth>40 && this.map.terrainLoading()) for(int i=0;i<3;i++) {
-            int alpha=this.map.reducedMotion()?160:90+(int)(120*(.5+.5*Math.sin(System.nanoTime()/240_000_000.0-i*1.1)));
+            int alpha = 160;
             graphics.fill(statusX-15+i*4,strip.y()+8,statusX-13+i*4,strip.y()+10,(alpha<<24)|(ACCENT&0xFFFFFF));
         }
+    }
+
+    public boolean allowsInlineHint() {
+        return map!=null && mainControls() && noticeTicks==0 && !JourneyClient.canCancelNavigation()
+                && com.example.examplemod.client.map.MinimapClient.settings().contextHints;
+    }
+
+    private WorldMapUiLayout.Rect stopNavigationBounds() {
+        if (map==null || !JourneyClient.canCancelNavigation()) return null;
+        var strip=WorldMapUiLayout.statusStrip(width,height);
+        int right=(mode==Mode.CITIES ? ProjectLayout.toggle(width,height).x() : strip.right())-3;
+        int w=Math.min(Math.max(16,(right-strip.x())/3),font.width(atlasText("action.stop"))+10);
+        return new WorldMapUiLayout.Rect(right-w,strip.y()+2,w,Math.max(12,strip.height()-4));
     }
 
     private void renderTutorial(GuiGraphics graphics) {
@@ -1047,23 +1492,50 @@ case ENERGY->List.of();
         graphics.drawCenteredString(this.font, text, this.width / 2, strip.y() + 5, TEXT);
     }
 
+    private String focusSurface() {
+        if (pendingMutation!=null) return "confirm";
+        if (guideOpen) return "guide";
+        if (problemCenterOpen) return "problems";
+        if (searchOpen) return "search";
+        if (layersOpen) return "layers";
+        return "map";
+    }
+    private boolean useAtlasKeyboard(int key, int modifiers) {
+        if (searchOpen && !guideOpen && !problemCenterOpen && pendingMutation==null || map==null || map.hasPendingClaim() || projectWorkspace.open() && !layersOpen && !guideOpen && !problemCenterOpen) return false;
+        boolean tab=key==GLFW.GLFW_KEY_TAB;
+        if (!tab && key!=GLFW.GLFW_KEY_ENTER && key!=GLFW.GLFW_KEY_KP_ENTER && key!=GLFW.GLFW_KEY_SPACE) return false;
+        if (!focusSurface.equals(focusSurface())) { keyboard.reset(); return false; }
+        var control=tab ? keyboard.move((modifiers & GLFW.GLFW_MOD_SHIFT)!=0) : keyboard.current();
+        if (control==null) return false;
+        if (!tab) control.activate().run();
+        else {
+            var r=control.bounds();
+            if (control.id().startsWith("card.")) {
+                var body=WorldMapUiLayout.cardBody(new WorldMapUiLayout.Rect(cardX,cardY,cardWidth,cardHeight));
+                cardScroll=Math.clamp(cardScroll+scrollIntoView(r,body.y(),body.bottom()),0,cardMaxScroll);
+            } else if (control.id().startsWith("layer.")) {
+                var panel=layersPopoverBounds();
+                layerScroll=Math.max(0,layerScroll+scrollIntoView(r,panel.y()+WorldMapUiLayout.POPOVER_HEADER,panel.bottom()));
+            }
+            minecraft.getNarrator().sayNow(control.name().copy().append(". ").append(control.hint()));
+        }
+        return true;
+    }
+    private static int scrollIntoView(WorldMapUiLayout.Rect r,int top,int bottom) {
+        return r.y()<top?r.y()-top:Math.max(0,r.bottom()-bottom);
+    }
+    private boolean mainControls() {
+        return !searchOpen && !layersOpen && !guideOpen && !problemCenterOpen && pendingMutation==null
+                && map!=null && !map.hasPendingClaim() && !projectWorkspace.open();
+    }
     private void offerTooltip(Component tooltip, boolean hovered) {
-        if (!hovered) {
-            if (tooltip.equals(this.tooltipCandidate)) this.tooltipCandidate = null;
-            return;
-        }
-        long now = System.currentTimeMillis();
-        if (!tooltip.equals(this.tooltipCandidate)) {
-            this.tooltipCandidate = tooltip;
-            this.tooltipCandidateSince = now;
-        } else if (now - this.tooltipCandidateSince >= TOOLTIP_DELAY_MILLIS) {
-            this.hoveredTooltip = tooltip;
-        }
+        if (!hovered || map==null || map.isMapDragging() || guideOpen || problemCenterOpen || pendingMutation!=null) return;
+        tooltipOffered=tooltip;
     }
 
     private void renderTooltip(GuiGraphics graphics, Component value, int mouseX, int mouseY) {
         int pad=WorldMapUiLayout.TOOLTIP_PADDING;
-        int textWidth=Math.max(1,Math.min(this.font.width(value),Math.max(1,this.width-WorldMapUiLayout.EDGE*2-pad*2)));
+        int textWidth=Math.max(1,Math.min(Math.min(220,this.font.width(value)),Math.max(1,this.width-WorldMapUiLayout.EDGE*2-pad*2)));
         var bounds=WorldMapUiLayout.tooltip(this.width,this.height,mouseX,mouseY,textWidth,this.font.wordWrapHeight(value,textWidth));
         plate(graphics,bounds.x(),bounds.y(),bounds.width(),bounds.height());
         graphics.enableScissor(bounds.x(),bounds.y(),bounds.right(),bounds.bottom());
@@ -1077,13 +1549,27 @@ case ENERGY->List.of();
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if(atlasTool!=null){atlasTool.mouseClicked(mouseX,mouseY,button);return true;}
+        if(planEditor!=null){planEditor.mouseClicked(mouseX,mouseY,button);return true;}
+        keyboard.reset();
+        if (button==0 && mainControls() && stopNavigationBounds()!=null && stopNavigationBounds().contains(mouseX,mouseY)) { JourneyClient.cancelNavigation(); return true; }
+        if (insideMapViewport(mouseX,mouseY)) {
+            searchJump=null;
+            map.interruptCamera();
+            com.example.examplemod.client.logistics.LogisticsMapOverlay.cancelAutomaticFocus();
+        }
+        if (map == null && button == 0 && com.example.examplemod.client.CityPublicDirectory.failed()
+                && directoryRetryBounds().contains(mouseX,mouseY)) {
+            com.example.examplemod.client.CityPublicDirectory.retry();
+            return true;
+        }
         // A disappearing surface still owns its input until its final frame.
         if(closingModal()||this.map!=null&&closingPopover(mouseX,mouseY))return true;
         if(this.guideOpen||this.problemCenterOpen)return handleModalClick(mouseX,mouseY);
         if(button!=0&&this.map!=null&&(this.layersOpen&&layersPopoverBounds().contains(mouseX,mouseY)
                 ||this.searchOpen&&WorldMapUiLayout.searchPopover(this.width,this.modeLabelWidths,this.globalLabelWidths,visibleSearchResults().size(),228).contains(mouseX,mouseY)))return true;
-        if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&com.example.examplemod.client.logistics.LogisticsMapOverlay.click(mouseX,mouseY,button))return true;
-        if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&com.example.examplemod.client.screen.ProjectWorkspaceClient.click(mouseX,mouseY,button))return true;
+        if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&this.map!=null&&!this.map.cameraPrecisionActive()&&!projectWorkspace.open()&&this.tutorialTicks==0&&com.example.examplemod.client.logistics.LogisticsMapOverlay.click(mouseX,mouseY,button))return true;
+        if(!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.layersOpen&&!this.searchOpen&&this.mode==Mode.CITIES&&this.map!=null&&!this.map.cameraPrecisionActive()&&!projectWorkspace.open()&&this.tutorialTicks==0&&com.example.examplemod.client.screen.ProjectWorkspaceClient.click(mouseX,mouseY,button))return true;
         if (this.map != null && this.mode == Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation == null && this.tutorialTicks == 0 && !this.layersOpen && !this.searchOpen && !this.map.hasPendingClaim()
                 && projectWorkspace.click(mouseX,mouseY,button,true)) return true;
         var titleBounds = WorldMapUiLayout.title(this.width);
@@ -1091,9 +1577,9 @@ case ENERGY->List.of();
             var dimensions = com.example.examplemod.client.CityPublicDirectory.dimensions;
             if (dimensions.size() > 1) {
                 requestedDimension = dimensions.get((dimensions.indexOf(this.data.getDimensionId()) + 1) % dimensions.size());
-                savePreferences(); if (map != null) map.releaseTerrainTextures(); map = null; preferenceWorld = null; preferences = null;
-                CityWorldMapSession.INSTANCE.awaitAnchor();
-                PacketDistributor.sendToServer(new com.example.examplemod.network.RequestCityDirectoryPayload(requestedDimension, com.example.examplemod.network.RequestCityDirectoryPayload.NEW, 0));
+                savePreferences(); discardOwnedPanel(); preferenceWorld = null; preferences = null;
+                com.example.examplemod.client.CityPublicDirectory.open(requestedDimension);
+                directoryView=com.example.examplemod.client.CityPublicDirectory.viewId();
                 return true;
             }
         }
@@ -1117,14 +1603,14 @@ case ENERGY->List.of();
         if (button != 0) {
             if (this.problemCenterOpen || this.guideOpen) return handleModalClick(mouseX, mouseY);
             if (this.readOnly) {
-                /*
-                 * Правая кнопка в режиме чтения ничего не делает.
-                 *
-                 * <p>Панель обрабатывает ПКМ как запрос занять участок, а занятие
-                 * участка — это изменение города. Отдавать клик панели значило бы
-                 * предложить действие, которого на этой карте быть не должно, и
-                 * открыть подтверждение, которого тут нечем подтвердить.
-                 */
+                if(button==1 && !planningSession && mode==Mode.CITIES && mainControls() && tutorialTicks==0 &&
+                        !map.cameraPrecisionActive() && canAddPlace()){
+                    var icon=map.placeIconAt(mouseX,mouseY,minecraft.player.getBlockY());
+                    if(icon!=null){
+                        openAtlasTool(AtlasPlaceEditor.sharedAt(this,map,icon));
+                        return true;
+                    }
+                }
                 return false;
             }
             return this.map.mouseClicked(mouseX, mouseY, button)
@@ -1132,7 +1618,7 @@ case ENERGY->List.of();
         }
         for (int index = 0; index < this.viewButtons.size(); index++) {
             if (!this.problemCenterOpen && !this.guideOpen && editControl("view[" + index + "]", this.viewButtons.get(index)).contains(mouseX, mouseY)) {
-                handleViewAction(index<2?index:index+1); dismissTutorial(); return true;
+                handleViewAction(viewActionAt(index)); dismissTutorial(); return true;
             }
         }
         // A modal owns the click: the map must not pan, select or dismiss anything underneath it.
@@ -1150,10 +1636,12 @@ case ENERGY->List.of();
             handleGlobalAction(index);
             return true;
         }
-        if (this.searchOpen && this.searchBox.mouseClicked(mouseX, mouseY, button)) return true;
+        if (this.searchOpen && viewEdit!=ViewEdit.DELETE && this.searchBox.mouseClicked(mouseX, mouseY, button)) {
+            searchMessage="";searchFocus=-1;setFocused(searchBox);return true;
+        }
         if (this.layersOpen && handleLayerClick(mouseX, mouseY)) return true;
         if (this.searchOpen && handleSearchClick(mouseX, mouseY)) return true;
-        if(WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)){
+        if(!expandedSelectionCard() && WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)){
             var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null));rows.add(new Legend("social_project",0xFFE4B65B,null));for(int i=0;i<rows.size();i++)if(rows.get(i).key().equals("alliance")&&WorldMapUiLayout.legendRow(panel,i,this.legendScroll).contains(mouseX,mouseY))com.example.examplemod.client.AllianceClient.clearFocus();return true;
         }
         CityMapPanel.Selection selected = this.map.getSelection();
@@ -1169,14 +1657,16 @@ case ENERGY->List.of();
         if (this.cardWidth > 0
                 && inside(mouseX, mouseY, this.cardX, this.cardY, this.cardWidth, this.cardHeight)) return true;
 
+        pendingSelection=null;
         this.map.clearSelection();
         dismissTutorial();
         CityMapPanel.Selection before = selected;
         boolean handled = this.map.mouseClicked(mouseX, mouseY, button);
         CityMapPanel.Selection after = this.map.getSelection();
         if (handled && after != null && !after.equals(before)) {
-            if (before != null) this.backHistory.push(before);
+            pushTarget(backHistory,before);
             this.forwardHistory.clear();
+            CommunityFx.sound("map_select");
         }
         return handled || super.mouseClicked(mouseX, mouseY, button);
     }
@@ -1185,6 +1675,7 @@ private boolean handleModalClick(double mouseX, double mouseY) {
         if (this.problemCenterOpen) {
             var objects = problemObjects();
             var bounds = WorldMapUiLayout.problemModal(this.width, this.height);
+            if(inboxBounds(bounds).contains(mouseX,mouseY)){ SocialHubScreen.openInbox(this); return true; }
             for (int index = 0; index < Math.min(problemRows(), objects.size() - this.problemOffset); index++) if (problemRow(bounds, index).contains(mouseX, mouseY)) {
                 selectObject(objects.get(index + this.problemOffset)); this.problemCenterOpen = false; return true;
             }
@@ -1202,11 +1693,14 @@ private boolean handleModalClick(double mouseX, double mouseY) {
             case WorldMapUiLayout.GLOBAL_FORWARD -> { navigateForward(); dismissTutorial(); }
             case WorldMapUiLayout.GLOBAL_CENTER_CITY -> {  this.map.centerOn(this.data.getPylonPos()); dismissTutorial(); }
             case WorldMapUiLayout.GLOBAL_SEARCH -> {
-                updateSearchResults();
                 this.searchOpen = !this.searchOpen;
                 this.layersOpen = false;
                 this.searchBox.setVisible(this.searchOpen);
-                if (this.searchOpen) updateSearchResults();
+                if (this.searchOpen) {
+                    com.example.examplemod.client.logistics.LogisticsMapOverlay.requestDirectoryForSearch();
+                    searchFocus = -1;
+                    rebuildSearchCatalog();
+                }
                 setFocused(this.searchOpen ? this.searchBox : null);
             }
             case WorldMapUiLayout.GLOBAL_LAYERS -> {
@@ -1224,20 +1718,31 @@ private boolean handleModalClick(double mouseX, double mouseY) {
     private void navigateBack() {
         if (this.backHistory.isEmpty()) return;
 
-        CityMapPanel.Selection current=this.map.getSelection();if(current!=null)this.forwardHistory.push(current);
-        this.map.selectAndCenter(this.backHistory.pop());
+        navigate(backHistory,forwardHistory);
     }
 
     private void navigateForward() {
         if (this.forwardHistory.isEmpty()) return;
 
-        CityMapPanel.Selection current=this.map.getSelection();if(current!=null)this.backHistory.push(current);
-        this.map.selectAndCenter(this.forwardHistory.pop());
+        navigate(forwardHistory,backHistory);
     }
 
-private void handleContextAction(CityMapPanel.Selection value){
-        if(value.kind()==CityMapPanel.SelectionKind.CITY&&!this.readOnly&&this.minecraft!=null)CommunityScreen.openRelations(this);
-        else this.map.centerOn(value.pos());
+    private void pushTarget(Deque<AtlasViewContext.Target> history, CityMapPanel.Selection value) {
+        if (value == null) return;
+        history.push(AtlasViewContext.Target.from(value));
+        if (history.size()>64) history.removeLast();
+    }
+    private void navigate(Deque<AtlasViewContext.Target> history, Deque<AtlasViewContext.Target> reverse) {
+        if (map == null) return;
+        while (!history.isEmpty()) {
+            var target=history.pop();
+            var value=map.resolveSelection(target.kind(),target.id(),target.pos());
+            if (value!=null) {
+                pushTarget(reverse,map.getSelection());
+                map.selectAndCenter(value);
+                return;
+            }
+        }
     }
 
     /** Only the overlays the current mode owns are clickable; a row that is not drawn is not a row. */
@@ -1272,22 +1777,144 @@ private void handleContextAction(CityMapPanel.Selection value){
         return editControl("layer[" + index + "]", new WorldMapUiLayout.Rect(raw.x(), raw.y() - this.layerScroll, raw.width(), raw.height()));
     }
 
-    private boolean handleSearchClick(double mouseX, double mouseY) {
-        var visible = visibleSearchResults();
-        for (int index = 0; index < 3; index++) if (searchFilterBounds(index).contains(mouseX, mouseY)) {
-            if (index == 0) this.searchType = (this.searchType + 1) % (CityMapPanel.SelectionKind.values().length + 1);
-            else if (index == 1) this.searchOwner = (this.searchOwner + 1) % 3;
-            else this.searchProblems = !this.searchProblems;
-            this.searchOffset = 0; updateSearchResults(); return true;
+    private boolean handleSearchClick(double x,double y) {
+        if(!searchPanelBounds().contains(x,y))return false;
+        searchMessage="";
+        if(viewEdit==ViewEdit.NONE) {
+            for(int i=0;i<3;i++)if(searchFilterBounds(i).contains(x,y)){activateControl(i);return true;}
+            for(int i=0;i<4;i++)if(searchTabBounds(i).contains(x,y)){activateControl(i+3);return true;}
+            var rows=visibleSearchResults();
+            for(int i=0;i<rows.size();i++)if(searchResultControl(i).contains(x,y)) {
+                searchFocus=7;searchCursor=searchOffset+i;setFocused(null);
+                if(rows.get(i) instanceof ViewRow row){selectedView=row.view.id();return true;}
+                if(x>=searchResultControl(i).right()-20)starResult();else openCurrentSearchRow();return true;
+            }
         }
-        for (int index = 0; index < visible.size(); index++) if (searchResultControl(index).contains(mouseX, mouseY)) {
-            selectObject(visible.get(index)); this.searchOpen = false; this.searchBox.setVisible(false); setFocused(null); return true;
+        if(searchTab==AtlasSearch.Tab.VIEWS) {
+            var actions=viewActions();
+            for(int i=0;i<actions.length;i++)if(searchFooter(i,actions.length).contains(x,y)){activateControl(i+8);return true;}
         }
-        return WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, visible.size(), 228).contains(mouseX, mouseY);
+        return true;
+    }
+    private String[] viewActions() {
+        return viewEdit==ViewEdit.NONE?new String[]{"create","rename","update","delete","open"}:new String[]{"confirm","cancel"};
+    }
+    private ViewRow selectedViewRow() {
+        if(selectedView!=null)for(var row:visibleViews)if(row.view.id().equals(selectedView))return row;
+        return searchCursor<visibleViews.size()?visibleViews.get(searchCursor):null;
+    }
+    private void finishNaming() {
+        viewEdit=ViewEdit.NONE;searchBox.setMaxLength(64);searchBox.setValue(queryBeforeNaming);setFocused(null);searchFocus=7;
+    }
+    private void editWorkingView(String action) {
+        if(library==null){searchMessage="unavailable";return;}
+        if(action.equals("cancel")){finishNaming();return;}
+        var row=selectedViewRow();
+        if(action.equals("confirm")) {
+            var edit=viewEdit;String name=searchBox.getValue().strip();
+            if(edit==ViewEdit.CREATE) {
+                UUID id=library.create(name,workingCamera());if(id==null){searchMessage="invalid";return;}
+                selectedView=id;if(!writeLibrary(library,true))return;
+            } else {
+                if(row==null||!row.view.id().equals(selectedView)){searchMessage="unavailable";return;}
+                boolean changed=edit==ViewEdit.DELETE?row.library.delete(selectedView):row.library.edit(selectedView,name,null);
+                if(!changed){searchMessage="invalid";return;}if(!writeLibrary(row.library,true))return;
+            }
+            finishNaming();searchBox.setValue("");
+            for(int i=0;i<visibleViews.size();i++)if(visibleViews.get(i).view.id().equals(selectedView))moveSearchCursor(i);
+            return;
+        }
+        if(!action.equals("create")&&row==null){searchMessage="pick_view";return;}
+        if(row!=null)selectedView=row.view.id();
+        if(action.equals("open")) {
+            if(row.library==library)applyWorkingView(row.view);
+            else startSearchJump(ResourceLocation.parse(row.library.area.dimension()),null,row.library.area,row.view.id());
+            return;
+        }
+        if(action.equals("update")) {
+            if(row.library!=library){searchMessage="update_here";return;}
+            if(row.library.edit(selectedView,null,workingCamera())&&writeLibrary(row.library,true))searchMessage="updated";
+            return;
+        }
+        viewEdit=switch(action){case "create"->ViewEdit.CREATE;case "rename"->ViewEdit.RENAME;default->ViewEdit.DELETE;};
+        queryBeforeNaming=searchBox.getValue();
+        if(viewEdit!=ViewEdit.DELETE) {
+            searchBox.setMaxLength(48);searchBox.setValue(viewEdit==ViewEdit.RENAME?row.view.name():"");
+            searchBox.setHighlightPos(0);setFocused(searchBox);searchFocus=-1;
+        } else {searchFocus=8;setFocused(null);}
+    }
+    private void activateControl(int index) {
+        searchMessage="";searchFocus=index;setFocused(null);
+        if(index>=8){var actions=viewActions();if(index-8<actions.length)editWorkingView(actions[index-8]);return;}
+        if(index==7){openCurrentSearchRow();return;}
+        if(index>=3){switchSearchTab(AtlasSearch.Tab.values()[index-3]);return;}
+        if(index==0)searchType=(searchType+1)%AtlasSearch.Type.values().length;
+        else if(index==1)searchOwner=(searchOwner+1)%3;
+        else searchProblems=!searchProblems;
+        searchOffset=searchCursor=0;updateSearchResults();
+    }
+    private void moveSearchCursor(int index) {
+        searchCursor=Math.clamp(index,0,Math.max(0,allSearchRows().size()-1));
+        searchOffset=Math.max(searchCursor-searchRows()+1,Math.min(searchCursor,searchOffset));
+        if(searchTab==AtlasSearch.Tab.VIEWS&&searchCursor<visibleViews.size())selectedView=visibleViews.get(searchCursor).view.id();
+    }
+    private void starResult() {
+        if(library==null||searchCursor>=searchResults.size()){searchMessage="unavailable";return;}
+        if(library.toggle(searchResults.get(searchCursor).key()))writeLibrary(library,true);
+        else searchMessage="favorite_limit";
+        updateSearchResults();
+    }
+    private void openCurrentSearchRow() {
+        if(searchTab==AtlasSearch.Tab.VIEWS){editWorkingView("open");return;}
+        if(searchCursor>=searchResults.size())return;
+        var entry=searchResults.get(searchCursor);
+        if(entry.type()==AtlasSearch.Type.COORDINATES&&entry.dimension().equals(data.getDimensionId())) {
+            if(library!=null&&library.visit(entry.key()))writeLibrary(library,false);
+            map.clearSelection();map.centerOn(entry.pos());closeSearchPanel();return;
+        }
+        if(!openSearchKey(entry.key())){rebuildSearchCatalog();searchMessage="unavailable";}
+    }
+    private boolean searchKey(int key,int modifiers) {
+        if(key==GLFW.GLFW_KEY_ESCAPE){if(viewEdit==ViewEdit.NONE)closeSearchPanel();else finishNaming();return true;}
+        if(key==GLFW.GLFW_KEY_TAB) {
+            int last=searchTab==AtlasSearch.Tab.VIEWS?7+viewActions().length:7;
+            int step=(modifiers&GLFW.GLFW_MOD_SHIFT)!=0?-1:1;
+            if(viewEdit!=ViewEdit.NONE) {
+                int[] order=viewEdit==ViewEdit.DELETE?new int[]{8,9}:new int[]{-1,8,9};int idx=0;
+                while(idx<order.length&&order[idx]!=searchFocus)idx++;
+                searchFocus=order[Math.floorMod(idx+step,order.length)];
+            } else searchFocus=Math.floorMod(searchFocus+1+step,last+2)-1;
+            setFocused(searchFocus==-1?searchBox:null);narrateSearchFocus();return true;
+        }
+        if(key==GLFW.GLFW_KEY_ENTER||key==GLFW.GLFW_KEY_KP_ENTER) {
+            if(viewEdit!=ViewEdit.NONE)editWorkingView(searchFocus==9?"cancel":"confirm");
+            else if(searchFocus==-1||searchFocus==7)openCurrentSearchRow();else activateControl(searchFocus);
+            return true;
+        }
+        if(viewEdit==ViewEdit.NONE&&(key==GLFW.GLFW_KEY_UP||key==GLFW.GLFW_KEY_DOWN)) {
+            moveSearchCursor(searchCursor+(key==GLFW.GLFW_KEY_UP?-1:1));searchFocus=7;setFocused(null);narrateSearchFocus();return true;
+        }
+        if(searchFocus==7&&searchTab!=AtlasSearch.Tab.VIEWS&&key==GLFW.GLFW_KEY_SPACE){starResult();return true;}
+        if(key==GLFW.GLFW_KEY_SPACE&&searchFocus>=0){activateControl(searchFocus);return true;}
+        return searchFocus!=-1;
+    }
+    private void narrateSearchFocus() {
+        Component text;
+        if(searchFocus==-1)text=AtlasSearch.tr(viewEdit==ViewEdit.NONE?"search":"name");
+        else if(searchFocus<3)text=searchFocus==0?searchTypeLabel():Component.translatable(searchFocus==1
+                ?"gui.createcityexpansioncore.world_map.filter.owner."+searchOwner:"gui.createcityexpansioncore.world_map.filter."+(searchProblems?"problems":"any_status"));
+        else if(searchFocus<7)text=AtlasSearch.tr("tab."+AtlasSearch.Tab.values()[searchFocus-3].name().toLowerCase(Locale.ROOT));
+        else if(searchFocus==7&&searchCursor<allSearchRows().size()) {
+            Object item=allSearchRows().get(searchCursor);text=Component.literal(item instanceof AtlasSearch.Entry e?e.name()+" · "+e.context():((ViewRow)item).view.name());
+        } else if(searchFocus>=8)text=AtlasSearch.tr(viewActions()[searchFocus-8]+"_help");
+        else text=AtlasSearch.tr("empty");
+        minecraft.getNarrator().sayNow(text);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if(atlasTool!=null){atlasTool.mouseDragged(mouseX,mouseY,button,dragX,dragY);return true;}
+        if(planEditor!=null){planEditor.mouseDragged(mouseX,mouseY,button,dragX,dragY);return true;}
         if(closingModal()||this.map!=null&&closingPopover(mouseX,mouseY))return true;
         if (this.mode==Mode.CITIES && projectWorkspace.blocksDrag(mouseX,mouseY)) return true;
         dismissTutorial();
@@ -1300,6 +1927,8 @@ private void handleContextAction(CityMapPanel.Selection value){
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if(atlasTool!=null){atlasTool.mouseReleased(mouseX,mouseY,button);return true;}
+        if(planEditor!=null){planEditor.mouseReleased(mouseX,mouseY,button);return true;}
         // Клик мог начаться до панели и закончиться после: отпускание обязано
         // быть безопасным независимо от того, что нажатие было проигнорировано.
         if (this.map == null) return super.mouseReleased(mouseX, mouseY, button);
@@ -1309,19 +1938,22 @@ private void handleContextAction(CityMapPanel.Selection value){
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if(atlasTool!=null){atlasTool.mouseScrolled(mouseX,mouseY,scrollX,scrollY);return true;}
+        if(planEditor!=null){planEditor.mouseScrolled(mouseX,mouseY,scrollX,scrollY);return true;}
         if(closingModal()||this.map!=null&&closingPopover(mouseX,mouseY))return true;
         if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.scroll(mouseX,mouseY,scrollY)) return true;
         if (this.guideOpen) { this.guideScroll = Math.max(0, Math.min(this.guideMaxScroll, this.guideScroll + (scrollY > 0 ? -16 : 16))); return true; }
         if (this.pendingMutation != null || this.map != null && this.map.hasPendingClaim()) return true;
         if (this.problemCenterOpen) { this.problemOffset = Math.max(0, Math.min(Math.max(0, problemObjects().size() - problemRows()), this.problemOffset + (scrollY > 0 ? -1 : 1))); return true; }
         if (this.searchOpen && WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, visibleSearchResults().size(), 228).contains(mouseX, mouseY)) {
-            this.searchOffset = Math.max(0, Math.min(Math.max(0, this.searchResults.size() - searchRows()), this.searchOffset + (scrollY > 0 ? -1 : 1))); return true;
+            searchOffset=Math.clamp(searchOffset+(scrollY>0?-1:1),0,Math.max(0,allSearchRows().size()-searchRows()));
+            moveSearchCursor(Math.clamp(searchCursor,searchOffset,searchOffset+searchRows()-1));return true;
         }
         if (this.layersOpen && layersPopoverBounds().contains(mouseX, mouseY)) {
             int fullHeight = WorldMapUiLayout.POPOVER_HEADER + layersRowCount() * WorldMapUiLayout.POPOVER_ROW;
             this.layerScroll = Math.max(0, Math.min(fullHeight - layersPopoverBounds().height(), this.layerScroll + (scrollY > 0 ? -20 : 20))); return true;
         }
-        if(this.map!=null&&WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)) {
+        if(this.map!=null&&!expandedSelectionCard()&&WorldMapUiLayout.legend(this.width,this.height).contains(mouseX,mouseY)) {
             int full=WorldMapUiLayout.legendHeader(WorldMapUiLayout.legend(this.width,this.height))+legendRows().size()*WorldMapUiLayout.LEGEND_ROW;
             this.legendScroll=Math.max(0,Math.min(Math.max(0,full-WorldMapUiLayout.legend(this.width,this.height).height()),this.legendScroll+(scrollY>0?-18:18)));return true;
         }
@@ -1329,7 +1961,9 @@ private void handleContextAction(CityMapPanel.Selection value){
             this.cardScroll = Math.max(0, Math.min(this.cardMaxScroll, this.cardScroll + (scrollY > 0 ? -16 : 16))); return true;
         }
         dismissTutorial();
+        if (mainControls() && LogisticsMapOverlay.scrollInspection(mouseX,mouseY,scrollY)) return true;
         if (this.map == null) return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        if (scrollY!=0 && insideMapViewport(mouseX,mouseY)) com.example.examplemod.client.logistics.LogisticsMapOverlay.cancelAutomaticFocus();
         return this.map.mouseScrolled(mouseX, mouseY, scrollY) || super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
@@ -1351,22 +1985,29 @@ private void handleContextAction(CityMapPanel.Selection value){
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        hoverDelay.keyboardInput(mouseXNow,mouseYNow);
+        if(atlasTool!=null){atlasTool.keyPressed(keyCode,scanCode,modifiers);return true;}
+        if(planEditor!=null){planEditor.keyPressed(keyCode,scanCode,modifiers);return true;}
+        if (map != null) map.interruptCamera();
         if(closingModal())return true;
         if(this.map!=null&&!this.guideOpen&&!this.problemCenterOpen&&this.pendingMutation==null&&!this.map.hasPendingClaim()
                 &&keyCode==GLFW.GLFW_KEY_F&&(modifiers&GLFW.GLFW_MOD_CONTROL)!=0) {
             if(!this.searchOpen)handleGlobalAction(WorldMapUiLayout.GLOBAL_SEARCH);
-            setFocused(this.searchBox);return true;
+            searchFocus=-1;setFocused(this.searchBox);return true;
         }
         if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.key(keyCode,scanCode,modifiers)) return true;
+        if (useAtlasKeyboard(keyCode,modifiers)) return true;
+        if (keyCode==GLFW.GLFW_KEY_ESCAPE && layersOpen && !guideOpen && !problemCenterOpen && pendingMutation==null) { layersOpen=false; return true; }
         if (this.pendingMutation != null) {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) this.pendingMutation = null;
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE && (this.guideOpen || this.problemCenterOpen)) { this.guideOpen = false; this.problemCenterOpen = false; return true; }
-        if (this.map != null && !this.searchOpen && !this.map.hasPendingClaim() && keyCode == GLFW.GLFW_KEY_ESCAPE && this.map.cancelPersonalTools()) return true;
-        if (this.searchOpen && keyCode == GLFW.GLFW_KEY_ENTER && !this.searchResults.isEmpty()) {
-            selectObject(this.searchResults.get(this.searchOffset)); this.searchOpen = false; this.searchBox.setVisible(false); return true;
+        if (guideOpen || problemCenterOpen) {
+            if (keyCode==GLFW.GLFW_KEY_ESCAPE) { guideOpen=false; problemCenterOpen=false; }
+            return true;
         }
+        if (this.map != null && mainControls() && keyCode == GLFW.GLFW_KEY_ESCAPE && this.map.cancelPersonalTools()) return true;
+        if (this.searchOpen && searchKey(keyCode, modifiers)) return true;
         /*
          * Открытое подтверждение claim — самое верхнее состояние атласа:
          * Escape должен отменять один участок, а не закрывать весь атлас
@@ -1384,16 +2025,24 @@ private void handleContextAction(CityMapPanel.Selection value){
             return true;
         }
         if (this.map != null && keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            if (this.map.getSelection() != null) { this.map.clearSelection(); return true; }
             if (this.searchOpen) {
                 this.searchOpen = false; this.searchBox.setVisible(false); setFocused(null); return true;
             }
             if (this.layersOpen) { this.layersOpen = false; return true; }
+            if (map!=null && map.getSelection()!=null && LogisticsMapOverlay.inspecting(map.getSelection().id(),map.dimensionId())) {
+                LogisticsMapOverlay.finishInspection(); cardScroll=0; return true;
+            }
+            if (directions != null) { directions = null; cardScroll = 0; return true; }
+            if (this.map.getSelection()!=null) { this.map.clearSelection(); pendingSelection=null; return true; }
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override public boolean charTyped(char character,int modifiers) {
+        hoverDelay.keyboardInput(mouseXNow,mouseYNow);
+        if(atlasTool!=null){atlasTool.charTyped(character,modifiers);return true;}
+        if(planEditor!=null){planEditor.charTyped(character,modifiers);return true;}
+        if (guideOpen || problemCenterOpen || pendingMutation!=null || map!=null && map.hasPendingClaim()) return true;
         if (this.mode==Mode.CITIES && !this.guideOpen && !this.problemCenterOpen && this.pendingMutation==null && !this.layersOpen && !this.searchOpen && projectWorkspace.character(character,modifiers)) return true;
         return super.charTyped(character,modifiers);
     }
@@ -1449,7 +2098,8 @@ case ENERGY -> setOverlays(false,false);
 
     private void setOverlays(boolean territories,boolean projects){this.map.setOverlay(CityMapPanel.Overlay.TERRITORIES,territories);this.map.setOverlay(CityMapPanel.Overlay.PROJECTS,projects);}
 
-    private static Component selectionType(CityMapPanel.Selection value) {
+    private Component selectionType(CityMapPanel.Selection value) {
+        if (value.kind()==CityMapPanel.SelectionKind.LOGISTICS) return atlasText("kind."+LogisticsMapOverlay.markerKind(value.id(),map.dimensionId()));
         return Component.translatable("gui.createcityexpansioncore.world_map.selection."
                 + value.kind().name().toLowerCase(Locale.ROOT));
     }
@@ -1469,18 +2119,24 @@ case ENERGY -> setOverlays(false,false);
 
     private Path preferencePath() { return this.minecraft.gameDirectory.toPath().resolve("config/ccec-atlas.properties"); }
     private void loadPreferences() {
-        if (this.preferences != null || this.map == null || this.minecraft == null) return;
+        if (this.map == null || this.minecraft == null || this.minecraft.player == null) return;
+        UUID worldId = com.example.examplemod.client.CityPublicDirectory.worldId(this.data.getDimensionId());
+        if (worldId == null || worldId.equals(preferenceWorldId) && this.preferences != null) return;
+        preferenceWorldId = worldId;
         String server = this.minecraft.getCurrentServer() != null ? this.minecraft.getCurrentServer().ip
-                : this.minecraft.getSingleplayerServer() != null ? this.minecraft.getSingleplayerServer().getWorldData().getLevelName() : "local";
-        this.preferenceWorld = server + ":" + (this.minecraft.player == null ? "" : this.minecraft.player.getUUID()) + ":" + this.data.getDimensionId();
-        AtlasPreferences loaded = AtlasPreferences.loadWorld(preferencePath(), this.preferenceWorld);
+                : this.minecraft.getSingleplayerServer() != null ? this.minecraft.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toAbsolutePath().toString() : "local";
+        this.preferenceWorld = "world-v4:" + worldId + ":" + server + ":" + this.minecraft.player.getUUID() + ":" + this.data.getDimensionId();
+        attachLibrary(server, worldId);
+        AtlasPreferences loaded = AtlasPreferences.load(preferencePath(), this.preferenceWorld);
         this.preferences = null;
         applyMode(Mode.CITIES);
         this.preferences = loaded;
         if (this.preferences.positioned) this.map.restoreView(this.preferences.centerX, this.preferences.centerZ, this.preferences.zoom);
         this.map.setPresentation(this.preferences.grid, this.preferences.minimap);
         this.map.setTerritoryPresentation(this.preferences.territoryMode,this.preferences.plotGrid);
-        this.map.setMotion(true,this.preferences.reducedMotion);
+        var display = com.example.examplemod.client.map.MinimapClient.settings();
+        display.importReducedMotion(this.preferences.reducedMotion);
+        this.map.setMotion(true,display.reducedMotion);
         this.map.setPersonalPins(this.preferences.pins);
         int mask = this.preferences.overlays[this.mode==Mode.CITIES?0:3];
         if (mask >= 0) for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.preferenceBit())) != 0);
@@ -1493,6 +2149,62 @@ case ENERGY -> setOverlays(false,false);
             this.map.setOverlay(CityMapPanel.Overlay.TRACKS, true);
             this.preferences.tracksPreference = true;
         }
+        restoreView(VIEWS.get(minecraft.getConnection(),viewKey()));
+    }
+    private String viewKey() {
+        return preferenceWorld == null ? null : preferenceWorld + (readOnly ? planningSession ? ":planning" : ":atlas" : ":pylon");
+    }
+    AtlasViewContext.State captureView() {
+        if (map == null) return null;
+        var target = pendingSelection == null ? AtlasViewContext.Target.from(map.getSelection()) : pendingSelection;
+        return new AtlasViewContext.State(map.centerX(), map.centerZ(), map.zoom(), searchOpen,
+                viewEdit!=ViewEdit.NONE?queryBeforeNaming:searchBox == null ? restoredQuery : searchBox.getValue(), searchType, searchOwner,
+                searchProblems, searchOffset, pendingSelection == null ? cardKey : pendingCardKey,
+                pendingSelection == null ? cardScroll : pendingCardScroll, target,searchTab,searchCursor,selectedView,queryBeforeViews);
+    }
+    void restoreView(AtlasViewContext.State state) {
+        if (map == null || state == null) return;
+        map.restoreView(state.x(),state.z(),state.zoom());
+        restoredQuery=state.query(); searchOpen=state.searchOpen();
+        searchType=state.searchType(); searchOwner=state.searchOwner(); searchProblems=state.problems();
+        searchTab=state.searchTab();selectedView=state.namedView();queryBeforeViews=state.objectQuery();viewEdit=ViewEdit.NONE;
+        if (searchBox != null) {searchBox.setValue(restoredQuery);searchBox.setVisible(searchOpen);}
+        searchCursor=state.searchCursor();
+        searchOffset=state.searchOffset();cardKey=state.cardKey();cardScroll=state.cardScroll();
+        pendingSelection=state.selected();pendingCardScroll=cardScroll;pendingCardKey=cardKey;
+        map.clearSelection();
+        resolvePending(false);
+    }
+    private void resolvePending(boolean completeDirectory) {
+        if (map == null || pendingSelection == null) return;
+        var target=pendingSelection;
+        var value=map.resolveSelection(target.kind(),target.id(),target.pos());
+        boolean authoritative=switch(target.kind()) {
+            case CITY -> completeDirectory;
+            case PROJECT -> com.example.examplemod.client.ProjectClientState.hasMapSnapshot();
+            case LOGISTICS -> LogisticsMapOverlay.hasDirectory(map.dimensionId())
+                    && (!LogisticsMapOverlay.supportsTrade(map.dimensionId()) || AtlasTradeDirectory.finishedRestore(target.id()));
+            case WAYPOINT -> preferences!=null;
+            case PLACE -> AtlasPlaces.ready(map.dimensionId()) || !AtlasPlaces.supported();
+            default -> false;
+        };
+        if (value!=null || authoritative) {
+            if(value==null) showCardNotice("unavailable");
+            map.setSelection(value);
+            if(value!=null){cardScroll=pendingCardScroll;cardKey=pendingCardKey;}
+            pendingSelection=null;
+        }
+    }
+    public void privateSnapshotReady() {
+        if (map == null) return;
+        map.setProjects(data.getProjects());
+        var target=pendingSelection!=null?pendingSelection:AtlasViewContext.Target.from(map.getSelection());
+        if(target!=null && target.kind()==CityMapPanel.SelectionKind.INDUSTRY) {
+            var resolved=map.resolveSelection(target.kind(),target.id(),target.pos());
+            map.setSelection(resolved);
+            if (resolved!=null && pendingSelection!=null) {cardScroll=pendingCardScroll;cardKey=pendingCardKey;}
+            pendingSelection=null;
+        }
     }
     private void rememberOverlays() {
         int mask = 0; for (var layer : CityMapPanel.Overlay.values()) if (this.map.isOverlayEnabled(layer)) mask |= 1 << layer.preferenceBit();
@@ -1500,7 +2212,8 @@ case ENERGY -> setOverlays(false,false);
         this.preferences.overlays[this.mode==Mode.CITIES?0:3] = mask;
     }
     private void savePreferences() {
-        if (this.preferences == null || this.map == null) return;
+        if (this.preferences == null || this.map == null || minecraft.getConnection() == null || minecraft.getConnection() != connection.get()) return;
+        VIEWS.put(minecraft.getConnection(), viewKey(), captureView());
         rememberOverlays(); this.preferences.mode = this.mode.ordinal(); this.preferences.centerX = this.map.centerX();
         this.preferences.centerZ = this.map.centerZ(); this.preferences.zoom = this.map.zoom(); this.preferences.positioned = true;
         this.preferences.grid = this.map.coordinateGrid(); this.preferences.minimap = this.map.overviewVisible();
@@ -1510,39 +2223,85 @@ case ENERGY -> setOverlays(false,false);
         catch (java.io.IOException error) { org.slf4j.LoggerFactory.getLogger(PolishedWorldMapScreen.class).warn("Cannot save local atlas view", error); }
     }
     @Override public void removed() {
-        if (journeyWorkspaceOpen) { super.removed(); return; }
+        closeAtlasTool();AtlasPlaces.clear();
+        searchCatalog=List.of();searchResults=List.of();listedPlaces=List.of();
+        if(planEditor!=null){planEditor.detach();exitPlanEditor();}
+        if (journeyWorkspaceOpen || finished) { super.removed(); return; }
+        finished=true;
+        if(map!=null)returnDimension=map.dimensionId();
         // Every way out of the atlas (ESC, a child screen, the "open object" action) must stop the
         // ambient logistics feed; otherwise a finished center session leaks its markers onto the
         // next normal world map opened in this client.
-        com.example.examplemod.client.logistics.LogisticsMapOverlay.deactivate();
-        ProjectWorkspaceClient.clear();
-        savePreferences();  this.pendingMutation = null;
-        if (this.map != null) { this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null); this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.releaseTerrainTextures(); }
-        if (this.readOnly && !openingIdentityEditor) { CityWorldMapSession.INSTANCE.clear(); com.example.examplemod.client.CityPublicDirectory.reset(); }
-        com.example.examplemod.client.ProjectClientState.clear();
+        boolean ownsView = !readOnly || java.util.Objects.equals(directoryView,com.example.examplemod.client.CityPublicDirectory.viewId());
+        if (ownsView) {
+            com.example.examplemod.client.logistics.LogisticsMapOverlay.deactivate();
+            ProjectWorkspaceClient.clear();
+            savePreferences();
+        }
+        this.pendingMutation = null;
+        if (this.map != null) {
+            this.map.setMotion(false,false); this.map.setProjectFocus(false,false); this.map.setVisualOverlay(null);
+            this.map.cancelPersonalTools(); this.map.setDrawInternalControls(true); this.map.setRailOverlay(null);
+            this.map.setTrackCount(0);
+            if (readOnly) discardOwnedPanel();
+            else if (!validReturn()) this.map.releaseTerrainTextures();
+        }
+        if (this.readOnly && ownsView) com.example.examplemod.client.CityPublicDirectory.reset();
+        if (ownsView) com.example.examplemod.client.ProjectClientState.clear();
         super.removed();
+    }
+    private void discardOwnedPanel() {
+        if (map == null) return;
+        map.releaseTerrainTextures();
+        map=null;
+        com.example.examplemod.client.map.MapDiagnostics.released();
     }
     private int layoutViewButtons(int mapWidth) {
         this.viewButtons.clear();
         int start=WorldMapUiLayout.popoverY(this.width,this.modeLabelWidths,this.globalLabelWidths)+NORMAL;
-        int[] labels=new int[4];
-        for(int i=0;i<labels.length;i++)labels[i]=this.font.width(Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i<2?i:i+1]));
+        trainActionVisible = this.mode==Mode.CITIES && com.example.examplemod.client.logistics.LogisticsMapOverlay.selectedTrain(map.dimensionId())!=null;
+        int[] labels=new int[(trainActionVisible ? 7 : 6)+(AtlasTripScreen.needsRecalculation()?1:0)];
+        for(int i=0;i<labels.length;i++)labels[i]=this.font.width(viewLabel(viewActionAt(i)));
         this.viewButtons.addAll(WorldMapUiLayout.viewButtons(mapWidth,start,labels));
         return this.viewButtons.getLast().bottom()+NORMAL;
     }
+    private int viewActionAt(int index) {
+        int action=index < 2 || trainActionVisible ? index : index + 1;
+        return switch(action){case 5->PLAN_TOOL;case 6->PLACE_TOOL;case 7->RECALCULATE_TOOL;default->action;};
+    }
+    private Component viewLabel(int action) {
+        if(action==PLACE_TOOL || action==RECALCULATE_TOOL)return AtlasPlaces.text(action==PLACE_TOOL?"add":"recalculate");
+        return action==PLAN_TOOL ? AtlasPlanEditor.text("tool") : Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[action]);
+    }
+    private boolean insideMapViewport(double x, double y) {
+        return map != null && x >= map.viewportLeft() && x < map.viewportRight()
+                && y >= map.viewportTop() && y < map.viewportBottom();
+    }
+    private boolean canAddPlace() {
+        return planningAvailable() && AtlasPlaces.supported() && minecraft.player!=null &&
+                minecraft.player.level().dimension().location().equals(map.dimensionId());
+    }
     private void renderViewButtons(GuiGraphics g,int mx,int my) {
         for(int viewIndex=0;viewIndex<this.viewButtons.size();viewIndex++) {
-            int i=viewIndex<2?viewIndex:viewIndex+1;
+            int i=viewActionAt(viewIndex);
             var r=editControl("view[" + viewIndex + "]", this.viewButtons.get(viewIndex));
-            boolean active=i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
-            var selected=this.map.getSelection();
-            boolean enabled=i!=2;
+            boolean active=i==2&&this.map.followedTrain()!=null||i==3&&this.map.pinToolActive()||i==4&&this.map.measureToolActive();
+            boolean enabled=switch(i){case PLAN_TOOL->planningAvailable();case PLACE_TOOL->canAddPlace();default->true;};
             WorldMapChrome.dispatchControl(g,r,active,r.contains(mx,my),enabled,false);
-            Component label=Component.translatable("gui.createcityexpansioncore.world_map.view."+VIEW_KEYS[i]);
+            Component label=viewLabel(i);
             if(WorldMapUiLayout.viewButtonsCompact(Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL)))
                 WorldMapChrome.viewIcon(g,i,r.x()+(r.width()-16)/2,r.y()+(r.height()-16)/2,enabled?TEXT:MapPalette.TEXT_FAINT);
             else g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-SECTION),r.x()+6,r.y()+(r.height()-8)/2,enabled?TEXT:MapPalette.TEXT_FAINT,false);
-            offerTooltip(label,r.contains(mx,my));
+            if(mainControls()) {
+                var hint=switch(i){
+                    case PLACE_TOOL -> AtlasPlaces.text(readOnly && !planningSession && mode==Mode.CITIES?"add_map_hint":"add_hint");
+                    case RECALCULATE_TOOL -> AtlasPlaces.text("recalculate");
+                    case PLAN_TOOL -> AtlasPlanEditor.text(enabled?"tool_hint":"await_scope");
+                    default -> atlasText("view."+i);
+                };
+                keyboard.add("view."+i,label,hint,r,()->{if(enabled)handleViewAction(i);});
+                offerTooltip(hint,r.contains(mx,my));
+            }
         }
         if(this.map.pinToolActive()||this.map.measureToolActive()) {
             int width=Math.max(1,WorldMapUiLayout.contextPanelLeft(this.width)-WorldMapUiLayout.EDGE-NORMAL);
@@ -1551,52 +2310,188 @@ case ENERGY -> setOverlays(false,false);
     }
 
     private void handleViewAction(int index) {
+        if(index==PLACE_TOOL){
+            if(canAddPlace())
+                openAtlasTool(new AtlasPlaceEditor(this,map,null,null));
+            return;
+        }
+        if(index==RECALCULATE_TOOL){AtlasTripScreen.recalculate(this,map);return;}
+        if(index==PLAN_TOOL){openPlanEditor();return;}
+        if (index < 5 && index != 2) map.interruptCamera();
         switch (index) {
             case 0 -> {  this.map.centerOnPlayer(); }
             case 1 -> {  this.map.fitCity(); }
+            case 2 -> this.map.toggleFollow(com.example.examplemod.client.logistics.LogisticsMapOverlay.selectedTrain(map.dimensionId()));
 
             case 3 -> this.map.togglePinTool();
             case 4 -> this.map.toggleMeasureTool();
             case 5 -> this.map.setPresentation(this.map.coordinateGrid(), !this.map.overviewVisible());
             case 6 -> this.map.setPresentation(!this.map.coordinateGrid(), this.map.overviewVisible());
-            case 7 -> { this.map.retryTerrain(); requestSnapshots(true); }
+            case 7 -> { this.map.retryTerrain(); com.example.examplemod.client.CityPublicDirectory.retry(); requestSnapshots(true); }
             case 8 -> {
-                // Keep the read-only map session while a temporary profile screen is open.
-                openingIdentityEditor = true; this.layersOpen = false;
+                this.layersOpen = false;
                 com.example.examplemod.client.CityPublicDirectory.cancelLoading();
                 PlayerProfileScreen.open(this, this.minecraft.player.getUUID());
             }
-            case 9 -> { this.preferences.reducedMotion=!this.preferences.reducedMotion; this.map.setMotion(true,this.preferences.reducedMotion); }
+            case 9 -> {
+                var display = com.example.examplemod.client.map.MinimapClient.settings();
+                display.setReducedMotion(!display.reducedMotion);
+                this.map.setMotion(true,display.reducedMotion);
+            }
+            case 10 -> {
+                var display = com.example.examplemod.client.map.MinimapClient.settings();
+                display.inertia = !display.inertia; display.save();
+                this.map.setInertiaEnabled(display.inertia);
+            }
+            case 12 -> {
+                var display=com.example.examplemod.client.map.MinimapClient.settings();
+                display.contextHints=!display.contextHints;
+                display.save();
+            }
+            case 11 -> {
+                var display = com.example.examplemod.client.map.MinimapClient.settings();
+                display.smoothTerrain = !display.smoothTerrain; display.save();
+                this.map.setSmoothTerrain(display.smoothTerrain);
+            }
             default -> { }
         }
     }
 
-    private List<Component> navigationActions(CityMapPanel.Selection value) {
-        List<Component> actions = new ArrayList<>();
-        actions.add(Component.translatable("gui.createcityexpansioncore.world_map.action.center"));
-
-        if (value.kind() == CityMapPanel.SelectionKind.WAYPOINT) actions.add(Component.translatable("gui.createcityexpansioncore.world_map.pin.remove"));
-        var profile = value.kind() == CityMapPanel.SelectionKind.CITY ? com.example.examplemod.client.CityPublicDirectory.profile(value.id()) : null;
-        if (profile != null && profile.editable()) actions.add(Component.translatable("gui.createcityexpansioncore.city.identity.edit"));
-        if(value.kind()==CityMapPanel.SelectionKind.CITY)actions.add(AllianceScreen.tr("city_entry"));
-        return actions;
+    private int searchRows() { return Math.max(1,Math.min(8,(height-popoverY()-96)/25)); }
+    private List<?> allSearchRows() {return searchTab==AtlasSearch.Tab.VIEWS?visibleViews:searchResults;}
+    private List<?> visibleSearchResults() {
+        List<?> all=allSearchRows();
+        searchOffset=Math.clamp(searchOffset,0,Math.max(0,all.size()-searchRows()));
+        return all.subList(searchOffset,Math.min(all.size(),searchOffset+searchRows()));
     }
-    private int searchRows() { return Math.max(1, Math.min(8, (this.height - popoverY() - 96) / 25)); }
-    private List<CityMapPanel.Selection> visibleSearchResults() {
-        int count = this.searchResults.size(); this.searchOffset = Math.max(0, Math.min(this.searchOffset, Math.max(0, count - searchRows())));
-        return this.searchResults.subList(this.searchOffset, Math.min(count, this.searchOffset + searchRows()));
+    private WorldMapUiLayout.Rect searchPanelBounds() {
+        return WorldMapUiLayout.searchPopover(width,modeLabelWidths,globalLabelWidths,visibleSearchResults().size(),228);
+    }
+    private WorldMapUiLayout.Rect searchTabBounds(int i) {
+        var p=searchPanelBounds();int w=(p.width()-10)/4;
+        return new WorldMapUiLayout.Rect(p.x()+5+i*w,p.y()+49,w-2,17);
+    }
+    private WorldMapUiLayout.Rect searchFooter(int i,int count) {
+        var p=searchPanelBounds();int w=(p.width()-8)/count;
+        return new WorldMapUiLayout.Rect(p.x()+4+i*w,p.bottom()-19,w-1,16);
     }
     private Component searchTypeLabel() {
-        return this.searchType == 0 ? Component.translatable("gui.createcityexpansioncore.world_map.filter.all")
-                : Component.translatable("gui.createcityexpansioncore.world_map.selection." + CityMapPanel.SelectionKind.values()[this.searchType - 1].name().toLowerCase(Locale.ROOT));
+        var types=AtlasSearch.Type.values();
+        return AtlasSearch.tr("type."+types[Math.clamp(searchType,0,types.length-1)].name().toLowerCase(Locale.ROOT));
+    }
+    private List<CityMapPanel.Selection> listedPlaces=List.of();
+    private void rebuildSearchCatalog() {
+        listedPlaces=map==null || !searchOpen ? List.of() : AtlasPlaces.selections(map.dimensionId());
+        searchCatalog=map==null||!searchOpen?List.of():AtlasSearch.catalog(map,data.getDimensionId(),data.getCityName());
+        updateSearchResults();
     }
     private void updateSearchResults() {
-        if (this.map == null) { this.searchResults = List.of(); return; }
-        String query = this.searchBox == null ? "" : this.searchBox.getValue();
-        this.searchResults = this.map.search(query).stream().filter(value -> this.searchType == 0 || value.kind() == CityMapPanel.SelectionKind.values()[this.searchType - 1])
-                .filter(value -> this.searchOwner == 0 || value.own() == (this.searchOwner == 1))
-                .filter(value -> !this.searchProblems || value.warning()).toList();
-        this.searchOffset = Math.max(0, Math.min(this.searchOffset, Math.max(0, this.searchResults.size() - searchRows())));
+        if(map==null) {searchResults=List.of();visibleViews=List.of();return;}
+        String query=searchBox==null?"":searchBox.getValue();
+        var types=AtlasSearch.Type.values();searchType=Math.clamp(searchType,0,types.length-1);
+        searchResults=AtlasSearch.find(searchCatalog,query,types[searchType],searchOwner,searchProblems,searchTab,library,data.getDimensionId());
+        if(searchTab==AtlasSearch.Tab.VIEWS) {
+            String term=(viewEdit==ViewEdit.NONE?query:queryBeforeNaming).strip().toLowerCase(Locale.ROOT);
+            var rows=new ArrayList<ViewRow>();
+            for(var book:viewLibraries.values())for(var view:book.views())
+                if(view.name().toLowerCase(Locale.ROOT).contains(term))rows.add(new ViewRow(book,view));
+            rows.sort(java.util.Comparator.comparing(v->v.view.name(),String.CASE_INSENSITIVE_ORDER));
+            visibleViews=List.copyOf(rows);
+        }
+        searchCursor=Math.clamp(searchCursor,0,Math.max(0,allSearchRows().size()-1));
+        searchOffset=Math.clamp(searchOffset,0,Math.max(0,allSearchRows().size()-searchRows()));
+    }
+    private void attachLibrary(String server,UUID world) {
+        var area=new AtlasWorkspace.Area(data.getDimensionId().toString(),world);
+        Path directory=preferencePath().resolveSibling("ccec-atlas-library").resolve(AtlasWorkspace.digest(server+"\0"+minecraft.player.getUUID()));
+        library=AtlasWorkspace.load(directory,area);
+        viewLibraries.clear();viewLibraries.put(area,library);
+        // Dimension IDs are scoped to an individual save. Only a shared live connection can establish a link.
+        if(lastLibraryConnection.get()==minecraft.getConnection()&&directory.equals(lastLibraryDirectory)
+                &&lastLibraryArea!=null&&!area.equals(lastLibraryArea)&&!lastLibraryArea.dimension().equals(area.dimension())) {
+            var previous=AtlasWorkspace.load(directory,lastLibraryArea);
+            boolean changed=library.link(previous.area);
+            for(var sibling:previous.linkedAreas())if(!sibling.dimension().equals(area.dimension()))changed|=library.link(sibling);
+            if(previous.link(area))writeLibrary(previous,false);
+            if(changed)writeLibrary(library,false);
+        }
+        for(var linked:library.linkedAreas()) {
+            if(!linked.dimension().equals(area.dimension())&&com.example.examplemod.client.CityPublicDirectory.dimensions.stream()
+                    .anyMatch(dim->dim.toString().equals(linked.dimension())))viewLibraries.put(linked,AtlasWorkspace.load(directory,linked));
+        }
+        lastLibraryArea=area;lastLibraryConnection=new java.lang.ref.WeakReference<>(minecraft.getConnection());lastLibraryDirectory=directory;
+    }
+    private boolean writeLibrary(AtlasWorkspace book,boolean feedback) {
+        try {book.save();if(feedback)com.example.examplemod.client.CommunityFx.sound("map_save");return true;}
+        catch(java.io.IOException failure) {
+            var restored=book.reload();viewLibraries.put(book.area,restored);
+            if(library==book)library=restored;
+            searchMessage="save_failed";updateSearchResults();return false;
+        }
+    }
+    private AtlasWorkspace.Camera workingCamera() {
+        int mask=0;for(var layer:CityMapPanel.Overlay.values())if(map.isOverlayEnabled(layer))mask|=1<<layer.preferenceBit();
+        String query=searchTab==AtlasSearch.Tab.VIEWS?queryBeforeViews:searchBox.getValue();
+        return new AtlasWorkspace.Camera(map.centerX(),map.centerZ(),map.zoom(),mask,searchType,searchOwner,searchProblems,query,
+                map.territoryMode(),map.plotGrid(),map.coordinateGrid(),map.overviewVisible());
+    }
+    private void switchSearchTab(AtlasSearch.Tab tab) {
+        searchJump=null;
+        if(viewEdit!=ViewEdit.NONE)finishNaming();
+        if(tab==AtlasSearch.Tab.VIEWS&&searchTab!=tab){queryBeforeViews=searchBox.getValue();searchBox.setValue("");}
+        else if(searchTab==AtlasSearch.Tab.VIEWS&&tab!=searchTab)searchBox.setValue(queryBeforeViews);
+        searchTab=tab;selectedView=null;searchOffset=searchCursor=0;searchMessage="";updateSearchResults();
+    }
+    private void closeSearchPanel() {
+        if(viewEdit!=ViewEdit.NONE)finishNaming();
+        searchJump=null;searchOpen=false;searchBox.setVisible(false);searchMessage="";searchFocus=-1;setFocused(null);
+    }
+    private void startSearchJump(ResourceLocation dimension,String key,AtlasWorkspace.Area area,UUID savedView) {
+        if(!readOnly || !com.example.examplemod.client.CityPublicDirectory.dimensions.contains(dimension)) {searchMessage="dimension_unavailable";return;}
+        savePreferences();discardOwnedPanel();library=null;viewLibraries.clear();preferenceWorld=null;preferences=null;
+        requestedDimension=dimension;searchCatalog=List.of();searchResults=List.of();visibleViews=List.of();
+        com.example.examplemod.client.CityPublicDirectory.open(dimension);
+        directoryView=com.example.examplemod.client.CityPublicDirectory.viewId();
+        searchJump=new SearchJump(directoryView,dimension,key,area,savedView);
+        jumpDirectoryReady=false;searchJumpDeadline=System.nanoTime()+15_000_000_000L;
+    }
+    private void completeSearchJump() {
+        var jump=searchJump;
+        if(jump==null)return;
+        if(!jump.view.equals(directoryView)||map==null||library==null){searchJump=null;return;}
+        var arrival=AtlasSearch.arrival(jump.view,com.example.examplemod.client.CityPublicDirectory.viewId(),
+                jump.dimension,data.getDimensionId(),jump.objectKey,com.example.examplemod.client.ProjectClientState.hasMapSnapshot(),
+                System.nanoTime(),searchJumpDeadline);
+        if(arrival==AtlasSearch.Arrival.WAIT){searchMessage="loading_target";return;}
+        if(arrival==AtlasSearch.Arrival.EXPIRED){searchJump=null;searchMessage="unavailable";return;}
+        searchJump=null;
+        if(jump.area!=null) {
+            if(!library.area.equals(jump.area)){searchMessage="unavailable";return;}
+            for(var v:library.views())if(v.id().equals(jump.savedView)){applyWorkingView(v);return;}
+        } else if(openSearchKey(jump.objectKey))return;
+        searchMessage="unavailable";
+    }
+    private void applyWorkingView(AtlasWorkspace.View v) {
+        var c=v.camera();searchTab=AtlasSearch.Tab.ALL;viewEdit=ViewEdit.NONE;searchType=c.type();searchOwner=c.owner();searchProblems=c.problems();
+        searchBox.setValue(c.query());map.clearSelection();map.restoreView(c.x(),c.z(),c.zoom());
+        map.setTerritoryPresentation(c.territoryMode(),c.plots());map.setPresentation(c.grid(),c.overview());
+        for(var layer:CityMapPanel.Overlay.values())map.setOverlay(layer,(c.layers()&(1<<layer.preferenceBit()))!=0);
+        if(sessionForcedTracks)map.setOverlay(CityMapPanel.Overlay.TRACKS,true);
+        closeSearchPanel();
+    }
+    private boolean openSearchKey(String key) {
+        if(map==null)return false;
+        var dim=data.getDimensionId();
+        for(var e:AtlasSearch.catalog(map,dim,data.getCityName()))if(e.key().equals(key)) {
+            if(!dim.equals(e.dimension())){startSearchJump(e.dimension(),e.key(),null,null);return true;}
+            if(library!=null&&library.visit(key))writeLibrary(library,false);
+            closeSearchPanel();
+            if(e.type()==AtlasSearch.Type.TRADE && e.pos()==null)LogisticsMapOverlay.openObject(java.util.UUID.fromString(e.id()),dim);
+            else if(e.type()==AtlasSearch.Type.JOURNEY){map.centerOn(e.pos());openJourneyWorkspace(e.id());}
+            else selectObject(e.selection());
+            return true;
+        }
+        return false;
     }
     private WorldMapUiLayout.Rect searchFilterBounds(int index) {
         var panel = WorldMapUiLayout.searchPopover(this.width, this.modeLabelWidths, this.globalLabelWidths, 1, 228);
@@ -1604,18 +2499,17 @@ case ENERGY -> setOverlays(false,false);
         return editControl("searchFilter[" + index + "]", new WorldMapUiLayout.Rect(panel.x() + 6 + index * width, panel.y() + 28, width - 3, 19));
     }
     private void selectObject(CityMapPanel.Selection value) {
-
-        var before = this.map.getSelection();
-        if (before != null && !before.equals(value)) this.backHistory.push(before);
-        this.forwardHistory.clear();
-        switch (value.kind()) {
-
-default -> applyMode(Mode.CITIES);
+        if(map==null || value==null)return;
+        if(mode!=Mode.CITIES)applyMode(Mode.CITIES);
+        switch(value.kind()) {
+            case CITY -> map.setOverlay(CityMapPanel.Overlay.CITIES,true);
+            case INDUSTRY, PROJECT -> map.setOverlay(CityMapPanel.Overlay.PROJECTS,true);
+            default -> { }
         }
-        for (var layer : activeOverlays()) this.map.setOverlay(layer, true);
-        this.map.selectAndCenter(value);
+        pinMapObject(value);
+        map.centerOn(value.pos());
     }
-    private List<CityMapPanel.Selection> problemObjects() { return this.map.search("").stream().filter(CityMapPanel.Selection::warning).toList(); }
+    private List<CityMapPanel.Selection> problemObjects() { return map.problemObjects(); }
     private int problemRows() { return Math.max(1, (WorldMapUiLayout.problemModal(this.width, this.height).height() - 112) / 25); }
     private WorldMapUiLayout.Rect mutationControl(WorldMapUiLayout.Rect panel, boolean confirm) {
         int half = (panel.width() - LARGE * 3) / 2;
@@ -1669,6 +2563,18 @@ if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEX
             default->CityMapPanel.Overlay.RELATIONS;
         };return this.mode.available()&&this.map.isOverlayEnabled(layer);
     }
+    private WorldMapUiLayout.Rect selectionBounds() {
+        var base=WorldMapUiLayout.contextPanel(width,height,modeLabelWidths,globalLabelWidths,Integer.MAX_VALUE);
+        if (!expandedSelectionCard()) return base;
+        var strip=WorldMapUiLayout.statusStrip(width,height);
+        return new WorldMapUiLayout.Rect(base.x(),base.y(),base.width(),Math.max(1,strip.y()-NORMAL-base.y()));
+    }
+    private boolean expandedSelectionCard() {
+        if (map==null || map.getSelection()==null) return false;
+        var base=WorldMapUiLayout.contextPanel(width,height,modeLabelWidths,globalLabelWidths,Integer.MAX_VALUE);
+        return base.height()<WorldMapUiLayout.CARD_HEADER+112;
+    }
+
     private void renderModeLegend(GuiGraphics g) {
         var panel=WorldMapUiLayout.legend(this.width,this.height);var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null));rows.add(new Legend("social_project",0xFFE4B65B,null));
         int full=WorldMapUiLayout.legendHeader(panel)+rows.size()*WorldMapUiLayout.LEGEND_ROW;

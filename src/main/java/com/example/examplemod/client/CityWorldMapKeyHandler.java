@@ -42,8 +42,8 @@ public final class CityWorldMapKeyHandler {
         }
         // Повторное нажатие закрывает открытую карту, чтобы не приходилось искать
         // кнопку закрытия.
-        if (minecraft.screen instanceof PolishedWorldMapScreen) {
-            minecraft.setScreen(null);
+        if (minecraft.screen instanceof PolishedWorldMapScreen atlas) {
+            atlas.onClose();
             return;
         }
         // Из другого экрана карта не открывается: возврат должен вести туда,
@@ -51,8 +51,7 @@ public final class CityWorldMapKeyHandler {
         if (minecraft.screen != null) {
             return;
         }
-        CityWorldMapSession.INSTANCE.awaitAnchor();
-        PacketDistributor.sendToServer(new RequestCityWorldMapPayload());
+        CityPublicDirectory.open(null);
         minecraft.setScreen(new PolishedWorldMapScreen(CityWorldMapSession.INSTANCE));
     }
 

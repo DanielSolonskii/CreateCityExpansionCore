@@ -351,8 +351,10 @@ final class WorldMapUiLayout {
     static Rect tooltip(int width,int height,int mouseX,int mouseY,int textWidth,int textHeight) {
         int w=Math.min(Math.max(1,width-EDGE*2),textWidth+TOOLTIP_PADDING*2);
         int h=Math.min(Math.max(1,height-EDGE*2),textHeight+TOOLTIP_PADDING*2);
-        int x=Math.max(EDGE,Math.min(width-EDGE-w,mouseX+SECTION));
-        int y=Math.max(EDGE,Math.min(height-EDGE-h,mouseY+SECTION));
+        int x=mouseX+SECTION+w<=width-EDGE ? mouseX+SECTION : mouseX-SECTION-w;
+        int y=mouseY+SECTION+h<=height-EDGE ? mouseY+SECTION : mouseY-SECTION-h;
+        x=Math.max(EDGE,Math.min(width-EDGE-w,x));
+        y=Math.max(EDGE,Math.min(height-EDGE-h,y));
         return new Rect(x,y,w,h);
     }
 

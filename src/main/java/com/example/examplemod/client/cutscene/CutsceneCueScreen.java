@@ -1,5 +1,7 @@
 package com.example.examplemod.client.cutscene;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.client.cutscene.CutsceneEditorScreen.Track;
 import com.example.examplemod.cutscene.Cutscene;
@@ -192,7 +194,7 @@ public final class CutsceneCueScreen extends Screen {
         labels.add(new Label("Надпись", x, y + rowStep));
         int textY = y + rowStep + 10;
         int textHeight = compact ? 31 : 44;
-        MultiLineEditBox textBox = addRenderableWidget(new MultiLineEditBox(font, x, textY, contentWidth, textHeight,
+        MultiLineEditBox textBox = addRenderableWidget(AtlasFormStyle.multiline(font, x, textY, contentWidth, textHeight,
                 Component.literal("Текст плашки"), Component.literal("Надпись")));
         textBox.setCharacterLimit(Cutscene.MAX_TEXT_LENGTH);
         textBox.setValue(text);
@@ -445,7 +447,7 @@ public final class CutsceneCueScreen extends Screen {
 
     private EditBox field(Field field, int x, int y, int width) {
         labels.add(new Label(field.label, x, y));
-        EditBox box = addRenderableWidget(new EditBox(font, x, y + 10, width, 18, Component.literal(field.label)));
+        EditBox box = addRenderableWidget(AtlasFormStyle.field(font, x, y + 10, width, 18, Component.literal(field.label)));
         box.setMaxLength(field.limit);
         box.setValue(values.get(field));
         box.setResponder(value -> values.put(field, value));

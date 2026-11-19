@@ -27,7 +27,8 @@ public record CityMapTilePayload(
         boolean complete,
         int[] colors,
         BitSet contours,
-        int level, short[] heights, java.util.UUID worldId, long revision, boolean unchanged
+        int level, short[] heights, java.util.UUID worldId, long revision, boolean unchanged,
+        java.util.UUID viewId, java.util.UUID requestId, long version, boolean pending
 ) implements CustomPacketPayload {
 
     /**
@@ -42,6 +43,11 @@ public record CityMapTilePayload(
 
     public CityMapTilePayload(BlockPos pos,ResourceLocation dimension,int x,int z,boolean complete,int[] colors,BitSet contours) {
         this(pos,dimension,x,z,complete,colors,contours,0,new short[0],new java.util.UUID(0,0),0,false);
+    }
+    public CityMapTilePayload(BlockPos pos,ResourceLocation dimension,int x,int z,boolean complete,int[] colors,BitSet contours,
+                              int level,short[] heights,java.util.UUID worldId,long revision,boolean unchanged) {
+        this(pos,dimension,x,z,complete,colors,contours,level,heights,worldId,revision,unchanged,
+                RequestCityDirectoryPayload.NEW,RequestCityDirectoryPayload.NEW,0,false);
     }
     public static final Type<CityMapTilePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(
@@ -59,7 +65,8 @@ public record CityMapTilePayload(
                         buffer.writeInt(payload.tileZ());
                         buffer.writeBoolean(payload.complete());
                         buffer.writeByte(payload.level());buffer.writeUUID(payload.worldId());buffer.writeLong(payload.revision());buffer.writeBoolean(payload.unchanged());
-                        if(payload.unchanged())return;
+                        buffer.writeUUID(payload.viewId()); buffer.writeUUID(payload.requestId()); buffer.writeVarLong(payload.version()); buffer.writeBoolean(payload.pending());
+                        if(payload.unchanged() || payload.pending())return;
                         buffer.writeVarInt(payload.heights().length);for(short height:payload.heights())buffer.writeShort(height);
                         for (int color : payload.colors()) {
                             buffer.writeInt(color);
@@ -73,7 +80,8 @@ public record CityMapTilePayload(
                         int tileZ = buffer.readInt();
                         boolean complete = buffer.readBoolean();
                         int level=buffer.readUnsignedByte();java.util.UUID world=buffer.readUUID();long revision=buffer.readLong();boolean unchanged=buffer.readBoolean();
-                        if(unchanged)return new CityMapTilePayload(pylonPos,dimension,tileX,tileZ,complete,new int[0],new BitSet(),level,new short[0],world,revision,true);
+                        var viewId=buffer.readUUID(); var requestId=buffer.readUUID(); long version=buffer.readVarLong(); boolean pending=buffer.readBoolean();
+                        if(unchanged || pending)return new CityMapTilePayload(pylonPos,dimension,tileX,tileZ,complete,new int[0],new BitSet(),level,new short[0],world,revision,unchanged,viewId,requestId,version,pending);
                         int count=buffer.readVarInt();if(count!=0&&count!=1156)throw new IllegalArgumentException("height halo size");
                         short[] heights=new short[count];for(int i=0;i<count;i++)heights[i]=buffer.readShort();
                         int[] colors = new int[COLOR_COUNT];
@@ -94,13 +102,13 @@ public record CityMapTilePayload(
                                 tileZ,
                                 complete,
                                 colors,
-                                contours,level,heights,world,revision,false
+                                contours,level,heights,world,revision,false,viewId,requestId,version,false
                         );
                     }
             );
 
     public CityMapTilePayload {
-        if (level<0||level>7||(!unchanged&&colors.length != COLOR_COUNT)||unchanged&&colors.length!=0||heights.length!=0&&heights.length!=1156) {
+        if (level<0||level>7||(!(unchanged||pending)&&colors.length != COLOR_COUNT)||(unchanged||pending)&&colors.length!=0||unchanged&&pending||version<0||heights.length!=0&&heights.length!=1156) {
             throw new IllegalArgumentException("Invalid city map tile color count");
         }
         colors = colors.clone();heights=heights.clone();java.util.Objects.requireNonNull(worldId);

@@ -4,7 +4,7 @@ package com.example.examplemod.client.map;
 public final class MapMotion {
     private MapMotion() {}
     public static double blend(double seconds, double response) {
-        return 1 - Math.exp(-Math.clamp(seconds, 0, .05) * response);
+        return -Math.expm1(-Math.max(0, seconds) * response);
     }
     public static double angle(double current, double target, double seconds) {
         double delta = ((target - current) % 360 + 540) % 360 - 180;

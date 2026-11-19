@@ -17,6 +17,7 @@ import "./launcher-polish.css";
 import "./launcher-refresh.css";
 import "./companion.css";
 import "./quiet-motion.css";
+import "./community-window.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode><App /></StrictMode>,

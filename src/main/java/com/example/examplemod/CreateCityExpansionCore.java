@@ -1003,7 +1003,7 @@ LOGGER.info(
     ) {
 
         PayloadRegistrar registrar =
-                event.registrar("3");
+                event.registrar("4");
         registrar.playToServer(com.example.examplemod.network.CommunityRequestPayload.TYPE,
                 com.example.examplemod.network.CommunityRequestPayload.STREAM_CODEC,
                 (p,c)->c.enqueueWork(()->{if(c.player() instanceof ServerPlayer player)com.example.examplemod.community.CommunityService.handle(player,p);}));
@@ -1012,7 +1012,10 @@ LOGGER.info(
                 (p,c)->c.enqueueWork(()->{com.example.examplemod.client.CommunityClient.accept(p);com.example.examplemod.client.screen.CommunityScreen.accept(p);}));
         registrar.playToClient(com.example.examplemod.network.CommunityNoticePayload.TYPE,
                 com.example.examplemod.network.CommunityNoticePayload.STREAM_CODEC,
-                (p,c)->c.enqueueWork(()->com.example.examplemod.client.screen.CommunityNoticeClient.accept(p)));
+                (p,c)->c.enqueueWork(()->{
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(c.connection()))
+                        com.example.examplemod.client.screen.CommunityNoticeClient.accept(p);
+                }));
         registrar.playToServer(com.example.examplemod.network.SocialRequestPayload.TYPE,
                 com.example.examplemod.network.SocialRequestPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{
@@ -1085,13 +1088,35 @@ registrar.playToServer(com.example.examplemod.network.RequestCityDirectoryPayloa
                 }));
         registrar.playToClient(com.example.examplemod.network.MinimapDirectoryPayload.TYPE,
                 com.example.examplemod.network.MinimapDirectoryPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.map.MinimapClient.directory(payload.directory())));
+                (payload, context) -> context.enqueueWork(() -> { if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection())) com.example.examplemod.client.map.MinimapClient.directory(payload.directory()); }));
+        registrar.playToClient(com.example.examplemod.network.MapPrivateStatePayload.TYPE,
+                com.example.examplemod.network.MapPrivateStatePayload.STREAM_CODEC,
+                (payload,context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        com.example.examplemod.client.CityPublicDirectory.acceptPrivate(payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.TerrainInvalidatedPayload.TYPE,
+                com.example.examplemod.network.TerrainInvalidatedPayload.STREAM_CODEC,
+                (payload,context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        com.example.examplemod.client.map.CityMapPanel.invalidate(payload);
+                }));
+        registrar.playToServer(com.example.examplemod.network.CloseMapViewPayload.TYPE,
+                com.example.examplemod.network.CloseMapViewPayload.STREAM_CODEC,
+                (payload,context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.city.CityPublicAtlas.close(player,payload.viewId());
+                }));
         registrar.playToClient(com.example.examplemod.network.MapBorderPayload.TYPE,
                 com.example.examplemod.network.MapBorderPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.map.MapBorderLayer.accept(payload)));
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()) &&
+                            (com.example.examplemod.client.CityPublicDirectory.acceptsBorder(payload) ||
+                             com.example.examplemod.client.map.MinimapClient.acceptsBorder(payload)))
+                        com.example.examplemod.client.map.MapBorderLayer.accept(payload);
+                }));
         registrar.playToClient(com.example.examplemod.network.CityDirectoryPayload.TYPE,
                 com.example.examplemod.network.CityDirectoryPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.CityPublicDirectory.accept(payload)));
+                (payload, context) -> context.enqueueWork(() -> { if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection())) com.example.examplemod.client.CityPublicDirectory.accept(payload); }));
         registrar.playToClient(com.example.examplemod.network.CityIdentityResultPayload.TYPE,
                 com.example.examplemod.network.CityIdentityResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.CityIdentityEditorScreen.accept(payload)));
@@ -1112,8 +1137,7 @@ registrar.playToServer(
                 com.example.examplemod.network.CityRelationsStatePayload.TYPE,
                 com.example.examplemod.network.CityRelationsStatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    if (context.player().containerMenu instanceof CityPylonMenu menu) menu.applyRelationsState(payload);
-                    else CityWorldMapSession.INSTANCE.applyRelationsState(payload);
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()) && context.player().containerMenu instanceof CityPylonMenu menu) menu.applyRelationsState(payload);
                 })
         );
 
@@ -1170,10 +1194,8 @@ registrar.playToServer(
                 CityPylonStatePayload.TYPE,
                 CityPylonStatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()) && context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.applyState(payload);
-                    } else {
-                        CityWorldMapSession.INSTANCE.applyState(payload);
                     }
                 })
         );
@@ -1182,13 +1204,8 @@ registrar.playToServer(
                 CityMapTilePayload.TYPE,
                 CityMapTilePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
-                        com.example.examplemod.client.map.MinimapClient.tile(payload);
-                        menu.acceptMapTile(payload);
-                    } else {
-                        com.example.examplemod.client.map.MinimapClient.tile(payload);
-                        CityWorldMapSession.INSTANCE.acceptMapTile(payload);
-                    }
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        com.example.examplemod.client.map.CityMapPanel.acceptTerrain(payload);
                 })
         );
 
@@ -2106,7 +2123,10 @@ registrar.playToClient(
         registrar.playToClient(
                 CityMapPeersPayload.TYPE,
                 CityMapPeersPayload.STREAM_CODEC,
-                (payload, context) -> CITY_MAP_PEERS_HANDLER.handle(payload, context)
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        CITY_MAP_PEERS_HANDLER.handle(payload, context);
+                })
         );
 
         /*
@@ -2166,16 +2186,9 @@ registrar.playToClient(
                 RequestCityWorldMapPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player) {
-                        com.example.examplemod.city.CityWorldMapHandlers.openForMember(player);
+                        com.example.examplemod.city.CityWorldMapHandlers.openForMember(player,payload);
                     }
                 })
-        );
-
-        registrar.playToClient(
-                com.example.examplemod.network.CityWorldMapDeniedPayload.TYPE,
-                com.example.examplemod.network.CityWorldMapDeniedPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(
-                        () -> com.example.examplemod.client.CityWorldMapSession.INSTANCE.deny())
         );
 
         registrar.playToClient(

@@ -1,4 +1,4 @@
-import { ArrowLeft, Blocks, Factory, Heart, Map, Pickaxe, TrainFront, UserRound, UsersRound, Wrench } from "lucide-react";
+import { ArrowLeft, Blocks, Factory, Map, TrainFront, UserRound } from "lucide-react";
 
 const principles = [
   { icon: Factory, title: "Промышленный мир", text: "Create лежит в основе производства, автоматизации и развития городов." },
@@ -37,30 +37,17 @@ export function AboutPage({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="team-grid">
-          <article className="team-card team-card--founder">
-            <div className="team-card__icon"><UserRound size={24} /></div>
-            <div className="team-card__role"><Wrench size={12} /> СОЗДАТЕЛЬ СЕРВЕРА</div>
-            <h3>Даниил<br />Солонский</h3>
-            <p>Автор идеи и руководитель проекта RE:CREATED.</p>
-            <span className="team-card__index">01</span>
-          </article>
-
-          <article className="team-card team-card--builders">
-            <div className="team-card__icon"><UsersRound size={24} /></div>
-            <div className="team-card__role"><Pickaxe size={12} /> BUILDERS</div>
-            <div className="builder-person"><h3>Данила Дзержановский</h3><span>DZERZH</span></div>
-            <div className="builder-person"><h3>Юрий Пономарёв</h3><span>kastrula8976</span></div>
-            <span className="team-card__index">02</span>
-          </article>
-
-          <article className="team-card team-card--thanks">
-            <div className="team-card__icon"><Heart size={24} /></div>
-            <div className="team-card__role"><Heart size={12} /> ОТДЕЛЬНОЕ СПАСИБО</div>
-            <h3>Макс</h3>
-            <span className="team-nickname">moorguul</span>
-            <p>За помощь проекту и вклад в его развитие.</p>
-            <span className="team-card__index">03</span>
-          </article>
+          {[
+            ["Максим Александров", "Разработчик / администратор"],
+            ["Данила Дзержановский", "Разработчик / администратор"],
+            ["Даниил Солонский", "Разработчик / директор"],
+          ].map(([name, role]) => (
+            <article className="team-card" key={name}>
+              <div className="team-card__icon"><UserRound size={24} /></div>
+              <h3>{name}</h3>
+              <p>{role}</p>
+            </article>
+          ))}
         </div>
       </section>
 

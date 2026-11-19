@@ -1,6 +1,5 @@
 package com.example.examplemod.city;
 
-import com.example.examplemod.menu.CityPylonMenu;
 import com.example.examplemod.network.CityMapTilePayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -10,7 +9,6 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.BiomeSpecialEffects;
 import net.minecraft.world.level.block.Block;
@@ -22,34 +20,15 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
-/**
- * Persistent atlas samples captured only while chunks are already naturally loaded.
- *
- * <p>The atlas is sampled once per world block ({@link CityMapTilePayload#SAMPLE_STEP} is 1) with a
- * light slope shading baked in from the sampled surface heights, so the terrain reads as relief
- * instead of flat confetti. Height is additionally reduced to elevation isolines: the server marks
- * the samples a contour passes through, and the client draws those as ink. Sending the decision
- * rather than the height keeps a tile at 128 extra bytes instead of 4096.
- *
- * <p><b>Refresh.</b> A chunk load is the only capture trigger, and this class never asks a level for
- * a chunk: it only records what is already in memory. Every tile that actually changed is marked
- * dirty, and a throttled pass pushes exactly those tiles to the players who already hold them, so a
- * newly explored chunk appears on an already-open map without a reopen and without re-uploading the
- * rest of the atlas.
- */
+/** Persistent surveyed colours, heights and coverage for one ServerLevel.
+ * Derived pyramid nodes and bounded per-view leases live only in memory. */
 public final class CityMapSavedData extends SavedData {
     public static final int UNKNOWN_COLOR = 0xFF101719;
     /** Which biome colour family, if any, a block's colour is resolved through in vanilla. */
@@ -75,8 +54,8 @@ public final class CityMapSavedData extends SavedData {
     /** One tile per this many blocks; also the size of one vanilla chunk in blocks. */
     private static final String DATA_NAME = "createcityexpansioncore_city_map";
     /** Pushes are throttled and budgeted so a burst of chunk loads cannot flood a client. */
-    private static final int PUSH_INTERVAL_TICKS = 20;
     private static final int MAX_TILES_PER_PASS = 16;
+    private static final boolean DIAGNOSTICS = Boolean.getBoolean("ccec.map.diagnostics");
     /**
      * Высота горизонтали в блоках.
      *
@@ -88,23 +67,55 @@ public final class CityMapSavedData extends SavedData {
 
     private java.util.UUID worldId=java.util.UUID.randomUUID();
     private final TerrainPyramid pyramid=new TerrainPyramid();
-    private final Set<Long> changedChunks=new LinkedHashSet<>();
-    public void refreshLoaded(int tileX,int tileZ){
-        for(int z=0;z<2;z++)for(int x=0;x<2;x++)if(changedChunks.size()<4096)changedChunks.add(ChunkPos.asLong(tileX*2+x,tileZ*2+z));
+    private final TerrainSurfaceQueue surfaces = new TerrainSurfaceQueue();
+    private final TerrainInterest interest = new TerrainInterest();
+
+    private static void queueSurface(net.minecraft.world.level.LevelAccessor level, BlockPos pos) {
+        if (level instanceof ServerLevel server)
+            get(server).surfaces.changed(ChunkPos.asLong(Math.floorDiv(pos.getX(),16), Math.floorDiv(pos.getZ(),16)));
     }
-    private static void queueSurface(net.minecraft.world.level.LevelAccessor level,BlockPos pos){
-        if(level instanceof ServerLevel server){var data=get(server);if(data.changedChunks.size()<4096)data.changedChunks.add(ChunkPos.asLong(Math.floorDiv(pos.getX(),16),Math.floorDiv(pos.getZ(),16)));}
+
+    @SubscribeEvent public static void onSurfaceBreak(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event) {
+        queueSurface(event.getLevel(),event.getPos());
     }
-    @SubscribeEvent public static void onSurfaceBreak(net.neoforged.neoforge.event.level.BlockEvent.BreakEvent event){queueSurface(event.getLevel(),event.getPos());}
-    @SubscribeEvent public static void onSurfacePlace(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event){queueSurface(event.getLevel(),event.getPos());}
-    private void refresh(ServerLevel level){
-        long until=System.nanoTime()+1_000_000L;
-        for(int i=0;i<2&&!changedChunks.isEmpty()&&System.nanoTime()<until;i++){
-            long key=changedChunks.iterator().next();changedChunks.remove(key);
-            LevelChunk chunk=level.getChunkSource().getChunkNow(ChunkPos.getX(key),ChunkPos.getZ(key));
-            if(chunk!=null)capture(chunk);
+    @SubscribeEvent public static void onSurfacePlace(net.neoforged.neoforge.event.level.BlockEvent.EntityPlaceEvent event) {
+        queueSurface(event.getLevel(),event.getPos());
+    }
+
+    private void refresh(ServerLevel level) {
+        surfaces.advance(level.getGameTime(), interest.size() != 0, interest::covers, key -> {
+            LevelChunk chunk = level.getChunkSource().getChunkNow(ChunkPos.getX(key), ChunkPos.getZ(key));
+            if (chunk != null) {
+                capture(chunk);
+                surfaces.complete(key);
+            }
+        });
+    }
+
+    public TerrainPyramid.Snapshot snapshot(TerrainPyramid.Key key) {
+        return surfaces.pending(key, pyramid.hasSamples(key)) ? null : pyramid.snapshot(key);
+    }
+
+    private long version(TerrainPyramid.Key key) {
+        return surfaces.pending(key, pyramid.hasSamples(key)) ? -1 : pyramid.version(key);
+    }
+
+    public void prioritize(TerrainPyramid.Key key, BlockPos focus) {
+        surfaces.prioritize(key, Math.floorDiv(focus.getX(),16), Math.floorDiv(focus.getZ(),16));
+    }
+
+    private boolean previouslySurveyed(ChunkPos chunk) {
+        var tile = tiles.get(ChunkPos.asLong(Math.floorDiv(chunk.x,2), Math.floorDiv(chunk.z,2)));
+        if (tile == null) return false;
+        int start = Math.floorMod(chunk.x,2)*16 + Math.floorMod(chunk.z,2)*16*32;
+        for (int z=0; z<16; z++) {
+            int row = start + z*32;
+            int first = tile.known().nextSetBit(row);
+            if (first >= 0 && first < row+16) return true;
         }
+        return false;
     }
+
     public java.util.UUID worldId(){return worldId;}
     public TerrainPyramid.Data terrain(TerrainPyramid.Key key){return pyramid.get(key);}
     public short[] terrainHeights(TerrainPyramid.Key key){return pyramid.halo(key);}
@@ -114,14 +125,13 @@ public final class CityMapSavedData extends SavedData {
         pyramid.put(ChunkPos.getX(key),ChunkPos.getZ(key),colors,tile.heights());
     }
     private final Map<Long, KnownTile> tiles = new HashMap<>();
-    /** Tiles whose samples changed and still have to reach whoever is holding them. */
-    private final Set<Long> dirty = new LinkedHashSet<>();
-    /** Which cached tiles each player already holds, so updates go only where they are useful. */
-    private final Map<UUID, Set<Long>> watched = new HashMap<>();
-
     public static CityMapSavedData get(ServerLevel level) {
         return level.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(CityMapSavedData::new, CityMapSavedData::load, null),
+                new SavedData.Factory<>(() -> {
+                    CityMapSavedData data = new CityMapSavedData();
+                    data.setDirty(); // Persist the dimension identity even for a still-empty survey.
+                    return data;
+                }, CityMapSavedData::load, null),
                 DATA_NAME
         );
     }
@@ -132,87 +142,47 @@ public final class CityMapSavedData extends SavedData {
                 || !(event.getChunk() instanceof LevelChunk chunk)) {
             return;
         }
-        // A chunk load event is the only capture trigger. This method never asks a level for a chunk.
-        get(level).capture(chunk);
+        var data = get(level);
+        long key = chunk.getPos().toLong();
+        // ChunkEvent.Load may fire before FULL status. Sample it on the level tick once
+        // getChunkNow returns it, sharing the same budget as edits and background refresh.
+        data.surfaces.load(key, data.previouslySurveyed(chunk.getPos()));
     }
 
-    /** Pushes tiles that changed since the last pass. Only runs when somebody is actually mapping. */
+    @SubscribeEvent
+    public static void onChunkUnload(ChunkEvent.Unload event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || !(event.getChunk() instanceof LevelChunk chunk)) return;
+        var data = get(level);
+        long key = chunk.getPos().toLong();
+        // A confirmed edit might occur on the last tick before natural unload.
+        if (data.surfaces.dirty(key)) data.capture(chunk);
+        data.surfaces.unload(key);
+    }
+
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ServerLevel level))return;
-        var terrain=get(level);terrain.refresh(level);terrain.pyramid.advance(16,2_000_000L);
-        if (level.getGameTime() % PUSH_INTERVAL_TICKS != 0L) {
-            return;
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        var data = get(level);
+        data.refresh(level);
+        data.pyramid.advance(16, 2_000_000L);
+        if (DIAGNOSTICS && level.getGameTime() % 600 == 0) {
+            org.slf4j.LoggerFactory.getLogger(CityMapSavedData.class).info(
+                    "Map server resources watches={} sourceQueue={} dirtyParents={} queuedRoots={}",
+                    data.interest.size(), data.surfaces.prioritySize(), data.pyramid.pendingTiles(), data.pyramid.queuedRoots());
         }
-        List<ServerPlayer> mappers = new ArrayList<>();
-        for (ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
-            if (level.dimension().location().equals(CityMapNetworkHandlers.viewerDimension(player))) mappers.add(player);
-        }
-        if (mappers.isEmpty()) {
-            return;
-        }
-        CityMapSavedData data = get(level);
-        data.pruneWatchers(level.getServer().getPlayerList().getPlayers());
-        List<Long> batch = data.drainDirty(MAX_TILES_PER_PASS);
-        if (batch.isEmpty()) {
-            return;
-        }
-        for (ServerPlayer player : mappers) {
-            BlockPos anchor = CityMapNetworkHandlers.viewerPylon(player);
-            if (anchor == null) continue;
-            for (Long key : batch) {
-                if (!data.isWatched(player.getUUID(), key)) {
-                    continue;
-                }
-                var terrainKey=new TerrainPyramid.Key(0,ChunkPos.getX(key),ChunkPos.getZ(key));
-                var raw=data.terrain(terrainKey);if(raw==null)continue;
-                short[] halo=data.terrainHeights(terrainKey);
-                PacketDistributor.sendToPlayer(player,
-                        new CityMapTilePayload(anchor, level.dimension().location(),
-                                ChunkPos.getX(key), ChunkPos.getZ(key),
-                                java.util.Arrays.stream(raw.colors()).allMatch(c->(c>>>24)==255),raw.colors(),new BitSet(),0,halo,data.worldId(),TerrainPyramid.revision(raw.colors(),halo),false));
-            }
-        }
+        data.interest.advance(level.getGameTime(), 256, MAX_TILES_PER_PASS, data::version, (address, version) -> {
+            var player = level.getServer().getPlayerList().getPlayer(address.player());
+            if (player != null) CityMapNetworkHandlers.invalidate(player, address.view(),
+                    level.dimension().location(), data.worldId(), address.tile(), version);
+        });
     }
 
-    /** Remembers that a player already holds a tile, so later changes can be pushed to them. */
-    public void watch(UUID player, int tileX, int tileZ) {
-        Set<Long> keys = this.watched.computeIfAbsent(player, ignored -> new LinkedHashSet<>());
-        long key = ChunkPos.asLong(tileX, tileZ); keys.remove(key); keys.add(key);
-        while (keys.size() > 8192) keys.remove(keys.iterator().next());
+    public void watch(UUID player, UUID viewId, TerrainPyramid.Key key, long tick, long lastVersion) {
+        interest.watch(player, viewId, key, tick, lastVersion);
     }
 
-    public boolean isWatched(UUID player, long tileKey) {
-        Set<Long> keys = this.watched.get(player);
-        return keys != null && keys.contains(tileKey);
-    }
-
-    /** Drops watches of players who are no longer online, so the map cannot grow forever. */
-    private void pruneWatchers(List<ServerPlayer> online) {
-        if (this.watched.isEmpty()) {
-            return;
-        }
-        Set<UUID> present = new HashSet<>();
-        for (ServerPlayer player : online) {
-            present.add(player.getUUID());
-        }
-        this.watched.keySet().removeIf(player -> !present.contains(player));
-    }
-
-    /** Takes at most {@code budget} dirty tiles; the rest stay for the next pass. */
-    private List<Long> drainDirty(int budget) {
-        if (this.dirty.isEmpty()) {
-            return List.of();
-        }
-        List<Long> batch = new ArrayList<>(Math.min(budget, this.dirty.size()));
-        for (Long key : this.dirty) {
-            batch.add(key);
-            if (batch.size() >= budget) {
-                break;
-            }
-        }
-        batch.forEach(this.dirty::remove);
-        return batch;
+    public void unwatch(UUID player, UUID viewId) {
+        interest.unwatch(player, viewId);
     }
 
     public TileSnapshot tile(int tileX, int tileZ) {
@@ -329,7 +299,6 @@ public final class CityMapSavedData extends SavedData {
         }
         if (changed) {
             index(tileKey,tile);
-            this.dirty.add(tileKey);
             setDirty();
         }
     }

@@ -9,9 +9,10 @@ import java.util.zip.*;
 
 /** Region-based, asynchronous derived cache. No disk access from the render thread. */
 public final class TerrainTileStore {
-    public static final int MAX_TILES=8192;
+    /** At most two retained scopes share the 8192-tile connection budget. */
+    public static final int MAX_TILES=4096;
     public static final long MAX_DISK_BYTES=256L*1024*1024;
-    private static final int MAGIC=0x43434133;
+    private static final int MAGIC=0x43434134;
     private static final ScheduledThreadPoolExecutor IO=new ScheduledThreadPoolExecutor(1,r->{Thread t=new Thread(r,"CCEC atlas cache");t.setDaemon(true);return t;});
     static {IO.setRemoveOnCancelPolicy(true);}
     public record Key(int x,int z,int level){public Key(int x,int z){this(x,z,0);}public Key {if(level<0||level>7)throw new IllegalArgumentException("terrain level");}}
@@ -20,15 +21,16 @@ public final class TerrainTileStore {
         public Tile(int[] colors,BitSet contours,boolean complete,long at){this(colors,contours,complete,at,new short[0],0,new UUID(0,0));}
         public Tile {if(colors.length!=1024||contours.length()>1024||heights.length!=0&&heights.length!=1156)throw new IllegalArgumentException("tile size");colors=colors.clone();contours=(BitSet)contours.clone();heights=heights.clone();}
     }
+    final TerrainExchange exchange = new TerrainExchange();
     private final Path directory;
     private final String prefix;
     private final LinkedHashMap<Key,Tile> tiles=new LinkedHashMap<>(64,.75f,true);
-    private final Set<Region> loadedRegions=new HashSet<>(),loadingRegions=new HashSet<>(),dirty=new HashSet<>();
+    private final Set<Region> loadedRegions=new LinkedHashSet<>(),loadingRegions=new HashSet<>();
     private final Map<Key,Tile> changed=new LinkedHashMap<>();
     private ScheduledFuture<?> pending;
     public TerrainTileStore(Path directory,String scope){
         this.directory=directory;
-        try {prefix=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest((scope+":terrain-v3").getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
+        try {prefix=HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest((scope+":terrain-v4").getBytes(java.nio.charset.StandardCharsets.UTF_8)));}
         catch(Exception ex){throw new IllegalStateException(ex);}
     }
     public boolean loaded(){return true;}
@@ -37,21 +39,33 @@ public final class TerrainTileStore {
     public Tile get(int x,int z){return get(x,z,0);}
     public synchronized Tile get(int x,int z,int level){
         Key key=new Key(x,z,level);Region region=region(key);
-        if(!loadedRegions.contains(region)&&loadingRegions.add(region))IO.execute(()->load(region));
+        scheduleRead(region);
         return tiles.get(key);
     }
+    private void scheduleRead(Region region) {
+        if (!loadedRegions.contains(region) && loadingRegions.size() < 32 && loadingRegions.add(region))
+            IO.execute(() -> load(region));
+    }
+    synchronized Tile peek(Key key) { return tiles.get(key); }
+    private void trimWrites() {
+        while (changed.size() > 512) {
+            var it = changed.keySet().iterator();
+            it.next(); it.remove();
+        }
+    }
     public synchronized boolean ready(int x,int z,int level){return loadedRegions.contains(region(new Key(x,z,level)));}
+    static int ioQueueSize() { return IO.getQueue().size(); }
     public synchronized int size(){return tiles.size();}
     public void put(int x,int z,Tile tile){put(x,z,0,tile);}
     public synchronized void put(int x,int z,int level,Tile tile){
         Key key=new Key(x,z,level);Region r=region(key);
-        if(!loadedRegions.contains(r)&&loadingRegions.add(r))IO.execute(()->load(r));
-        tiles.put(key,tile);changed.put(key,tile);trim();dirty.add(r);
+        scheduleRead(r);
+        tiles.put(key,tile);changed.put(key,tile);trim();trimWrites();
         if(changed.size()>=256){if(pending!=null)pending.cancel(false);pending=IO.schedule(this::write,0,TimeUnit.SECONDS);}
         else if(pending==null||pending.isDone())pending=IO.schedule(this::write,10,TimeUnit.SECONDS);
     }
-    private void trim(){while(tiles.size()>MAX_TILES){Key oldest=tiles.keySet().iterator().next();tiles.remove(oldest);loadedRegions.remove(region(oldest));}}
-    public synchronized Future<?> flush(){if(pending!=null)pending.cancel(false);pending=IO.schedule(this::write,0,TimeUnit.SECONDS);return pending;}
+    private void trim(){while(loadedRegions.size()>512)loadedRegions.remove(loadedRegions.iterator().next());while(tiles.size()>MAX_TILES){Key oldest=tiles.keySet().iterator().next();tiles.remove(oldest);loadedRegions.remove(region(oldest));}}
+    public synchronized Future<?> flush(){if(pending!=null)pending.cancel(false);if(changed.isEmpty())return IO.submit(()->{});pending=IO.schedule(this::write,0,TimeUnit.SECONDS);return pending;}
     public static void awaitIo()throws Exception{IO.submit(()->{}).get(20,TimeUnit.SECONDS);}
     private Map<Key,Tile> read(Region region){
         Map<Key,Tile> saved=new LinkedHashMap<>();Path file=file(region);
@@ -72,7 +86,11 @@ public final class TerrainTileStore {
     private void load(Region region){Map<Key,Tile> saved=read(region);synchronized(this){saved.forEach(tiles::putIfAbsent);loadingRegions.remove(region);loadedRegions.add(region);trim();}}
     private void write(){
         Map<Region,Map<Key,Tile>> groups=new HashMap<>();
-        synchronized(this){pending=null;for(Region r:dirty){Map<Key,Tile> copy=new LinkedHashMap<>();for(var e:changed.entrySet())if(region(e.getKey()).equals(r))copy.put(e.getKey(),e.getValue());groups.put(r,copy);}dirty.clear();changed.clear();}
+        synchronized(this) {
+            pending=null;
+            changed.forEach((key,tile) -> groups.computeIfAbsent(region(key), ignored -> new LinkedHashMap<>()).put(key,tile));
+            changed.clear();
+        }
         for(var group:groups.entrySet()){
             Path file=file(group.getKey()),temporary=file.resolveSibling(file.getFileName()+".tmp");
             Map<Key,Tile> merged=read(group.getKey());merged.putAll(group.getValue());
@@ -87,7 +105,7 @@ public final class TerrainTileStore {
                     }
                 }
                 try{Files.move(temporary,file,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException ex){Files.move(temporary,file,StandardCopyOption.REPLACE_EXISTING);}
-            }catch(IOException unavailable){synchronized(this){dirty.add(group.getKey());group.getValue().forEach(changed::putIfAbsent);}try{Files.deleteIfExists(temporary);}catch(IOException ignored){}}
+            }catch(IOException unavailable){synchronized(this){group.getValue().forEach(changed::putIfAbsent);trimWrites();}try{Files.deleteIfExists(temporary);}catch(IOException ignored){}}
         }
         try{prune(directory,MAX_DISK_BYTES);}catch(IOException ignored){}
     }

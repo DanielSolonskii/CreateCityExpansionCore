@@ -157,6 +157,7 @@ public final class GeologyWideScanOverlay {
                 "gui.createcityexpansioncore.magnetic_analyzer.map.caption.age",
                 age / 1000
         ));
+        map.labels().reserve(left+7,top+6,mapFont().width(caption)+2,12);
         graphics.drawString(mapFont(), caption, left + 8, top + 8, MUTED, false);
     }
 

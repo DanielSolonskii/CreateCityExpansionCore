@@ -35,7 +35,6 @@ public final class CityMapPanel {
 
     private static final double MIN_ZOOM = AtlasMapScale.MIN_ZOOM;
     private static final double MAX_ZOOM = AtlasMapScale.MAX_ZOOM;
-    private static final double ZOOM_STEP = 1.25;
     private static final double MAX_WORLD_COORDINATE = 29_999_984.0;
     /**
      * Минимальная экранная плотность одной выборки рельефа.
@@ -111,7 +110,9 @@ public final class CityMapPanel {
         receivePeers(territoryPeers);
     }
     private final ResourceLocation dimensionId;
-    private List<CityProjectSnapshot> projects;
+    private List<CityProjectSnapshot> projects = List.of();
+    private List<Selection> problemObjects = List.of();
+    public List<Selection> problemObjects() { return problemObjects; }
 
 private Map<UUID, CityRelationSnapshot.Status> relations = Map.of();
     /**
@@ -203,6 +204,7 @@ private Map<UUID, CityRelationSnapshot.Status> relations = Map.of();
      * открытии кнопки на секунду оказались бы на месте прошлого участка.
      */
     private void setPendingClaim(CityPlot plot) {
+        if (plot != null) interruptCamera();
         this.pendingClaim = plot;
         this.overlayLines = List.of();
     }
@@ -215,7 +217,10 @@ private boolean showCities = true;
     public void setTerritoryPresentation(int mode,boolean plots){territoryMode=Math.clamp(mode,0,2);showPlotGrid=plots;}
     public int territoryMode(){return territoryMode;}
     public boolean plotGrid(){return showPlotGrid;}
-    public void setProjectFocus(boolean focus,boolean picking){projectFocus=focus;projectPicking=picking;}
+    public void setProjectFocus(boolean focus,boolean picking){
+        if (picking && !projectPicking) interruptCamera();
+        projectFocus=focus;projectPicking=picking;
+    }
     private boolean showProjects = true;
     private boolean showRelations;
     private boolean showTracks = true;
@@ -229,25 +234,50 @@ private boolean showCities = true;
     private Focus focus = Focus.WORLD;
     private long routeSelectionStartedAt;
     private final Map<TileKey, CachedTile> tileCache = new java.util.LinkedHashMap<>(64, .75f, true);
-    private final Map<TileKey, Long> requestedTiles = new HashMap<>();
+    private final Map<TileKey, Boolean> requestedTiles = new HashMap<>();
     /** Lightweight tile handles. GPU storage is shared and capped by TerrainAtlas. */
     private final Map<TileKey, TerrainTileTexture> terrainTextures = new HashMap<>();
     private TerrainTileStore terrainStore;
-    private UUID terrainWorld=new UUID(0,0);
+    private MapViewBindings.Binding binding;
 
-    private TerrainTileStore terrainStore() {
-        if (this.terrainStore == null) this.terrainStore = TerrainCache.store(this.dimensionId.toString());
-        return this.terrainStore;
+    private void bindTerrain() {
+        var next = MapViewBindings.binding(hud, pylonPos, dimensionId);
+        if (java.util.Objects.equals(next, binding)) return;
+        var store = TerrainCache.store(next);
+        if (terrainStore != store) {
+            releaseTerrainTextures();
+            tileCache.clear();
+        }
+        terrainStore = store;
+        binding = next;
     }
     private CachedTile cachedTerrain(TileKey key) {
-        CachedTile local = this.tileCache.get(key);
-        if (local != null) return local;
-        var saved = terrainStore().get(key.tileX(), key.tileZ(),key.level());
-        if (saved == null || !terrainWorld.equals(new UUID(0,0))&&!saved.worldId().equals(terrainWorld)) return null;
-        com.example.examplemod.client.ClientTelemetry.diskHit();
-        local = new CachedTile(saved.colors(), saved.contours(), saved.complete(), 0L,saved.heights(),saved.revision(),saved.worldId());
-        this.tileCache.put(key, local); evictTerrainTiles();
+        if (terrainStore == null) return null;
+        var saved = terrainStore.get(key.tileX(), key.tileZ(), key.level());
+        if (saved == null || !saved.worldId().equals(binding.worldId()) || !terrainStore.exchange.acceptsCachedHash(key.storeKey(), saved.revision())) {
+            tileCache.remove(key);
+            TerrainTileTexture obsolete = terrainTextures.remove(key);
+            if (obsolete != null) obsolete.close();
+            return null;
+        }
+        CachedTile local = tileCache.get(key);
+        if (local != null && local.colors() == saved.colors()) return local;
+        MapDiagnostics.cacheHit();
+        if (terrainStore.exchange.checked(key.storeKey()) == 0) com.example.examplemod.client.ClientTelemetry.diskHit();
+        local = new CachedTile(saved.colors(), saved.contours(), saved.complete(), saved.receivedAt(),
+                saved.heights(), saved.revision(), saved.worldId());
+        tileCache.put(key, local);
+        evictTerrainTiles();
         return local;
+    }
+    private final MapLabelLayout labels = new MapLabelLayout();
+    private boolean deferLabels;
+    public MapLabelLayout labels() { return labels; }
+    public void deferLabels() { deferLabels = true; }
+    public void drawLabels(GuiGraphics graphics) {
+        var font = Minecraft.getInstance().font;
+        labels.paint((text,color,x,y) -> graphics.drawString(font,text,x,y,color,true));
+        deferLabels = false;
     }
     private final Map<MarkerKey, ScreenPoint> markerPositions = new HashMap<>();
 
@@ -256,11 +286,13 @@ private boolean showCities = true;
     private double zoom = 1.25;
     private boolean dragging;
     private boolean motionEnabled, reducedMotion;
-    private long motionFrame, cameraStarted, selectionStarted, dragAt;
-    private double fromX, fromZ, fromZoom, toX, toZ, toZoom, velocityX, velocityZ;
-    private boolean cameraMoving;
-    private double zoomAnchorX, zoomAnchorZ, zoomMouseX, zoomMouseY;
-    private boolean anchoredZoom;
+    private long motionFrame, selectionStarted;
+    private boolean inertiaEnabled = true, precisionInput;
+    private final MapCameraMotion cameraMotion = new MapCameraMotion();
+    private final MapProjection projection = new MapProjection();
+    private UUID followedTrain;
+    private boolean hasFollowSample;
+    private double followX, followZ;
     private double pointerYaw;
     private boolean pointerInitialized;
     private final DispatchMotion.Transition[] layerMotion = new DispatchMotion.Transition[Overlay.values().length];
@@ -320,42 +352,64 @@ private boolean showCities = true;
     }
 
     public void setMotion(boolean enabled, boolean reduced) {
+        boolean handingOff = motionEnabled && !enabled;
         motionEnabled = enabled; reducedMotion = reduced;
-        if (!enabled || reduced) stopMotion();
+        if (handingOff) interruptCamera();
+        else if (reduced) stopMotion();
     }
     public boolean reducedMotion() { return reducedMotion; }
-    private boolean preciseTool() { return projectPicking || placingPin || measuring || pendingClaim != null; }
-    private void stopMotion() { cameraMoving = false; anchoredZoom = false; velocityX = velocityZ = 0; }
-    private void animateTo(double x, double z, double scale) {
+    public void setInertiaEnabled(boolean enabled) {
+        if (inertiaEnabled && !enabled) cameraMotion.cancelCoast();
+        inertiaEnabled = enabled;
+    }
+    public void setPrecisionInput(boolean precise) {
+        if (precise && !precisionInput) interruptCamera();
+        precisionInput = precise;
+    }
+    private boolean preciseTool() { return precisionInput || projectPicking || placingPin || measuring || pendingClaim != null; }
+    public boolean cameraPrecisionActive() { return preciseTool(); }
+    private boolean smoothCamera() { return !reducedMotion && !preciseTool(); }
+    private MapCameraMotion.Pose pose() { return new MapCameraMotion.Pose(centerX, centerZ, zoom); }
+    private void applyPose(MapCameraMotion.Pose pose) {
+        centerX = pose.x(); centerZ = pose.z(); zoom = pose.zoom();
+        clampCenter();
+    }
+    private void stopMotion() { cameraMotion.stop(); }
+    public void interruptCamera() {
+        followedTrain = null;
+        hasFollowSample = false;
+        dragging = false;
         stopMotion();
-        if (!motionEnabled || reducedMotion || preciseTool()) { restoreView(x,z,scale); return; }
-        fromX=centerX; fromZ=centerZ; fromZoom=zoom;
-        toX=x; toZ=z; toZoom=scale; cameraStarted=System.nanoTime(); cameraMoving=true;
+    }
+    public UUID followedTrain() { return followedTrain; }
+    public void toggleFollow(UUID train) {
+        boolean active = train != null && !train.equals(followedTrain);
+        interruptCamera();
+        if (active && !preciseTool()) followedTrain = train;
+    }
+    private void animateTo(double x, double z, double scale) {
+        var target = new MapCameraMotion.Pose(x,z,AtlasMapScale.clamp(scale));
+        if (smoothCamera()) cameraMotion.focus(pose(),target,System.nanoTime());
+        else { stopMotion(); applyPose(target); }
     }
     public void followPosition(double x, double z) {
-        if (preciseTool()) return;
-        if (Math.abs(x-centerX)*zoom > viewportWidth*.12 || Math.abs(z-centerZ)*zoom > viewportHeight*.12)
-            if (!cameraMoving || Math.hypot(x-toX,z-toZ)*zoom > 4) animateTo(x,z,zoom);
+        if (followedTrain == null || preciseTool()) return;
+        followX = x;
+        followZ = z;
+        hasFollowSample = true;
     }
     private void updateMotion() {
         long now=System.nanoTime();
-        double dt=motionFrame==0?0:Math.clamp((now-motionFrame)/1e9,0,.05); motionFrame=now;
-        if (preciseTool()) stopMotion();
-        if (cameraMoving) {
-            double t=MapMotion.ease((now-cameraStarted)/180_000_000.0);
-            zoom=fromZoom+(toZoom-fromZoom)*t;
-            if (anchoredZoom) {
-                centerX=zoomAnchorX-(zoomMouseX-viewportX-viewportWidth/2.0)/zoom;
-                centerZ=zoomAnchorZ-(zoomMouseY-viewportY-viewportHeight/2.0)/zoom;
-            } else { centerX=fromX+(toX-fromX)*t; centerZ=fromZ+(toZ-fromZ)*t; }
-            if (t>=1) { cameraMoving=false; anchoredZoom=false; }
-        } else if (!dragging && motionEnabled && !reducedMotion && !preciseTool()) {
-            double decay=Math.exp(-dt*14), step=(1-decay)/14;
-            centerX+=velocityX*step; centerZ+=velocityZ*step;
-            velocityX*=decay; velocityZ*=decay;
-            if (Math.hypot(velocityX,velocityZ)*zoom<2) velocityX=velocityZ=0;
+        double dt=motionFrame==0?0:(now-motionFrame)/1e9; motionFrame=now;
+        var movement=cameraMotion.sample(now);
+        if (movement!=null) applyPose(movement);
+        if (hasFollowSample) {
+            double blend = smoothCamera() ? MapMotion.blend(dt,18) : 1;
+            centerX = MapCameraMotion.followAxis(centerX,followX,viewportWidth*.12/zoom,blend);
+            centerZ = MapCameraMotion.followAxis(centerZ,followZ,viewportHeight*.12/zoom,blend);
+            clampCenter();
+            hasFollowSample = false;
         }
-        clampCenter();
         var player=Minecraft.getInstance().player;
         if (player!=null) {
             double target=player.getYRot()+180;
@@ -380,8 +434,8 @@ private int viewportX;
     private boolean measuring;
     private BlockPos measureStart, measureEnd;
     private final List<AtlasPreferences.Pin> personalPins = new ArrayList<>();
-    private final Set<TileKey> failedTiles = new HashSet<>();
-    private final Map<TileKey, Integer> tileAttempts = new HashMap<>();
+
+
 
     private final ItemStack cityIcon = item("createcityexpansioncore:city_pylon");
     private final ItemStack mineIcon = item("createcityexpansioncore:mine_controller");
@@ -414,7 +468,7 @@ private final ItemStack networkIcon = item("create:track");
     ) {
         this.pylonPos = pylonPos.immutable();
         this.dimensionId = dimensionId;
-        this.projects = List.copyOf(projects);
+        setProjects(projects);
         centerOnPylon();
     }
 
@@ -423,6 +477,10 @@ private final ItemStack networkIcon = item("create:track");
             return;
         }
         this.projects = List.copyOf(projects);
+        // Industry status is the warning source for this panel. Rebuild once per changed snapshot.
+        problemObjects = this.projects.stream().filter(project -> dimensionId.equals(project.dimensionId()))
+                .filter(project -> !"RUNNING".equals(project.status())).map(this::projectSelection)
+                .sorted(Comparator.comparingLong(value -> value.pos().asLong())).toList();
     }
 
     /**
@@ -632,6 +690,38 @@ private final ItemStack networkIcon = item("create:track");
         return this.selection;
     }
 
+    /** Resolve a remembered target against this view's current data and permissions. */
+    public Selection resolveSelection(SelectionKind kind, UUID id, BlockPos pos) {
+        switch (kind) {
+            case PLACE -> { return com.example.examplemod.client.screen.AtlasPlaces.selection(id,dimensionId); }
+            case PLAYER -> {
+                Selection player = playerSelection();
+                if (matchesTarget(player, kind, id, pos)) return player;
+            }
+            case LOGISTICS -> { return com.example.examplemod.client.logistics.LogisticsMapOverlay.resolveMapSelection(id, dimensionId); }
+            case PROJECT -> { return com.example.examplemod.client.screen.AtlasSearch.projectSelection(id, dimensionId); }
+            case CITY -> {
+                for (var peer : peers) if (peer.cityId().equals(id) || id == null && atAnchor(peer) && pylonPos.equals(pos)) return peerSelection(peer);
+                if (id == null && hasCityAnchor() && pylonPos.equals(pos))
+                    return new Selection(kind, null, Component.translatable("gui.createcityexpansioncore.map.city_pylon"),
+                            pylonPos, true, List.of(ownTerritoryDetails()), cityIcon, false);
+            }
+            case INDUSTRY -> {
+                for (var project : projects)
+                    if (project.dimensionId().equals(dimensionId) && project.projectId().equals(id)) return projectSelection(project);
+            }
+            case WAYPOINT -> {
+                for (int i = 0; i < personalPins.size(); i++) {
+                    Selection pin = pinSelection(i);
+                    if (matchesTarget(pin, kind, id, pos)) return pin;
+                }
+            }
+        }
+        return null;
+    }
+
+    public boolean isMapDragging() { return dragging; }
+
     public Selection getHoveredSelection() {
         return this.hoveredSelection;
     }
@@ -738,6 +828,7 @@ for (int index = 0; index < this.personalPins.size(); index++) {
     }
 
     public void centerOn(BlockPos pos) {
+        interruptCamera();
         animateTo(pos.getX()+.5, pos.getZ()+.5, zoom);
     }
 
@@ -757,16 +848,23 @@ for (int index = 0; index < this.personalPins.size(); index++) {
         var mc = Minecraft.getInstance();
         if (mc.player == null) return;
         double tx = mc.player.getX(), tz = mc.player.getZ();
-        if (Math.hypot(centerX-tx,centerZ-tz) > 64) { centerX=tx; centerZ=tz; }
+        long now=System.nanoTime();
+        if (reducedMotion || hudFrame == 0 || Math.hypot(centerX-tx,centerZ-tz) > 64) { centerX=tx; centerZ=tz; }
         else {
-            long now=System.nanoTime();double dt=hudFrame==0?1:Math.min(.1,(now-hudFrame)/1_000_000_000d);
-            double blend=1-Math.exp(-18*dt);centerX+=(tx-centerX)*blend;centerZ+=(tz-centerZ)*blend;
+            double blend=MapMotion.blend((now-hudFrame)/1e9,18);centerX+=(tx-centerX)*blend;centerZ+=(tz-centerZ)*blend;
         }
-        hudFrame=System.nanoTime();
+        hudFrame=now;
         zoom=scale;
         render(g,x,y,size,size,-10000,-10000);
     }
     private float guiScale = 1.0F;
+    private boolean drewSurvey;
+
+    void applyDisplaySettings(MinimapPreferences display) {
+        if (reducedMotion != display.reducedMotion) setMotion(motionEnabled, display.reducedMotion);
+        setInertiaEnabled(display.inertia);
+        setSmoothTerrain(display.smoothTerrain);
+    }
 
     public void render(
             GuiGraphics guiGraphics,
@@ -777,6 +875,34 @@ for (int index = 0; index < this.personalPins.size(); index++) {
             int mouseX,
             int mouseY
     ) {
+        long started = MapDiagnostics.beginDraw();
+        drewSurvey = false;
+        try {
+            renderFrame(guiGraphics, x, y, width, height, mouseX, mouseY);
+            if (MapDiagnostics.awaitingFirstDraw()) {
+                if (drewSurvey) MapDiagnostics.terrainDrawn(true);
+                else if (confirmedUnsurveyedViewport()) MapDiagnostics.terrainDrawn(false);
+            }
+        } finally {
+            MapDiagnostics.endDraw(started);
+        }
+    }
+
+    private boolean confirmedUnsurveyedViewport() {
+        if (terrainStore == null || lastViewport.isEmpty()) return false;
+        int level = terrainLevel();
+        int minX=terrainCoordinate(screenToWorldX(viewportX),level), maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth-1),level);
+        int minZ=terrainCoordinate(screenToWorldZ(viewportY),level), maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight-1),level);
+        for (int z=minZ;z<=maxZ;z++) for (int x=minX;x<=maxX;x++) {
+            var key = new TileKey(dimensionId,x,z,level);
+            var texture = terrainTextures.get(key);
+            if (texture == null || texture.id() == null || texture.hasSurvey() || terrainStore.exchange.checked(key.storeKey()) == 0) return false;
+        }
+        return true;
+    }
+    private void renderFrame(GuiGraphics guiGraphics, int x, int y, int width, int height, int mouseX, int mouseY) {
+        MinimapClient.applyDisplay(this);
+        bindTerrain();
         this.viewportX = x;
         this.viewportY = y;
         this.viewportWidth = width;
@@ -786,7 +912,9 @@ for (int index = 0; index < this.personalPins.size(); index++) {
         this.layerButtonsX = x + width - 166;
         this.layerButtonsY = y + 4;
         updateMotion();
+        projection.frame(centerX,centerZ,zoom,viewportX,viewportY,viewportWidth,viewportHeight);
         updateLayerMotion();
+        labels.begin(x,y,width,viewportHeight);
         if(motionEnabled&&!projectPicking) {
             int visualMask=0;for(Overlay layer:Overlay.values())if(layerOpacity[layer.ordinal()]>0)visualMask|=1<<layer.ordinal();
             withOverlayMask(visualMask,this::layoutMarkers);
@@ -887,7 +1015,7 @@ for (int index = 0; index < this.personalPins.size(); index++) {
             guiGraphics.disableScissor();
         }
 
-        if (hud) return;
+        if (hud) { drawLabels(guiGraphics); return; }
         if (this.drawInternalControls) {
             renderFooter(guiGraphics, x, y + viewportHeight + 4, width, mouseX, mouseY);
         }
@@ -906,6 +1034,15 @@ for (int index = 0; index < this.personalPins.size(); index++) {
                 this.chromeAvoidRight,
                 frameLegendEntries().size()
         );
+        if (this.drawInternalControls || this.showOverview)
+            labels.reserve(chromeGeometry.minimapX(),chromeGeometry.minimapY(),chromeGeometry.minimapSize(),chromeGeometry.minimapSize());
+        if (drawInternalControls) {
+            labels.reserve(chromeGeometry.stampX(),chromeGeometry.stampY(),chromeGeometry.stampWidth(),26);
+            labels.reserve(chromeGeometry.legendX(),chromeGeometry.legendY(),chromeGeometry.legendWidth(),chromeGeometry.legendRows()*chromeGeometry.legendRowHeight()+12);
+        }
+        labels.reserve(chromeGeometry.scaleX(),chromeGeometry.scaleY()-10,chromeGeometry.scaleWidth(),24);
+        labels.reserve(chromeGeometry.legendX(),chromeGeometry.legendY()-22-MapPalette.MICRO,22,22);
+        if (!deferLabels) drawLabels(guiGraphics);
         CityMapFrame.render(
                 guiGraphics,
                 this.chromeGeometry,
@@ -938,41 +1075,44 @@ for (int index = 0; index < this.personalPins.size(); index++) {
     }
 
     public boolean receive(CityMapTilePayload payload) {
-        if (!this.pylonPos.equals(payload.pylonPos())
-                || !this.dimensionId.equals(payload.dimensionId())) {
+        return acceptTerrain(payload);
+    }
+
+    public static void invalidate(com.example.examplemod.network.TerrainInvalidatedPayload payload) {
+        var view = MapViewBindings.find(payload.viewId());
+        if (view == null || !view.worldId().equals(payload.worldId()) || !view.dimension().equals(payload.dimension())) return;
+        var store = TerrainCache.store(view);
+        if (store != null) store.exchange.invalidate(new TerrainTileStore.Key(payload.tileX(), payload.tileZ(), payload.level()),payload.version());
+    }
+
+    public static boolean acceptTerrain(CityMapTilePayload payload) {
+        var view = MapViewBindings.find(payload.viewId());
+        if (view == null || !view.worldId().equals(payload.worldId()) || !view.dimension().equals(payload.dimensionId())
+                || !view.anchor().equals(payload.pylonPos())) {
+            MapDiagnostics.stale(); return false;
+        }
+        var store = TerrainCache.store(view);
+        if (store == null) return false;
+        var key = new TerrainTileStore.Key(payload.tileX(),payload.tileZ(),payload.level());
+        var previous = store.peek(key);
+        boolean matching = previous != null && previous.revision() == payload.revision() && previous.worldId().equals(payload.worldId());
+        long now = net.minecraft.Util.getMillis();
+        if (!store.exchange.accept(key, view.viewId(), payload.requestId(), payload.version(), payload.pending(),
+                payload.unchanged(), payload.revision(), matching, now)) {
+            if (!payload.pending()) MapDiagnostics.stale();
             return false;
         }
-
-        TileKey key=new TileKey(payload.dimensionId(),payload.tileX(),payload.tileZ(),payload.level());
-        Long requested=this.requestedTiles.remove(key);if(requested!=null)com.example.examplemod.client.ClientTelemetry.tile(System.currentTimeMillis()-requested);this.failedTiles.remove(key);this.tileAttempts.remove(key);
-        if(!terrainWorld.equals(payload.worldId())) {
-            boolean mismatch=this.tileCache.values().stream().anyMatch(t->!t.worldId().equals(payload.worldId()));
-            terrainWorld=payload.worldId();if(mismatch)TerrainCache.clearTextures(this.terrainStore);
-            this.tileCache.entrySet().removeIf(e->!e.getValue().worldId().equals(terrainWorld));
-            if(mismatch){this.terrainTextures.values().forEach(TerrainTileTexture::close);this.terrainTextures.clear();}
-        }
-        CachedTile previous=cachedTerrain(key);long now=System.currentTimeMillis();
-        if(payload.unchanged()) {
-            if(previous!=null)this.tileCache.put(key,new CachedTile(previous.colors(),previous.contours(),previous.complete(),now,previous.heights(),previous.revision(),previous.worldId()));
-            return true;
-        }
-        this.tileCache.put(key,new CachedTile(payload.colors(),payload.contours(),payload.complete(),now,payload.heights(),payload.revision(),payload.worldId()));
-        terrainStore().put(payload.tileX(),payload.tileZ(),payload.level(),new TerrainTileStore.Tile(payload.colors(),payload.contours(),payload.complete(),now,payload.heights(),payload.revision(),payload.worldId()));
-        TerrainTileTexture texture=this.terrainTextures.get(key);
-        if(previous==null||previous.revision()!=payload.revision()) {
-            if(texture!=null)texture.invalidate();
-            TerrainCache.invalidate(this.terrainStore,key.tileX(),key.tileZ(),key.level());
-        }
-        evictTerrainTiles();
+        if (!payload.unchanged()) store.put(key.x(),key.z(),key.level(),new TerrainTileStore.Tile(payload.colors(),
+                payload.contours(),payload.complete(),now,payload.heights(),payload.revision(),payload.worldId()));
         return true;
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (insideViewport(mouseX,mouseY)) interruptCamera();
         if (button == 0 && !projectPicking && !preciseTool() && pendingClaim == null && !placingPin && !measuring && insideViewport(mouseX,mouseY)
                 && com.example.examplemod.client.journey.JourneyMapLayer.click(this,mouseX,mouseY)) return true;
         if(button==1 && insideViewport(mouseX,mouseY) && !MapBorderLayer.available(dimensionId,screenToWorldX(mouseX),screenToWorldZ(mouseY))) return true;
-        if(button==0&&!projectPicking&&pendingClaim==null&&insideViewport(mouseX,mouseY)&&com.example.examplemod.client.screen.MapSocialLayer.click(this,mouseX,mouseY))return true;
-        if (insideViewport(mouseX,mouseY)) { stopMotion(); dragAt=0; }
+        if(button==0&&!preciseTool()&&insideViewport(mouseX,mouseY)&&com.example.examplemod.client.screen.MapSocialLayer.click(this,mouseX,mouseY))return true;
         /*
          * Подтверждение claim владеет кликами, пока открыто: карта под ним
          * не панорамируется и не выбирает объекты, иначе подтверждение
@@ -1023,14 +1163,10 @@ for (int index = 0; index < this.personalPins.size(); index++) {
             } else this.measureEnd = point;
             return true;
         }
-        for (int index = 0; insideViewport(mouseX, mouseY) && index < this.personalPins.size(); index++) {
-            Selection pin = pinSelection(index);
-            if (inside(mouseX, mouseY, worldToScreenX(pin.pos().getX()) - 8,
-                    worldToScreenY(pin.pos().getZ()) - 8, 16, 16)) { setSelection(pin); return true; }
-        }
         Selection hit = findSelection(mouseX, mouseY);
         if (hit != null) {
             setSelection(hit);
+            if (hit.kind() != SelectionKind.WAYPOINT) beginPan();
             return true;
         }
         if (this.drawInternalControls && inside(mouseX, mouseY, centerButtonX, centerButtonY, 54, 12)) {
@@ -1048,26 +1184,37 @@ for (int index = 0; index < this.personalPins.size(); index++) {
 
 if (insideViewport(mouseX, mouseY)) {
             this.selection = null;
-            this.dragging = true;
+            beginPan();
             return true;
         }
         return false;
     }
 
     private Selection findSelection(double mouseX, double mouseY) {
-
+        if (!insideViewport(mouseX,mouseY)) return null;
+        int markerRadius = AtlasPlaceIcon.radius(zoom);
+        for (int i = personalPins.size() - 1; i >= 0; i--) {
+            var pin = personalPins.get(i);
+            int x = worldToScreenX(pin.x() + .5), y = worldToScreenY(pin.z() + .5);
+            if (insideViewport(x,y) && AtlasPlaceIcon.contains(mouseX,mouseY,x,y,markerRadius)) return pinSelection(i);
+        }
+        if(placesVisible())for(var place:com.example.examplemod.client.screen.AtlasPlaces.selections(dimensionId).reversed()){
+            int x=worldToScreenX(place.pos().getX()+.5),y=worldToScreenY(place.pos().getZ()+.5);
+            if(insideViewport(x,y) && AtlasPlaceIcon.contains(mouseX,mouseY,x,y,markerRadius))return place;
+        }
         Selection player = playerSelection();
         if (player != null) {
             ScreenPoint point = markerPoint(player.kind(), player.id(), player.pos());
             if (inside(mouseX, mouseY, point.x() - 13, point.y() - 13, 26, 26)) return player;
         }
 
-        if (this.showCities) for (CityMapPeersPayload.Peer peer : this.peers) {
-            if (atAnchor(peer)) continue;
-            Selection candidate = peerSelection(peer);
-            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
-            if (insideCityMarker(mouseX, mouseY, point.x(), point.y())) return candidate;
+        if (showProjects && zoom>=MIN_ZOOM) for (var project : projects.reversed()) {
+            if (!dimensionId.equals(project.dimensionId())) continue;
+            var point=markerPoint(SelectionKind.INDUSTRY,project.projectId(),project.controllerPos());
+            int radius=projectRadius(project);
+            if (inside(mouseX,mouseY,point.x()-radius,point.y()-radius,2*radius,2*radius)) return projectSelection(project);
         }
+
         ScreenPoint ownPoint = markerPoint(SelectionKind.CITY, null, this.pylonPos);
         if (this.showCities && hasCityAnchor() && insideCityMarker(mouseX, mouseY, ownPoint.x(), ownPoint.y())) {
             for (var peer : this.peers) if (atAnchor(peer)) return peerSelection(peer);
@@ -1075,6 +1222,12 @@ if (insideViewport(mouseX, mouseY)) {
             return new Selection(SelectionKind.CITY, null,
                     Component.translatable("gui.createcityexpansioncore.map.city_pylon"), this.pylonPos, true,
                     List.of(ownTerritoryDetails()), this.cityIcon, false);
+        }
+        if (this.showCities) for (CityMapPeersPayload.Peer peer : this.peers.reversed()) {
+            if (atAnchor(peer)) continue;
+            Selection candidate = peerSelection(peer);
+            ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
+            if (insideCityMarker(mouseX, mouseY, point.x(), point.y())) return candidate;
         }
         return null;
     }
@@ -1105,32 +1258,20 @@ if (insideViewport(mouseX, mouseY)) {
         if (player != null) addMarker(entries, player.kind(), player.id(), player.pos(),
                 Minecraft.getInstance().player.getX(), Minecraft.getInstance().player.getZ(), 100);
 
-this.markerPositions.clear();
-        List<ScreenPoint> placed = new ArrayList<>(entries.size());
+        markerPositions.clear();
+        entries.sort(Comparator.comparingInt(MarkerEntry::priority).reversed());
         for (MarkerEntry entry : entries) {
-            ScreenPoint anchor = new ScreenPoint(worldToScreenX(entry.worldX()), worldToScreenY(entry.worldZ()));
-            ScreenPoint selected = anchor;
+            int x = worldToScreenX(entry.worldX()), y = worldToScreenY(entry.worldZ());
+            var chosen = new ScreenPoint(x,y);
             for (int[] offset : MARKER_OFFSETS) {
-                ScreenPoint candidate = new ScreenPoint(anchor.x() + offset[0], anchor.y() + offset[1]);
-                if (candidate.x() < this.viewportX + 12 || candidate.x() > this.viewportX + this.viewportWidth - 12
-                        || candidate.y() < this.viewportY + 12 || candidate.y() > this.viewportY + this.viewportHeight - 12) {
-                    continue;
-                }
-                boolean collision = false;
-                for (ScreenPoint other : placed) {
-                    if (Math.abs(candidate.x() - other.x()) < MARKER_SPACING
-                            && Math.abs(candidate.y() - other.y()) < MARKER_SPACING) {
-                        collision = true;
-                        break;
-                    }
-                }
-                if (!collision) {
-                    selected = candidate;
+                int cx = x+offset[0], cy = y+offset[1];
+                if (labels.fits(cx-11,cy-11,MARKER_SPACING,MARKER_SPACING)) {
+                    chosen = new ScreenPoint(cx,cy);
                     break;
                 }
             }
-            this.markerPositions.put(entry.key(), selected);
-            placed.add(selected);
+            markerPositions.put(entry.key(),chosen);
+            labels.reserve(chosen.x()-11,chosen.y()-11,MARKER_SPACING,MARKER_SPACING);
         }
     }
 
@@ -1141,7 +1282,8 @@ this.markerPositions.clear();
         if (x < this.viewportX - 40 || x > this.viewportX + this.viewportWidth + 40
                 || y < this.viewportY - 40 || y > this.viewportY + this.viewportHeight + 40) return;
         MarkerKey key = new MarkerKey(kind, id, pos.immutable());
-        entries.add(new MarkerEntry(key, worldX, worldZ, basePriority));
+        int priority = matchesTarget(selection,kind,id,pos) ? 300 : matchesTarget(hoveredSelection,kind,id,pos) ? 200 : basePriority;
+        entries.add(new MarkerEntry(key, worldX, worldZ, priority));
     }
 
     private ScreenPoint markerPoint(SelectionKind kind, UUID id, BlockPos pos) {
@@ -1176,142 +1318,175 @@ this.markerPositions.clear();
         if (!this.dragging || button != 0) {
             return false;
         }
-        long now=System.nanoTime();
-        double dt=dragAt==0?1.0/60:Math.clamp((now-dragAt)/1e9,.008,.05); dragAt=now;
-        velocityX=Math.clamp(-dragX/zoom/dt,-1800/zoom,1800/zoom);
-        velocityZ=Math.clamp(-dragY/zoom/dt,-1800/zoom,1800/zoom);
-        this.centerX -= dragX / this.zoom;
-        this.centerZ -= dragY / this.zoom;
-        clampCenter();
+        applyPose(cameraMotion.drag(pose(),dragX,dragY,System.nanoTime()));
         return true;
+    }
+
+    public void beginPan() {
+        interruptCamera();
+        dragging = true;
+        cameraMotion.beginDrag(System.nanoTime());
     }
 
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (button == 0 && this.dragging) {
             this.dragging = false;
-            if (System.nanoTime()-dragAt>80_000_000L) velocityX=velocityZ=0;
+            cameraMotion.release(pose(),System.nanoTime(),inertiaEnabled && smoothCamera());
             return true;
         }
         return false;
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
-        if (!insideViewport(mouseX, mouseY) || scrollY == 0.0) {
+        if (!insideViewport(mouseX, mouseY) || !Double.isFinite(scrollY) || scrollY == 0.0) {
             return false;
         }
-
-        double worldXBefore = screenToWorldX(mouseX);
-        double worldZBefore = screenToWorldZ(mouseY);
-        double factor = scrollY > 0.0 ? ZOOM_STEP : 1.0 / ZOOM_STEP;
-        double newZoom = clamp((cameraMoving && anchoredZoom ? toZoom : this.zoom) * factor, MIN_ZOOM, MAX_ZOOM);
-        if (newZoom == this.zoom) {
-            return true;
-        }
-
-        if (motionEnabled && !reducedMotion && !preciseTool()) {
-            animateTo(centerX,centerZ,newZoom);
-            anchoredZoom=true; zoomAnchorX=worldXBefore; zoomAnchorZ=worldZBefore;
-            zoomMouseX=mouseX; zoomMouseY=mouseY; return true;
-        }
-        stopMotion();
-        this.zoom = newZoom;
-        this.centerX += worldXBefore - screenToWorldX(mouseX);
-        this.centerZ += worldZBefore - screenToWorldZ(mouseY);
-        clampCenter();
+        followedTrain = null;
+        dragging = false;
+        applyPose(cameraMotion.scroll(pose(),screenToWorldX(mouseX),screenToWorldZ(mouseY),
+                projection.offsetX(mouseX),projection.offsetY(mouseY),scrollY,smoothCamera(),System.nanoTime()));
         return true;
     }
 
-    private int terrainLevel(){return AtlasMapScale.terrainLevel(this.zoom,viewportWidth,viewportHeight,
-            Minecraft.getInstance().getWindow().getGuiScale()*this.guiScale);}
+    private int displayLod = -1, previousLod = -1;
+    private long lodChangedAt;
+    private boolean smoothTerrain;
+
+    public void setSmoothTerrain(boolean smooth) { smoothTerrain = smooth; }
+
+    private int terrainLevel() {
+        int next=AtlasMapScale.displayLevel(zoom, viewportWidth, viewportHeight,
+                Minecraft.getInstance().getWindow().getGuiScale()*guiScale, displayLod);
+        if (next != displayLod) {
+            previousLod=displayLod; displayLod=next; lodChangedAt=System.nanoTime();
+        }
+        return next;
+    }
     private int terrainCoordinate(double world,int level){return (int)Math.floor(world/AtlasMapScale.span(level));}
-    private void renderTerrain(GuiGraphics guiGraphics) {
+    private void renderTerrain(GuiGraphics graphics) {
+        if (terrainStore == null) return;
         TerrainAtlas.begin();
-        int level=terrainLevel(),budget=MAX_TILE_REBUILDS_PER_FRAME,fallbackLevel=-1;
-        long until=System.nanoTime()+2_000_000L;
-        // Pin existing visible samples before new uploads can reuse their atlas slots.
-        for(var entry:this.terrainTextures.entrySet()) {
+        int level=terrainLevel();
+        double left=screenToWorldX(viewportX), right=screenToWorldX(viewportX+viewportWidth);
+        double top=screenToWorldZ(viewportY), bottom=screenToWorldZ(viewportY+viewportHeight);
+        var finerBranches = new HashSet<TileKey>();
+        for (var entry : terrainTextures.entrySet()) {
             TileKey key=entry.getKey();
             double span=key.span();
-            if((key.tileX()+1)*span<screenToWorldX(viewportX)||key.tileX()*span>screenToWorldX(viewportX+viewportWidth)
-                    ||(key.tileZ()+1)*span<screenToWorldZ(viewportY)||key.tileZ()*span>screenToWorldZ(viewportY+viewportHeight))continue;
-            if(key.level()<level) {
-                if(entry.getValue().id()!=null)fallbackLevel=Math.max(fallbackLevel,key.level());
-                continue;
-            }
-            entry.getValue().pin();
-        }
-        // Prepare cached overview first, within the same time/count budget as detailed uploads.
-        for(int lod=7;lod>=level;lod--) {
-            int minX=terrainCoordinate(screenToWorldX(viewportX),lod),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),lod);
-            int minZ=terrainCoordinate(screenToWorldZ(viewportY),lod),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),lod);
-            for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
-                if(System.nanoTime()>until)budget=0;
-                budget=renderTerrainTile(guiGraphics,new TileKey(this.dimensionId,x,z,lod),1,budget);
+            if ((key.tileX()+1)*span<=left || key.tileX()*span>=right ||
+                    (key.tileZ()+1)*span<=top || key.tileZ()*span>=bottom || entry.getValue().id()==null) continue;
+            // Prioritise visible fallbacks for LRU, but leave room for the new target LOD.
+            entry.getValue().keepVisible(key.level()==level);
+            while (key.level()<level) {
+                key=terrainParent(key);
+                if (!finerBranches.add(key)) break;
             }
         }
-        int minX=terrainCoordinate(screenToWorldX(viewportX),level),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),level);
-        int minZ=terrainCoordinate(screenToWorldZ(viewportY),level),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),level);
-        // An unloaded/partial tile is visibly unexplored, not a featureless black rectangle.
-        // Paint the missing-data base BEFORE fallback parents and final detailed tiles.
-        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
-            TileKey key=new TileKey(dimensionId,x,z,level);
-            var raw=tileCache.get(key);var texture=terrainTextures.get(key);
-            if(raw==null||!raw.complete()||texture==null||texture.id()==null)
-                renderMissingTile(guiGraphics,key,requestedTiles.containsKey(key));
-        }
-        // A cropped parent only fills a missing/partial child: never redraw eight full-screen LODs.
-        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
-            TileKey key=new TileKey(dimensionId,x,z,level);
-            TerrainTileTexture exact=terrainTextures.get(key);CachedTile raw=tileCache.get(key);
-            if(exact!=null&&exact.id()!=null&&raw!=null&&raw.complete()
-                    &&(!motionEnabled||reducedMotion||exact.reveal(System.nanoTime())>=1))continue;
-            for(int parent=level+1;parent<=7;parent++) {
-                int factor=1<<(parent-level);
-                var texture=terrainTextures.get(new TileKey(dimensionId,Math.floorDiv(x,factor),Math.floorDiv(z,factor),parent));
-                if(texture==null||texture.id()==null)continue;
-                float size=32f/factor;
-                queueTerrain(texture,key,Math.floorMod(x,factor)*size,Math.floorMod(z,factor)*size,size);
-                break;
+        int budget=MAX_TILE_REBUILDS_PER_FRAME;
+        long now=System.nanoTime(), deadline=now+2_000_000L;
+        var centre=new TileKey(dimensionId,terrainCoordinate(centerX,level),terrainCoordinate(centerZ,level),level);
+        budget=renderTerrainTile(centre,budget);
+        for (int lod=level;lod<=7;lod++) {
+            int minX=terrainCoordinate(left,lod),maxX=terrainCoordinate(right,lod);
+            int minZ=terrainCoordinate(top,lod),maxZ=terrainCoordinate(bottom,lod);
+            for (int z=minZ;z<=maxZ;z++) for (int x=minX;x<=maxX;x++) {
+                var key=new TileKey(dimensionId,x,z,lod);
+                if (key.equals(centre)) continue;
+                if (budget>0 && System.nanoTime()>=deadline) budget=0;
+                budget=renderTerrainTile(key,budget);
             }
         }
-        TerrainAtlas.flush(guiGraphics);
-        for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
-            TileKey key=new TileKey(dimensionId,x,z,level);var texture=terrainTextures.get(key);
-            if(texture!=null&&texture.id()!=null)queueTerrain(texture,key,0,0,32);
+        int minX=terrainCoordinate(left,level),maxX=terrainCoordinate(right,level);
+        int minZ=terrainCoordinate(top,level),maxZ=terrainCoordinate(bottom,level);
+        // The paper is needed only where the current resolution has no fully covered texture.
+        for (int z=minZ;z<=maxZ;z++) for (int x=minX;x<=maxX;x++) {
+            var key=new TileKey(dimensionId,x,z,level);
+            var texture=terrainTextures.get(key);
+            if (texture==null || !texture.opaque()) renderMissingTile(graphics,key,requestedTiles.containsKey(key));
         }
-        TerrainAtlas.flush(guiGraphics);
-        // Briefly retain finer already-loaded samples when zooming out into an uncached overview.
-        int retained=0;
-        for(var entry:terrainTextures.entrySet()) {
-            TileKey key=entry.getKey();if(key.level()!=fallbackLevel||entry.getValue().id()==null)continue;
-            int factor=1<<(level-key.level());var target=terrainTextures.get(new TileKey(dimensionId,
-                    Math.floorDiv(key.tileX(),factor),Math.floorDiv(key.tileZ(),factor),level));
-            if(target!=null&&target.id()!=null)continue;
-            if(queueTerrain(entry.getValue(),key,0,0,32)&&++retained>=128)break;
+        // Fade only between two ready, fully surveyed images on an actual LOD transition.
+        // The usual upload, same-content refresh and texture reload all switch atomically.
+        float transition=motionEnabled && !reducedMotion && !preciseTool() && previousLod>level
+                ? (float)MapMotion.ease((now-lodChangedAt)/100_000_000.0) : 1f;
+        List<TileKey> fading=null;
+        for (int z=minZ;z<=maxZ;z++) for (int x=minX;x<=maxX;x++) {
+            var key=new TileKey(dimensionId,x,z,level);
+            var exact=terrainTextures.get(key);
+            if (exact!=null && exact.id()!=null) {
+                if (transition<1 && exact.opaque() && drawParent(key,true)) {
+                    if (fading==null) fading=new ArrayList<>();
+                    fading.add(key);
+                } else queueTerrain(exact,key,0,0,32,false,1f);
+            } else drawFallback(key,finerBranches);
         }
-        TerrainAtlas.flush(guiGraphics);
+        TerrainAtlas.flush(graphics);
+        if (fading!=null) {
+            for (var key:fading) queueTerrain(terrainTextures.get(key),key,0,0,32,false,transition);
+            TerrainAtlas.flush(graphics);
+        }
     }
-    private int renderTerrainTile(GuiGraphics g,TileKey key,int stride,int budget) {
+
+    private static TileKey terrainParent(TileKey key) {
+        return new TileKey(key.dimensionId(),Math.floorDiv(key.tileX(),2),Math.floorDiv(key.tileZ(),2),key.level()+1);
+    }
+
+    /** Subdivide only branches containing a retained finer tile. The leaves cover disjoint rectangles. */
+    private void drawFallback(TileKey key, Set<TileKey> finerBranches) {
+        var exact=terrainTextures.get(key);
+        if (exact!=null && exact.id()!=null) {
+            queueTerrain(exact,key,0,0,32,false,1f);
+        } else if (key.level()>0 && finerBranches.contains(key)) {
+            for (int dz=0;dz<2;dz++) for (int dx=0;dx<2;dx++)
+                drawFallback(new TileKey(dimensionId,2*key.tileX()+dx,2*key.tileZ()+dz,key.level()-1),finerBranches);
+        } else drawParent(key,false);
+    }
+
+    private boolean drawParent(TileKey key, boolean requireOpaque) {
+        for (int lod=key.level()+1;lod<=7;lod++) {
+            var crop=AtlasMapScale.ancestor(key.tileX(),key.tileZ(),lod-key.level());
+            var parent=new TileKey(dimensionId,crop.x(),crop.z(),lod);
+            var texture=terrainTextures.get(parent);
+            if (texture==null || texture.id()==null) continue;
+            if (requireOpaque && !texture.opaque()) return false;
+            return queueTerrain(texture,key,crop.u(),crop.v(),crop.size(),true,1f);
+        }
+        return false;
+    }
+    private int renderTerrainTile(TileKey key,int budget) {
         CachedTile tile=cachedTerrain(key);
         if(tile==null)return budget;
         TerrainTileTexture texture=this.terrainTextures.computeIfAbsent(key,ignored->{
-            TerrainTileTexture saved=TerrainCache.take(terrainStore(),key.tileX(),key.tileZ(),key.level());
-            return saved!=null?saved:new TerrainTileTexture("ccec_city_map/"+this.dimensionId.getNamespace()+"_"+this.dimensionId.getPath()+"_"+key.level()+"_"+key.tileX()+"_"+key.tileZ());
+            TerrainTileTexture saved=TerrainCache.take(terrainStore,key.tileX(),key.tileZ(),key.level());
+            if (saved!=null) { saved.neighbourChanged(); return saved; }
+            return new TerrainTileTexture("ccec_city_map/"+this.dimensionId.getNamespace()+"_"+this.dimensionId.getPath()+"_"+key.level()+"_"+key.tileX()+"_"+key.tileZ());
         });
-        if(!texture.matches(stride)) {
-            if(budget>0){budget--;texture.build(tile.colors(),tile.contours(),stride,tile.heights(),key.level());}
-            else if(texture.id()==null)return budget;
+        texture.useSource(tile.revision(), tile.colors());
+        if(!texture.matches(1) && budget>0) {
+            budget--;
+            texture.build(tile.colors(),tile.contours(),1,tile.heights(),key.level(),terrainNeighbours(key));
+        } else if (smoothTerrain && budget>1 && texture.needsGutter()) {
+            budget--;
+            texture.refreshGutter(terrainNeighbours(key));
         }
         return budget;
     }
-    private boolean queueTerrain(TerrainTileTexture texture,TileKey key,float u,float v,float size) {
-        int left=worldToScreenX((double)key.tileX()*key.span());
-        int top=worldToScreenY((double)key.tileZ()*key.span());
-        int right=worldToScreenX((double)(key.tileX()+1)*key.span());
-        int bottom=worldToScreenY((double)(key.tileZ()+1)*key.span());
+
+    private TerrainTileTexture[] terrainNeighbours(TileKey key) {
+        var neighbours=new TerrainTileTexture[9];
+        for (int dz=-1;dz<=1;dz++) for(int dx=-1;dx<=1;dx++) {
+            if (dx==0 && dz==0) continue;
+            neighbours[(dz+1)*3+dx+1]=terrainTextures.get(new TileKey(dimensionId,key.tileX()+dx,key.tileZ()+dz,key.level()));
+        }
+        return neighbours;
+    }
+    private boolean queueTerrain(TerrainTileTexture texture,TileKey key,float u,float v,float size,boolean coarse,float alpha) {
+        double left=worldToScreenXExact((double)key.tileX()*key.span());
+        double top=worldToScreenZExact((double)key.tileZ()*key.span());
+        double right=worldToScreenXExact((double)(key.tileX()+1)*key.span());
+        double bottom=worldToScreenZExact((double)(key.tileZ()+1)*key.span());
         if(right<=viewportX||left>=viewportX+viewportWidth||bottom<=viewportY||top>=viewportY+viewportHeight)return false;
-        double alpha=size==32&&motionEnabled&&!reducedMotion?texture.reveal(System.nanoTime()):1;
-        texture.draw(left,top,right,bottom,u,v,size,(float)alpha);
+        texture.draw(left,top,right,bottom,u,v,size,smoothTerrain,coarse,alpha);
+        if (!drewSurvey && alpha>0) drewSurvey=texture.hasSurvey(u,v,size,coarse);
         return true;
     }
 
@@ -1320,7 +1495,7 @@ this.markerPositions.clear();
      * Reopening the same world reuses both samples and already uploaded textures.
      */
     public void releaseTerrainTextures() {
-        if (this.terrainStore != null) this.terrainStore.flush();
+        requestedTiles.clear();
         this.terrainTextures.forEach((key, texture) -> TerrainCache.keep(this.terrainStore, key.tileX(), key.tileZ(),key.level(), texture));
         this.terrainTextures.clear();
     }
@@ -1364,19 +1539,24 @@ this.markerPositions.clear();
         double span = key.span();
         double originX = key.tileX() * span;
         double originZ = key.tileZ() * span;
-        int left = worldToScreenX(originX);
-        int top = worldToScreenY(originZ);
-        int right = worldToScreenX(originX + span);
-        int bottom = worldToScreenY(originZ + span);
+        float left = (float)worldToScreenXExact(originX);
+        float top = (float)worldToScreenZExact(originZ);
+        float right = (float)worldToScreenXExact(originX + span);
+        float bottom = (float)worldToScreenZExact(originZ + span);
         int parity = (key.tileX() + key.tileZ()) & 1;
         /*
          * Незаведённый тайл — это бумага, а не пустота: по нему
          * видно, что «сюда ещё не смотрели», и он не спорит с
          * линиями, которые на нём нарисованы.
          */
-        int color = failedTiles.contains(key) ? 0xFF30282A : requested ?
+        int color = terrainStore != null && terrainStore.exchange.failed(key.storeKey()) ? 0xFF30282A : requested ?
                 (parity == 0 ? 0xFF202A2E : 0xFF1C2428) : MapSurveyTransform.unexploredPaper(parity);
-        guiGraphics.fill(left, top, right, bottom, color);
+        var buffer=guiGraphics.bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.gui());
+        var matrix=guiGraphics.pose().last().pose();
+        buffer.addVertex(matrix,left,top,0).setColor(color);
+        buffer.addVertex(matrix,left,bottom,0).setColor(color);
+        buffer.addVertex(matrix,right,bottom,0).setColor(color);
+        buffer.addVertex(matrix,right,top,0).setColor(color);
     }
 
     private void renderGrid(GuiGraphics guiGraphics) {
@@ -1420,27 +1600,8 @@ this.markerPositions.clear();
         g.pose().pushPose();g.pose().translate(x,y,0);g.pose().scale(scale,scale,1);
         MapMarkerRenderer.drawGlyph(g,AtlasGlyph.CITY,-8,-8,color);g.pose().popPose();
     }
-    private final List<int[]> cityLabelBounds=new ArrayList<>();
-    private void reserveCityLabel(int x,int y,int width) { cityLabelBounds.add(new int[]{x-3,y-3,x+width+3,y+11}); }
-    private boolean cityLabelFits(int x,int y,int width) {
-        if(cityLabelBounds.size()>=24)return false;
-        for(int[] r:cityLabelBounds) if(x-3<r[2]&&x+width+3>r[0]&&y-3<r[3]&&y+11>r[1])return false;
-        reserveCityLabel(x,y,width);return true;
-    }
     private void renderPeers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         com.example.examplemod.client.AllianceClient.ensure();
-        cityLabelBounds.clear();
-        var labelFont=Minecraft.getInstance().font;
-        if(showCities&&hasCityAnchor()) {
-            ScreenPoint anchor=markerPoint(SelectionKind.CITY,null,pylonPos);
-            String name=peers.stream().filter(this::atAnchor).findFirst().map(CityMapPeersPayload.Peer::name).orElse("");
-            reserveCityLabel(anchor.x()+TerritoryPresentation.cityRadius(zoom)+4,anchor.y()-4,labelFont.width(name));
-        }
-        for(var peer:peers) if(matchesTargetAt(selection,SelectionKind.CITY,peer.pylonX(),peer.pylonZ())
-                ||matchesTargetAt(hoveredSelection,SelectionKind.CITY,peer.pylonX(),peer.pylonZ())) {
-            ScreenPoint point=markerPoint(SelectionKind.CITY,peer.cityId(),new BlockPos(peer.pylonX(),pylonPos.getY(),peer.pylonZ()));
-            reserveCityLabel(point.x()+TerritoryPresentation.cityRadius(zoom)+4,point.y()-4,labelFont.width(peer.name()));
-        }
         if (this.showRelations) for (CityMapPeersPayload.Peer peer : this.peers) {
             CityRelationSnapshot.Status status = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
             if (status == CityRelationSnapshot.Status.NONE || peer.own()) continue;
@@ -1511,32 +1672,11 @@ if (!this.showCities) continue;
              * названия, и на экране оно оказывалось дважды — у маркера и в
              * окошке в паре пикселей от него.
              */
-            if ((emphasized || this.zoom < 1.1) && !tooltipShown && name != null && !name.isEmpty()) {
-                int textX = markerX + TerritoryPresentation.cityRadius(this.zoom) + 4;
-                int textY = markerY - 4;
-                var font = Minecraft.getInstance().font;
-                if (textX + font.width(name) < viewportX + viewportW
-                        && textX > viewportX
-                        && textY > viewportY
-                        && textY < viewportY + viewportH
-                        && (!motionEnabled || emphasized || cityLabelFits(textX,textY,font.width(name)))) {
-                    guiGraphics.drawString(
-                            font,
-                            name,
-                            textX + 1,
-                            textY + 1,
-                            0x80000000,
-                            false
-                    );
-                    guiGraphics.drawString(
-                            font,
-                            name,
-                            textX,
-                            textY,
-                            peer.master() ? 0xFFFFC766 : 0xFFC4CDD2,
-                            false
-                    );
-                }
+            if ((emphasized || this.zoom < 1.1) && name != null && !name.isEmpty() && this.showCities) {
+                var priority = matchesTargetAt(selection,SelectionKind.CITY,peer.pylonX(),peer.pylonZ()) ? MapLabelLayout.Priority.SELECTED
+                        : emphasized ? MapLabelLayout.Priority.HOVER : peer.master() ? MapLabelLayout.Priority.NODE : MapLabelLayout.Priority.NORMAL;
+                labels.offer("city/"+peer.cityId(),name,peer.master()?0xFFFFC766:0xFFC4CDD2,markerX,markerY,
+                        Math.max(14,TerritoryPresentation.cityRadius(zoom)+4),Minecraft.getInstance().font.width(name),priority);
             }
         }
     }
@@ -2049,25 +2189,11 @@ if (!this.showCities) continue;
                 matchesTarget(this.hoveredSelection, SelectionKind.CITY, null, this.pylonPos),
                 matchesTarget(this.selection, SelectionKind.CITY, null, this.pylonPos));
         if(this.showCities)this.peers.stream().filter(this::atAnchor).findFirst().ifPresent(peer->AllianceMapPresentation.marker(guiGraphics,markerX,markerY,peer.cityId()));
-        if (this.showCities) guiGraphics.drawString(
-                Minecraft.getInstance().font,
-                this.peers.stream().filter(this::atAnchor).findFirst().map(peer -> Component.literal(peer.name())).orElse(Component.translatable("gui.createcityexpansioncore.map.city_pylon")),
-                markerX + TerritoryPresentation.cityRadius(this.zoom) + 4,
-                markerY - 4,
-                0xFFF4D49A,
-                true
-        );
-        }
-
-        BlockPos playerPos = playerPos();
-        if (playerPos != null && this.paintingLayer==null) {
-            UUID playerId = Minecraft.getInstance().player.getUUID();
-            ScreenPoint player = markerPoint(SelectionKind.PLAYER, playerId, playerPos);
-            int playerX = player.x();
-            int playerY = player.y();
-            MapMarkerRenderer.renderPlayer(guiGraphics, playerX, playerY, this.playerIcon,
-                    matchesTarget(this.hoveredSelection, SelectionKind.PLAYER, playerId),
-                    matchesTarget(this.selection, SelectionKind.PLAYER, playerId), pointerYaw);
+        String name = peers.stream().filter(this::atAnchor).findFirst().map(CityMapPeersPayload.Peer::name)
+                .orElseGet(() -> Component.translatable("gui.createcityexpansioncore.map.city_pylon").getString());
+        labels.offer("city/anchor",name,0xFFF4D49A,markerX,markerY,Math.max(14,TerritoryPresentation.cityRadius(zoom)+4),
+                Minecraft.getInstance().font.width(name),matchesTargetAt(selection,SelectionKind.CITY,pylonPos.getX(),pylonPos.getZ())
+                        ? MapLabelLayout.Priority.SELECTED : MapLabelLayout.Priority.NODE);
         }
 
         if (this.showProjects && this.zoom >= MIN_ZOOM) for (CityProjectSnapshot project : projects) {
@@ -2080,11 +2206,13 @@ if (!this.showCities) continue;
             drawMarkerLeader(guiGraphics, projectX, projectY,
                     worldToScreenX(project.controllerPos().getX() + 0.5),
                     worldToScreenY(project.controllerPos().getZ() + 0.5));
+            int markerRadius=projectRadius(project);
+            labels.reserve(projectX-markerRadius,projectY-markerRadius,2*markerRadius,2*markerRadius);
             MapMarkerRenderer.renderMap(guiGraphics, this.zoom, projectX, projectY, this.mineIcon, true,
                     !"RUNNING".equals(project.status()),
                     matchesTarget(this.hoveredSelection, SelectionKind.INDUSTRY, project.projectId()),
                     matchesTarget(this.selection, SelectionKind.INDUSTRY, project.projectId()));
-            if (inside(mouseX, mouseY, projectX - 11, projectY - 11, 22, 22)) {
+            if (inside(mouseX,mouseY,projectX-markerRadius,projectY-markerRadius,2*markerRadius,2*markerRadius)) {
                 deferTooltip(mouseX, mouseY,
                         Component.translatable(
                                 "gui.createcityexpansioncore.project.industrial_mine"),
@@ -2098,7 +2226,23 @@ if (!this.showCities) continue;
                                 project.controllerPos().getX(), project.controllerPos().getZ()));
             }
         }
+        BlockPos playerPos = playerPos();
+        if (playerPos != null && this.paintingLayer==null) {
+            UUID playerId = Minecraft.getInstance().player.getUUID();
+            ScreenPoint player = markerPoint(SelectionKind.PLAYER, playerId, playerPos);
+            int playerX = player.x();
+            int playerY = player.y();
+            MapMarkerRenderer.renderPlayer(guiGraphics, playerX, playerY, this.playerIcon,
+                    matchesTarget(this.hoveredSelection, SelectionKind.PLAYER, playerId),
+                    matchesTarget(this.selection, SelectionKind.PLAYER, playerId), pointerYaw);
+        }
 
+
+    }
+
+    private int projectRadius(CityProjectSnapshot project) {
+        if (matchesTarget(selection,SelectionKind.INDUSTRY,project.projectId())) return 12;
+        return zoom>=.8 || matchesTarget(hoveredSelection,SelectionKind.INDUSTRY,project.projectId()) ? 11 : 5;
     }
 
     private void deferTooltip(int mouseX, int mouseY, Component... lines) {
@@ -2176,6 +2320,7 @@ if (!this.showCities) continue;
         int left = clampTo(this.pendingTooltipX + 8, boxWidth, viewportX, viewportX + viewportWidth);
         int top = clampTo(this.pendingTooltipY + 8, boxHeight, viewportY, viewportY + viewportHeight);
 
+        labels.reserve(left,top,boxWidth,boxHeight);
         graphics.fill(left, top, left + boxWidth, top + boxHeight, 0xE8101719);
         graphics.renderOutline(left, top, boxWidth, boxHeight, ACCENT_COLOR);
         int row = 0;
@@ -2352,17 +2497,42 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
     public double centerZ() { return this.centerZ; }
     public double zoom() { return this.zoom; }
     public ResourceLocation dimensionId() { return this.dimensionId; }
+    public List<CityMapPeersPayload.Peer> planningTerritories() { return peers; }
+    public PlanSurface planningHeight(int x, int z) {
+        if (binding==null || terrainStore==null || !binding.equals(MapViewBindings.binding(hud,pylonPos,dimensionId))) return null;
+        var key=new TerrainTileStore.Key(Math.floorDiv(x,32),Math.floorDiv(z,32),0);
+        var tile=terrainStore.peek(key);
+        if (tile==null || !terrainStore.exchange.acceptsCachedHash(key,tile.revision())) return null;
+        return PlanSurface.sample(tile,binding.worldId(),x,z,terrainStore.exchange.checked(key),
+                terrainStore.exchange.invalidated(key),net.minecraft.Util.getMillis());
+    }
     public int viewportLeft() { return this.viewportX; }
+    /** Projects a click on the atlas terrain. Icon height is independent of surveyed entrances. */
+    public BlockPos placeIconAt(double mouseX,double mouseY,int fallbackY) {
+        if(!insideViewport(mouseX,mouseY))return null;
+        var chrome=chromeGeometry;
+        if(chrome!=null && chrome.minimapSize()>0){
+            if(showOverview && inside(mouseX,mouseY,chrome.minimapX(),chrome.minimapY(),chrome.minimapSize(),chrome.minimapSize()))return null;
+            if(inside(mouseX,mouseY,chrome.scaleX(),chrome.scaleY()-10,chrome.scaleWidth(),24) ||
+                    inside(mouseX,mouseY,chrome.legendX(),chrome.legendY()-22-MapPalette.MICRO,22,22))return null;
+        }
+        double x=screenToWorldX(mouseX),z=screenToWorldZ(mouseY);
+        if(!MapBorderLayer.available(dimensionId,x,z))return null;
+        var point=BlockPos.containing(x,fallbackY,z);
+        var surface=planningHeight(point.getX(),point.getZ());
+        return surface==null || surface.stale()?point:new BlockPos(point.getX(),surface.y()+1,point.getZ());
+    }
     public int viewportTop() { return this.viewportY; }
     public int viewportRight() { return this.viewportX + this.viewportWidth; }
     public int viewportBottom() { return this.viewportY + this.viewportHeight; }
     public void restoreView(double x, double z, double zoom) {
         if (!Double.isFinite(x) || !Double.isFinite(z) || !Double.isFinite(zoom)) return;
-        stopMotion();
+        interruptCamera();
         this.centerX = x; this.centerZ = z; this.zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM); clampCenter();
     }
     public void centerOnPlayer() { BlockPos player = playerPos(); if (player != null) centerOn(player); }
     public void fitCity() {
+        interruptCamera();
         CityMapPeersPayload.Peer own = ownPeer();
         if (own == null || own.plots().isEmpty()) { centerOnPylon(); return; }
         int minX = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
@@ -2376,8 +2546,8 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
     }
     public void setPersonalPins(List<AtlasPreferences.Pin> pins) { this.personalPins.clear(); this.personalPins.addAll(pins.stream().limit(AtlasPreferences.MAX_PINS).toList()); }
     public List<AtlasPreferences.Pin> personalPins() { return List.copyOf(this.personalPins); }
-    public void togglePinTool() { this.placingPin = !this.placingPin; this.measuring = false; }
-    public void toggleMeasureTool() { this.measuring = !this.measuring; this.placingPin = false; this.measureStart = null; this.measureEnd = null; }
+    public void togglePinTool() { interruptCamera(); this.placingPin = !this.placingPin; this.measuring = false; }
+    public void toggleMeasureTool() { interruptCamera(); this.measuring = !this.measuring; this.placingPin = false; this.measureStart = null; this.measureEnd = null; }
     public boolean pinToolActive() { return this.placingPin; }
     public boolean measureToolActive() { return this.measuring; }
     public boolean cancelPersonalTools() {
@@ -2395,13 +2565,31 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
                 Component.translatable("gui.createcityexpansioncore.world_map.pin", index + 1), new BlockPos(pin.x(), 0, pin.z()),
                 true, List.of(Component.translatable("gui.createcityexpansioncore.world_map.pin.local")), this.cityIcon, false);
     }
+    private boolean placesVisible(){
+        return !projectPicking && focus==Focus.WORLD && Minecraft.getInstance().screen instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen;
+    }
     private void renderPersonalTools(GuiGraphics graphics,int mouseX,int mouseY) {
-        for (int index = 0; index < this.personalPins.size(); index++) {
-            Selection pin = pinSelection(index);
-            int x = worldToScreenX(pin.pos().getX()), y = worldToScreenY(pin.pos().getZ());
-            graphics.fill(x - 4, y - 5, x + 5, y + 4, MapPalette.PAPER_SUNK);
-            graphics.renderOutline(x - 3, y - 4, 7, 7, MapPalette.SELECTED);
-            graphics.vLine(x, y + 3, y + 9, MapPalette.SELECTED);
+        int markerRadius = AtlasPlaceIcon.radius(zoom);
+        if(placesVisible())for(var place:com.example.examplemod.client.screen.AtlasPlaces.selections(dimensionId)){
+            int x=worldToScreenX(place.pos().getX()+.5),y=worldToScreenY(place.pos().getZ()+.5);
+            if(!insideViewport(x,y))continue;
+            boolean pinned=matchesTarget(selection,SelectionKind.PLACE,place.id());
+            boolean hovered=matchesTarget(hoveredSelection,SelectionKind.PLACE,place.id());
+            var icon=AtlasPlaceIcon.forSelection(place,dimensionId);
+            if(icon==null)continue;
+            icon.badge(graphics,x,y,markerRadius,pinned,hovered);
+            labels.reserve(x-markerRadius,y-markerRadius,2*markerRadius,2*markerRadius);
+            String label=place.title().getString();
+            labels.offer("place:"+place.id(),label,pinned?DispatchPalette.SELECTED:MapPalette.TEXT,x,y,markerRadius+2,Minecraft.getInstance().font.width(label),
+                    pinned?MapLabelLayout.Priority.SELECTED:hovered?MapLabelLayout.Priority.HOVER:MapLabelLayout.Priority.NORMAL);
+        }
+        for (var pin : personalPins) {
+            int x = worldToScreenX(pin.x()+.5), y = worldToScreenY(pin.z()+.5);
+            if (!insideViewport(x,y)) continue;
+            AtlasPlaceIcon.PERSONAL.badge(graphics,x,y,markerRadius,
+                    matchesTargetAt(selection,SelectionKind.WAYPOINT,pin.x(),pin.z()),
+                    matchesTargetAt(hoveredSelection,SelectionKind.WAYPOINT,pin.x(),pin.z()));
+            labels.reserve(x-markerRadius,y-markerRadius,2*markerRadius,2*markerRadius);
         }
         if (this.measuring && this.measureStart != null) {
             int x = worldToScreenX(this.measureStart.getX()), y = worldToScreenY(this.measureStart.getZ());
@@ -2423,16 +2611,38 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
     }
     public boolean terrainLoading() { return !requestedTiles.isEmpty(); }
     public Component terrainStatus() {
-        boolean failed=false,loading=false,unknown=false;int level=terrainLevel();
+        boolean failed=false, loading=false, empty=false, stale=false, cached=false, unknown=false;
+        long now=net.minecraft.Util.getMillis();
+        int level=terrainLevel();
         int minX=terrainCoordinate(screenToWorldX(viewportX),level),maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),level);
         int minZ=terrainCoordinate(screenToWorldZ(viewportY),level),maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),level);
         for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
-            TileKey key=new TileKey(dimensionId,x,z,level);CachedTile tile=tileCache.get(key);
-            failed|=failedTiles.contains(key);loading|=requestedTiles.containsKey(key);unknown|=tile==null||!tile.complete();
+            var key=new TileKey(dimensionId,x,z,level);
+            if (terrainStore == null) { empty=true; continue; }
+            var exchange=terrainStore.exchange;
+            var k=key.storeKey();
+            var tile=tileCache.get(key);
+            failed |= exchange.failed(k);
+            loading |= exchange.pending(k) || exchange.publishing(k);
+            if(tile==null) { empty=true; continue; }
+            long checked=exchange.checked(k);
+            cached |= checked==0 && !exchange.invalidated(k);
+            stale |= exchange.invalidated(k) || checked!=0 && now-checked>=ttl(tile);
+            var displayed=terrainTextures.get(key);
+            if (displayed==null || displayed.id()==null) loading=true;
+            else if (!displayed.current(tile.revision())) stale=true;
+            unknown |= checked!=0 && !tile.complete();
         }
-        return Component.translatable("gui.createcityexpansioncore.world_map.terrain."+(failed?"failed":loading?"loading":unknown?"unknown":"ready"));
+        String status=failed?"failed":stale?"stale":cached?"cached":loading?"loading":empty?"waiting":unknown?"unknown":"ready";
+        return Component.translatable("gui.createcityexpansioncore.world_map.terrain."+status);
     }
-    public void retryTerrain() { this.failedTiles.clear(); this.tileAttempts.clear(); this.requestedTiles.clear(); }
+
+    private static long ttl(CachedTile tile) { return tile!=null && tile.complete()?60_000L:5_000L; }
+    public void retryTerrain() {
+        if (terrainStore == null) return;
+        for (TileKey key : lastViewport) terrainStore.exchange.retry(key.storeKey());
+        nextRequestAtMillis = 0;
+    }
 
     public enum Overlay { CITIES, TERRITORIES, PROJECTS, RELATIONS, TRACKS;
         /**
@@ -2444,7 +2654,7 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
 
     public enum Focus { WORLD, ENERGY }
 
-    public enum SelectionKind { WAYPOINT, PLAYER, CITY, INDUSTRY }
+    public enum SelectionKind { WAYPOINT, PLAYER, CITY, INDUSTRY, PROJECT, LOGISTICS, PLACE }
 
     public record Selection(SelectionKind kind, UUID id, Component title, BlockPos pos,
                             boolean own, List<Component> details, ItemStack icon, boolean warning) {
@@ -2542,33 +2752,63 @@ private static boolean sameTarget(Selection first, Selection second) {
         return new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(id)));
     }
 
+    private final Set<TileKey> lastViewport = new HashSet<>();
     private void requestVisibleTiles() {
-        long now=System.currentTimeMillis();
-        requestedTiles.entrySet().removeIf(e->now-e.getValue()>=REQUEST_TIMEOUT_MILLIS);
-        if(now<nextRequestAtMillis||requestedTiles.size()>=64)return;
-        int level=terrainLevel();List<TileKey> missing=new ArrayList<>();
-        // Small overview first, then intermediate coverage and physical-pixel detail.
+        if (terrainStore == null) return;
+        long now=net.minecraft.Util.getMillis();
+        if(now < nextRequestAtMillis) return;
+        nextRequestAtMillis=now+(hud?500:REQUEST_INTERVAL_MILLIS);
+        TerrainCache.expire(now);
+        int level=terrainLevel();
+        List<TileKey> missing=new ArrayList<>();
+        List<TileKey> margin=new ArrayList<>();
+        lastViewport.clear();
+        requestedTiles.clear();
+        var exchange=terrainStore.exchange;
         for(int lod=Math.min(7,level+2);lod>=level;lod--) {
             int minX=terrainCoordinate(screenToWorldX(viewportX),lod)-1,maxX=terrainCoordinate(screenToWorldX(viewportX+viewportWidth),lod)+1;
             int minZ=terrainCoordinate(screenToWorldZ(viewportY),lod)-1,maxZ=terrainCoordinate(screenToWorldZ(viewportY+viewportHeight),lod)+1;
             for(int z=minZ;z<=maxZ;z++)for(int x=minX;x<=maxX;x++) {
                 double span=AtlasMapScale.span(lod);
                 if (!MapBorderLayer.intersects(dimensionId,x*span,z*span,(x+1)*span,(z+1)*span)) continue;
-                TileKey key=new TileKey(dimensionId,x,z,lod);CachedTile known=cachedTerrain(key);
-                if(!terrainStore().ready(x,z,lod))continue;
-                if((known==null||now-known.receivedAtMillis()>=(known.complete()?60_000L:5_000L))&&!requestedTiles.containsKey(key)&&!failedTiles.contains(key))missing.add(key);
+                var key=new TileKey(dimensionId,x,z,lod);
+                var k=key.storeKey();
+                boolean visible=x>minX && x<maxX && z>minZ && z<maxZ;
+                if(visible)lastViewport.add(key);
+                if (exchange.pending(k)) { if(visible)requestedTiles.put(key,true); continue; }
+                var known=cachedTerrain(key);
+                if(terrainStore.ready(x,z,lod) && exchange.due(k,now, known==null?0:ttl(known)))
+                    (visible?missing:margin).add(key);
             }
         }
-        // Cancel obsolete queued view requests; late replies may still enrich the cache.
-        requestedTiles.keySet().removeIf(k->{double span=k.span();return (k.tileX()+1)*span<screenToWorldX(viewportX)-span||k.tileX()*span>screenToWorldX(viewportX+viewportWidth)+span||(k.tileZ()+1)*span<screenToWorldZ(viewportY)-span||k.tileZ()*span>screenToWorldZ(viewportY+viewportHeight)+span;});
-        missing.sort(Comparator.<TileKey>comparingInt(k->tileCache.containsKey(k)?1:0).thenComparingInt(k->-k.level()).thenComparingDouble(this::distanceFromCenterSquared));
-        int count=Math.min(hud?2:MAX_REQUESTS_PER_RENDER,missing.size());
-        for(int i=0;i<count;i++) {
-            TileKey key=missing.get(i);if(tileAttempts.merge(key,1,Integer::sum)>3){failedTiles.add(key);continue;}
-            CachedTile known=cachedTerrain(key);requestedTiles.put(key,now);
-            PacketDistributor.sendToServer(new RequestCityMapTilePayload(pylonPos,dimensionId,key.tileX(),key.tileZ(),key.level(),known==null?0:known.revision(),known==null?new UUID(0,0):known.worldId()));
+        var focus = new TileKey(dimensionId, terrainCoordinate(centerX, level), terrainCoordinate(centerZ, level), level);
+        var priority=Comparator.comparing((TileKey key) -> !key.equals(focus))
+                .thenComparing(key -> tileCache.containsKey(key))
+                .thenComparingInt(k->-k.level()).thenComparingDouble(this::distanceFromCenterSquared);
+        missing.sort(priority);
+        int budget=Math.min(hud?2:MAX_REQUESTS_PER_RENDER, TerrainExchange.LIMIT-TerrainCache.inflight());
+        int visibleCount=missing.size();
+        if(visibleCount<budget && !margin.isEmpty()){
+            margin.sort(priority);
+            int spare=Math.min(Math.min(budget-visibleCount,hud?1:2),margin.size());
+            missing.addAll(margin.subList(0,spare));
         }
-        if(count>0)nextRequestAtMillis=now+(hud?500:REQUEST_INTERVAL_MILLIS);
+        int count=Math.min(budget,missing.size());
+        for (int i=0;i<count;i++) {
+            TileKey key=missing.get(i);
+            var k=key.storeKey();
+            var known=tileCache.get(key);
+            long hash=known==null?0:known.revision();
+            boolean retry=exchange.retrying(k);
+            var request=exchange.start(k,binding.viewId(),hash,now);
+            if(request==null) continue;
+            if(i<visibleCount)requestedTiles.put(key,true);
+            MapDiagnostics.request(retry);
+            PacketDistributor.sendToServer(new RequestCityMapTilePayload(pylonPos,dimensionId,k.x(),k.z(),k.level(),
+                    hash,binding.worldId(),binding.viewId(),request.id()));
+        }
+        MapDiagnostics.queues(TerrainCache.inflight(),TerrainTileTexture.queueSize());
+        MapDiagnostics.sampleResources(now,terrainTextures.size());
     }
 
     private double distanceFromCenterSquared(TileKey key) {
@@ -2582,21 +2822,21 @@ private static boolean sameTarget(Selection first, Selection second) {
     }
 
     public int worldToScreenX(double worldX) {
-        return (int) Math.floor(this.viewportX + this.viewportWidth / 2.0
-                + (worldX - this.centerX) * this.zoom);
+        return (int)Math.floor(worldToScreenXExact(worldX));
     }
 
     public int worldToScreenY(double worldZ) {
-        return (int) Math.floor(this.viewportY + this.viewportHeight / 2.0
-                + (worldZ - this.centerZ) * this.zoom);
+        return (int)Math.floor(worldToScreenZExact(worldZ));
     }
 
+    public double worldToScreenXExact(double worldX) { return projection.screenX(worldX); }
+    public double worldToScreenZExact(double worldZ) { return projection.screenY(worldZ); }
     public double screenToWorldX(double screenX) {
-        return this.centerX + (screenX - this.viewportX - this.viewportWidth / 2.0) / this.zoom;
+        return projection.worldX(screenX);
     }
 
     public double screenToWorldZ(double screenY) {
-        return this.centerZ + (screenY - this.viewportY - this.viewportHeight / 2.0) / this.zoom;
+        return projection.worldZ(screenY);
     }
 
     private boolean insideViewport(double mouseX, double mouseY) {
@@ -2615,7 +2855,7 @@ private static boolean sameTarget(Selection first, Selection second) {
     }
 
     private void centerOnPylon() {
-        stopMotion();
+        interruptCamera();
         this.centerX = this.pylonPos.getX() + 0.5;
         this.centerZ = this.pylonPos.getZ() + 0.5;
         this.dragging = false;
@@ -2633,6 +2873,7 @@ private static boolean sameTarget(Selection first, Selection second) {
     private record TileKey(ResourceLocation dimensionId, int tileX, int tileZ,int level) {
         TileKey(ResourceLocation dimensionId,int x,int z){this(dimensionId,x,z,0);}
         int span(){return AtlasMapScale.span(level);}
+        TerrainTileStore.Key storeKey() { return new TerrainTileStore.Key(tileX,tileZ,level); }
     }
 
     private record CachedTile(

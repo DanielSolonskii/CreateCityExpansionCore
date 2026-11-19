@@ -79,6 +79,9 @@ export function LauncherUpdate({ onRequired }: { onRequired: (required: boolean)
   }, [waiting]);
   if (!build) return null;
   return <section aria-label="Обновление Launcher" className={`launcher-update ${expanded ? "is-expanded" : ""} ${failed ? "has-error" : ""}`}>
+    {update?.available && update.mandatory && <button className="job-primary" disabled={busy || waiting} onClick={() => { setFailed(false); void install(); }}>
+      {waiting ? "Ожидаем выхода из игры" : busy ? "Обновление лаунчера…" : "Обновить лаунчер"}
+    </button>}
     <button className="launcher-update__summary" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>
       <span className={busy ? "status-light is-busy" : "status-light"} />
       <span>Launcher {build.version}</span><span>{busy ? "Обновляем…" : update?.available ? "Доступно обновление" : failed ? "Нет связи" : "О приложении"}</span>

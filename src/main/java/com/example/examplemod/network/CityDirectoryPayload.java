@@ -10,9 +10,14 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import java.util.*;
 
 public record CityDirectoryPayload(UUID token, BlockPos anchor, ResourceLocation dimension, int offset, int total,
-                                   List<ResourceLocation> dimensions, List<CityPublicProfile> cities) implements CustomPacketPayload {
+                                   List<ResourceLocation> dimensions, List<CityPublicProfile> cities, UUID viewId, UUID requestId, UUID worldId, UUID memberCityId) implements CustomPacketPayload {
     public static final Type<CityDirectoryPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(CreateCityExpansionCore.MODID, "city_directory"));
     public static final StreamCodec<RegistryFriendlyByteBuf, CityDirectoryPayload> STREAM_CODEC = StreamCodec.of(CityDirectoryPayload::encode, CityDirectoryPayload::decode);
+    public CityDirectoryPayload(UUID token, BlockPos anchor, ResourceLocation dimension, int offset, int total,
+                                List<ResourceLocation> dimensions, List<CityPublicProfile> cities) {
+        this(token, anchor, dimension, offset, total, dimensions, cities, RequestCityDirectoryPayload.NEW,
+                RequestCityDirectoryPayload.NEW, RequestCityDirectoryPayload.NEW, RequestCityDirectoryPayload.NEW);
+    }
     public CityDirectoryPayload {
         dimensions = List.copyOf(dimensions); cities = List.copyOf(cities);
         if (offset < 0 || total < offset || (long)offset + cities.size() > total || cities.size() > CityDirectoryPager.PAGE_SIZE || dimensions.size() > 256)
@@ -20,6 +25,7 @@ public record CityDirectoryPayload(UUID token, BlockPos anchor, ResourceLocation
         if (cities.stream().anyMatch(c -> !c.dimension().equals(dimension))) throw new IllegalArgumentException("Mixed directory dimensions");
     }
     private static void encode(RegistryFriendlyByteBuf b, CityDirectoryPayload p) {
+        b.writeUUID(p.viewId); b.writeUUID(p.requestId); b.writeUUID(p.worldId); b.writeUUID(p.memberCityId);
         b.writeUUID(p.token); BlockPos.STREAM_CODEC.encode(b, p.anchor); b.writeResourceLocation(p.dimension);
         b.writeVarInt(p.offset); b.writeVarInt(p.total); b.writeVarInt(p.dimensions.size());
         for (var dim : p.dimensions) b.writeResourceLocation(dim);
@@ -31,6 +37,7 @@ public record CityDirectoryPayload(UUID token, BlockPos anchor, ResourceLocation
         }
     }
     private static CityDirectoryPayload decode(RegistryFriendlyByteBuf b) {
+        UUID viewId = b.readUUID(), requestId = b.readUUID(), worldId = b.readUUID(), memberCityId = b.readUUID();
         UUID token = b.readUUID(); BlockPos anchor = BlockPos.STREAM_CODEC.decode(b); var dimension = b.readResourceLocation();
         int offset = b.readVarInt(), total = b.readVarInt(), count = b.readVarInt();
         if (offset < 0 || total < 0 || offset > total || count < 0 || count > 256) throw new IllegalArgumentException("Invalid directory header");
@@ -39,7 +46,7 @@ public record CityDirectoryPayload(UUID token, BlockPos anchor, ResourceLocation
         List<CityPublicProfile> cities = new ArrayList<>();
         for (int i = 0; i < count; i++) cities.add(new CityPublicProfile(b.readUUID(), b.readUtf(128), b.readResourceLocation(), BlockPos.STREAM_CODEC.decode(b),
                 b.readInt(), b.readVarInt(), b.readVarInt(), b.readBoolean(), b.readBoolean(), b.readVarLong(), new CityIdentity(b.readUtf(CityIdentity.MAX_DESCRIPTION), b.readUtf(CityIdentity.PIXELS))));
-        return new CityDirectoryPayload(token, anchor, dimension, offset, total, dimensions, cities);
+        return new CityDirectoryPayload(token, anchor, dimension, offset, total, dimensions, cities, viewId, requestId, worldId, memberCityId);
     }
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 }

@@ -119,7 +119,7 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
         Layout layout = layout();
 
         this.addRenderableWidget(
-                Button.builder(
+                AtlasFormStyle.button(Button.builder(
                         Component.translatable("gui.createcityexpansioncore.common.close"),
                         button -> this.minecraft.setScreen(this.parent)
                 ).bounds(
@@ -127,7 +127,7 @@ public class CityColorPaletteScreen extends ModalOverlayScreen {
                         layout.top() + layout.buttonY(),
                         layout.buttonWidth(),
                         layout.buttonHeight()
-                ).build()
+                ))
         );
     }
 

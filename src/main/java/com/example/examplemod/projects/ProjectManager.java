@@ -43,11 +43,15 @@ public final class ProjectManager {
     public long serverAvailable(){return Math.max(0,serverLimit()-serverIssued-Math.min(serverReserved(),Math.max(0,serverLimit()-serverIssued)));}
     public boolean hasActive(UUID city){return projects.values().stream().anyMatch(p->Objects.equals(p.city(),city)&&!p.status().terminal());}
     public List<Project> visible(Actor actor,int filter) {
-        return projects.values().stream().filter(p->p.scope()==Scope.SERVER||actor.city()!=null&&Objects.equals(p.city(),actor.city()))
-                .filter(p->p.status()!=Status.DRAFT||(p.scope()==Scope.SERVER?actor.op():p.author().equals(actor.player())||actor.admin()))
+        return projects.values().stream().filter(p -> visibleTo(actor, p))
                 .filter(p->switch(filter){case 1->p.author().equals(actor.player())||p.executor()!=null&&p.executor().representative().equals(actor.player());
                     case 2->p.status()==Status.REVIEW||p.status()==Status.PENDING_FUNDING;case 3->p.status().terminal();default->!p.status().terminal();})
                 .sorted(Comparator.comparing((Project p)->p.status().ordinal()).thenComparing(Project::title).thenComparing(Project::id)).toList();
+    }
+    public static boolean visibleTo(Actor actor, Project project) {
+        if (project.scope() == Scope.CITY && (actor.city() == null || !actor.city().equals(project.city()))) return false;
+        return project.status() != Status.DRAFT || (project.scope() == Scope.SERVER
+                ? actor.op() : project.author().equals(actor.player()) || actor.admin());
     }
     /** Errors are stable localization keys; no partial updates on a rejected command. */
     public synchronized String execute(Actor a,Command c) {

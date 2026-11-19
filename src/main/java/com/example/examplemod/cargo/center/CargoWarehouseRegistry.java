@@ -22,6 +22,8 @@ public final class CargoWarehouseRegistry extends net.minecraft.world.level.save
     private final Map<UUID,Warehouse> entries=new HashMap<>();
     public static CargoWarehouseRegistry get(MinecraftServer s){if(!s.isSameThread())throw new IllegalStateException("Server thread");return s.overworld().getDataStorage().computeIfAbsent(new Factory<>(CargoWarehouseRegistry::new,CargoWarehouseRegistry::load,null),"ccec_cargo_warehouses");}
     public List<Warehouse> all(){return List.copyOf(entries.values());}
+    List<Warehouse> mapCandidates(int limit) { return entries.values().stream().limit(limit).toList(); }
+
     public Optional<Warehouse> find(UUID id){return Optional.ofNullable(entries.get(id));}
     public static CargoOwners.Access access(MinecraftServer s,Warehouse w){return CargoOwners.get(s).access("warehouse/"+w.id(),w.creator(),CargoTrainRegistry.AccessMode.PRIVATE);}
     public static CargoTickerBlockEntity ticker(MinecraftServer s,Warehouse w){var be=w.ticker().loaded(s);return be instanceof CargoTickerBlockEntity t&&!t.isRemoved()&&w.tickerInstance().equals(t.instanceId())&&w.network().equals(t.behaviour.freqId)?t:null;}

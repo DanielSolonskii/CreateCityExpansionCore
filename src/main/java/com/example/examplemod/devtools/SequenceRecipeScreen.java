@@ -1,5 +1,7 @@
 package com.example.examplemod.devtools;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import com.google.gson.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -24,8 +26,8 @@ public final class SequenceRecipeScreen extends Screen {
     private boolean fluidTag;
     private final List<JsonObject> displayed=new ArrayList<>();
     public SequenceRecipeScreen(Screen parent,JsonObject json,Consumer<JsonObject> accept){super(Component.literal("Последовательная сборка"));this.parent=parent;this.accept=accept;draft=new SequenceRecipeDraft(json);}
-    private void button(String text,int x,int y,int w,Runnable action){addRenderableWidget(Button.builder(Component.literal(text),b->{try{store();action.run();rebuild();}catch(Exception e){error=e.getMessage();}}).bounds(x,y,w,20).build());}
-    private EditBox field(String value,int x,int y,int w){var box=addRenderableWidget(new EditBox(font,x,y,w,20,Component.empty()));box.setMaxLength(256);box.setValue(value);return box;}
+    private void button(String text,int x,int y,int w,Runnable action){addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal(text),b->{try{store();action.run();rebuild();}catch(Exception e){error=e.getMessage();}}).bounds(x,y,w,20)));}
+    private EditBox field(String value,int x,int y,int w){var box=addRenderableWidget(AtlasFormStyle.field(font,x,y,w,20,Component.empty()));box.setMaxLength(256);box.setValue(value);return box;}
     private String value(JsonObject json,String key,String fallback){return json.has(key)?json.get(key).getAsString():fallback;}
     private JsonObject step(){return draft.step(stage);}
     private String type(){return step().get("type").getAsString();}

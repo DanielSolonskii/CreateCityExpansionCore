@@ -89,6 +89,7 @@ public final class CargoPackageAssignment {
 
     public static boolean mayAssignTrain(MinecraftServer server, OwnerRef requester, UUID trainId) {
         if (server == null || !server.isSameThread() || requester == null || trainId == null) return false;
+        if (com.example.examplemod.passenger.PassengerService.assigned(server, trainId)) return false;
         var registered = CargoTrainRegistry.find(server, trainId).orElse(null);
         Train train = RailwaySavedData.load(server).getTrains().get(trainId);
         return registered != null && train != null && train.id.equals(trainId)
@@ -97,6 +98,7 @@ public final class CargoPackageAssignment {
 
     private static CargoTrainRegistry.Registration assignableTrain(MinecraftServer server, UUID owner, UUID trainId) {
         if (server == null || !server.isSameThread() || owner == null || trainId == null) return null;
+        if (com.example.examplemod.passenger.PassengerService.assigned(server,trainId)) return null;
         var registered = CargoTrainRegistry.find(server, trainId).orElse(null);
         Train train = RailwaySavedData.load(server).getTrains().get(trainId);
         return registered != null && registered.ownerId().equals(owner) && train != null

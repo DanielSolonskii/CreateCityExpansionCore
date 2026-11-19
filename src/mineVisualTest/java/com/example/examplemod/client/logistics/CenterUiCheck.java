@@ -8,6 +8,12 @@ public final class CenterUiCheck {
         if (!value) throw new AssertionError(message);
     }
     public static void run() {
+        var paper=new LogisticsMapOverlay.View(10,20,233,127);
+        var corner=new LogisticsMapOverlay.View(230,140,22,23).clippedTo(paper);
+        require(corner.contains(242.75,146.75),"the visible fraction of a clipped marker remains clickable");
+        require(!corner.contains(243,146) && !corner.contains(242,147),"a marker cannot intercept clicks outside the paper");
+        var outside=new LogisticsMapOverlay.View(250,150,22,23).clippedTo(paper);
+        require(!outside.contains(250,150),"a fully clipped marker has no hit area");
         EquipmentWizardCheck.run();
         LogisticsTutorialCheck.run();
         LogisticsActivationCheck.run();

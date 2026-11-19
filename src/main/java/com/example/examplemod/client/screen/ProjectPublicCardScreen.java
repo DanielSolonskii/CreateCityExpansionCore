@@ -14,9 +14,9 @@ public final class ProjectPublicCardScreen extends Screen {
     public ProjectPublicCardScreen(Screen parent,NearbyScenePayload.Site site){super(Component.literal(site.title()));this.parent=parent;original=site;}
     private NearbyScenePayload.Site current(){return NearbySceneClient.projects().stream().filter(s->s.id().equals(original.id())).findFirst().orElse(null);}
     @Override protected void init(){scale=Math.min(1,Math.min(width/400f,height/212f));w=380;left=((int)(width/scale)-w)/2;top=Math.max(8,((int)(height/scale)-192)/2);opened=net.minecraft.Util.getMillis();clearWidgets();
-        if(original.author()!=null)addRenderableWidget(Button.builder(Component.literal(original.authorName()),b->{if(current()!=null)PlayerProfileScreen.open(this,current().author());}).bounds(left+16,top+100,w-32,20).build());
-        addRenderableWidget(Button.builder(Component.literal(original.executorName().isBlank()?"—":original.executorName()),b->{if(current()!=null&&current().executor()!=null)PlayerProfileScreen.open(this,current().executor());}).bounds(left+16,top+135,w-32,20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"),b->onClose()).bounds(left+16,top+164,w-32,20).build());
+        if(original.author()!=null)addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal(original.authorName()),b->{if(current()!=null)PlayerProfileScreen.open(this,current().author());}).bounds(left+16,top+100,w-32,20)));
+        addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal(original.executorName().isBlank()?"—":original.executorName()),b->{if(current()!=null&&current().executor()!=null)PlayerProfileScreen.open(this,current().executor());}).bounds(left+16,top+135,w-32,20)));
+        addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.translatable("gui.back"),b->onClose()).bounds(left+16,top+164,w-32,20)));
     }
     @Override public void render(GuiGraphics g,int mx,int my,float dt){renderBackground(g,mx,my,dt);g.pose().pushPose();g.pose().scale(scale,scale,1);mx=(int)(mx/scale);my=(int)(my/scale);rounded(g,left,top,w,192,5,EDGE);rounded(g,left+1,top+1,w-2,190,5,SURFACE);
         var site=current();if(site==null){g.drawString(font,Component.translatable("gui.createcityexpansioncore.trade.unavailable"),left+16,top+24,MUTED,false);for(var child:renderables)if(child instanceof Button b)b.active=b.getY()==top+164;super.render(g,mx,my,dt);g.pose().popPose();return;}

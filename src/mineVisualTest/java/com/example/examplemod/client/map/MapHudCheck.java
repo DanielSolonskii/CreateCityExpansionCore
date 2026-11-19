@@ -5,6 +5,7 @@ public final class MapHudCheck {
  private static int checks;
  private static void require(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
  public static void main(String[] args)throws Exception{
+  verifyLifecycle();
   var b=new MapBorderGeometry.Bounds(-50,-20,75,90);
   require(b.contains(-50,-20),"inclusive minimum");require(!b.contains(75,90),"exclusive maximum");
   require(b.intersects(-100,0,-49,1),"crossing border tile");require(!b.intersects(-100,0,-50,1),"outside tile touching edge");
@@ -57,5 +58,29 @@ public final class MapHudCheck {
    require(!com.example.examplemod.network.MinimapDirectoryPayload.TYPE.equals(com.example.examplemod.network.CityDirectoryPayload.TYPE),"late HUD response cannot enter full atlas handler");
   }finally{buffer.release();}
   System.out.println("Map HUD: "+checks+" checks passed");
+ }
+ private static void verifyLifecycle(){
+  int[] releases={0}, resets={0};
+  Object world=new Object(), panel=new Object(), otherWorld=new Object();
+  var hud=new HudPanelLifecycle<Object>(owned -> releases[0]++, () -> resets[0]++);
+  hud.update(world,true,true,0);
+  hud.install(panel);
+  for(int i=1;i<=50;i++){
+   hud.update(world,true,false,i*100);
+   require(!hud.visibleFor(world),"hidden HUD cannot draw or request");
+   hud.update(world,true,true,i*100+50);
+   require(hud.visibleFor(world)&&hud.panel()==panel,"short hide preserves panel identity");
+  }
+  hud.update(world,true,false,6000);
+  hud.update(world,true,false,6000+HudPanelLifecycle.IDLE_MILLIS);
+  require(hud.panel()==null && releases[0]==1 && resets[0]==0,"idle releases only the HUD panel");
+  hud.update(world,true,true,40000);hud.install(new Object());
+  hud.update(world,true,false,40100);hud.update(otherWorld,true,false,40200);
+  require(hud.panel()==null && releases[0]==2 && resets[0]==1,"hidden world replacement discards old scope");
+  hud.update(otherWorld,true,true,40300);hud.install(new Object());
+  hud.update(otherWorld,false,false,40400);hud.close();
+  require(hud.panel()==null && releases[0]==3 && resets[0]==2,"disable and repeated close release once");
+  hud.update(world,true,true,40500);hud.install(new Object());hud.update(null,true,false,40600);hud.close();
+  require(releases[0]==4 && resets[0]==3,"logout releases the last panel once");
  }
 }

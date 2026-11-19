@@ -59,8 +59,9 @@ public final class CommunityService {
             case PREFERENCE -> {var q=data.preferences(p.getUUID());var v=switch(r.value()){case 0->new CommunityData.Preferences(!q.telegram(),q.preview(),q.offlineOnly(),q.quiet(),q.offset());case 1->new CommunityData.Preferences(q.telegram(),!q.preview(),q.offlineOnly(),q.quiet(),q.offset());case 2->new CommunityData.Preferences(q.telegram(),q.preview(),!q.offlineOnly(),q.quiet(),q.offset());case 3->new CommunityData.Preferences(q.telegram(),q.preview(),q.offlineOnly(),!q.quiet(),q.offset());default->q;};data.preferences.put(p.getUUID(),v);data.setDirty();}
             case MUTE -> {if(r.target()!=null){var set=data.muted.computeIfAbsent(p.getUUID(),id->new HashSet<>());if(r.value()==1&&set.size()<128){set.add(r.target());data.outbox.removeIf(n->n.owner().equals(p.getUUID())&&n.peer().equals(r.target()));}else if(r.value()==0)set.remove(r.target());data.preferences.putIfAbsent(p.getUUID(),data.preferences(p.getUUID()));data.setDirty();}}
         }
-        out.put("Inbox",CommunityInbox.get(s).page(p.getUUID(),r.action()==CommunityRequestPayload.Action.INBOX?Math.min(1,r.page()):0));out.putInt("InboxTotal",CommunityInbox.get(s).history(p.getUUID()).size());out.putInt("AllianceUnread",(int)CommunityInbox.get(s).history(p.getUUID()).stream().filter(e->!e.read()&&e.kind().equals("alliance_message")).count());out.putInt("InboxUnread",CommunityInbox.get(s).unread(p.getUUID()));
-        var counts=CommunitySummary.build(p,new CompoundTag(),false,0);for(String key:List.of("Unread","AllianceUnread","InboxUnread"))out.putInt(key,counts.getInt(key));
+        var counts = CommunitySummary.build(p, new CompoundTag(), true, 0);
+        for (String key : List.of("Unread", "AllianceUnread", "InboxUnread", "InboxTotal")) out.putInt(key, counts.getInt(key));
+        out.put("Inbox", counts.getList("Inbox", 10));
         CommunitySummary.memberships(p,out,manager);
         out.putString("SelfName",PlayerNames.name(p));own=manager.getMemberCity(p.getUUID());out.putString("OwnRole",own==null?"":own.getMember(p.getUUID()).getRole().name());out.putString("Result",result);if(own!=null){out.putUUID("OwnCity",own.getId());out.putString("OwnName",own.getName());out.putString("OwnRole",own.getMember(p.getUUID()).getRole().name());}
         out.putBoolean("PylonAccess",CityMembershipService.atPylon(p,c));

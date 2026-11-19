@@ -83,7 +83,7 @@ public final class ItemSelectorOverlay {
         this.lastQuery = "";
         this.filtered = entries();
         Minecraft minecraft = Minecraft.getInstance();
-        this.search = new EditBox(minecraft.font, x + PAD, y + 26, w - PAD * 2 - 18, 16,
+        this.search = AtlasFormStyle.field(minecraft.font, x + PAD, y + 26, w - PAD * 2 - 18, 16,
                 Component.translatable("gui.createcityexpansioncore.item_selector.search"));
         this.search.setHint(Component.translatable("gui.createcityexpansioncore.item_selector.search_hint"));
         this.search.setMaxLength(64);

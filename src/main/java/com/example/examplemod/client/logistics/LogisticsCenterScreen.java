@@ -1,5 +1,7 @@
 package com.example.examplemod.client.logistics;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import com.example.examplemod.cargo.center.CenterRequest;
 import com.example.examplemod.client.CommunityFx;
 import net.minecraft.client.gui.GuiGraphics;
@@ -31,7 +33,30 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
 
     public LogisticsCenterScreen() { super(tr("title")); }
 
+    public record View(int section, boolean network, boolean reverse, boolean onlyProblems, String query,
+                       int page, int scroll, int detailScroll, int navScroll, int dashboardScroll, UUID selected) {
+        public LogisticsCenterScreen restore() {
+            var center=new LogisticsCenterScreen();
+            center.section=section; center.networkMode=network; center.reverse=reverse; center.onlyProblems=onlyProblems;
+            center.query=query; center.page=page; center.scroll=scroll; center.detailScroll=detailScroll;
+            center.navScroll=navScroll; center.dashboardScroll=dashboardScroll; center.selected=selected;
+            center.guideChecked=true;
+            return center;
+        }
+    }
+    public View view() {
+        return new View(section,networkMode,reverse,onlyProblems,query,page,scroll,detailScroll,navScroll,dashboardScroll,selected);
+    }
+    LogisticsMapOverlay.ReturnToMap mapReturn;
+    @Override public void onClose() {
+        var destination=mapReturn;
+        mapReturn=null;
+        if (destination != null && destination.restore()) return;
+        super.onClose();
+    }
+
     public void focusObject(String kind, UUID id) {
+        guideChecked = true;
         query = ""; reverse = onlyProblems = false; page = scroll = detailScroll = dashboardScroll = 0;
         state = new CompoundTag(); received = 0;
         section = switch (kind) { case "train" -> 2; case "line" -> 3; case "point", "station" -> 4; case "warehouse" -> 5; case "offer" -> 6; case "shipment" -> 7; case "company" -> 9; case "fleet" -> 10; case "road" -> 11; case "debt" -> 12; case "trade_contract" -> 13; case "master_city" -> 14; default -> kind.startsWith("company_")?9:0; };
@@ -55,7 +80,7 @@ public final class LogisticsCenterScreen extends Screen implements CenterRespons
         ensureNavigationVisible();
 
         var s = layout.search();
-        search = new EditBox(font, s.x(), s.y(), s.width(), s.height(), tr("search"));
+        search = AtlasFormStyle.field(font, s.x(), s.y(), s.width(), s.height(), tr("search"));
         search.setHint(tr("search")); search.setMaxLength(96); search.setValue(query);
         search.setResponder(value -> { query = value; searchChanged = net.minecraft.Util.getMillis(); });
         addRenderableWidget(search);

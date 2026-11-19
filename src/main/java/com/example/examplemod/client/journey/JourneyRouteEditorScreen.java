@@ -90,7 +90,9 @@ public final class JourneyRouteEditorScreen extends Screen {
     private enum Pick { STEP, START, WAYPOINT }
     private enum Dialog { NONE, ADD, ACTION, ITEM, TEST, EXIT, RELOAD, PUBLISH }
 
-    private record Placement(JourneyRouteEditorScreen editor, Pick pick, ClientLevel level, LocalPlayer player) {}
+    private record Placement(JourneyRouteEditorScreen editor, Pick pick,
+                             java.lang.ref.WeakReference<ClientLevel> level,
+                             java.lang.ref.WeakReference<LocalPlayer> player, long expires) {}
     private record Label(Component text, int x, int y) {}
     private record ItemChoice(Item item, String id, Component name) {}
 
@@ -312,7 +314,7 @@ public final class JourneyRouteEditorScreen extends Screen {
     }
 
     private EditBox textBox(int x, int y, int w, Component title, String value, int limit, Consumer<String> change) {
-        EditBox box = new EditBox(font, x, y, w, 19, title);
+        EditBox box = com.example.examplemod.client.screen.AtlasFormStyle.field(font, x, y, w, 19, title);
         box.setMaxLength(limit);
         box.setHint(title);
         box.setValue(value);
@@ -600,7 +602,8 @@ public final class JourneyRouteEditorScreen extends Screen {
         pickMap = false;
         message(null, false);
         suspended = true;
-        placement = new Placement(this, pick, minecraft.level, minecraft.player);
+        placement = new Placement(this, pick, new java.lang.ref.WeakReference<>(minecraft.level),
+                new java.lang.ref.WeakReference<>(minecraft.player), Util.getMillis() + 600_000);
         minecraft.setScreen(null);
         if (minecraft.screen != null) {
             placement = null;
@@ -610,21 +613,21 @@ public final class JourneyRouteEditorScreen extends Screen {
 
     private void capture(Placement session) {
         CompoundTag step = step();
-        BlockPos pos = session.player().blockPosition();
+        BlockPos pos = minecraft.player.blockPosition();
         if (session.pick() == Pick.STEP && step != null && Action.of(step).usesBlock()) {
             if (!(minecraft.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
                 message(tr("aim_block"), true);
                 return;
             }
             pos = hit.getBlockPos();
-            if (Action.of(step) == Action.OPEN_PYLON && !session.level().getBlockState(pos).is(CreateCityExpansionCore.CITY_PYLON.get())) {
+            if (Action.of(step) == Action.OPEN_PYLON && !minecraft.level.getBlockState(pos).is(CreateCityExpansionCore.CITY_PYLON.get())) {
                 message(tr("aim_pylon"), true);
                 return;
             }
         }
         Point point;
         try {
-            point = new Point(session.level().dimension().location().toString(), pos.getX(), pos.getY(), pos.getZ());
+            point = new Point(minecraft.level.dimension().location().toString(), pos.getX(), pos.getY(), pos.getZ());
         } catch (IllegalArgumentException invalid) {
             message(JourneyClient.tr("error.location"), true);
             return;
@@ -678,7 +681,8 @@ public final class JourneyRouteEditorScreen extends Screen {
     }
 
     private static boolean valid(Placement session, Minecraft minecraft) {
-        return minecraft.level == session.level() && minecraft.player == session.player() && session.player().isAlive();
+        return minecraft.level != null && minecraft.level == session.level().get() && minecraft.player != null
+                && minecraft.player == session.player().get() && minecraft.player.isAlive() && session.editor().parent.hasLiveMap();
     }
 
     @SubscribeEvent
@@ -705,7 +709,15 @@ public final class JourneyRouteEditorScreen extends Screen {
     @SubscribeEvent
     public static void placementTick(ClientTickEvent.Post event) {
         var session = placement;
-        if (session != null && !valid(session, Minecraft.getInstance())) dropPlacement();
+        var mc=Minecraft.getInstance();
+        if (session == null) return;
+        if (!valid(session,mc)) {dropPlacement();return;}
+        // End an idle world pick by returning the unsaved draft when the player is back in the world.
+        if (mc.screen==null && Util.getMillis()>=session.expires()) {
+            placement=null;
+            session.editor().suspended=false;
+            mc.setScreen(session.editor());
+        }
     }
 
     @SubscribeEvent
@@ -751,6 +763,7 @@ public final class JourneyRouteEditorScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float delta) {
+        if (!parent.hasLiveMap()) return;
         g.fill(0, 0, width, height, BACKGROUND);
         g.fill(0, 0, width, BODY_TOP - 3, SURFACE);
         g.fill(0, BODY_TOP - 4, width, BODY_TOP - 3, BRASS);
@@ -805,6 +818,7 @@ public final class JourneyRouteEditorScreen extends Screen {
     }
 
     private void renderMap(GuiGraphics g, int mx, int my) {
+        map.setPrecisionInput(pickMap);
         map.render(g, mapLeft, BODY_TOP, mapWidth, bodyBottom - BODY_TOP, mx, my);
         g.enableScissor(mapLeft, BODY_TOP, mapLeft + mapWidth, bodyBottom);
         var steps = steps();
@@ -920,6 +934,7 @@ public final class JourneyRouteEditorScreen extends Screen {
             return true;
         }
         if ((wide || compactMap) && x >= mapLeft && x < mapLeft + mapWidth && y >= BODY_TOP && y < bodyBottom) {
+            map.interruptCamera();
             if (pickMap && step() != null) {
                 var step = step();
                 Point point;
@@ -944,7 +959,8 @@ public final class JourneyRouteEditorScreen extends Screen {
                     select(hit);
                     return true;
                 }
-                draggingMap = true;
+                draggingMap = button == 0;
+                if (draggingMap) map.beginPan();
             }
             return true;
         }
@@ -967,15 +983,17 @@ public final class JourneyRouteEditorScreen extends Screen {
     public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
         if (dragIndex >= 0) return true;
         if (draggingMap && button == 0) {
-            map.restoreView(map.centerX() - dx / map.zoom(), map.centerZ() - dy / map.zoom(), map.zoom());
-            return true;
+            return map.mouseDragged(x,y,button,dx,dy);
         }
         return super.mouseDragged(x, y, button, dx, dy);
     }
 
     @Override
     public boolean mouseReleased(double x, double y, int button) {
-        draggingMap = false;
+        if (draggingMap && button == 0) {
+            draggingMap = false;
+            return map.mouseReleased(x,y,button);
+        }
         if (dragIndex >= 0) {
             int from = dragIndex;
             dragIndex = -1;

@@ -22,7 +22,42 @@ public final class MasterCityTradeCheck {
     private static CompoundTag item(String id){var tag=new CompoundTag();tag.putString("id",id);return tag;}
     private static MasterCityTradeBook fixture(MasterCityTradeBook.Direction mode){var b=new MasterCityTradeBook(ACCOUNTS);b.time(1_000_000,100);b.bind(new MasterCityTradeBook.Binding(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),new CargoInfrastructure.Location(ResourceLocation.parse("minecraft:overworld"),BlockPos.ZERO),UUID.randomUUID()),null);b.configureBudget(1000,null);b.policy(new MasterCityTradeBook.Policy(UUID.randomUUID(),"Iron",item("minecraft:iron_ingot"),mode,100,200,50,100,5,10,50,false),null);b.enabled(true,null);return b;}
     private static MasterCityTradeBook restore(MasterCityTradeBook book){var restored=new MasterCityTradeBook(ACCOUNTS);restored.load(book.save());return restored;}
+    private static void searchableAfterHistory() {
+        var accounts = new CatalogAccounts();
+        var commerce = new CargoCommerceBook(accounts);
+        var master = fixture(MasterCityTradeBook.Direction.EXPORT);
+        master.configureBudget(100_000, null);
+        UUID policy = master.policies().getFirst().id(), warehouse = UUID.randomUUID();
+        var seller = OwnerRef.player(UUID.randomUUID());
+        var iron = item("minecraft:iron_ingot");
+        for (int i = 0; i < 512; i++) {
+            UUID old = UUID.randomUUID();
+            commerce.publish(old, seller.id(), seller, warehouse, iron, "Iron", 1, 3);
+            commerce.close(old);
+            master.createContract(old, policy, 1, "Iron", 2_000_000, null);
+            master.closeContract(old, i % 2 == 0, null);
+        }
+        UUID current = UUID.randomUUID();
+        var offer = commerce.publish(current, seller.id(), seller, warehouse, iron, "Iron", 1, 3);
+        var contract = master.createContract(current, policy, 1, "Iron", 2_000_000, null);
+        require(commerce.mapCandidates(512).equals(List.of(offer)), "closed offers do not consume the atlas scan budget");
+        require(master.mapCandidates(512).equals(List.of(contract)), "closed and expired contracts do not consume the atlas scan budget");
+        var restored = new CargoCommerceBook(accounts);
+        restored.load(commerce.save());
+        require(restored.mapCandidates(1).equals(List.of(offer)) && restore(master).mapCandidates(1).equals(List.of(contract)),
+                "both live catalogs are rebuilt from saved history on restart");
+        var payer = OwnerRef.player(UUID.randomUUID());
+        accounts.balances.put(payer, 30L);
+        UUID order = UUID.randomUUID();
+        restored.reserve(order, payer, seller, order, current, 1, 3, List.of());
+        require(restored.mapCandidates(512).isEmpty(), "fully reserved offer leaves the atlas index");
+        require(restored.refundUnattempted(order) && restored.mapCandidates(512).equals(List.of(offer)), "refund restores available terms");
+        require(restored.close(current) && restored.mapCandidates(512).isEmpty() && restored.reopen(current)
+                && restored.mapCandidates(512).equals(List.of(offer)), "recovery republishes the same offer exactly once");
+    }
+
     public static void main(String[] args)throws Exception{
+        searchableAfterHistory();
         var b=fixture(MasterCityTradeBook.Direction.EXPORT);var p=b.policies().getFirst();UUID cId=UUID.randomUUID();var c=b.createContract(cId,p.id(),50,"Foreign demand",2_000_000,null);
         require(p.demand(100,0,0)==0,"retained export goods cover city target and cannot trigger endless repeat procurement");require(p.demand(80,20,0)==0,"confirmed inbound goods cover the same shortage once");require(p.demand(10,20,90)==10,"new demand is capped by the remaining daily item quota");require(p.demand(Integer.MAX_VALUE,4096,0)==0,"large native stock cannot wrap signed arithmetic into an artificial shortage");
         require(b.allocated()==300&&b.balance()==300&&b.remainingBudget()==700,"contract reserves full goods and freight from bounded daily grant");

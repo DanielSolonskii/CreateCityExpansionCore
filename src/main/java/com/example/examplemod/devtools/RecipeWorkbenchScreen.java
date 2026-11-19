@@ -1,5 +1,7 @@
 package com.example.examplemod.devtools;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import com.google.gson.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -162,7 +164,7 @@ public final class RecipeWorkbenchScreen extends Screen {
     private void retain(){if(editor!=null)draft=editor.getValue();if(id!=null)recipeId=id.getValue();}
     private boolean parse(){try{document=JsonParser.parseString(editor.getValue()).getAsJsonObject();normalizeGrid();refreshSlots();return true;}catch(Exception e){status="Ошибка JSON: "+e.getMessage();return false;}}
     private void sync(){draft=RecipeWorkbenchFiles.JSON.toJson(document);editor.setValue(draft);}
-    private void button(String text,int x,int y,int w,Runnable action){addRenderableWidget(Button.builder(Component.literal(text),b->{if(!busy)action.run();}).bounds(x,y,w,20).build());}
+    private void button(String text,int x,int y,int w,Runnable action){addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal(text),b->{if(!busy)action.run();}).bounds(x,y,w,20)));}
     @Override protected void init(){
         uiScale=Math.min(1f,Math.min(width/680f,height/480f));
         width=Math.round(width/uiScale);height=Math.round(height/uiScale);
@@ -172,7 +174,7 @@ public final class RecipeWorkbenchScreen extends Screen {
         button("Создание",140,28,90,()->{retain();editing=false;page=0;rebuild();});
         button("Редактирование",238,28,120,()->{retain();editing=true;page=0;rebuild();});
         button("Закрыть",right-76,28,76,this::onClose);
-        id=addRenderableWidget(new EditBox(font,left,58,Math.max(120,width-280),20,Component.literal("ID рецепта")));id.setMaxLength(256);id.setValue(recipeId);
+        id=addRenderableWidget(AtlasFormStyle.field(font,left,58,Math.max(120,width-280),20,Component.literal("ID рецепта")));id.setMaxLength(256);id.setValue(recipeId);
         button(editing?"Предыдущие":"← Тип",right-250,58,115,()->{retain();if(editing)page=Math.max(0,page-4);else{typeIndex=Math.floorMod(typeIndex-1,templates.size());load(new ArrayList<>(templates.values()).get(typeIndex));}rebuild();});
         button(editing?"Следующие":"Тип →",right-125,58,125,()->{retain();if(editing)page+=4;else{typeIndex=(typeIndex+1)%templates.size();load(new ArrayList<>(templates.values()).get(typeIndex));}rebuild();});
         if(editing){var found=filtered();page=Math.min(page,Math.max(0,found.size()-4));
@@ -193,7 +195,7 @@ public final class RecipeWorkbenchScreen extends Screen {
         if(FluidRecipeDraft.supportsInput(docType)||FluidRecipeDraft.supportsResult(docType))button("Жидкости",width/2+8,160,120,()->{
             retain();if(parse())minecraft.setScreen(new FluidRecipeScreen(this,document,json->{load(json);status="Жидкости обновлены в черновике. Сохраните рецепт для применения.";}));
         });
-        editor=addRenderableWidget(new MultiLineEditBox(font,12,editorY,width-24,editorH,Component.empty(),Component.literal("JSON рецепта")));
+        editor=addRenderableWidget(AtlasFormStyle.multiline(font,12,editorY,width-24,editorH,Component.empty(),Component.literal("JSON рецепта")));
         editor.setCharacterLimit(131072);editor.setValue(draft);
         int actionsY=editorY+editorH+4;
         button(editing?"Сохранить изменения":"Добавить крафт",12,actionsY,150,()->confirm(false));

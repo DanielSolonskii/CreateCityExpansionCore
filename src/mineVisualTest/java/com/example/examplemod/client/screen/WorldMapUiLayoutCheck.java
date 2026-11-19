@@ -25,6 +25,7 @@ public final class WorldMapUiLayoutCheck {
     private static int[] globalLabels() { return new int[] { 40, 44, 52, 50, 64, 72, 30, 50 }; }
 
     public static void main(String[] args) {
+        AtlasInteractionCheck.run();
         require(CityMapClaimAccess.allowed(true,true,true,false,false,false),"root enables claim");
         require(CityMapClaimAccess.allowed(true,true,false,true,false,false),"workspace enables claim");
         require(CityMapClaimAccess.allowed(true,true,false,false,true,false),"own management atlas enables claim");

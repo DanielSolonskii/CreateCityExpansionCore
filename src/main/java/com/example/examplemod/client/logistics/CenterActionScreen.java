@@ -1,5 +1,7 @@
 package com.example.examplemod.client.logistics;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
@@ -84,7 +86,7 @@ public final class CenterActionScreen extends Screen implements CenterResponseSc
                 options.put(key,list);String initial=key.equals("Owner")?row.getString("OwnerValue"):key.equals("Enabled")&&row.contains("Enabled",1)?Boolean.toString(row.getBoolean("Enabled")):row.getString(key);
                 if(!values.containsKey(key))values.put(key,list.stream().filter(v->v.getString("Value").equals(initial)).map(v->v.getString("Value")).findFirst().orElse(list.isEmpty()?"":list.getFirst().getString("Value")));
             }else{
-                var edit=new EditBox(font,left+16,y,formWidth-32,20,fieldLabel(field));edit.setMaxLength(key.equals("Terms")||key.equals("Memo")?256:key.equals("Name")?64:96);
+                var edit=AtlasFormStyle.field(font,left+16,y,formWidth-32,20,fieldLabel(field));edit.setMaxLength(key.equals("Terms")||key.equals("Memo")?256:key.equals("Name")?64:96);
                 String initial=key.equals("Tariff")?Long.toString(row.getLong("Tariff")):row.getString(key);
                 edit.setValue(values.getOrDefault(key,initial.isEmpty()&&kind.equals("number")?field.getString("Source"):initial));
                 edit.setResponder(value->{values.put(key,value);invalidateQuote();});values.putIfAbsent(key,edit.getValue());

@@ -20,7 +20,7 @@ export function CompanionProfile({profile,registeredAt,compact=false,onOpen,onEd
       <dl className="companion-profile__details"><div><dt>Роль в городе</dt><dd>{profile.role}</dd></div><div><dt>Дата регистрации</dt><dd>{profile.joinedAt}</dd></div></dl>
       <ProfileStudio key={profile.accountId} account={profile.accountId} registeredAt={registeredAt}/>
       <p className="companion-sync">{profile.syncLabel}</p>
-      <div className="companion-profile__actions"><button onClick={onEdit}><Pencil size={16}/>Оформление профиля</button><button onClick={onLogout}><LogOut size={16}/>Выйти из аккаунта</button></div>
+      <div className="companion-profile__actions"><button onClick={onEdit}><Pencil size={16}/>Изменить профиль</button><button onClick={onLogout}><LogOut size={16}/>Выйти из аккаунта</button></div>
       <details className="companion-account-details"><summary>Данные аккаунта</summary><p>ID платформы</p><code>{profile.accountId}</code><small>Отображаемое имя меняется локально. Город, роль и статистика поступают с сервера.</small></details>
     </>}
     {compact&&<button className="companion-profile__open" onClick={onOpen}>Открыть профиль<ChevronRight size={17}/></button>}

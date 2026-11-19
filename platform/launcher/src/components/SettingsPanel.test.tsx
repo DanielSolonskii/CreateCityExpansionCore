@@ -18,5 +18,7 @@ it("loads native settings, saves real launch options and opens the actual folder
 it("does not claim saved settings when native storage fails",async()=>{
   api.load.mockResolvedValue({memoryGb:4,width:1280,height:720,hideAfterLaunch:false});api.save.mockRejectedValue(new Error("private"));
   render(<SettingsPanel open onClose={()=>{}}/>);await waitFor(()=>expect((screen.getByLabelText("Память для игры") as HTMLInputElement).disabled).toBe(false));
+  expect((screen.getByText("Сохранить настройки") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Память для игры"),{target:{value:"5"}});
   fireEvent.click(screen.getByText("Сохранить настройки"));await waitFor(()=>expect(screen.getByRole("status").textContent).toContain("Не удалось сохранить"));
 });

@@ -86,7 +86,7 @@ public final class CommunityScreen extends Screen {
         for(Tag raw:state.getList("Projects",Tag.TAG_COMPOUND)){var t=(CompoundTag)raw;row(g,y,Component.literal(t.getString("Title")),Component.translatable("gui.createcityexpansioncore.projects.status."+t.getString("Status").toLowerCase(Locale.ROOT)),this::openMap,mx,my);y+=49;}
         if(state.getList("Invites",10).isEmpty()&&state.getList("Projects",10).isEmpty())g.drawWordWrap(font,tr("calm"),layout.body().x()+12,y+10,layout.body().width()-24,MUTED);
     }
-    private void openMap(){com.example.examplemod.client.CityWorldMapSession.INSTANCE.awaitAnchor();PacketDistributor.sendToServer(new RequestCityWorldMapPayload());minecraft.setScreen(SocialHubScreen.retainMap(new PolishedWorldMapScreen(com.example.examplemod.client.CityWorldMapSession.INSTANCE)));}
+    private void openMap(){com.example.examplemod.client.CityPublicDirectory.open(null);minecraft.setScreen(SocialHubScreen.retainMap(new PolishedWorldMapScreen(com.example.examplemod.client.CityWorldMapSession.INSTANCE)));}
     private void respond(CompoundTag t,boolean accept){city=t.getUUID("City");request(accept?CommunityRequestPayload.Action.ACCEPT:CommunityRequestPayload.Action.DECLINE,null,t.getUUID("Token"),0);}
     private void cities(GuiGraphics g,double mx,double my){int y=layout.body().y()+12-scroll;
         var memberships=state.getList("Memberships",10);
@@ -144,6 +144,15 @@ public final class CommunityScreen extends Screen {
         button(g,layout.row(y,27),tr("setting.reduced",CommunityFx.reduced?"✓":"—"),()->{CommunityFx.reduced=!CommunityFx.reduced;CommunityFx.save();},true,false,mx,my);y+=34;
         button(g,layout.row(y,27),tr("setting.volume",Math.round(CommunityFx.volume*100)),()->{CommunityFx.volume=CommunityFx.volume>=1?0:Math.min(1,CommunityFx.volume+.25f);CommunityFx.save();CommunityFx.sound("click");},true,false,mx,my);y+=34;
         button(g,layout.row(y,27),tr("setting.messages",CommunityFx.messageSound?"✓":"—"),()->{CommunityFx.messageSound=!CommunityFx.messageSound;CommunityFx.save();},true,false,mx,my);y+=38;
+        var feedback = CommunityFx.feedback;
+        for (var option : com.example.examplemod.client.CommunityFeedbackSettings.Option.values()) {
+            button(g, layout.row(y, 27), tr("setting." + option.key(), feedback.enabled(option) ? "✓" : "—"),
+                    () -> { feedback.toggle(option); CommunityFx.save(); }, true, false, mx, my);
+            y += 34;
+        }
+        button(g, layout.row(y, 27), tr("setting.snooze", feedback.snoozed(System.currentTimeMillis()) ? "✓" : "—"),
+                () -> { feedback.toggleSnooze(System.currentTimeMillis()); CommunityFx.save(); }, true, false, mx, my);
+        y += 34;
         g.drawWordWrap(font,tr("privacy"),layout.body().x()+12,y,layout.body().width()-24,MUTED);contentHeight=Math.max(contentHeight,y+80+scroll-layout.body().y());
     }
     @Override public boolean mouseClicked(double x,double y,int button){if(button!=0)return false;double mx=layout.localX(x),my=layout.localY(y)-offset();if(membershipAction!=null){if(layout.membershipConfirm(false).contains(mx,my)){membershipAction=null;return true;}if(layout.membershipConfirm(true).contains(mx,my)&&pending==null){var action=membershipAction;membershipAction=null;action.run();}return true;}for(int i=hits.size()-1;i>=0;i--){var h=hits.get(i);if(h.enabled&&layout.hit(h.r,h.content,mx,my)){CommunityFx.sound("click");h.run.run();return true;}}return true;}

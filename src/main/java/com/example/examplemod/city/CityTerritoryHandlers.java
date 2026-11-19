@@ -169,13 +169,21 @@ public final class CityTerritoryHandlers {
                 &&menu.getDimensionId().equals(player.serverLevel().dimension().location());
         boolean memberMatches=city!=null&&city.getPylonPos().equals(request.pylonPos())
                 &&city.getPylonDimension().equals(player.serverLevel().dimension().location());
+        if (!request.viewId().equals(com.example.examplemod.network.RequestCityDirectoryPayload.NEW)) {
+            var view = CityPublicAtlas.view(player,request.viewId());
+            if (view == null || city == null || !city.hasMember(player.getUUID())
+                    || !view.memberCityId().equals(city.getId()) || !view.anchor().equals(request.pylonPos())
+                    || !view.dimension().equals(city.getPylonDimension())) return;
+            memberMatches = true;
+            menuMatches = false;
+        }
         if(!menuMatches&&!memberMatches)return;
         if(menuMatches)city=cities.getCityByPylon(player.serverLevel().dimension().location(),request.pylonPos());
         var budget=player.getPersistentData();long now=net.minecraft.Util.getMillis();
         long previous=budget.getLong("CCECTerritoryRefresh");
         if(now>=previous&&now-previous<500)return;
         budget.putLong("CCECTerritoryRefresh",now);
-        sendTerritories(player,city,request.center(),request.range());
+        sendTerritories(player,city,request.center(),request.range(),request.viewId(),request.requestId());
     }
     /**
      * Отправляет игроку снимок территорий для его карты.
@@ -195,9 +203,9 @@ public final class CityTerritoryHandlers {
      * его территории тому, кто просто знает, куда позвать.
      */
     public static void sendTerritories(ServerPlayer player, City ownCity) {
-        sendTerritories(player,ownCity,null,CityPylonBlock.MAP_PEER_RANGE);
+        sendTerritories(player,ownCity,null,CityPylonBlock.MAP_PEER_RANGE,com.example.examplemod.network.RequestCityDirectoryPayload.NEW,com.example.examplemod.network.RequestCityDirectoryPayload.NEW);
     }
-    private static void sendTerritories(ServerPlayer player,City ownCity,BlockPos center,int range) {
+    private static void sendTerritories(ServerPlayer player,City ownCity,BlockPos center,int range,UUID viewId,UUID requestId) {
         if (ownCity != null && !ownCity.hasMember(player.getUUID())) {
             LOGGER.info("Territory snapshot refused: {} is not a member of {}",
                     com.example.examplemod.auth.PlayerNames.name(player), ownCity.getName());
@@ -238,7 +246,7 @@ public final class CityTerritoryHandlers {
             ));
         }
 
-        PacketDistributor.sendToPlayer(player, new CityMapPeersPayload(pylonPos, dimension, peers));
+        PacketDistributor.sendToPlayer(player, new CityMapPeersPayload(pylonPos, dimension, peers,viewId,requestId,player.containerMenu.containerId));
         int totalPlots = peers.stream().mapToInt(peer -> peer.plots().size()).sum();
         LOGGER.info("Territory snapshot sent: pylon={} dimension={} cities={} plots={} own={}",
                 pylonPos, dimension, peers.size(), totalPlots,

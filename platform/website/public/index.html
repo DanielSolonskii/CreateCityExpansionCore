@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#141513">
+  <meta name="description" content="RE:CREATED — индустриальный Minecraft-сервер с модом Create. Скачайте лаунчер для Windows или macOS и присоединяйтесь к сообществу.">
+  <meta property="og:title" content="RE:CREATED — индустриальный Minecraft">
+  <meta property="og:description" content="Прокладывайте железные дороги, стройте заводы и развивайте города вместе с другими игроками.">
+  <meta property="og:image" content="https://recreated.ru/assets/rail-yard.jpg">
+  <link rel="canonical" href="https://recreated.ru/">
+  <link rel="icon" href="/assets/favicon.png" type="image/png">
+  <link rel="stylesheet" href="/site.css">
+  <script defer src="/downloads.js"></script>
+  <script defer src="/server.js"></script>
+  <script defer src="/share.js"></script>
+  <title>RE:CREATED — лаунчер Minecraft-сервера</title>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="rail" viewBox="0 0 32 32"><path fill="currentColor" fill-rule="evenodd" d="M2 3h20l7 7-4 10h-6l7 9H15L8 18l-4 11H0l6-16h13l2-5H0z"/></symbol>
+    <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 19 19 5M6 5h13v13" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+    <symbol id="mac" viewBox="0 0 24 24"><path fill="currentColor" d="M17.2 1.4c.2 2.2-1.7 4.7-4.2 4.7-.4-2.1 1.7-4.5 4.2-4.7Zm3.5 15.5c-.7 1.8-2.3 5.3-4.4 5.3-1.3 0-1.9-.8-3.6-.8s-2.4.8-3.6.8c-2.1 0-5.5-5.4-5.5-9.5 0-3.7 2.3-6.2 5.3-6.2 1.6 0 2.7.9 3.7.9s2.5-1.1 4.2-1c1.9 0 3.3.9 4.2 2.3-3.1 1.7-3.3 6.2-.3 8.2Z"/></symbol>
+    <symbol id="discord" viewBox="0 0 24 24"><path fill="currentColor" d="M19.5 5.3a18 18 0 0 0-4.4-1.4l-.6 1.3a17 17 0 0 0-5 0L9 3.9a18 18 0 0 0-4.5 1.4C1.6 9.5.8 13.6 1.2 17.6A17 17 0 0 0 6.7 20l1.1-1.8-1.8-.9.4-.3a13.2 13.2 0 0 0 11.2 0l.4.3-1.8.9 1.1 1.8a17 17 0 0 0 5.5-2.4c.5-4.7-.9-8.8-3.3-12.3ZM8.6 14.9c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.8.9 1.7 2c0 1.1-.7 2-1.7 2Zm6.8 0c-1 0-1.7-.9-1.7-2s.7-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2Z"/></symbol>
+    <symbol id="telegram" viewBox="0 0 24 24"><path fill="currentColor" d="m2.7 10.7 17.6-7c1.1-.4 1.8.2 1.5 1.5l-3 14.2c-.2 1.1-.9 1.4-1.8.8l-5.1-3.8-2.5 2.4c-.3.3-.5.5-1 .5l.4-5.1 9.2-8.3c.4-.4-.1-.6-.6-.3L6.1 12.8l-3.5-1.1c-.9-.3-.9-.7.1-1Z"/></symbol>
+  </svg>
+  <a class="skip" href="#downloads">Перейти к загрузке</a>
+  <header class="masthead">
+    <div class="frame header-inner">
+      <a class="brand" href="/" aria-label="RE:CREATED, главная"><svg aria-hidden="true"><use href="#rail"/></svg><span>RE<span class="accent">:</span>CREATED</span></a>
+      <nav aria-label="Разделы сайта"><a href="#launcher">Лаунчер</a><a href="#about">О сервере</a><a href="#news">Новости</a><a href="#community">Сообщество</a></nav>
+    </div>
+  </header>
+  <main>
+    <section class="hero" id="launcher" aria-labelledby="title">
+      <img class="panorama" src="/assets/rail-yard.jpg" width="1500" height="844" fetchpriority="high" alt="">
+      <div class="frame hero-inner">
+        <div class="hero-copy">
+          <p class="edition"><span class="signal" aria-hidden="true"></span> Minecraft 1.21.1 <b>/</b> Create</p>
+          <h1 id="title" aria-label="RE:CREATED">RE<span>:</span>CREATED</h1>
+          <p class="intro">Собери линию по выпуску деталей, отвези груз на склад или проложи дорогу к соседнему городу. Ты отвечаешь за один участок, а всю цепочку вы строите вместе.</p>
+          <p class="access-note">Для нового аккаунта нужен одноразовый альфа-ключ от организатора RE:CREATED. При регистрации и первом входе на компьютере понадобится Telegram.</p>
+          <div class="downloads" id="downloads" tabindex="-1">
+            <a class="primary" href="https://api.recreated.ru/launcher/latest/RE-CREATED-Launcher-x64-setup.exe"><svg aria-hidden="true"><use href="#download"/></svg><span>Скачать для Windows<small>x64</small></span></a>
+            <a class="secondary" id="mac-download" href="https://api.recreated.ru/launcher/macos-aarch64/versions/0.1.16/RE-CREATED-Launcher-aarch64.app.zip"><svg aria-hidden="true"><use href="#mac"/></svg><span>Скачать для macOS<small>Apple Silicon</small></span></a>
+          </div>
+          <div class="download-help">
+            <a href="#first-login">Как зайти в игру</a>
+            <button type="button" id="copy-link" hidden>Скопировать ссылку для компьютера</button>
+          </div>
+          <span role="status" id="copy-result"></span>
+          <input id="manual-link" aria-label="Адрес страницы для копирования" readonly hidden>
+          <div class="server-strip" role="status" aria-atomic="true">
+            <span id="server-state">Нет данных о сервере</span>
+            <span>Игроки онлайн <b id="server-players">—</b></span>
+          </div>
+        </div>
+        <div class="photo-caption" aria-hidden="true"><span></span>Железнодорожный узел</div>
+      </div>
+    </section>
+    <section class="editorial frame" id="first-login" tabindex="-1" aria-labelledby="first-login-title">
+      <h2 id="first-login-title">Как зайти в игру<span>.</span></h2>
+      <div class="guide-platforms">
+        <details><summary>Первый вход на Windows <small>x64</small></summary>
+          <ol>
+            <li>Запусти скачанный файл <code>RE-CREATED-Launcher-x64-setup.exe</code>. Заверши установку и открой RE:CREATED Launcher.</li>
+            <li>Нажми «Войти». Если аккаунта ещё нет, выбери «Зарегистрироваться», введи альфа-ключ, придумай логин и пароль и нажми «Создать профиль». Отсканируй QR-код телефоном и нажми в боте «Подтвердить регистрацию». В лаунчере выбери «Перейти ко входу».</li>
+            <li>Введи логин и пароль, нажми «Войти в аккаунт». Отсканируй новый QR-код и нажми «Подтвердить устройство» в том же Telegram-аккаунте.</li>
+            <li>Вернись в лаунчер и нажми «Играть». Лаунчер подготовит сборку и запустит Minecraft с подключением к серверу.</li>
+          </ol>
+        </details>
+        <details><summary>Первый вход на macOS <small>Apple Silicon</small></summary>
+          <ol>
+            <li>Распакуй скачанный ZIP. Перенеси <code>RE-CREATED Launcher.app</code> в папку приложений своего пользователя (<code>~/Applications</code>) и открой приложение.</li>
+            <li>Выбери «Войти в аккаунт». Если играешь впервые, нажми «Зарегистрироваться», введи альфа-ключ, придумай логин и пароль и выбери «Создать профиль». Отсканируй QR-код и нажми в боте «Подтвердить регистрацию», затем в лаунчере — «Перейти ко входу».</li>
+            <li>Введи логин и пароль, нажми «Войти в аккаунт». Открой новый запрос по QR-коду или кнопкой «Открыть Telegram» и нажми «Подтвердить устройство» в привязанном аккаунте.</li>
+            <li>Вернись в лаунчер и нажми «Играть». Лаунчер подготовит сборку и запустит Minecraft с подключением к серверу.</li>
+          </ol>
+        </details>
+      </div>
+    </section>
+    <section class="editorial frame" id="about" aria-labelledby="about-title">
+      <h2 id="about-title">О сервере<span>.</span></h2>
+      <p class="about-intro">RE:CREATED — индустриальный сервер выживания в Minecraft. Например, ты настраиваешь на заводе Create выпуск шестерёнок. Напарник везёт их поездом на склад соседнего города. Там строитель забирает груз, чтобы собрать привод для своей мастерской.</p>
+      <h3 class="team-title">Авторы проекта</h3>
+      <dl class="authors">
+        <div><dt>Максим Александров</dt><dd>Разработчик / администратор</dd></div>
+        <div><dt>Данила Дзержановский</dt><dd>Разработчик / администратор</dd></div>
+        <div><dt>Даниил Солонский</dt><dd>Разработчик / директор</dd></div>
+      </dl>
+    </section>
+    <section class="editorial frame" id="news" aria-labelledby="news-title">
+      <h2 id="news-title">Новости<span>.</span></h2>
+      <p class="news-channel"><a href="https://t.me/servercp42">Новости в Telegram</a></p><p id="news-message" role="status"></p>
+      <div id="news-list"></div>
+      <button class="news-button" type="button" id="news-more" hidden>Показать ещё</button>
+      <button class="news-button" type="button" id="news-retry" hidden>Повторить загрузку</button>
+    </section>
+    <section class="community frame" id="community" aria-labelledby="community-title">
+      <h2 id="community-title">Сообщество<span>.</span></h2>
+      <div class="socials">
+        <a class="social" href="https://discord.gg/Qcks6wsBUX"><span class="icon-box discord"><svg aria-hidden="true"><use href="#discord"/></svg></span><span class="social-copy"><strong>Discord</strong><span>Найти команду и обсудить стройку</span></span><svg class="out" aria-hidden="true"><use href="#arrow"/></svg></a>
+        <a class="social" href="https://t.me/servercp42"><span class="icon-box telegram"><svg aria-hidden="true"><use href="#telegram"/></svg></span><span class="social-copy"><strong>Telegram</strong><span>Читать новости проекта</span></span><svg class="out" aria-hidden="true"><use href="#arrow"/></svg></a>
+      </div>
+    </section>
+  </main>
+  <footer><div class="frame footer-inner"><span class="foot-brand">RE<span class="accent">:</span>CREATED</span><span>Независимый Minecraft-проект</span></div></footer>
+</body>
+</html>

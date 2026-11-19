@@ -378,7 +378,9 @@ private int helpContentHeight;
         var screen = this.minecraft == null ? null : this.minecraft.screen;
         boolean owningAtlas = screen instanceof PolishedWorldMapScreen atlas && atlas.getParentScreen() == this;
         boolean readOnlyAtlas = screen instanceof PolishedWorldMapScreen atlas && atlas.isReadOnly();
-        boolean interactive = CityMapClaimAccess.allowed(this.menu.hasCity(),this.menu.canManageTerritory(),
+        boolean interactive = minecraft!=null && minecraft.player!=null && minecraft.player.containerMenu==this.menu
+                && minecraft.level!=null && minecraft.level.dimension().location().equals(this.menu.getDimensionId())
+                && CityMapClaimAccess.allowed(this.menu.hasCity(),this.menu.canManageTerritory(),
                 screen == this,CityPylonWorkspace.isEmbedded(this),owningAtlas,readOnlyAtlas);
         this.mapPanel.setPlotClaimRequest(interactive ? this.plotClaimHandler : null);
     }
@@ -398,6 +400,7 @@ private int helpContentHeight;
         if (this.minecraft == null || this.minecraft.getConnection() == null) {
             return;
         }
+        if (minecraft.screen instanceof PolishedWorldMapScreen atlas) atlas.showCardNotice("claim_sent");
         this.minecraft.getConnection().send(new ClaimCityPlotPayload(
                 this.menu.getPylonPos(),
                 this.menu.getDimensionId(),
@@ -827,6 +830,12 @@ private String managementTabName(int tab) {
         SoundHelper.playUi(ModSounds.PYLON_SCREEN_SLEEP.get());
 
         super.onClose();
+    }
+
+    @Override public void removed() {
+        if (minecraft == null || minecraft.player == null || minecraft.player.containerMenu != menu)
+            this.mapPanel.releaseTerrainTextures();
+        super.removed();
     }
 
     /*

@@ -1,13 +1,17 @@
 package com.example.examplemod.network;
-import net.minecraft.resources.ResourceLocation;
+
+import java.util.UUID;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import java.util.UUID;
-/** Dimension and anchor are selected by the server, including subsequent pages. */
-public record RequestMinimapPayload(UUID token,int offset) implements CustomPacketPayload {
- public RequestMinimapPayload(){this(RequestCityDirectoryPayload.NEW,0);}
- public static final Type<RequestMinimapPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath("createcityexpansioncore","request_minimap"));
- public static final StreamCodec<RegistryFriendlyByteBuf,RequestMinimapPayload> STREAM_CODEC=StreamCodec.of((b,p)->{b.writeUUID(p.token);b.writeVarInt(p.offset);},b->new RequestMinimapPayload(b.readUUID(),b.readVarInt()));
- @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+import net.minecraft.resources.ResourceLocation;
+
+public record RequestMinimapPayload(UUID token, int offset, UUID viewId, UUID requestId) implements CustomPacketPayload {
+    public RequestMinimapPayload(UUID token, int offset) { this(token, offset, UUID.randomUUID(), UUID.randomUUID()); }
+    public static final Type<RequestMinimapPayload> TYPE = new Type<>(
+            ResourceLocation.fromNamespaceAndPath("createcityexpansioncore", "request_minimap"));
+    public static final StreamCodec<RegistryFriendlyByteBuf, RequestMinimapPayload> STREAM_CODEC = StreamCodec.of(
+            (b, p) -> { b.writeUUID(p.token); b.writeVarInt(p.offset); b.writeUUID(p.viewId); b.writeUUID(p.requestId); },
+            b -> new RequestMinimapPayload(b.readUUID(), b.readVarInt(), b.readUUID(), b.readUUID()));
+    @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 }

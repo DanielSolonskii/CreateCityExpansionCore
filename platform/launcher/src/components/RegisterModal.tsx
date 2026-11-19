@@ -1,6 +1,7 @@
 import { Eye, EyeOff, LockKeyhole, TicketCheck, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { accountApi, AccountError, errorMessage, type Registration } from "../services/accountApi";
+import { AccessSteps, CodeLifetime } from "./AccessSteps";
 import { QRCodeSVG } from "qrcode.react";
 import "../phone-verification.css";
 import { useOverlay } from "./useOverlay";
@@ -95,8 +96,8 @@ export function RegisterModal({ open, onClose, onLogin, onSuccess }: {
       <section className="login-modal register-modal" role="dialog" aria-modal="true" aria-label="Регистрация в RE:CREATED">
         <button className="login-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
         <div className="login-emblem register-emblem"><TicketCheck size={25} /><i /><i /></div>
-        <span className="eyebrow">CREATE SERVER ACCOUNT</span>
-        <h2>Стать частью<br /><em>RE:CREATED</em></h2>
+        <AccessSteps step={phase === "form" ? 0 : phase === "completed" ? 2 : 1}/>
+        <h2>{phase === "completed" ? "Аккаунт подтверждён" : phase === "form" ? "Создание аккаунта" : "Подтверждение в Telegram"}</h2>
         <p>{phase === "form" ? "Введите альфа-ключ, создайте аккаунт и подтвердите его через Telegram. Ключ одноразовый." :
           phase === "completed" ? "Telegram подтверждён. Теперь войдите с вашим логином и паролем." :
           phase === "expired" ? "Получите новый QR/код для этого аккаунта. Если вы уже подтвердили аккаунт, попробуйте вход." :
@@ -115,7 +116,7 @@ export function RegisterModal({ open, onClose, onLogin, onSuccess }: {
             <button className="auth-switch" onClick={() => void copyCode()}>{copied ? "Код скопирован" : "Скопировать код"}</button>
           </div>
           <small className="login-note">Отсканируйте QR телефоном. Или откройте @{new URL(registration.telegramDeepLink).pathname.slice(1)} и отправьте /code {registration.verificationCode}. Нажмите «Подтвердить регистрацию» в боте.</small>
-          <small className="login-note">QR/код действуют до {new Date(registration.expiresAt).toLocaleTimeString()}. Не пересылайте их. Не закрывайте это окно до подтверждения.</small>
+          <CodeLifetime expiresAt={registration.expiresAt}/><small className="login-note">Оставьте это окно открытым до подтверждения.</small>
           <div className={`login-error register-error ${error ? "is-visible" : ""}`} role="alert">{error || "Ожидаем подтверждение…"}</div>
           {error && <button className="auth-switch" onClick={() => { setError(""); setRetry(value => value + 1); }}>Повторить проверку</button>}
         </>}

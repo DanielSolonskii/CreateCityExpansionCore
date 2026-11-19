@@ -32,6 +32,7 @@ public final class LogisticsClient {
             }
             return;
         }
+        if ("atlas_trade".equals(data.getString("Section"))) { AtlasTradeDirectory.accept(data); return; }
         LogisticsMapOverlay.accept(data);var mc=Minecraft.getInstance();if(mc.screen instanceof CenterResponseScreen screen)screen.accept(data);else if(data.getBoolean("Open")){var screen=new LogisticsCenterScreen();mc.setScreen(screen);screen.accept(data);}};
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut e)->{equipmentScreen=null;LogisticsMapOverlay.reset();});
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderGuiEvent.Post e)->{

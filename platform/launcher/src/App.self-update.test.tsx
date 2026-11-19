@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LauncherSnapshot } from "./types/launcher";
 const { invoke, serverStatus } = vi.hoisted(() => ({
@@ -11,7 +11,10 @@ vi.mock("./services/authGateway", () => ({ authGateway: {
   getProfileSettings: () => ({ displayName: "drannch1k", telegram: "@", city: "" }),
   getPlatformUserId: () => "test-user",
 } }));
-vi.mock("./services/serverStatusGateway", () => ({ getServerStatus: async () => serverStatus }));
+vi.mock("./services/serverStatusGateway", async importOriginal => {
+  const actual = await importOriginal<typeof import("./services/serverStatusGateway")>();
+  return { ...actual, getServerStatus: async () => actual.unavailableStatus };
+});
 vi.mock("./services/mockLauncherGateway", () => ({ launcherGateway: {
   getSnapshot: async (): Promise<LauncherSnapshot> => ({
     profile: { id: "test", displayName: "drannch1k", subtitle: "", initials: "DR", accountId: "test-user", role: "", city: "", playtime: "", joinedAt: "", verified: true },
@@ -37,18 +40,18 @@ describe("Mandatory Launcher update", () => {
       if (command === "game_prepare") { prepared = true; return Promise.resolve({ ...idleUpdate, phase: "READY", version: "alpha-0.1.4" }); }
       return Promise.resolve();
     });
-    await act(async () => { render(<App />); });
-    const check = screen.getByText("Проверить сборку", { selector: "footer button span" }).closest("button")!;
-    expect(check.disabled).toBe(false);
-    const retry = screen.getByText("Повторить установку", { selector: "button" });
-    expect(retry.closest("section")?.getAttribute("aria-label")).toBe("Обновление Launcher");
-    const summary = screen.getByText("Launcher 0.1.2", { selector: "button span" }).closest("button")!;
-    expect(summary.getAttribute("aria-expanded")).toBe("true");
-    await act(async () => { fireEvent.click(check); });
-    expect(invoke).toHaveBeenCalledWith("game_prepare");
-    const play = screen.getByText("Играть", { selector: "footer button span" }).closest("button")!;
-    expect(play.disabled).toBe(true);
-    fireEvent.click(play);
+    render(<App />);
+    const check = await screen.findByRole("button", { name: /Проверить сборку/i });
+    await screen.findByText("Повторить установку");
+    expect((check as HTMLButtonElement).disabled).toBe(false);
+    const panel = screen.getByRole("region", { name: "Обновление Launcher" });
+    expect(panel.classList.contains("launcher-update")).toBe(true);
+    expect(screen.getByRole("button",{name:/Launcher 0.1.2/}).getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(check);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("game_prepare"));
+    await vi.waitFor(() => expect(screen.queryByRole("button", { name: /Проверить сборку/ })).toBeNull());
+    expect(screen.queryByRole("button", { name: /^Играть/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Обновить лаунчер" })).toBeTruthy();
     expect(invoke).not.toHaveBeenCalledWith("game_start");
   });
 });

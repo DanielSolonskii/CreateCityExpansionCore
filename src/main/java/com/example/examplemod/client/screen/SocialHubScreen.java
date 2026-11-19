@@ -58,6 +58,7 @@ public final class SocialHubScreen extends Screen {
     private List<CompoundTag> inboxEvents = List.of();
     private List<SocialInboxLayout.Row> inboxRows = List.of();
     private final Map<UUID, UUID> pendingInboxReads = new HashMap<>();
+    private final Map<UUID, Long> readDeadlines = new HashMap<>();
     private static final java.time.format.DateTimeFormatter INBOX_TIME =
             java.time.format.DateTimeFormatter.ofPattern("dd.MM HH:mm");
     private java.util.function.Supplier<net.minecraft.client.resources.PlayerSkin> inspectedSkin;
@@ -73,6 +74,11 @@ public final class SocialHubScreen extends Screen {
     public static <T extends Screen>T find(Class<T> type,Predicate<T> predicate){var screen=Minecraft.getInstance().screen;if(type.isInstance(screen)){var v=type.cast(screen);return predicate.test(v)?v:null;}var h=current();if(h==null)return null;for(var p:h.initialized)if(type.isInstance(p)&&predicate.test(type.cast(p)))return type.cast(p);return null;}
     public static <T extends Screen>T active(Class<T> type){var screen=Minecraft.getInstance().screen;if(type.isInstance(screen))return type.cast(screen);var h=current();return h!=null&&type.isInstance(h.page)?type.cast(h.page):null;}
     public static void show(Screen parent,Screen child,Section section){section=visibleSection(section);var h=current();if(h==null){h=new SocialHubScreen(parent);h.page=child;h.section=section;h.sections.put(child,section);if(h.cacheable(child,section))h.saved.put(cacheKey(child,section),child);Minecraft.getInstance().setScreen(h);}else h.mount(child,section,true);}
+    public static void openInbox(Screen parent) {
+        var hub=new SocialHubScreen(parent);
+        hub.section=Section.INBOX;
+        Minecraft.getInstance().setScreen(hub);
+    }
     public static void openDailyRewards(){var h=current();if(h!=null){h.suspended=true;DailyRewardsClient.open(h);}}
     public static boolean back(Screen child){var h=current();if(h==null||!h.initialized.contains(child))return false;h.goBack();return true;}
     private boolean cacheable(Screen p,Section s){if(p instanceof ProjectWorkspaceScreen)return false;if(p instanceof PlayerProfileScreen v)return v.ownProfileView();if(p instanceof CommunityScreen v)return s==Section.HOME?v.homeView():s!=Section.CITY||v.ownCityView();return true;}
@@ -147,6 +153,7 @@ public final class SocialHubScreen extends Screen {
         UUID eventId = pendingInboxReads.entrySet().stream()
                 .filter(entry -> entry.getValue().equals(request)).map(Map.Entry::getKey).findFirst().orElseThrow();
         pendingInboxReads.remove(eventId);
+        readDeadlines.remove(eventId);
         if ("ok".equals(reply.getString("Result"))) {
             inboxEvents.stream().filter(event -> eventId.equals(event.getUUID("Id")))
                     .forEach(event -> event.putBoolean("Read", true));
@@ -158,17 +165,7 @@ public final class SocialHubScreen extends Screen {
         var anchor = keepPosition && inboxScroll > 0
                 ? inboxRows.stream().filter(row -> row.top() + row.height() > inboxScroll).findFirst().orElse(null) : null;
         int offset = anchor == null ? 0 : inboxScroll - anchor.top();
-        var displayed = new ArrayList<CompoundTag>(inboxEvents.size());
-        for (var event : inboxEvents) {
-            if (pendingInboxReads.containsKey(event.getUUID("Id")) && !event.getBoolean("Read")) {
-                var read = event.copy();
-                read.putBoolean("Read", true);
-                displayed.add(read);
-            } else {
-                displayed.add(event);
-            }
-        }
-        inboxRows = SocialInboxLayout.rows(displayed, showReadNotifications);
+        inboxRows = SocialInboxLayout.rows(inboxEvents, showReadNotifications);
         if (anchor != null) {
             inboxRows.stream().filter(row -> row.key().equals(anchor.key())).findFirst()
                     .ifPresent(row -> inboxScroll = row.top() + offset);
@@ -182,7 +179,7 @@ public final class SocialHubScreen extends Screen {
     private void inspectSocial(SocialBook.Action action){if(socialRequest!=null)return;socialRequest=UUID.randomUUID();socialAt=net.minecraft.Util.getMillis();inspectAction=action;PacketDistributor.sendToServer(new SocialRequestPayload(socialRequest,inspected,action,inspectedSocial==null?0:inspectedSocial.revision(),"","",0,0,0));}
     private void select(Section next){inspected=null;if(next==Section.COMMUNITY){if(section!=next||!(page instanceof SocialScreen))SocialScreen.openDialogs(this);return;}if(next==Section.INBOX){if(section!=Section.INBOX&&page!=null)history.push(new Trail(page,section));section=next;changed=net.minecraft.Util.getMillis();requestSummary();return;}var cached=saved.get(next);if(cached!=null&&cacheable(cached,next)){mount(cached,next,true);return;}switch(next){case FINANCES->BankScreen.open(this,null);case HOME->CommunityScreen.open(this);case MESSAGES->SocialScreen.openDialogs(this);case FRIENDS->SocialScreen.openFriends(this);case CITY->CommunityScreen.openOwnCity(this);case ALLIANCE->AllianceScreen.open(this,null);case PROFILE->PlayerProfileScreen.open(this,minecraft.player.getUUID());default->{}}}
     private void goBack(){inspected=null;if(!history.isEmpty()){var t=history.pop();if(t.section()==Section.INBOX){page=t.page();section=Section.INBOX;changed=net.minecraft.Util.getMillis();}else mount(t.page(),t.section(),false);}else if(section==Section.HOME)onClose();else select(Section.HOME);}
-    @Override public void tick(){if(minecraft.player==null||minecraft.getConnection()==null){minecraft.setScreen(null);return;}long now=net.minecraft.Util.getMillis();AllianceClient.ensure();if(summaryRequest!=null&&now-summarySent>8000)summaryRequest=null;if(now-summaryAt>5000)requestSummary();if(inspectRequest!=null&&now-profileAt>8000){inspectRequest=null;inspectResult="timeout";}if(socialRequest!=null&&now-socialAt>8000){socialRequest=null;inspectResult="timeout";}if(section!=Section.INBOX&&page!=null)page.tick();}
+    @Override public void tick(){if(minecraft.player==null||minecraft.getConnection()==null){minecraft.setScreen(null);return;}long now=net.minecraft.Util.getMillis();AllianceClient.ensure();readDeadlines.entrySet().removeIf(e->{ if (now<e.getValue()) return false; pendingInboxReads.remove(e.getKey()); return true; });if(summaryRequest!=null&&now-summarySent>8000)summaryRequest=null;if(now-summaryAt>5000)requestSummary();if(inspectRequest!=null&&now-profileAt>8000){inspectRequest=null;inspectResult="timeout";}if(socialRequest!=null&&now-socialAt>8000){socialRequest=null;inspectResult="timeout";}if(section!=Section.INBOX&&page!=null)page.tick();}
     private void text(GuiGraphics g,Component c,int x,int y,int w,int color){g.drawString(font,fit(font,c,Math.max(1,w)),x,y,color,false);}
     private final SocialHubIcons.HoverMotion buttonMotion = new SocialHubIcons.HoverMotion();
 
@@ -349,10 +346,14 @@ public final class SocialHubScreen extends Screen {
         String translation = "gui.createcityexpansioncore.hub.event." + event.getString("Kind");
         text(g, Component.translatableWithFallback(translation, tr("inbox_event").getString()),
                 bounds.x() + 12, bounds.y() + 7, bounds.width() - 24, unread ? TEXT : MUTED);
-        text(g, Component.literal(event.getString("Name")), bounds.x() + 12, bounds.y() + 21, bounds.width() - 24, MUTED);
+        var detail = Component.literal(event.getString("Name"));
+        if (event.getBoolean("Resolved")) detail.append(" · ").append(tr("project_closed"));
+        text(g, detail, bounds.x() + 12, bounds.y() + 21, bounds.width() - 24, MUTED);
         String when = INBOX_TIME.format(java.time.Instant.ofEpochMilli(event.getLong("Time"))
                 .atZone(java.time.ZoneId.systemDefault()));
-        text(g, Component.literal(when), bounds.x() + 12, bounds.y() + 35, bounds.width() - 24, MUTED);
+        Component caption=pendingInboxReads.containsKey(event.getUUID("Id"))
+                ? PolishedWorldMapScreen.atlasText("read_pending") : Component.literal(when);
+        text(g, caption, bounds.x() + 12, bounds.y() + 35, bounds.width() - 24, MUTED);
     }
 
     private void drawReadToggle(GuiGraphics g, int count, SocialHubLayout.Rect bounds, boolean hovered) {
@@ -381,9 +382,10 @@ public final class SocialHubScreen extends Screen {
 
     private void openInboxEvent(CompoundTag event) {
         UUID eventId = event.getUUID("Id");
-        if (!event.getBoolean("Read")) {
+        if (!event.getBoolean("Read") && !pendingInboxReads.containsKey(eventId)) {
             UUID request = UUID.randomUUID();
             pendingInboxReads.put(eventId, request);
+            readDeadlines.put(eventId,net.minecraft.Util.getMillis()+8000);
             PacketDistributor.sendToServer(new CommunityRequestPayload(request, CommunityRequestPayload.Action.READ_INBOX,
                     null, null, eventId, 0, 0, ""));
             rebuildInbox(true);
@@ -419,7 +421,7 @@ public final class SocialHubScreen extends Screen {
     @Override public boolean keyPressed(int key,int scan,int mods){if(inspected!=null){if(key==256)inspected=null;return true;}if(section==Section.INBOX){if(key==256)onClose();return true;}return page!=null&&page.keyPressed(key,scan,mods);}
     @Override public boolean keyReleased(int key,int scan,int mods){return inspected==null&&page!=null&&page.keyReleased(key,scan,mods);}
     @Override public boolean charTyped(char c,int mods){return inspected==null&&section!=Section.INBOX&&page!=null&&page.charTyped(c,mods);}
-    @Override public void onClose(){minecraft.setScreen(parent);}@Override public boolean isPauseScreen(){return false;}
+    @Override public void onClose(){minecraft.setScreen(parent instanceof PolishedWorldMapScreen atlas && !atlas.validReturn()?null:parent);}@Override public boolean isPauseScreen(){return false;}
     public static PolishedWorldMapScreen retainMap(PolishedWorldMapScreen map){var h=current();if(h!=null){h.suspended=true;map.returnToCommunity(h);}return map;}
     @Override public void removed(){if(suspended){suspended=false;return;}for(var p:initialized)p.removed();initialized.clear();history.clear();saved.clear();viewport.clear();super.removed();}
 }
