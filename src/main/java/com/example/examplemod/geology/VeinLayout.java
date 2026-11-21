@@ -12,8 +12,10 @@ final class VeinLayout {
     private static final int SIDE = VeinFootprint.SIDE;
     private static final int SAMPLES = SIDE * SIDE;
     private static final int STEP = VeinFootprint.STEP;
-    private static final int SITE_SPACING = 640;
-    private static final int SITE_JITTER = 96;
+    private static final int SITE_SPACING = 480;
+    private static final int SITE_JITTER = 48;
+    private static final int LEGACY_SITE_SPACING = 640;
+    private static final int LEGACY_SITE_JITTER = 96;
     private static final int WARP_AMPLITUDE = 120;
     private static final int HALF_WINDOW = SIDE / 2;
     // Nearest-site distance is at most sqrt(2) * (320 + 96) in warped space.
@@ -22,9 +24,10 @@ final class VeinLayout {
     static final int MIN_AREA = (int) Math.ceil(Math.PI * DepositSizeClass.MIN_RADIUS
             * DepositSizeClass.MIN_RADIUS / (VeinFootprint.STEP * VeinFootprint.STEP));
     private static final int SPLIT_AREA = 1900;
-    static final double PRESENCE_THRESHOLD = -0.052;
+    static final double PRESENCE_THRESHOLD = -0.112;
+    private static final double LEGACY_PRESENCE_THRESHOLD = -0.052;
 
-    record Patch(int component, VeinFootprint footprint) {}
+    record Patch(int component, VeinFootprint footprint, int ore) {}
 
     private record Growth(int sample, int owner, double cost) {}
 
@@ -32,24 +35,26 @@ final class VeinLayout {
 
     private VeinLayout() {}
 
-    static List<Patch> generate(long seed, int cellX, int cellZ) {
+    static List<Patch> generate(long seed, int cellX, int cellZ, boolean legacy) {
+        int spacing = legacy ? LEGACY_SITE_SPACING : SITE_SPACING;
+        int jitter = legacy ? LEGACY_SITE_JITTER : SITE_JITTER;
         int cellWidth = GeologyGenerator.MACRO_CELL_SIZE;
         int cellStartX = cellX * cellWidth;
         int cellStartZ = cellZ * cellWidth;
-        int minSiteX = Math.floorDiv(cellStartX - SITE_JITTER - SITE_SPACING / 2, SITE_SPACING);
-        int minSiteZ = Math.floorDiv(cellStartZ - SITE_JITTER - SITE_SPACING / 2, SITE_SPACING);
-        int maxSiteX = Math.floorDiv(cellStartX + cellWidth - 1 + SITE_JITTER - SITE_SPACING / 2,
-                SITE_SPACING);
-        int maxSiteZ = Math.floorDiv(cellStartZ + cellWidth - 1 + SITE_JITTER - SITE_SPACING / 2,
-                SITE_SPACING);
+        int minSiteX = Math.floorDiv(cellStartX - jitter - spacing / 2, spacing);
+        int minSiteZ = Math.floorDiv(cellStartZ - jitter - spacing / 2, spacing);
+        int maxSiteX = Math.floorDiv(cellStartX + cellWidth - 1 + jitter - spacing / 2,
+                spacing);
+        int maxSiteZ = Math.floorDiv(cellStartZ + cellWidth - 1 + jitter - spacing / 2,
+                spacing);
         List<Patch> patches = new ArrayList<>();
         int siteOrdinal = 0;
         for (int z = minSiteZ; z <= maxSiteZ; z++) {
             for (int x = minSiteX; x <= maxSiteX; x++) {
-                Site site = siteAt(seed, x, z);
+                Site site = siteAt(seed, x, z, spacing, jitter);
                 if (Math.floorDiv(site.x(), cellWidth) == cellX
                         && Math.floorDiv(site.z(), cellWidth) == cellZ) {
-                    addSitePatches(seed, site, siteOrdinal * SAMPLES, patches);
+                    addSitePatches(seed, site, siteOrdinal * SAMPLES, patches, spacing, jitter, legacy);
                     siteOrdinal++;
                 }
             }
@@ -57,7 +62,13 @@ final class VeinLayout {
         return patches;
     }
 
-    private static void addSitePatches(long seed, Site site, int componentOffset, List<Patch> patches) {
+    private static void addSitePatches(long seed, Site site, int componentOffset,
+                                       List<Patch> patches, int spacing, int jitter, boolean legacy) {
+        double threshold = legacy ? LEGACY_PRESENCE_THRESHOLD : PRESENCE_THRESHOLD;
+        // Equal colors have a minimum grid offset of (2,1) or (1,2). With
+        // this jitter those sites cannot share a Voronoi boundary.
+        int oreOffset = Math.floorMod(GeologyNoise.mix(seed, 0x3220L), 5);
+        int ore = Math.floorMod(site.gridX() + 2L * site.gridZ() + oreOffset, 5);
         boolean[] present = new boolean[SAMPLES];
         int originX = (Math.floorDiv(site.x(), STEP) - HALF_WINDOW) * STEP;
         int originZ = (Math.floorDiv(site.z(), STEP) - HALF_WINDOW) * STEP;
@@ -66,7 +77,7 @@ final class VeinLayout {
         Site[][] nearby = new Site[7][7];
         for (int z = 0; z < nearby.length; z++) {
             for (int x = 0; x < nearby[z].length; x++) {
-                nearby[z][x] = siteAt(seed, firstSiteX + x, firstSiteZ + z);
+                nearby[z][x] = siteAt(seed, firstSiteX + x, firstSiteZ + z, spacing, jitter);
             }
         }
         long warpXSeed = GeologyNoise.mix(seed, 0x3100L);
@@ -74,10 +85,10 @@ final class VeinLayout {
         for (int sample = 0; sample < SAMPLES; sample++) {
             int x = originX + (sample % SIDE) * STEP + STEP / 2;
             int z = originZ + (sample / SIDE) * STEP + STEP / 2;
-            if (presence(seed, x, z) >= PRESENCE_THRESHOLD) {
+            if (presence(seed, x, z) >= threshold) {
                 int warpedX = x + warp(warpXSeed, x, z);
                 int warpedZ = z + warp(warpZSeed, x, z);
-                Site nearest = nearestSite(nearby, firstSiteX, firstSiteZ, warpedX, warpedZ);
+                Site nearest = nearestSite(nearby, firstSiteX, firstSiteZ, warpedX, warpedZ, spacing);
                 present[sample] = nearest.equals(site);
             }
         }
@@ -99,28 +110,29 @@ final class VeinLayout {
             }
             if (component.size() >= MIN_AREA) {
                 long splitSeed = GeologyNoise.mix(seed, site.gridX(), site.gridZ(), start);
-                for (List<Integer> part : partition(component, splitSeed)) {
+                List<List<Integer>> parts = legacy ? partition(component, splitSeed) : List.of(component);
+                for (List<Integer> part : parts) {
                     VeinFootprint footprint = VeinFootprint.fromSamples(originX, originZ, part);
                     if (footprint.coreClearance() >= DepositShape.MIN_VEIN_CORE_CLEARANCE) {
-                        patches.add(new Patch(componentOffset + start, footprint));
+                        patches.add(new Patch(componentOffset + start, footprint, legacy ? -1 : ore));
                     }
                 }
             }
         }
     }
 
-    private static Site siteAt(long seed, int gridX, int gridZ) {
+    private static Site siteAt(long seed, int gridX, int gridZ, int spacing, int jitter) {
         long hash = GeologyNoise.lattice(seed, gridX, gridZ);
-        int x = gridX * SITE_SPACING + SITE_SPACING / 2
-                + (int) Math.round(GeologyNoise.range(hash, -SITE_JITTER, SITE_JITTER));
-        int z = gridZ * SITE_SPACING + SITE_SPACING / 2
-                + (int) Math.round(GeologyNoise.range(GeologyNoise.mix(hash, 1), -SITE_JITTER, SITE_JITTER));
+        int x = gridX * spacing + spacing / 2
+                + (int) Math.round(GeologyNoise.range(hash, -jitter, jitter));
+        int z = gridZ * spacing + spacing / 2
+                + (int) Math.round(GeologyNoise.range(GeologyNoise.mix(hash, 1), -jitter, jitter));
         return new Site(gridX, gridZ, x, z);
     }
 
-    private static Site nearestSite(Site[][] nearby, int firstX, int firstZ, int x, int z) {
-        int gridX = Math.floorDiv(x, SITE_SPACING) - firstX;
-        int gridZ = Math.floorDiv(z, SITE_SPACING) - firstZ;
+    private static Site nearestSite(Site[][] nearby, int firstX, int firstZ, int x, int z, int spacing) {
+        int gridX = Math.floorDiv(x, spacing) - firstX;
+        int gridZ = Math.floorDiv(z, spacing) - firstZ;
         Site best = null;
         int bestDistance = Integer.MAX_VALUE;
         // Sites outside the surrounding 3x3 are farther than the site in this square.

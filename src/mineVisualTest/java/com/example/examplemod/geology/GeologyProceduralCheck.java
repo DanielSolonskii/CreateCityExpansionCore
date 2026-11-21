@@ -465,7 +465,7 @@ public final class GeologyProceduralCheck {
         CompoundTag tag = manager.save(new CompoundTag(), null);
         require(tag.getInt("FormatVersion") == GeologySavedDataCodec.CURRENT_FORMAT_VERSION,
                 "saved data uses the current format version");
-        require(tag.getInt("GeneratorVersion") == 4,
+        require(tag.getInt("GeneratorVersion") == GeologyGenerator.GENERATOR_VERSION,
                 "saved data carries the generator version");
 
         tag.putInt("FormatVersion", 6);
@@ -554,11 +554,20 @@ public final class GeologyProceduralCheck {
         var generation = new GeologyManager.SeedOverride(newSeed, new UUID(7L, 13L));
         for (ResourceLocation dimension : List.of(DIMENSION, nether)) {
             var factory = GeologyManager.factory(dimension, SEED);
-            GeologyManager manager = factory.constructor().get();
+            CompoundTag legacy = factory.constructor().get().save(new CompoundTag(), null);
+            legacy.putInt("GeneratorVersion", GeologyGenerator.LEGACY_GENERATOR_VERSION);
+            GeologyManager manager = factory.deserializer().apply(legacy, null);
             BlockPos origin = new BlockPos(115, 64, -270);
             GeologicalRegion oldView = manager.query(origin);
             GeologicalDeposit oldDeposit = manager.ownedRegions().stream()
                     .flatMap(region -> region.getDeposits().stream()).findFirst().orElseThrow();
+            require(oldDeposit.getId().getPath().startsWith("deposit/v4/"),
+                    "unopened cells in a legacy save still use generator v4");
+            CompoundTag savedLegacy = manager.save(new CompoundTag(), null);
+            GeologyManager reopenedLegacy = factory.deserializer().apply(savedLegacy, null);
+            reopenedLegacy.query(origin);
+            require(savedLegacy.equals(reopenedLegacy.save(new CompoundTag(), null)),
+                    "legacy deposits survive a save and reload");
             manager.setDirty(false);
             manager.applySeed(generation);
             require(manager.isDirty() && manager.ownedRegions().isEmpty(),
@@ -660,8 +669,9 @@ public final class GeologyProceduralCheck {
         GeologicalDeposit regeneratedDeposit = rebuilt.getDeposit(expected.getId()).orElseThrow();
         require(regeneratedDeposit.getShape().equals(expected.getShape()),
                 "format 5 regenerates the expected polygon");
-        require(regeneratedDeposit.getId().getPath().startsWith("deposit/v4/"),
-                "the regenerated deposit uses a version 4 identifier");
+        require(regeneratedDeposit.getId().getPath().startsWith(
+                        "deposit/v" + GeologyGenerator.GENERATOR_VERSION + "/"),
+                "the regenerated deposit uses the current generator identifier");
 
         java.util.Set<Integer> centres = new java.util.HashSet<>();
         for (GeologicalDeposit deposit : rebuilt.getDeposits()) {
@@ -836,7 +846,7 @@ public final class GeologyProceduralCheck {
      */
     private static void densityTargets(Path mapDirectory) throws IOException {
         smoothedContoursAreExclusive();
-        long[] seeds = {0, 1, -317, SEED, 42};
+        long[] seeds = {0, 1, -317, SEED, 42, 13};
         int half = 8;
         int step = VeinFootprint.STEP;
         int cellWidth = GeologyGenerator.MACRO_CELL_SIZE;
@@ -845,6 +855,7 @@ public final class GeologyProceduralCheck {
         int start = -half * cellWidth;
         int sampleCount = width * width;
         long[] oreTotals = new long[GeologyGenerator.RESOURCES.size()];
+        double totalCoverage = 0;
         for (long seed : seeds) {
             long layoutSeed = GeologyNoise.mix(seed, 0x3000L, DIMENSION.toString().hashCode());
             int raw = 0;
@@ -860,6 +871,7 @@ public final class GeologyProceduralCheck {
             int covered = 0;
             int count = 0;
             int[] owners = new int[sampleCount];
+            byte[] ores = new byte[sampleCount];
             long[] oreArea = new long[oreTotals.length];
             List<GeologicalDeposit> mapDeposits = new ArrayList<>();
             int ring = GeologyGenerator.LOOKUP_RING;
@@ -875,6 +887,10 @@ public final class GeologyProceduralCheck {
                             mapDeposits.add(deposit);
                         }
                         int owner = ++count;
+                        int ore = 0;
+                        while (!GeologyGenerator.RESOURCES.get(ore).id().equals(deposit.getResourceId())) {
+                            ore++;
+                        }
                         int offsetX = (footprint.originX() - start) / step;
                         int offsetZ = (footprint.originZ() - start) / step;
                         int footprintSide = VeinFootprint.SIDE;
@@ -894,25 +910,26 @@ public final class GeologyProceduralCheck {
                                 int index = z * width + x;
                                 require(owners[index] == 0, "polygons cannot overlap across storage cells");
                                 owners[index] = owner;
+                                ores[index] = (byte) (ore + 1);
                                 areaInSurvey++;
                             }
                         }
                         covered += areaInSurvey;
-                        for (int ore = 0; ore < oreArea.length; ore++) {
-                            if (GeologyGenerator.RESOURCES.get(ore).id().equals(deposit.getResourceId())) {
-                                oreArea[ore] += areaInSurvey;
-                            }
-                        }
+                        oreArea[ore] += areaInSurvey;
                     }
                 }
             }
 
             double rawShare = (double) raw / sampleCount;
             double coverage = (double) covered / sampleCount;
+            totalCoverage += coverage;
             System.out.printf(Locale.ROOT, "  seed %d: mask %.2f%%, retained %.2f%%%n",
                     seed, rawShare * 100, coverage * 100);
-            require(rawShare >= 0.60 && rawShare <= 0.72, "mask stays within the denser coverage range");
-            require(coverage >= 0.58 && covered <= raw, "filtered coverage stays near the target");
+            require(rawShare >= 0.74 && rawShare <= 0.85, "mask stays within the denser coverage range");
+            require(coverage >= 0.70 && coverage <= 0.81 && covered <= raw, "filtered coverage stays near the target");
+            int maxSpan = maxConnectedOreSpan(ores, width) * step;
+            System.out.printf(Locale.ROOT, "    largest connected same-ore span: %d blocks%n", maxSpan);
+            require(maxSpan <= 1200, "touching deposits cannot form oversized same-ore clusters");
             verifyStorageSeams(owners, width, side);
             for (int ore = 0; ore < oreTotals.length; ore++) {
                 oreTotals[ore] += oreArea[ore];
@@ -922,6 +939,9 @@ public final class GeologyProceduralCheck {
                 VeinMapImages.write(mapDirectory, seed, coverage, mapDeposits);
             }
         }
+        double meanCoverage = totalCoverage / seeds.length;
+        System.out.printf(Locale.ROOT, "  mean retained coverage: %.2f%%%n", meanCoverage * 100);
+        require(meanCoverage >= 0.73 && meanCoverage <= 0.77, "mean coverage stays near 75%");
         long total = java.util.Arrays.stream(oreTotals).sum();
         for (int ore = 0; ore < oreTotals.length; ore++) {
             double share = (double) oreTotals[ore] / total;
@@ -929,6 +949,39 @@ public final class GeologyProceduralCheck {
                     GeologyGenerator.RESOURCES.get(ore).id().getPath(), share * 100);
             require(share >= 0.16 && share <= 0.24, "ores are balanced by area across seeds");
         }
+    }
+
+    private static int maxConnectedOreSpan(byte[] ores, int width) {
+        int[] queue = new int[ores.length];
+        int largest = 0;
+        for (int start = 0; start < ores.length; start++) {
+            byte ore = ores[start];
+            if (ore == 0) continue;
+            queue[0] = start;
+            ores[start] = 0;
+            int size = 1;
+            int minX = width, minZ = width, maxX = 0, maxZ = 0;
+            for (int cursor = 0; cursor < size; cursor++) {
+                int index = queue[cursor];
+                int x = index % width;
+                int z = index / width;
+                minX = Math.min(minX, x);
+                minZ = Math.min(minZ, z);
+                maxX = Math.max(maxX, x);
+                maxZ = Math.max(maxZ, z);
+                for (int dz = Math.max(-1, -z); dz <= Math.min(1, width - 1 - z); dz++) {
+                    for (int dx = Math.max(-1, -x); dx <= Math.min(1, width - 1 - x); dx++) {
+                        int next = index + dz * width + dx;
+                        if (ores[next] == ore) {
+                            queue[size++] = next;
+                            ores[next] = 0;
+                        }
+                    }
+                }
+            }
+            largest = Math.max(largest, 1 + Math.max(maxX - minX, maxZ - minZ));
+        }
+        return largest;
     }
 
     private static void verifyStorageSeams(int[] owners, int width, int cellSide) {
