@@ -18,7 +18,8 @@ import java.util.SplittableRandom;
 final class GeologyGenerator {
 
     /** Входит в ID залежи и меняется при смене алгоритма раскладки. */
-    static final int GENERATOR_VERSION = 4;
+    static final int LEGACY_GENERATOR_VERSION = 4;
+    static final int GENERATOR_VERSION = 5;
 
     static final int MACRO_CELL_SIZE = 768;
 
@@ -74,9 +75,16 @@ final class GeologyGenerator {
     static List<GeologicalDeposit> createDeposits(
             ResourceLocation dimensionId, long worldSeed, int cellX, int cellZ
     ) {
+        return createDeposits(dimensionId, worldSeed, cellX, cellZ, GENERATOR_VERSION);
+    }
+
+    static List<GeologicalDeposit> createDeposits(
+            ResourceLocation dimensionId, long worldSeed, int cellX, int cellZ, int generatorVersion
+    ) {
         long cellSeed = cellSeed(worldSeed, dimensionId, cellX, cellZ);
         long layoutSeed = GeologyNoise.mix(worldSeed, SALT_LAYOUT, dimensionId.toString().hashCode());
-        List<VeinLayout.Patch> patches = new ArrayList<>(VeinLayout.generate(layoutSeed, cellX, cellZ));
+        List<VeinLayout.Patch> patches = new ArrayList<>(VeinLayout.generate(
+                layoutSeed, cellX, cellZ, generatorVersion == LEGACY_GENERATOR_VERSION));
         patches.sort(Comparator.comparingInt((VeinLayout.Patch patch) -> patch.footprint().area())
                 .reversed());
         SplittableRandom oreRandom = new SplittableRandom(GeologyNoise.mix(cellSeed, SALT_ORE));
@@ -85,29 +93,32 @@ final class GeologyGenerator {
         Map<Integer, Integer> componentOres = new HashMap<>();
         List<GeologicalDeposit> deposits = new ArrayList<>();
         for (VeinLayout.Patch patch : patches) {
-            int used = componentOres.getOrDefault(patch.component(), 0);
-            int offset = oreRandom.nextInt(RESOURCES.size());
-            int ore = offset;
-            int leastArea = Integer.MAX_VALUE;
-            for (int i = 0; i < RESOURCES.size(); i++) {
-                int candidate = (offset + i) % RESOURCES.size();
-                if ((used & (1 << candidate)) == 0 && assignedArea[candidate] < leastArea) {
-                    leastArea = assignedArea[candidate];
-                    ore = candidate;
+            int ore = patch.ore();
+            if (ore < 0) {
+                int used = componentOres.getOrDefault(patch.component(), 0);
+                int offset = oreRandom.nextInt(RESOURCES.size());
+                ore = offset;
+                int leastArea = Integer.MAX_VALUE;
+                for (int i = 0; i < RESOURCES.size(); i++) {
+                    int candidate = (offset + i) % RESOURCES.size();
+                    if ((used & (1 << candidate)) == 0 && assignedArea[candidate] < leastArea) {
+                        leastArea = assignedArea[candidate];
+                        ore = candidate;
+                    }
                 }
+                componentOres.put(patch.component(), used | (1 << ore));
+                assignedArea[ore] += patch.footprint().area();
             }
-            componentOres.put(patch.component(), used | (1 << ore));
-            assignedArea[ore] += patch.footprint().area();
             long seed = GeologyNoise.mix(cellSeed, SALT_SHAPE, deposits.size());
             deposits.add(createDeposit(dimensionId, RESOURCES.get(ore), cellX, cellZ,
-                    nextIndex[ore]++, seed, patch.footprint()));
+                    nextIndex[ore]++, seed, patch.footprint(), generatorVersion));
         }
         return deposits;
     }
 
     private static GeologicalDeposit createDeposit(
             ResourceLocation dimensionId, ResourceProfile profile, int cellX, int cellZ,
-            int index, long candidateSeed, VeinFootprint footprint
+            int index, long candidateSeed, VeinFootprint footprint, int generatorVersion
     ) {
         int sample = footprint.coreSample();
         int step = VeinFootprint.STEP;
@@ -143,7 +154,7 @@ final class GeologyGenerator {
                 / DepositQualityClass.PEAK_POTENTIAL_CEILING;
 
         return new GeologicalDeposit(
-                depositId(dimensionId, cellX, cellZ, profile.id(), index),
+                depositId(dimensionId, cellX, cellZ, profile.id(), index, generatorVersion),
                 profile.id(),
                 index,
                 grade,
@@ -222,11 +233,12 @@ final class GeologyGenerator {
             int cellX,
             int cellZ,
             ResourceLocation resourceId,
-            int depositIndex
+            int depositIndex,
+            int generatorVersion
     ) {
         return ResourceLocation.fromNamespaceAndPath(
                 MOD_ID,
-                "deposit/v" + GENERATOR_VERSION + "/" + encode(dimensionId)
+                "deposit/v" + generatorVersion + "/" + encode(dimensionId)
                         + "/" + cellX + "/" + cellZ
                         + "/" + encode(resourceId) + "/" + depositIndex
         );

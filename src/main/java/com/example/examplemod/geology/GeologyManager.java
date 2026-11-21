@@ -36,6 +36,7 @@ public final class GeologyManager extends SavedData {
     private final ResourceLocation dimensionId;
     private final long worldSeed;
     private SeedOverride seedOverride;
+    private int generatorVersion = GeologyGenerator.GENERATOR_VERSION;
 
     /**
      * Владельцы месторождений: macro-cell -> её собственные залежи.
@@ -122,6 +123,10 @@ public final class GeologyManager extends SavedData {
                     tag.getLong(GEOLOGY_SEED), tag.getUUID(GEOLOGY_GENERATION)
             );
         }
+        if (result.storageAvailable() && tag.getInt("FormatVersion") >= GeologySavedDataCodec.POLYGON_FORMAT_VERSION
+                && tag.getInt("GeneratorVersion") < GeologyGenerator.GENERATOR_VERSION) {
+            manager.generatorVersion = GeologyGenerator.LEGACY_GENERATOR_VERSION;
+        }
         manager.adopt(result);
 
         if (result.migrated()) {
@@ -157,7 +162,8 @@ public final class GeologyManager extends SavedData {
         return GeologySavedDataCodec.save(
                 tag,
                 dimensionId,
-                regions.values()
+                regions.values(),
+                generatorVersion
         );
     }
 
@@ -191,7 +197,8 @@ public final class GeologyManager extends SavedData {
     public static SeedChange changeSeed(MinecraftServer server, long seed, boolean confirm) {
         GeologyManager authority = getLocal(server.overworld());
         requireWritable(authority);
-        if (authority.effectiveSeed() == seed) {
+        if (authority.effectiveSeed() == seed
+                && authority.generatorVersion == GeologyGenerator.GENERATOR_VERSION) {
             return new SeedChange(0, true);
         }
 
@@ -229,6 +236,7 @@ public final class GeologyManager extends SavedData {
             return;
         }
         seedOverride = next;
+        generatorVersion = GeologyGenerator.GENERATOR_VERSION;
         regions.clear();
         depositsById.clear();
         byCell.clear();
@@ -469,7 +477,8 @@ public final class GeologyManager extends SavedData {
                         dimensionId,
                         effectiveSeed(),
                         cellX,
-                        cellZ
+                        cellZ,
+                        generatorVersion
                 )) {
             GeologicalDeposit existing = depositsById.get(candidate.getId());
             if (existing != null) {
