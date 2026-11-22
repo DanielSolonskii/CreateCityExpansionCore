@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
+    "createcityexpansioncore:city_pylon",
     "createcityexpansioncore:chunk_loader",
     "createcityexpansioncore:mine_frame",
     "createcityexpansioncore:mine_gateway",

@@ -83,7 +83,7 @@ public class CityPylonBlock extends BaseEntityBlock {
     public CityPylonBlock(
             BlockBehaviour.Properties properties
     ) {
-        super(properties.strength(-1.0F, 3600000.0F)
+        super(properties.strength(2.0F, 3600000.0F).requiresCorrectToolForDrops()
                 .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK));
         /*
          * NORTH — значение по умолчанию. Оно же сохраняет текущий
@@ -93,6 +93,19 @@ public class CityPylonBlock extends BaseEntityBlock {
                 this.stateDefinition.any()
                         .setValue(FACING, Direction.NORTH)
         );
+    }
+
+    @Override
+    protected float getDestroyProgress(BlockState state, Player player, BlockGetter level, BlockPos pos) {
+        boolean protectedPylon = level instanceof ServerLevel serverLevel
+                ? hasCity(serverLevel, pos)
+                : level.getBlockEntity(pos) instanceof CityPylonBlockEntity pylon && pylon.isActive();
+        return protectedPylon ? 0.0F : super.getDestroyProgress(state, player, level, pos);
+    }
+
+    public static boolean hasCity(ServerLevel level, BlockPos pos) {
+        return CityManager.get(level.getServer().overworld())
+                .getCityByPylon(level.dimension().location(), pos) != null;
     }
 
     @Override
