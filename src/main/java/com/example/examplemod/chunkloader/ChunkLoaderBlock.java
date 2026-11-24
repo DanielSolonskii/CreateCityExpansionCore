@@ -1,5 +1,6 @@
 package com.example.examplemod.chunkloader;
 
+import com.example.examplemod.sound.ModSounds;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -115,6 +116,7 @@ public final class ChunkLoaderBlock extends BaseEntityBlock {
     public static BlockBehaviour.Properties chunkLoaderProperties() {
         return BlockBehaviour.Properties.of()
                 .mapColor(MapColor.METAL)
+                .sound(ModSounds.PLACE_CHUNK_LOADER)
                 .strength(4.0F)
                 .noOcclusion()
                 .requiresCorrectToolForDrops()
