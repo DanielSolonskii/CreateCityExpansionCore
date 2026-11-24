@@ -1,9 +1,12 @@
 package com.example.examplemod.client.screen;
 
 import com.example.examplemod.CreateCityExpansionCore;
+import com.mojang.blaze3d.platform.Lighting;
 import com.example.examplemod.client.CommunityFx;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -40,14 +43,20 @@ final class KnowledgeHomeScreen extends Screen {
         }
     }
 
+    private static final int COLUMNS = 3;
+    private static final int CAPTION_TEXTURE_WIDTH = 384;
+    private static final int CAPTION_TEXTURE_HEIGHT = 44;
     private final Screen parent;
     private final ItemStack cityPylon = new ItemStack(CreateCityExpansionCore.CITY_PYLON_ITEM.get());
     private final SocialHubIcons.HoverMotion motion = new SocialHubIcons.HoverMotion();
-    private static final ResourceLocation FRAME = texture("frame");
-    private static final ResourceLocation TITLE = texture("title");
-    private static final ResourceLocation BOOK = texture("book");
+    private static final ResourceLocation TITLE = texture("title_clean");
+    private static final ResourceLocation BOOK = texture("book_clean");
     private static final ResourceLocation CLOSE = texture("close");
+    private final List<Card> cards = new ArrayList<>();
+    private Card close;
     private int left, top, panelWidth, panelHeight, headerHeight;
+    private int gridTop, gridBottom, contentHeight, rowPitch;
+    private double scroll;
 
     private static ResourceLocation texture(String name) {
         return ResourceLocation.fromNamespaceAndPath("createcityexpansioncore", "textures/gui/knowledge/" + name + ".png");
@@ -65,46 +74,101 @@ final class KnowledgeHomeScreen extends Screen {
     @Override
     protected void init() {
         CommunityFx.load();
-        int columns = width >= 400 ? 3 : width >= 210 ? 2 : 1;
-        int rows = 6 / columns;
+        double previousRows = rowPitch == 0 ? 0 : scroll / rowPitch;
+        boolean wasAtBottom = maxScroll() > 0 && scroll >= maxScroll();
+        cards.clear();
+        Topic[] topics = Topic.values();
+        int rows = (topics.length + COLUMNS - 1) / COLUMNS;
         // Keep the illustrated plates near their original 3:2 aspect even at large GUI scales.
-        int maxHeight = height - 12;
-        int maxWidth = Math.min(760, width - 16);
-        headerHeight = Math.clamp(Math.min(maxWidth / 10, maxHeight / 5), 26, 76);
-        int margin = Math.clamp(maxWidth / 32, 6, 22);
+        int maxHeight = Math.max(1, height - 12);
+        int maxWidth = Math.min(760, Math.max(1, width - 16));
+        headerHeight = Math.clamp(Math.min(maxWidth / 10, maxHeight / 6), 28, 76);
+        int margin = Math.clamp(Math.min(maxWidth / 32, maxHeight / 24), 6, 22);
         int gap = Math.clamp(maxWidth / 100, 3, 7);
-        int cardWidth = Math.min((maxWidth - 2 * margin - (columns - 1) * gap) / columns,
-                (maxHeight - headerHeight - margin - (rows - 1) * gap) * 3 / (2 * rows));
-        int cardHeight = cardWidth * 2 / 3;
-        panelWidth = 2 * margin + columns * cardWidth + (columns - 1) * gap;
-        panelHeight = headerHeight + rows * cardHeight + (rows - 1) * gap + margin;
+        int availableHeight = Math.max(1, maxHeight - headerHeight - margin);
+        int widthPerColumn = (maxWidth - 2 * margin - (COLUMNS - 1) * gap) / COLUMNS;
+        int widthForHeight = Math.min(availableHeight * 3 / 2,
+                Math.max(72, (availableHeight - gap) * 3 / 4));
+        int cardWidth = Math.max(1, Math.min(widthPerColumn, widthForHeight));
+        int cardHeight = Math.max(1, cardWidth * 2 / 3);
+        rowPitch = cardHeight + gap;
+        contentHeight = rows * rowPitch - gap;
+        panelWidth = 2 * margin + COLUMNS * cardWidth + (COLUMNS - 1) * gap;
+        // Keep part of the next row below the viewport so scrolling is discoverable.
+        int previewHeight = 2 * rowPitch - gap - Math.max(10, cardHeight / 7);
+        panelHeight = headerHeight + Math.min(availableHeight, Math.min(contentHeight, previewHeight)) + margin;
         top = (height - panelHeight) / 2;
         left = (width - panelWidth) / 2;
-        for (Topic topic : Topic.values()) {
-            int col = topic.ordinal() % columns;
-            int row = topic.ordinal() / columns;
+        gridTop = top + headerHeight;
+        gridBottom = top + panelHeight - margin;
+        for (Topic topic : topics) {
+            int col = topic.ordinal() % COLUMNS;
             int x = left + margin + col * (cardWidth + gap);
-            int y = top + headerHeight + row * (cardHeight + gap);
-            int w = cardWidth;
-            int h = cardHeight;
-            addRenderableWidget(new Card(x, y, w, h, topic.label(), topic,
-                    button -> minecraft.setScreen(new KnowledgeBaseScreen(this, null, topic))));
+            cards.add(addRenderableWidget(new Card(x, gridTop, cardWidth, cardHeight, topic.label(), topic,
+                    button -> minecraft.setScreen(new KnowledgeBaseScreen(this, null, topic)))));
         }
-        addRenderableWidget(new Card(left + panelWidth - margin - headerHeight / 2, top + headerHeight / 4, headerHeight / 2, headerHeight / 2,
+        int closeSize = Math.clamp(headerHeight / 2, 18, 38);
+        close = addRenderableWidget(new Card(left + panelWidth - margin - closeSize,
+                top + (headerHeight - closeSize) / 2, closeSize, closeSize,
                 Component.translatable("gui.close"), null, button -> onClose()));
+        updateScroll(wasAtBottom ? maxScroll() : previousRows * rowPitch);
+    }
+
+    private int maxScroll() {
+        return Math.max(0, contentHeight - (gridBottom - gridTop));
+    }
+
+    private void updateScroll(double value) {
+        scroll = Math.clamp(value, 0, maxScroll());
+        int offset = (int) Math.round(scroll);
+        for (int i = 0; i < cards.size(); i++) {
+            cards.get(i).setY(gridTop + (i / COLUMNS) * rowPitch - offset);
+        }
+    }
+
+    @Override
+    public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (vertical != 0 && maxScroll() > 0 && x >= left && x < left + panelWidth && inGrid(y)) {
+            updateScroll(scroll - vertical * rowPitch / 2.0);
+            return true;
+        }
+        return super.mouseScrolled(x, y, horizontal, vertical);
+    }
+
+    @Override
+    protected void changeFocus(ComponentPath path) {
+        super.changeFocus(path);
+        if (getFocused() instanceof Card card && card.topic != null) {
+            int bottom = card.getY() + card.getHeight();
+            if (card.getY() < gridTop) updateScroll(scroll + card.getY() - gridTop);
+            else if (bottom > gridBottom) updateScroll(scroll + bottom - gridBottom);
+        }
+    }
+
+    private boolean inGrid(double y) {
+        return y >= gridTop && y < gridBottom;
     }
 
     private final class Card extends Button {
         private final Topic topic;
-        private final ResourceLocation idle, highlighted, lettering;
+        private final ResourceLocation artwork, lettering;
 
         Card(int x, int y, int w, int h, Component label, Topic topic, OnPress press) {
             super(x, y, w, h, label, press, DEFAULT_NARRATION);
             this.topic = topic;
             String key = topic == null ? "close" : topic.name().toLowerCase(Locale.ROOT);
-            idle = topic == null ? CLOSE : texture(key);
-            highlighted = topic == null ? CLOSE : texture("lit_" + key);
-            lettering = topic == null ? null : texture("label_" + key);
+            artwork = topic == null ? CLOSE : topic == Topic.CITY ? null : texture("art_" + key);
+            lettering = topic == null ? null : texture("caption_" + key);
+        }
+
+        @Override
+        protected boolean clicked(double x, double y) {
+            return (topic == null || inGrid(y)) && super.clicked(x, y);
+        }
+
+        @Override
+        public boolean isMouseOver(double x, double y) {
+            return (topic == null || inGrid(y)) && super.isMouseOver(x, y);
         }
 
         @Override
@@ -113,29 +177,101 @@ final class KnowledgeHomeScreen extends Screen {
             boolean lit = isHoveredOrFocused();
             float hover = motion.amount(bounds, lit);
             g.pose().pushPose();
-            SocialHubIcons.scaleButton(g, bounds, hover);
-            image(g, lit ? highlighted : idle, getX(), getY(), getWidth(), getHeight());
-            if (topic != null) {
-                int labelHeight = Math.max(1, getHeight() * 17 / 100);
-                int labelY = getY() + getHeight() - labelHeight - getHeight() / 24;
+            try {
+                SocialHubIcons.scaleButton(g, bounds, hover);
+                if (topic == null) {
+                    image(g, CLOSE, getX(), getY(), getWidth(), getHeight());
+                    return;
+                }
+                drawTile(g, bounds, hover, lit);
+                boolean illustratedCaption = minecraft.getLanguageManager().getSelected().equals("ru_ru");
+                int textWidth = Math.max(1, getWidth() - 10);
+                int captionWidth = Math.min(textWidth,
+                        Math.max(1, getHeight() * 17 / 100) * CAPTION_TEXTURE_WIDTH / CAPTION_TEXTURE_HEIGHT);
+                int captionHeight = Math.max(1, (captionWidth * CAPTION_TEXTURE_HEIGHT
+                        + CAPTION_TEXTURE_WIDTH - 1) / CAPTION_TEXTURE_WIDTH);
+                var lines = illustratedCaption ? List.<net.minecraft.util.FormattedCharSequence>of()
+                        : font.split(getMessage(), textWidth);
+                int captionSpace = illustratedCaption ? captionHeight : Math.min(2, lines.size()) * font.lineHeight;
+                int captionY = bounds.bottom() - captionSpace - Math.max(4, getHeight() / 14);
+                int artY = getY() + Math.max(3, getHeight() / 20);
+                int artHeight = Math.max(1, captionY - artY - Math.max(3, getHeight() / 24));
                 if (topic == Topic.CITY) {
-                    int padding = Math.max(2, getHeight() / 24);
-                    int size = Math.min(getWidth() - 2 * padding, labelY - getY() - 2 * padding);
-                    g.pose().pushPose();
-                    g.pose().translate(getX() + (getWidth() - size) / 2f, getY() + padding, 0);
-                    g.pose().scale(size / 16f, size / 16f, 1);
-                    g.renderItem(cityPylon, 0, 0);
-                    g.pose().popPose();
-                }
-                if (minecraft.getLanguageManager().getSelected().equals("ru_ru") && labelHeight >= 9) {
-                    int inset = getWidth() / 32;
-                    image(g, lettering, getX() + inset, labelY, getWidth() - 2 * inset, labelHeight);
+                    drawPylon(g, getX() + getWidth() / 2, artY, artHeight);
                 } else {
-                    g.drawCenteredString(font, WorldMapChrome.fit(font, getMessage(), getWidth() - 6),
-                            getX() + getWidth() / 2, labelY + (labelHeight - font.lineHeight) / 2, 0xFFEEDFBF);
+                    int artWidth = Math.max(1, Math.min(getWidth() * 88 / 100, artHeight * 384 / 200));
+                    int drawHeight = Math.max(1, artWidth * 200 / 384);
+                    image(g, artwork, getX() + (getWidth() - artWidth) / 2,
+                            artY + artHeight - drawHeight, artWidth, drawHeight);
                 }
+                if (illustratedCaption) {
+                    image(g, lettering, getX() + (getWidth() - captionWidth) / 2,
+                            captionY, captionWidth, captionHeight);
+                } else {
+                    for (int i = 0; i < Math.min(2, lines.size()); i++) {
+                        g.drawCenteredString(font, lines.get(i), getX() + getWidth() / 2,
+                                captionY + i * font.lineHeight, 0xFFEEDFBF);
+                    }
+                }
+            } finally {
+                g.pose().popPose();
             }
+        }
+    }
+
+    private void drawPylon(GuiGraphics g, int centerX, int artY, int artHeight) {
+        float size = artHeight * 1.25f;
+        g.flush();
+        Lighting.setupForFlatItems();
+        g.pose().pushPose();
+        try {
+            g.pose().translate(centerX - size / 2, artY + (artHeight - size) / 2 - artHeight * .07f, 0);
+            g.pose().scale(size / 16, size / 16, 1);
+            g.renderItem(cityPylon, 0, 0);
+        } finally {
             g.pose().popPose();
+            Lighting.setupFor3DItems();
+        }
+    }
+
+    private static void drawTile(GuiGraphics g, WorldMapUiLayout.Rect bounds, float motion, boolean lit) {
+        float warmth = CommunityFx.reduced ? (lit ? 1 : 0) : motion;
+        int edge = net.minecraft.util.FastColor.ARGB32.lerp(warmth, 0xFF747587, 0xFFC38D40);
+        int background = net.minecraft.util.FastColor.ARGB32.lerp(warmth, 0xFF181A21, 0xFF302419);
+        stepped(g, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4, 0xFF101117);
+        stepped(g, bounds.x()+1, bounds.y()+1, bounds.width()-2, bounds.height()-2, 3, edge);
+        stepped(g, bounds.x()+3, bounds.y()+3, bounds.width()-6, bounds.height()-6, 2, background);
+    }
+
+    private static void stepped(GuiGraphics g, int x, int y, int w, int h, int corner, int color) {
+        if (w <= 0 || h <= 0) return;
+        int inset = Math.min(corner, Math.min(w, h) / 2);
+        g.fill(x, y + inset, x + w, y + h - inset, color);
+        for (int i = 0; i < inset; i++) {
+            int cut = inset - i;
+            g.fill(x + cut, y + i, x + w - cut, y + i + 1, color);
+            g.fill(x + cut, y + h - i - 1, x + w - cut, y + h - i, color);
+        }
+    }
+
+    private void drawFrame(GuiGraphics g) {
+        stepped(g, left, top, panelWidth, panelHeight, 9, 0xFF0F1016);
+        stepped(g, left+1, top+1, panelWidth-2, panelHeight-2, 8, 0xFF555765);
+        stepped(g, left+2, top+2, panelWidth-4, panelHeight-4, 7, 0xFF9292A1);
+        stepped(g, left+4, top+4, panelWidth-8, panelHeight-8, 5, 0xFF191B21);
+        for (int side = 0; side < 2; side++) {
+            for (int end = 0; end < 2; end++) {
+                int x = side == 0 ? left + 1 : left + panelWidth - 15;
+                int y = end == 0 ? top + 1 : top + panelHeight - 15;
+                int capX = side == 0 ? x+5 : x;
+                int capY = end == 0 ? y : y+10;
+                int stemX = side == 0 ? x : x+10;
+                int stemY = end == 0 ? y+5 : y;
+                g.fill(capX, capY, capX+9, capY+4, 0xFFB87D30);
+                g.fill(stemX, stemY, stemX+4, stemY+9, 0xFFB87D30);
+                g.fill(capX, capY, capX+9, capY+1, 0xFFE9BC69);
+                g.fill(stemX, stemY, stemX+1, stemY+9, 0xFFE9BC69);
+            }
         }
     }
 
@@ -143,18 +279,43 @@ final class KnowledgeHomeScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         motion.beginFrame();
         g.fill(0, 0, width, height, 0x88090E10);
-        image(g, FRAME, left, top, panelWidth, panelHeight);
+        drawFrame(g);
         int titleHeight = headerHeight / 2;
         int titleX = left + panelWidth / 18;
         int titleY = top + headerHeight / 4;
+        int bookWidth = titleHeight * 3 / 2;
+        image(g, BOOK, titleX, titleY, bookWidth, titleHeight);
+        int divider = titleX + bookWidth + Math.max(3, titleHeight / 8);
+        g.fill(divider, titleY, divider+1, titleY+titleHeight, 0xFFC38D40);
+        int textX = divider + Math.max(4, titleHeight / 5);
+        int textWidth = Math.max(1, close.getX() - textX - 6);
         if (minecraft.getLanguageManager().getSelected().equals("ru_ru")) {
-            image(g, TITLE, titleX, titleY, Math.min(titleHeight * 10, panelWidth * 2 / 3), titleHeight);
+            int titleWidth = Math.min(titleHeight * 7, textWidth);
+            int textHeight = Math.max(1, titleWidth / 7);
+            image(g, TITLE, textX, titleY + (titleHeight-textHeight)/2, titleWidth, textHeight);
         } else {
-            image(g, BOOK, titleX, titleY, titleHeight * 2, titleHeight);
-            g.drawString(font, getTitle(), titleX + titleHeight * 2 + 4,
+            g.drawString(font, WorldMapChrome.fit(font, getTitle(), textWidth), textX,
                     titleY + (titleHeight - font.lineHeight) / 2, 0xFFEEDFBF);
         }
-        for (var widget : renderables) widget.render(g, mouseX, mouseY, partialTick);
+        g.enableScissor(left, gridTop, left + panelWidth, gridBottom);
+        try {
+            for (Card card : cards) {
+                if (card.getY() < gridBottom && card.getY() + card.getHeight() > gridTop) {
+                    card.render(g, mouseX, mouseY, partialTick);
+                }
+            }
+        } finally {
+            g.disableScissor();
+        }
+        if (maxScroll() > 0) {
+            int track = gridBottom - gridTop;
+            int thumb = Math.min(track, Math.max(8, track * track / contentHeight));
+            int thumbY = gridTop + (int) Math.round((track - thumb) * scroll / maxScroll());
+            int x = left + panelWidth - Math.max(5, (cards.getFirst().getX() - left) / 2 + 1);
+            g.fill(x, gridTop, x + 2, gridBottom, WorldMapChrome.INSET);
+            g.fill(x, thumbY, x + 2, thumbY + thumb, WorldMapChrome.ACCENT);
+        }
+        close.render(g, mouseX, mouseY, partialTick);
     }
 
     @Override
