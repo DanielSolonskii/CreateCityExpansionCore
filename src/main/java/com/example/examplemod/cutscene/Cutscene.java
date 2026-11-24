@@ -82,7 +82,12 @@ public record Cutscene(int version, ResourceLocation dimension, int durationTick
     }
 
     /** Easing applies from this keyframe to the next one. */
-    public record CameraKeyframe(int tick, double x, double y, double z, float yaw, float pitch, Easing easing) {
+    public record CameraKeyframe(int tick, double x, double y, double z, float yaw, float pitch, Easing easing,
+                                 boolean fadeIn, boolean fadeOut, boolean hideBars) {
+        public CameraKeyframe(int tick, double x, double y, double z, float yaw, float pitch, Easing easing) {
+            this(tick, x, y, z, yaw, pitch, easing, false, false, false);
+        }
+
         public CameraKeyframe {
             requireTick(tick);
             requireRange(x, -MAX_COORDINATE, MAX_COORDINATE, "x");

@@ -65,7 +65,7 @@ public final class CutsceneChunks {
             if (request.action() == 2) {
                 stop(player);
             } else if (request.action() == 1 && request.tick() >= session.tick
-                    && request.tick() < session.scene.durationTicks()
+                    && request.tick() < CutscenePresentation.endTick(session.scene)
                     && request.tick() - session.startTick <= (System.nanoTime() - session.startedAt) / 50_000_000L + 40) {
                 session.update(request.tick());
             }
@@ -159,8 +159,8 @@ public final class CutsceneChunks {
         private void update(int tick) {
             this.tick = tick;
             updatedAt = System.nanoTime();
-            ChunkPos next = position(scene, tick);
-            ChunkPos nextAhead = position(scene, Math.min(scene.durationTicks(), tick + 40));
+            ChunkPos next = cameraPosition(tick);
+            ChunkPos nextAhead = cameraPosition(Math.min(CutscenePresentation.endTick(scene), tick + 40));
             int nextRadius = CutsceneChunks.radius(player);
             if (next.equals(center) && nextAhead.equals(ahead) && nextRadius == radius) {
                 return;
@@ -174,6 +174,17 @@ public final class CutsceneChunks {
                 level.getChunkSource().addRegionTicket(TICKET, ahead, radius + 1, id);
             }
             ((CutsceneChunkTrackingAccess) level.getChunkSource().chunkMap).ccec$updateChunkTracking(player);
+        }
+
+        private ChunkPos cameraPosition(double time) {
+            var last = scene.camera().getLast();
+            if (time < last.tick()) {
+                return position(scene, time);
+            }
+            double progress = CutscenePresentation.returnProgress(scene, time);
+            double x = last.x() + progress * (player.getX() - last.x());
+            double z = last.z() + progress * (player.getZ() - last.z());
+            return new ChunkPos((int) Math.floor(x / 16), (int) Math.floor(z / 16));
         }
 
         private void release() {

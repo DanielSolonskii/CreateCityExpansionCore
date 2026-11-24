@@ -25,7 +25,8 @@ public final class CutsceneJson {
     public static final int MAX_JSON_BYTES = 128 * 1024;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Set<String> SCENE_FIELDS = Set.of("version", "dimension", "durationTicks", "camera", "sounds", "texts");
-    private static final Set<String> CAMERA_FIELDS = Set.of("tick", "x", "y", "z", "yaw", "pitch", "easing");
+    private static final Set<String> CAMERA_FIELDS = Set.of("tick", "x", "y", "z", "yaw", "pitch", "easing",
+            "fadeIn", "fadeOut", "hideBars");
     private static final Set<String> SOUND_FIELDS = Set.of("tick", "sound", "volume", "pitch");
     private static final Set<String> TEXT_FIELDS = Set.of("tick", "durationTicks", "text", "textColor", "backgroundColor");
     private static final Pattern COLOR = Pattern.compile("#[0-9a-fA-F]{8}");
@@ -86,6 +87,15 @@ public final class CutsceneJson {
         object.addProperty("yaw", keyframe.yaw());
         object.addProperty("pitch", keyframe.pitch());
         object.addProperty("easing", keyframe.easing().name().toLowerCase(Locale.ROOT));
+        if (keyframe.fadeIn()) {
+            object.addProperty("fadeIn", true);
+        }
+        if (keyframe.fadeOut()) {
+            object.addProperty("fadeOut", true);
+        }
+        if (keyframe.hideBars()) {
+            object.addProperty("hideBars", true);
+        }
         return object;
     }
 
@@ -131,7 +141,18 @@ public final class CutsceneJson {
             throw new IllegalArgumentException("Expected easing linear, smooth, ease_in, ease_out or hold", exception);
         }
         return new Cutscene.CameraKeyframe(integer(object, "tick"), decimal(object, "x"), decimal(object, "y"),
-                decimal(object, "z"), floating(object, "yaw"), floating(object, "pitch"), easing);
+                decimal(object, "z"), floating(object, "yaw"), floating(object, "pitch"), easing,
+                optionalBoolean(object, "fadeIn"), optionalBoolean(object, "fadeOut"), optionalBoolean(object, "hideBars"));
+    }
+
+    private static boolean optionalBoolean(JsonObject object, String name) {
+        if (!object.has(name)) {
+            return false;
+        }
+        if (object.get(name) instanceof JsonPrimitive value && value.isBoolean()) {
+            return value.getAsBoolean();
+        }
+        throw new IllegalArgumentException(name + " must be a JSON boolean");
     }
 
     private static Cutscene.SoundCue readSound(JsonObject object) {

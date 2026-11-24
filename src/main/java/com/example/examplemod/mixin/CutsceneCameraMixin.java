@@ -21,6 +21,7 @@ public abstract class CutsceneCameraMixin {
     @Inject(method = "setup", at = @At("TAIL"))
     private void ccec$applyCutscenePose(BlockGetter level, Entity entity, boolean thirdPerson, boolean mirrored,
                                         float partialTick, CallbackInfo ci) {
+        CutscenePlayback.capturePlayerView((Camera) (Object) this);
         CutscenePlayback.CameraPose pose = CutscenePlayback.cameraPose((Camera) (Object) this);
         if (pose != null) {
             setPosition(pose.x(), pose.y(), pose.z());
