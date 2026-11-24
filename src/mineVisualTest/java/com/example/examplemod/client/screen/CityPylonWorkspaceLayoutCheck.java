@@ -38,8 +38,28 @@ public final class CityPylonWorkspaceLayoutCheck {
                             "the newspaper trigger is tall, narrow and outside the city frame");
                     require(paper.y() == withPaper.frameY() && paper.height() == withPaper.frameHeight(),
                             "the newspaper shares the city frame's top and bottom edges");
-                    double mapX = withPaper.originX() + withPaper.virtualWidth() * withPaper.scale() * 0.88;
-                    double mapY = withPaper.originY() + withPaper.virtualHeight() * withPaper.scale() * 0.7;
+                    int pageWidth = withPaper.virtualWidth(), pageHeight = withPaper.virtualHeight();
+                    var reference = CityPylonOverviewScreen.overviewTile(pageWidth,pageHeight,0,false);
+                    var map = CityPylonOverviewScreen.overviewTile(pageWidth,pageHeight,2,true);
+                    for (int col = 0; col < 3; col++) {
+                        var top = CityPylonOverviewScreen.overviewTile(pageWidth,pageHeight,col,false);
+                        var bottom = CityPylonOverviewScreen.overviewTile(pageWidth,pageHeight,col,true);
+                        require(top.x() == bottom.x() && top.width() == reference.width()
+                                        && bottom.width() == reference.width(),
+                                "overview cards share equal-width columns");
+                        require(top.bottom() < bottom.y() && top.right() <= pageWidth,
+                                "overview cards have gutters and fit within the page");
+                        if (col < 2) require(top.height() == reference.height()
+                                        && bottom.height() == reference.height(),
+                                "the four left overview cards share one height");
+                        else require(top.height() < reference.height() && bottom.height() > reference.height()
+                                        && bottom.bottom() == CityPylonOverviewScreen.overviewTile(pageWidth,pageHeight,0,true).bottom(),
+                                "compact community gives the map extra height and a shared bottom edge");
+                    }
+                    double mapX = withPaper.originX() + ((map.x()+map.right())/2.0) * withPaper.scale();
+                    double mapY = withPaper.originY() + ((map.y()+map.bottom())/2.0) * withPaper.scale();
+                    require(map.contains(withPaper.localX(mapX),withPaper.localY(mapY)),
+                            "scaled map center remains inside its rendered click area");
                     require(withPaper.contains(mapX,mapY) && mapX < frameRight,
                             "minimap stays inside the city content while the newspaper opens");
                 }
