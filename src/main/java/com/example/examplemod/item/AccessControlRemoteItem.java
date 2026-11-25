@@ -13,6 +13,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.context.UseOnContext;
 
 /**
@@ -68,11 +71,13 @@ public final class AccessControlRemoteItem extends Item {
          */
         switch (SimulatedCompat.toggleTransportBlockGrant(player, level, context.getClickedPos())) {
             case GRANTED -> {
+                moveSlider(context.getItemInHand(), level, true);
                 player.sendSystemMessage(Component.translatable(
                         "message.createcityexpansioncore.access_control_remote.transport_granted").withStyle(net.minecraft.ChatFormatting.GREEN));
                 return InteractionResult.CONSUME;
             }
             case REVOKED -> {
+                moveSlider(context.getItemInHand(), level, false);
                 player.sendSystemMessage(Component.translatable(
                         "message.createcityexpansioncore.access_control_remote.transport_revoked").withStyle(net.minecraft.ChatFormatting.RED));
                 return InteractionResult.CONSUME;
@@ -94,10 +99,10 @@ public final class AccessControlRemoteItem extends Item {
             }
         }
 
-        return toggleAccess(level, player, context.getClickedPos());
+        return toggleAccess(level, player, context.getClickedPos(), context.getItemInHand());
     }
 
-    private static InteractionResult toggleAccess(ServerLevel level, ServerPlayer player, BlockPos pos) {
+    private static InteractionResult toggleAccess(ServerLevel level, ServerPlayer player, BlockPos pos, ItemStack remote) {
         CityManager cities = CityManager.get(level.getServer().overworld());
         ResourceLocation dimension = level.dimension().location();
         City city = cities.getCityAt(dimension, pos);
@@ -114,6 +119,7 @@ public final class AccessControlRemoteItem extends Item {
         InteractionGrant existing = cities.interactionGrant(city, pos);
         if (existing != null && existing.dimension().equals(dimension)) {
             cities.removeInteractionGrant(city, pos);
+            moveSlider(remote, level, false);
             player.sendSystemMessage(Component.translatable(
                     "message.createcityexpansioncore.access_control_remote.revoked").withStyle(net.minecraft.ChatFormatting.RED));
             return InteractionResult.CONSUME;
@@ -122,9 +128,27 @@ public final class AccessControlRemoteItem extends Item {
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(
                 level.getBlockState(pos).getBlock());
         cities.addInteractionGrant(city, dimension, pos, blockId);
+        moveSlider(remote, level, true);
         player.sendSystemMessage(Component.translatable(
                 "message.createcityexpansioncore.access_control_remote.granted").withStyle(net.minecraft.ChatFormatting.GREEN));
         return InteractionResult.CONSUME;
+    }
+
+    private static void moveSlider(ItemStack remote, ServerLevel level, boolean opened) {
+        CustomData.update(DataComponents.CUSTOM_DATA, remote, tag -> {
+            tag.putBoolean("SliderOpen", opened);
+            tag.putLong("SliderTick", level.getGameTime());
+        });
+    }
+
+    public static float sliderPosition(ItemStack remote, long gameTime) {
+        CustomData data = remote.get(DataComponents.CUSTOM_DATA);
+        if (data == null) return 0;
+        var tag = data.copyTag();
+        if (!tag.contains("SliderTick")) return 0;
+        long elapsed = gameTime - tag.getLong("SliderTick");
+        float progress = elapsed < 0 ? 1 : Math.min(1, elapsed / 7f);
+        return tag.getBoolean("SliderOpen") ? progress : 1 - progress;
     }
 
     private static void refuse(ServerPlayer player, String reason) {
