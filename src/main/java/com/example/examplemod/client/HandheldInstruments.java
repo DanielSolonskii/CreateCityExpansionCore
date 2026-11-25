@@ -25,6 +25,10 @@ public final class HandheldInstruments {
 
     public static void register(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
+            ItemProperties.register(CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get(),
+                    ResourceLocation.fromNamespaceAndPath(CreateCityExpansionCore.MODID, "access_slider"),
+                    (stack, level, holder, seed) -> com.example.examplemod.item.AccessControlRemoteItem
+                            .sliderPosition(stack, level == null ? Long.MAX_VALUE : level.getGameTime()));
             ItemProperties.register(CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
                     ResourceLocation.fromNamespaceAndPath(CreateCityExpansionCore.MODID, "measuring"),
                     (stack, level, holder, seed) -> holder != null && holder == Minecraft.getInstance().player
