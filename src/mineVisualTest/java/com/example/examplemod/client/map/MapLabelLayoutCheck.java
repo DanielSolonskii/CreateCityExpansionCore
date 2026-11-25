@@ -8,6 +8,19 @@ final class MapLabelLayoutCheck {
     private static void require(boolean value,String message) { if (!value) throw new AssertionError(message); }
 
     static void run() throws Exception {
+        var roads=new MapLabelLayout();
+        var shown=new ArrayList<String>();
+        roads.begin(0,0,120,90);
+        roads.offerRoad(false,"street",36,40,48,12,()->shown.add("street"));
+        roads.offerRoad(true,"selected",36,40,48,12,()->shown.add("selected"));
+        roads.offerRoad(false,"offscreen",100,30,48,12,()->shown.add("offscreen"));
+        roads.reserve(55,4,14,14);
+        roads.offerRoad(false,"station overlap",48,4,48,12,()->shown.add("overlap"));
+        roads.paint((text,color,x,y)->{});
+        require(shown.equals(java.util.List.of("selected")),"road names must fit the viewport, avoid markers and respect the selected road");
+        roads.begin(0,0,120,90);
+        roads.paint((text,color,x,y)->{});
+        require(shown.size()==1,"road captions must not survive the frame");
         var layout = new MapLabelLayout();
         var output = new HashMap<String,String>();
         for (int pass=0; pass<2; pass++) {

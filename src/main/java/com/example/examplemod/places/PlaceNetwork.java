@@ -49,13 +49,37 @@ public final class PlaceNetwork {
         });
         @Override public Type<Reply> type(){return TYPE;}
     }
+    /** Negotiated separately because older clients decode place categories by enum ordinal. */
+    public record CategorizedReply(Reply value) implements CustomPacketPayload {
+        public static final Type<CategorizedReply> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(
+                "createcityexpansioncore", "place_reply_v2"));
+        static final StreamCodec<RegistryFriendlyByteBuf,CategorizedReply> CODEC =
+                Reply.CODEC.map(CategorizedReply::new, CategorizedReply::value);
+        @Override public Type<CategorizedReply> type() { return TYPE; }
+    }
+
+    private static Reply legacyCategories(Reply reply) {
+        if (reply.rows().stream().noneMatch(p -> p.category() == AtlasPlace.Category.STATION)) return reply;
+        var rows = reply.rows().stream().map(p -> p.category() == AtlasPlace.Category.STATION
+                ? new AtlasPlace(p.id(), p.owner(), p.version(), p.name(), AtlasPlace.Category.PUBLIC, p.description(),
+                        p.dimension(), p.icon(), p.entrances(), p.published(), p.source())
+                : p).toList();
+        return new Reply(reply.nonce(), reply.status(), rows, reply.canLink());
+    }
     @SubscribeEvent public static void register(RegisterPayloadHandlersEvent event){
         var r=event.registrar("places-1").optional();
         r.playToServer(Request.TYPE,Request.CODEC,(packet,ctx)->ctx.enqueueWork(()->{
-            if(ctx.player() instanceof ServerPlayer player)PacketDistributor.sendToPlayer(player,PlaceService.handle(player,packet));
+            if(ctx.player() instanceof ServerPlayer player) {
+                var reply = PlaceService.handle(player,packet);
+                PacketDistributor.sendToPlayer(player, player.connection.hasChannel(CategorizedReply.TYPE)
+                        ? new CategorizedReply(reply) : legacyCategories(reply));
+            }
         }));
         r.playToClient(Reply.TYPE,Reply.CODEC,(packet,ctx)->ctx.enqueueWork(()->{
             if(CityPublicDirectory.currentConnection(ctx.connection()))AtlasPlaces.receive(packet);
+        }));
+        r.playToClient(CategorizedReply.TYPE,CategorizedReply.CODEC,(packet,ctx)->ctx.enqueueWork(()->{
+            if(CityPublicDirectory.currentConnection(ctx.connection()))AtlasPlaces.receive(packet.value());
         }));
     }
     private PlaceNetwork(){}

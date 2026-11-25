@@ -24,12 +24,18 @@ public final class WalkingRoutes {
     public enum Status { FOUND, PARTIAL, NO_DATA, LIMIT, UNREACHABLE }
     public record Leg(BlockPos from, BlockPos to) {
         public Leg { from=from.immutable(); to=to.immutable(); }
+        public boolean withinSearchRange() {
+            long dx = Math.abs((long) from.getX() - to.getX());
+            long dz = Math.abs((long) from.getZ() - to.getZ());
+            return dx + dz <= MAX_HORIZONTAL && Math.abs((long) from.getY() - to.getY()) <= 96;
+        }
     }
     public record Result(Status status, List<BlockPos> path, double seconds) {
         public Result { path=List.copyOf(path); }
         static Result empty(Status status) { return new Result(status,List.of(),Double.NaN); }
     }
     public static final int MAX_LEGS = 32;
+    static final int MAX_HORIZONTAL = 512;
     private static final int MAX_BATCHES = 24, LIFETIME_TICKS = 160;
     private static final LinkedHashMap<UUID,Batch> batches = new LinkedHashMap<>();
     private WalkingRoutes() {}
@@ -61,6 +67,31 @@ public final class WalkingRoutes {
     }
     public static boolean currentlyWalkable(ServerPlayer actor, BlockPos feet) {
         return new WalkingSnapshot(actor).stand(feet) == WalkingSnapshot.Passage.OPEN;
+    }
+
+    /** Candidate endpoints only. The ordinary walking search must still reach one of them. */
+    public static List<BlockPos> landmarkApproaches(ServerPlayer actor, BlockPos anchor, boolean surfaceOnly) {
+        var terrain = new WalkingSnapshot(actor);
+        var columns = List.of(anchor, anchor.north(), anchor.east(), anchor.south(), anchor.west());
+        var approaches = new ArrayList<BlockPos>();
+        if (!surfaceOnly) {
+            if (terrain.stand(anchor) == WalkingSnapshot.Passage.OPEN) return List.of(anchor);
+            for (var column : columns.subList(1, columns.size()))
+                if (terrain.stand(column) == WalkingSnapshot.Passage.OPEN) approaches.add(column);
+            if (!approaches.isEmpty()) return List.copyOf(approaches);
+        }
+        for (var column : columns) {
+            var chunk = actor.serverLevel().getChunkSource().getChunkNow(column.getX() >> 4, column.getZ() >> 4);
+            if (chunk == null) continue;
+            int y = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    column.getX() & 15, column.getZ() & 15) + 1;
+            var feet = new BlockPos(column.getX(), y, column.getZ());
+            if (terrain.stand(feet) == WalkingSnapshot.Passage.OPEN) {
+                approaches.add(feet);
+                if (column.equals(anchor) || approaches.size() == 4) break;
+            }
+        }
+        return List.copyOf(approaches);
     }
     public static boolean confirmedBlocked(ServerPlayer actor, BlockPos feet) {
         return new WalkingSnapshot(actor).stand(feet) == WalkingSnapshot.Passage.BLOCKED;
@@ -106,6 +137,8 @@ public final class WalkingRoutes {
         final List<Result> results = new ArrayList<>();
         final Consumer<List<Result>> sink;
         final WalkingSnapshot terrain;
+        final MappedWalks mapped;
+        boolean attemptedMapped, checkingMapped;
         WalkingSearch search;
         int validate, node;
         boolean finished;
@@ -113,6 +146,7 @@ public final class WalkingRoutes {
         Batch(ServerPlayer actor,List<Leg> legs,Consumer<List<Result>> sink) {
             this.actor=actor;level=actor.serverLevel();started=level.getServer().getTickCount();
             this.legs=legs;this.sink=sink;terrain=new WalkingSnapshot(actor);
+            mapped=legs.isEmpty()?null:new MappedWalks(com.example.examplemod.citymap.CityMapService.publicFeatures(actor));
         }
         void advance() {
             if (validate==results.size() && results.size()<legs.size()) {
@@ -120,6 +154,11 @@ public final class WalkingRoutes {
                 if (search==null) {
                     if (!level.isInWorldBounds(leg.from()) || !level.isInWorldBounds(leg.to())) {
                         results.add(Result.empty(Status.NO_DATA)); return;
+                    }
+                    if (!attemptedMapped) {
+                        attemptedMapped=true;
+                        var candidate=mapped.propose(leg);
+                        if(candidate!=null) { checkingMapped=true; results.add(candidate); return; }
                     }
                     search=new WalkingSearch(leg);
                 }
@@ -131,11 +170,15 @@ public final class WalkingRoutes {
                 finished=true; sink.accept(List.copyOf(results)); return;
             }
             var path=results.get(validate).path();
-            if (node>=path.size()) { validate++;node=0;return; }
+            if (node>=path.size()) { validate++;node=0;attemptedMapped=false;checkingMapped=false;return; }
             // Discard results if the sampled door, floor, chunk or access changed during the search.
             boolean valid=node==0 ? currentlyWalkable(actor,path.getFirst())
                     : currentlyPassable(actor,path.get(node-1),path.get(node));
-            if (!valid) {results.set(validate,Result.empty(Status.NO_DATA));validate++;node=0;}
+            if (!valid && checkingMapped) {
+                results.removeLast();
+                checkingMapped=false;
+                node=0;
+            } else if (!valid) {results.set(validate,Result.empty(Status.NO_DATA));validate++;node=0;attemptedMapped=false;}
             else node++;
         }
         void expire() {

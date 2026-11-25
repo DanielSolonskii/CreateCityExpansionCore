@@ -13,6 +13,7 @@ public final class PassengerTimetableCheck {
         timetable.observe(-1, 290);
         require(timetable.departures(290).isEmpty(), "rail connectivity and partial calibration do not publish service");
         timetable.observe(0, 330);
+        require(timetable.departures(330).isEmpty(), "returning to the first observed station still needs its full dwell and departure");
         timetable.observe(-1, 350);
         var trips = timetable.departures(350);
         require(trips.size() == 12, "two bounded cycles with two subsequent destinations per origin");
@@ -44,7 +45,43 @@ public final class PassengerTimetableCheck {
         require(PassengerSeatRay.first(eye,aim,seat,outline)==PassengerSeatRay.Reach.BLOCKED,"carriage wall before a reachable seat blocks native selection");
         shapes.put(wall,null);
         require(PassengerSeatRay.first(eye,aim,seat,outline)==PassengerSeatRay.Reach.UNKNOWN,"an unverified carriage shape cannot attest a clear ray");
+        descriptions();
         System.out.println("PASS passenger direction, physical calibration, dwell, next service, skipped stop and lateness");
+    }
+
+    private static void descriptions() {
+        var id = java.util.UUID.randomUUID();
+        var owner = java.util.UUID.randomUUID();
+        var data = new PassengerData();
+        var line = new PassengerData.Line(id, owner, "Линия 1");
+        data.lines.put(id, line);
+        var legacy = data.save(new net.minecraft.nbt.CompoundTag(), null);
+        require(!legacy.getList("Lines", 10).getCompound(0).contains("Description")
+                && PassengerData.load(legacy, null).lines.get(id).description.isEmpty(), "v1 lines retain their UUID and default to no description");
+        String description = "К вокзалу ".repeat(15).strip();
+        var wire = new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(), net.minecraft.core.RegistryAccess.EMPTY);
+        var request = new PassengerEditorNetwork.DescriptionRequest(java.util.UUID.randomUUID(), id, "", description);
+        try {
+            PassengerEditorNetwork.DescriptionRequest.CODEC.encode(wire, request);
+            require(PassengerEditorNetwork.DescriptionRequest.CODEC.decode(wire).equals(request), "independent description payload supports more than 64 characters");
+        } finally { wire.release(); }
+        line.changeDescription("", description);
+        line.changeDescription("", description);
+        require(description.equals(line.description), "repeated write of the same value is idempotent");
+        for (String invalid : java.util.List.of("x".repeat(PassengerService.MAX_DESCRIPTION + 1), "bad\nline", "§k")) {
+            try { line.changeDescription(description, invalid); throw new AssertionError("Invalid description accepted"); }
+            catch (IllegalArgumentException rejected) { require("invalid_description".equals(rejected.getMessage()), "bounded plain text"); }
+        }
+        try { line.changeDescription("", "Concurrent overwrite"); throw new AssertionError("Stale edit accepted"); }
+        catch (IllegalArgumentException rejected) { require("stale".equals(rejected.getMessage()), "stale description edit is rejected"); }
+        var snapshot = data.save(new net.minecraft.nbt.CompoundTag(), null);
+        var restored = PassengerData.load(snapshot, null).lines.get(id);
+        require(restored.owner.equals(owner) && restored.name.equals(line.name) && description.equals(restored.description), "description and identity survive restart");
+        restored.changeDescription(description, "  ");
+        require(restored.description.isEmpty(), "explicit clear");
+        snapshot.getList("Lines", 10).getCompound(0).putString("Description", "bad\ndisplay text");
+        require(PassengerData.load(snapshot, null).lines.containsKey(id), "damaged optional display text cannot erase the service");
+        System.out.println("PASS passenger line descriptions, v1 save compatibility, optional codec and concurrent edits");
     }
     private static void require(boolean condition, String message) {
         if (!condition) throw new AssertionError(message);

@@ -4,7 +4,7 @@ import java.util.UUID;
 
 /** Optional scoped read carried by the existing 64-character Journey STATE argument. */
 public record NavigationLookup(Kind kind, UUID id, long sequence) {
-    public enum Kind { CITY, INDUSTRY, PROJECT, STATION, WAREHOUSE, POINT, TRAIN, SHIPMENT, ROAD, OFFER, DEMAND, INTAKE, PLACE }
+    public enum Kind { CITY, INDUSTRY, PROJECT, STATION, WAREHOUSE, POINT, TRAIN, SHIPMENT, ROAD, OFFER, DEMAND, INTAKE, PLACE, CARTOGRAPHY }
 
     public String token() {
         return "n/" + kind.name() + "/" + id + "/" + Long.toUnsignedString(sequence, 36);

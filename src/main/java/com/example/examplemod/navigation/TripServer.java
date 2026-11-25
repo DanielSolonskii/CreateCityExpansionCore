@@ -1,6 +1,9 @@
 package com.example.examplemod.navigation;
 
 import com.example.examplemod.city.CityMapSavedData;
+import com.example.examplemod.citymap.CityMapService;
+import com.example.examplemod.journey.JourneyObjectLookup;
+import com.example.examplemod.journey.NavigationLookup;
 import com.example.examplemod.navigation.TripNetwork.*;
 import com.example.examplemod.navigation.TripPlanner.*;
 import com.example.examplemod.navigation.walk.WalkingRoutes;
@@ -55,11 +58,28 @@ public final class TripServer {
 
     private static Destination resolve(ServerPlayer p,TripRef key) {
         if(key.kind()==TripRef.Kind.PLAYER)return new Destination(p.getName().getString(),List.of(new Entry(p.getUUID(),0,List.of(p.blockPosition()))));
+        if (key.kind() == TripRef.Kind.CARTOGRAPHY) {
+            var feature = CityMapService.resolve(p, key.id());
+            if (feature == null) return null;
+            var feet = feature.entrances().isEmpty()
+                    ? WalkingRoutes.landmarkApproaches(p, feature.anchor(), false) : feature.entrances();
+            if (feet.isEmpty()) return null;
+            return new Destination(feature.label(id -> CityMapService.resolve(p, id)), List.of(new Entry(feature.id(), feature.revision(), feet)));
+        }
         List<AtlasPlace> list;
         if(key.kind()==TripRef.Kind.PLACE){
             var place=PlaceService.resolve(p,key.id());
+            if (place != null && place.entrances().isEmpty()
+                    && place.dimension().equals(p.serverLevel().dimension().location())) {
+                boolean surfaceOnly = place.source() != null && place.source().kind() == AtlasPlace.SourceKind.PROJECT;
+                var feet = WalkingRoutes.landmarkApproaches(p, place.icon(), surfaceOnly);
+                if (!feet.isEmpty()) return new Destination(place.name(), List.of(new Entry(place.id(), place.version(), feet)));
+            }
             list=place==null?List.of():List.of(place);
-        }else list=PlaceService.entrancesFor(p,key.source(),key.id());
+        }else list=switch(key.kind()){
+            case CITY, PROJECT, WAREHOUSE -> PlaceService.entrancesFor(p,key.source(),key.id());
+            default -> List.of();
+        };
         var visible=list.stream().filter(a->a.dimension().equals(p.serverLevel().dimension().location()) && !a.entrances().isEmpty())
                 .sorted(Comparator.comparing(AtlasPlace::id)).limit(4).toList();
         if(!visible.isEmpty())return new Destination(visible.getFirst().name(),visible.stream().map(a->new Entry(a.id(),a.version(),a.entrances())).toList());
@@ -67,6 +87,15 @@ public final class TripServer {
             var platform=PassengerService.stop(p,key.id());
             if(platform!=null && platform.dimension().equals(p.serverLevel().dimension().location()))
                 return station(platform.id(),platform.name(),platform.entrance());
+        }
+        var fixed = switch (key.kind()) {
+            case INDUSTRY, PROJECT, CITY, WAREHOUSE -> JourneyObjectLookup.fixedLandmark(p,
+                    NavigationLookup.Kind.valueOf(key.kind().name()), key.id());
+            default -> null;
+        };
+        if (fixed != null && fixed.dimension().equals(p.serverLevel().dimension().location())) {
+            var feet = WalkingRoutes.landmarkApproaches(p, fixed.position(), key.kind() == TripRef.Kind.PROJECT);
+            if (!feet.isEmpty()) return new Destination(fixed.title(), List.of(new Entry(key.id(), 0, feet)));
         }
         return null;
     }
@@ -321,6 +350,9 @@ public final class TripServer {
             if(!sameEntrances(destination,s.active.goal))guide.replan="changed";
             s.active.goal=destination;
             packet.putString("Goal",s.active.goal.title());
+            var endpoint = lastFeet(s.active.options.get(s.option));
+            var liveEntrances = destination.points();
+            packet.putLong("GoalPos", (liveEntrances.contains(endpoint) ? endpoint : liveEntrances.getFirst()).asLong());
             String phase=guide.phase();
             String legacyPhase=switch(phase){
                 case "wait_run" -> "board";

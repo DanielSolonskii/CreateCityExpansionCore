@@ -392,8 +392,8 @@ public final class SocialHubScreen extends Screen {
         }
         UUID peer = event.hasUUID("Peer") ? event.getUUID("Peer") : null;
         String kind = event.getString("Kind");
-        if (event.hasUUID("Project")) ProjectWorkspaceScreen.open(this, event.getUUID("Project"));
-        else if (event.hasUUID("Alliance")) {
+        if (event.hasUUID("Project")) return;
+        if (event.hasUUID("Alliance")) {
             if ("alliance_message".equals(kind)) AllianceScreen.openChat(this, event.getUUID("Alliance"));
             else AllianceScreen.openCouncil(this, event.getUUID("Alliance"));
         } else if ("message".equals(kind) && peer != null) SocialScreen.open(this, peer);

@@ -38,6 +38,7 @@ public final class IndustrialCreativeTab {
             CreateCityExpansionCore.MAGNETIC_ANALYZER.get(),
             CreateCityExpansionCore.BLUEPRINT_TERMINAL.get(),
             CreateCityExpansionCore.PANEL_PAINTER.get(),
+            CreateCityExpansionCore.RAILWAY_BINDER.get(),
             CreateCityExpansionCore.INCOMPLETE_ACCESS_CONTROL_REMOTE.get(),
             CreateCityExpansionCore.ACCESS_CONTROL_REMOTE.get()
     );

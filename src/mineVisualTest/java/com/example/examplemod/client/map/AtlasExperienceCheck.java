@@ -8,8 +8,52 @@ import java.util.HashSet;
 public final class AtlasExperienceCheck {
     private static int checks;
     private static void require(boolean value, String message) { checks++; if (!value) throw new AssertionError(message); }
+    private static void passengerCards() {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        net.neoforged.fml.loading.LoadingModList.of(java.util.List.of(),java.util.List.of(),java.util.List.of(),java.util.List.of(),java.util.Map.of());
+        net.minecraft.server.Bootstrap.bootStrap();
+        var lineId=new java.util.UUID(1,1); var trainId=new java.util.UUID(1,2);
+        var platform=new net.minecraft.core.BlockPos(300,70,400);
+        var stops=java.util.List.of(new com.example.examplemod.passenger.PassengerRailMap.StopInfo(new java.util.UUID(1,3),"Central",platform));
+        var moving=new com.example.examplemod.passenger.PassengerRailMap.LineInfo(lineId,"Red","Across the river",0xc03232,
+                stops,trainId,"Express",new com.example.examplemod.passenger.PassengerRailMap.TrainLocation(15.8,67.2,-2.6),"checking",0);
+        var train=PassengerMapLayer.card(moving,CityMapPanel.SelectionKind.PASSENGER_TRAIN,null,false);
+        require(train.id().equals(trainId) && train.pos().equals(new net.minecraft.core.BlockPos(15,67,-3)),"train card uses its live bogey position");
+        var route=PassengerMapLayer.card(moving,CityMapPanel.SelectionKind.PASSENGER_LINE,null,false);
+        require(route.id().equals(lineId) && route.pos().equals(platform) && route.details().stream().anyMatch(t->t.getString().equals("Across the river")),
+                "the clickable line owns its public description");
+        var unavailable=new com.example.examplemod.passenger.PassengerRailMap.LineInfo(lineId,"Red","",0xc03232,stops,trainId,"Express",null,"checking",1);
+        require(PassengerMapLayer.card(unavailable,CityMapPanel.SelectionKind.PASSENGER_TRAIN,null,false)==null,
+                "a missing train position never places the train at the first stop");
+        var pinned=PassengerMapLayer.card(unavailable,CityMapPanel.SelectionKind.PASSENGER_TRAIN,train.pos(),false);
+        require(pinned.pos().equals(train.pos()) && pinned.details().stream().anyMatch(t->t.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc && tc.getKey().endsWith("location_unavailable")),
+                "a pinned train keeps its last known location and flags loss of live position");
+    }
+    private static void passengerTracks() {
+        var red=new java.util.UUID(0,1);
+        var blue=new java.util.UUID(0,2);
+        var samples=new java.util.ArrayList<com.example.examplemod.passenger.PassengerRailMap.Segment>();
+        for(int i=0;i<96;i++)
+            samples.add(new com.example.examplemod.passenger.PassengerRailMap.Segment(red,0xff0000,10_000+i,48,10_001+i,48));
+        samples.add(new com.example.examplemod.passenger.PassengerRailMap.Segment(red,0xff0000,12,0,0,0));
+        samples.add(new com.example.examplemod.passenger.PassengerRailMap.Segment(blue,0x0000ff,0,0,12,0));
+        samples.add(new com.example.examplemod.passenger.PassengerRailMap.Segment(red,0xff0000,12,0,12,12));
+        var tracks=new PassengerTrackIndex(samples);
+        require(red.equals(tracks.pick(10_095,48.3,.25,null)), "distant end remains clickable after multiple spatial groups");
+        require(red.equals(tracks.pick(6,.5,.25,null)), "shared track has a deterministic first line");
+        require(blue.equals(tracks.pick(6,.5,.25,red)), "repeated click selects the other line on the same rails");
+        require(red.equals(tracks.pick(6,.5,.25,blue)), "coincident lines cycle back to the first");
+        require(tracks.pick(6,6,.25,null)==null, "no imaginary diagonal through the bend");
+        require(tracks.pick(-4,0,.25,null)==null, "a rail hit stops at the end of the segment");
+        require(tracks.pick(4,2,.25,null)==null && tracks.pick(4,2,1,null)!=null, "hit radius follows display scale");
+        var visible=new java.util.ArrayList<com.example.examplemod.passenger.PassengerRailMap.Segment>();
+        tracks.visit(10_094.5,47,10_096,49,visible::add);
+        require(visible.size()==2, "off-screen tracks are culled without dropping the edge of the viewport");
+    }
     public static void main(String[] args) throws Exception {
         MapLabelLayoutCheck.run();
+        passengerTracks();
+        passengerCards();
         com.example.examplemod.client.screen.AtlasWorkspaceCheck.run();
         for (float scale : new float[]{0.25f, 0.5f, 0.75f, 1f, 1.06f}) {
             var pose = new org.joml.Matrix4f().translation(71.25f, 39.75f, 0).scale(scale);

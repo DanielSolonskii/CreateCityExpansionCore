@@ -115,7 +115,8 @@ public final class LogisticsMapOverlay {
         return new CityMapPanel.Selection(CityMapPanel.SelectionKind.LOGISTICS, id,
                 net.minecraft.network.chat.Component.literal(marker.getString("Name")), BlockPos.of(location.getLong("Pos")),
                 false, detail.isBlank() ? List.of() : List.of(net.minecraft.network.chat.Component.literal(detail)),
-                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.MINECART), false);
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.MINECART), false,
+                AtlasPlaceIcon.forTransport(marker.getString("Kind")));
     }
     public static List<CityMapPanel.Selection> visibleMapSelections(ResourceLocation dimension) {
         if (!hasDirectory(dimension)) return List.of();
@@ -383,7 +384,15 @@ public final class LogisticsMapOverlay {
             boolean hovered=draw==hover, selected=draw.selected;
             var hit=draw.bounds;
             int color=marker.getString("Status").equals("LAST_OBSERVED")?BRASS:kind.equals("train")?BRASS:TEAL;
-            surface(g,x-9,y-10,22,23,selected?0xff294b45:PANEL);if(hovered||selected){g.hLine(x-8,x+10,y-10,BRASS);g.hLine(x-8,x+10,y+12,BRASS);}icon(g,x-4,y-6,kindIcon(kind),color);HITS.putLast(hit,marker);
+            var transportIcon = AtlasPlaceIcon.forTransport(kind);
+            if (transportIcon != null) {
+                transportIcon.badge(g, x+2, y+1, 11, selected, hovered);
+            } else {
+                surface(g,x-9,y-10,22,23,selected?0xff294b45:PANEL);
+                if(hovered||selected){g.hLine(x-8,x+10,y-10,BRASS);g.hLine(x-8,x+10,y+12,BRASS);}
+                icon(g,x-4,y-6,kindIcon(kind),color);
+            }
+            HITS.putLast(hit,marker);
             map.labels().reserve(hit.x,hit.y,hit.width,hit.height);
             boolean node = kind.equals("station") || kind.equals("train");
             if (hovered || selected || (node && map.zoom() >= 1)) {
@@ -418,11 +427,14 @@ public final class LogisticsMapOverlay {
 
     /** Called inside the map's clipped rail layer, before markers and labels. */
     public static void renderRails(GuiGraphics graphics,CityMapPanel map) {
-        if (!hasSnapshot(map.dimensionId()) || session && !LAYERS.contains("line")) return;
-        UUID selected=focus;
-        if (selection!=null && "line".equals(selection.getString("Kind")) && selection.hasUUID("Id"))
-            selected=selection.getUUID("Id");
-        railBatch.draw(graphics,map,railMesh().dimension(map.dimensionId().toString()),selected,route!=null);
+        if (session && !LAYERS.contains("line")) return;
+        if (hasSnapshot(map.dimensionId())) {
+            UUID selected=focus;
+            if (selection!=null && "line".equals(selection.getString("Kind")) && selection.hasUUID("Id"))
+                selected=selection.getUUID("Id");
+            railBatch.draw(graphics,map,railMesh().dimension(map.dimensionId().toString()),selected,route!=null);
+        }
+        if (!session) com.example.examplemod.client.map.CityCartographyLayer.drawPassengerRails(graphics,map);
     }
 
     public static void cancelAutomaticFocus() { focusLocation=null; fitRoute=false; }

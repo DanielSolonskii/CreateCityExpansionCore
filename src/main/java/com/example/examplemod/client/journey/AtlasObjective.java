@@ -19,6 +19,7 @@ final class AtlasObjective {
     final long selectedAt = Util.getMillis();
     final NavigationLease lease;
     final JourneyModel.Marker marker;
+    JourneyModel.Point itineraryDestination;
     ResourceLocation dimension;
     UUID world;
     boolean lastKnown;
@@ -60,6 +61,7 @@ final class AtlasObjective {
 
     static NavigationLookup.Kind source(CityMapPanel.Selection value, ResourceLocation dim) {
         return switch (value.kind()) {
+            case CARTOGRAPHY -> NavigationLookup.Kind.CARTOGRAPHY;
             case PLACE -> NavigationLookup.Kind.PLACE;
             case CITY -> NavigationLookup.Kind.CITY;
             case PROJECT -> NavigationLookup.Kind.PROJECT;
@@ -85,6 +87,7 @@ final class AtlasObjective {
                                     com.example.examplemod.navigation.TripNetwork.Query query) {
         var goal=new AtlasObjective(value,dim,query.world(),null);
         goal.trip=query;
+        goal.itineraryDestination=goal.marker.point;
         return goal;
     }
 

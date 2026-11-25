@@ -15,7 +15,7 @@ public final class WorldMapPanelLifecycleCheck {
         if (!value) throw new AssertionError(message);
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws ReflectiveOperationException {
         SharedConstants.tryDetectVersion();
         LoadingModList.of(List.of(), List.of(), List.of(), List.of(), Map.of());
         Bootstrap.bootStrap();
@@ -56,6 +56,7 @@ public final class WorldMapPanelLifecycleCheck {
         var overview=new AtlasViewContext.State(87.5,-99,.75,true,"mine",1,2,false,3,"overview:CITIES",12,null,AtlasSearch.Tab.RECENT,3,null,"");
         screen.restoreView(overview);
         require(overview.equals(screen.captureView()),"actual screen restores camera, search, filters and card scroll");
+        checkWorkspaceInput(screen);
         var panel=new CityMapPanel(BlockPos.ZERO,dimension,List.of());
         var warning=new com.example.examplemod.city.CityProjectSnapshot(UUID.randomUUID(),
                 com.example.examplemod.city.CityProjectType.INDUSTRIAL_MINE,dimension,BlockPos.ZERO,
@@ -88,6 +89,49 @@ public final class WorldMapPanelLifecycleCheck {
         panel.receivePublicCities(List.of());
         require(panel.resolveSelection(target.kind(),target.id(),target.pos())==null,"removed city cannot restore an old card");
         session.clear();
-        System.out.println("PASS: loading-screen input and close, container ownership, bounded atlas navigation");
+        System.out.println("PASS: loading-screen input and close, container ownership, bounded atlas navigation, workspace hit tests and focus");
+    }
+
+    private static void checkWorkspaceInput(PolishedWorldMapScreen screen) throws ReflectiveOperationException {
+        screen.width=330;
+        screen.height=245;
+        set(screen,"searchOpen",false);
+        set(screen,"layersOpen",true);
+        set(screen,"focusSurface","layers");
+        var boundsMethod=PolishedWorldMapScreen.class.getDeclaredMethod("layersPopoverBounds");
+        boundsMethod.setAccessible(true);
+        var panel=(WorldMapUiLayout.Rect)boundsMethod.invoke(screen);
+        var overlap=new WorldMapUiLayout.Rect(panel.x()+5,panel.y()+8,26,16);
+        var buttons=PolishedWorldMapScreen.class.getDeclaredField("viewButtons");
+        buttons.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        var toolBounds=(List<WorldMapUiLayout.Rect>)buttons.get(screen);
+        toolBounds.add(overlap);
+        var click=PolishedWorldMapScreen.class.getDeclaredMethod("mouseClicked",double.class,double.class,int.class,boolean.class);
+        click.setAccessible(true);
+        double x=overlap.x()+1,y=overlap.y()+1;
+        require(Boolean.TRUE.equals(click.invoke(screen,x,y,0,false)),"layers header owns a click above a tool");
+        require(Boolean.TRUE.equals(click.invoke(screen,x,y,1,false)),"layers header consumes right-click too");
+        require(screen.mouseDragged(x,y,0,3,2),"drag over the popover does not reach the map");
+
+        var focusField=PolishedWorldMapScreen.class.getDeclaredField("keyboard");
+        focusField.setAccessible(true);
+        var focus=(AtlasFocus)focusField.get(screen);
+        var label=net.minecraft.network.chat.Component.literal("Layer");
+        int[] activations={0};
+        focus.add("layer.1",label,label,overlap,()->activations[0]++);
+        focus.move(false);
+        int enter=org.lwjgl.glfw.GLFW.GLFW_KEY_ENTER;
+        require(screen.keyPressed(enter,0,0) && activations[0]==0,"Enter cannot activate a row clipped into the header");
+        focus.begin();
+        var body=WorldMapUiLayout.layerBody(panel);
+        focus.add("layer.1",label,label,new WorldMapUiLayout.Rect(body.x()+5,body.y(),26,16),()->activations[0]++);
+        require(screen.keyPressed(enter,0,0) && activations[0]==1,"Enter activates the same row once it is visible");
+    }
+
+    private static void set(PolishedWorldMapScreen screen,String name,Object value) throws ReflectiveOperationException {
+        var field=PolishedWorldMapScreen.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(screen,value);
     }
 }

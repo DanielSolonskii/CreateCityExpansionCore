@@ -46,8 +46,22 @@ public final class ProjectCheck {
         for(int i=0;i<8;i++)require(ProjectNetworkHandlers.consumeRequestBudget(budget,1000),"requests within real-time budget allowed");
         require(!ProjectNetworkHandlers.consumeRequestBudget(budget,1999),"burst is still limited");
         require(ProjectNetworkHandlers.consumeRequestBudget(budget,2000),"budget recovers without advancing world time");
-        config();personal();treasury();permissions();failures();geometry();compatibility();cityGuards();codecs();clientSession();serverProjects();
+        config();personal();treasury();permissions();failures();geometry();compatibility();cityGuards();codecs();clientSession();serverProjects();retirement();
         System.out.println("PASS: "+checks+" City Projects lifecycle, money, save and security checks");
+    }
+    private static void retirement()throws Exception {
+        com.example.examplemod.places.PlaceRetirementCheck.run();
+        var load=EconomyManager.class.getDeclaredMethod("loadForStorage",CompoundTag.class,HolderLookup.Provider.class);
+        load.setAccessible(true);
+        for(var funding:List.of(Funding.TREASURY,Funding.PERSONAL)){
+            var f=new Fixture();var id=f.create(funding,300);
+            require(f.run(f.author,Action.PUBLISH,id).equals("ok"),"legacy funded project");
+            if(funding==Funding.TREASURY)require(f.run(f.admin,Action.APPROVE,id).equals("ok"),"legacy treasury approval");
+            for(int i=0;i<2;i++){
+                f.economy=(EconomyManager)load.invoke(null,f.economy.save(new CompoundTag(),null),null);
+                require(f.manager().all().isEmpty() && f.economy.wallet(f.author)==1000 && f.economy.treasury(f.city)==2000,"retirement refunds exactly once");
+            }
+        }
     }
     private static Actor publicActor(Fixture f,UUID player,boolean op,boolean conflict) {
         return new Actor(player,null,false,id->false,z->false,op,(city,representative)->city.equals(f.city)&&representative.equals(f.admin),z->conflict);
@@ -87,6 +101,18 @@ public final class ProjectCheck {
         require(f.manager().execute(op,serverCommand(f,Action.STAGE,id,ZERO,true,null)).equals("permission"),"unassigned OP cannot mark executor stage");
         require(f.manager().execute(player,serverCommand(f,Action.STAGE,id,ZERO,true,null)).equals("ok"),"outsider executor marks stages");
         require(f.manager().execute(player,serverCommand(f,Action.SUBMIT,id,ZERO,false,null)).equals("ok"),"outsider submits for OP review");
+        Project inReview=f.manager().get(id);
+        Actor secondOp=publicActor(f,f.admin,true,false);
+        var details=new Draft(Scope.SERVER,"Updated by another operator",inReview.description(),inReview.category(),
+                inReview.zone(),List.of(new Stage("Build",false)),inReview.funding(),inReview.reward());
+        var edit=serverCommand(f,Action.UPDATE,id,ZERO,false,details);
+        require(f.manager().execute(player,edit).equals("permission") && f.manager().execute(secondOp,edit).equals("ok"),
+                "Any server OP can edit an active project, including projects owned by another OP");
+        Project updated=f.manager().get(id);
+        require(updated.title().equals(details.title()) && updated.status()==Status.REVIEW && updated.stages().getFirst().done()
+                && updated.author().equals(inReview.author()) && updated.executor().equals(inReview.executor()) && updated.reserved()==500,
+                "Renaming through the editor retains the author, assigned executor, funding and completed stages");
+        require(f.manager().execute(secondOp,edit).equals("stale"),"Concurrent editors cannot overwrite a newer revision");
         require(f.economy.wallet(f.worker)==0,"stage and submission do not mint");
         require(f.manager().execute(publicActor(f,f.author,false,false),serverCommand(f,Action.ACCEPT,id,ZERO,false,null)).equals("permission"),"demoted OP author loses acceptance authority");
         require(f.manager().execute(op,serverCommand(f,Action.RETURN,id,ZERO,false,null)).equals("ok"),"OP returns to rework");
@@ -118,6 +144,15 @@ public final class ProjectCheck {
         var edited=new Draft(Scope.SERVER,"Edited public project",editable.description(),editable.category(),editable.zone(),editable.stages(),editable.funding(),2);
         require(budget.manager().execute(budgetOp,serverCommand(budget,Action.UPDATE,second,ZERO,false,edited)).equals("ok")&&budget.manager().get(second).reward()==2,"OP edits shared draft fields and budget");
         require(budget.manager().execute(budgetOp,serverCommand(budget,Action.PUBLISH,second,ZERO,false,null)).equals("ok")&&budget.manager().serverReserved()==2,"edited reward is reserved only on republishing");
+        Project open=budget.manager().get(second);
+        var move=new Draft(Scope.SERVER,open.title(),open.description(),open.category(),
+                new ProjectZone(DIM,ProjectZone.Shape.POINT,2000,2000,2000,2000),open.stages(),open.funding(),3);
+        Actor otherAdmin=publicActor(budget,budget.admin,true,true);
+        require(budget.manager().execute(otherAdmin,serverCommand(budget,Action.UPDATE,second,ZERO,false,move)).equals("conflict")
+                && budget.manager().get(second).equals(open),"Moving a published zone into claimed land requires explicit acknowledgement");
+        require(budget.manager().execute(otherAdmin,serverCommand(budget,Action.UPDATE,second,ZERO,true,move)).equals("ok")
+                && budget.manager().get(second).status()==Status.OPEN && budget.manager().serverReserved()==3,
+                "Changing the reward on an open project adjusts its reservation without withdrawing it");
         Fixture cityPay=new Fixture();UUID cityProject=serverDraft(cityPay,300);Actor cityOp=publicActor(cityPay,cityPay.author,true,false);
         cityPay.manager().execute(cityOp,serverCommand(cityPay,Action.PUBLISH,cityProject,ZERO,false,null));
         Actor representative=new Actor(cityPay.admin,cityPay.city,true,cityPay.members::contains,z->false,false,(city,who)->city.equals(cityPay.city)&&who.equals(cityPay.admin),z->false);

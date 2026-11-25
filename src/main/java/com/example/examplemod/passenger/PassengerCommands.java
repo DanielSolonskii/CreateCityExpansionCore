@@ -61,7 +61,7 @@ public final class PassengerCommands {
         return 1;
     }
     @SubscribeEvent public static void register(RegisterCommandsEvent event) {
-        var root = Commands.literal("passenger").executes(PassengerCommands::list);
+        var root = Commands.literal("passenger").requires(source -> source.hasPermission(2)).executes(PassengerCommands::list);
         root.then(Commands.literal("platform").executes(c -> mutate(c,p -> {
             PassengerService.platform(p,false); return text("platform_saved");
         })).then(Commands.literal("remove").executes(c -> mutate(c,p -> {

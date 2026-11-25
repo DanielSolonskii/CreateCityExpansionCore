@@ -4,6 +4,7 @@ import com.example.examplemod.cargo.*;
 import com.example.examplemod.cargo.center.*;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityMapSavedData;
+import com.example.examplemod.citymap.CityMapService;
 import com.example.examplemod.economy.EconomyManager;
 import com.example.examplemod.projects.ProjectManager;
 import com.example.examplemod.projects.ProjectNetworkHandlers;
@@ -17,23 +18,23 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.UUID;
 
 /** A single authorized observation, independent of open containers, camera and map subscriptions. */
-final class JourneyObjectLookup {
+public final class JourneyObjectLookup {
     private JourneyObjectLookup() {}
 
-    static CompoundTag read(ServerPlayer player, NavigationLookup query) {
-        var reply = new CompoundTag();
-        reply.putString("NavigationQuery", query.token());
+    public record Landmark(ResourceLocation dimension, BlockPos position, String title) {}
+
+    /** Uses the same access rules and coordinates as the live atlas objective. */
+    public static Landmark fixedLandmark(ServerPlayer player, NavigationLookup.Kind kind, UUID id) {
         var server = player.getServer();
-        var id = query.id();
-        switch (query.kind()) {
+        return switch (kind) {
             case CITY -> {
                 var city = CityManager.get(server.overworld()).getCity(id);
-                if (city != null) position(player, reply, city.getPylonDimension(), city.getPylonPos(), city.getName());
+                yield city == null ? null : new Landmark(city.getPylonDimension(), city.getPylonPos(), city.getName());
             }
             case INDUSTRY -> {
                 var city = CityManager.get(server.overworld()).getMemberCity(player.getUUID());
-                if (city != null) city.getProjects().stream().filter(p -> p.projectId().equals(id)).findFirst()
-                        .ifPresent(p -> position(player, reply, p.dimensionId(), p.controllerPos(), ""));
+                var project = city == null ? null : city.getProject(id);
+                yield project == null ? null : new Landmark(project.dimensionId(), project.controllerPos(), "");
             }
             case PROJECT -> {
                 var cities = CityManager.get(server.overworld());
@@ -42,9 +43,34 @@ final class JourneyObjectLookup {
                 var project = manager.get(id);
                 if (project != null && ProjectManager.visibleTo(actor, project)) {
                     var zone = project.zone();
-                    position(player, reply, zone.dimension(), new BlockPos(Math.floorDiv(zone.x1() + zone.x2(), 2), 0,
+                    yield new Landmark(zone.dimension(), new BlockPos(Math.floorDiv(zone.x1() + zone.x2(), 2), 0,
                             Math.floorDiv(zone.z1() + zone.z2(), 2)), project.title());
                 }
+                yield null;
+            }
+            case WAREHOUSE -> CargoWarehouseRegistry.get(server).find(id)
+                    .filter(w -> CargoWarehouseRegistry.permits(player, w))
+                    .map(w -> new Landmark(w.ticker().dimension(), w.ticker().pos(), w.name())).orElse(null);
+            default -> null;
+        };
+    }
+
+    static CompoundTag read(ServerPlayer player, NavigationLookup query) {
+        var reply = new CompoundTag();
+        reply.putString("NavigationQuery", query.token());
+        var server = player.getServer();
+        var id = query.id();
+        switch (query.kind()) {
+            case CARTOGRAPHY -> {
+                var feature = CityMapService.resolve(player, id);
+                if (feature != null) {
+                    var endpoint = feature.entrances().isEmpty() ? feature.anchor() : feature.entrances().getFirst();
+                    position(player, reply, feature.dimension(), endpoint, feature.label(street -> CityMapService.resolve(player, street)));
+                }
+            }
+            case CITY, INDUSTRY, PROJECT, WAREHOUSE -> {
+                var landmark = fixedLandmark(player, query.kind(), id);
+                if (landmark != null) position(player, reply, landmark.dimension(), landmark.position(), landmark.title());
             }
             case POINT -> {
                 var point = CargoPointRegistry.find(server, id).orElse(null);
@@ -64,9 +90,6 @@ final class JourneyObjectLookup {
                             place.station().getBlockEntityPos(), place.station().name);
                 }
             }
-            case WAREHOUSE -> CargoWarehouseRegistry.get(server).find(id)
-                    .filter(w -> CargoWarehouseRegistry.permits(player, w))
-                    .ifPresent(w -> position(player, reply, w.ticker().dimension(), w.ticker().pos(), w.name()));
             case TRAIN -> CargoTrainRegistry.find(server, id)
                     .filter(t -> CargoOwners.train(server, OwnerRef.player(player.getUUID()), t))
                     .ifPresent(t -> trainPosition(player, reply, id, t.displayName()));

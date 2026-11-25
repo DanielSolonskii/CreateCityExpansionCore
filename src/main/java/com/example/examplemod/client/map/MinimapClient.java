@@ -1,5 +1,6 @@
 package com.example.examplemod.client.map;
 import com.example.examplemod.network.*;
+import com.example.examplemod.citymap.CityMapNetwork;
 import com.example.examplemod.city.CityPublicProfile;
 import com.example.examplemod.client.CityPublicDirectory;
 import com.example.examplemod.client.ProjectClientState;
@@ -27,6 +28,9 @@ public final class MinimapClient {
  private static int expected,total;
  private static final List<CityPublicProfile> staging=new ArrayList<>();
  private static List<CityPublicProfile> cities=List.of();
+ private static MapViewBindings.Binding featureScope;
+ private static UUID featureRequest;
+ private static long nextFeatures;
  private static ProjectClientState.Marker focusedProject;
  private static UUID focusWorld,focusMember;
  private static long focusReceipt,focusRevocation;
@@ -57,6 +61,7 @@ public final class MinimapClient {
   if(viewId!=null && Minecraft.getInstance().getConnection()!=null)PacketDistributor.sendToServer(new CloseMapViewPayload(viewId));
   viewId=requestId=accepted=null;
   MapViewBindings.invalidate(true);
+  featureScope=null;featureRequest=null;nextFeatures=0;CityCartographyLayer.minimapFeatures(List.of());
   cancelDirectory();anchor=null;dimension=null;cities=List.of();focusedProject=null;nextRequest=0;
  }
  private static void createPanel(){
@@ -96,6 +101,16 @@ public final class MinimapClient {
    if(focusedProject!=null && (!Objects.equals(focusWorld,p.worldId())
            ||focusMember!=null&&!focusMember.equals(p.memberCityId())))focusedProject=null;
    MapViewBindings.confirm(true,p.anchor(),p.dimension(),p.viewId(),p.worldId());
+   var binding=MapViewBindings.binding(true,p.anchor(),p.dimension());
+   if(!binding.equals(featureScope)){
+    featureScope=binding;featureRequest=null;nextFeatures=0;CityCartographyLayer.minimapFeatures(List.of());
+   }
+   if(settings().cities && now>=nextFeatures && mc.getConnection().hasChannel(CityMapNetwork.Request.TYPE)){
+    featureRequest=UUID.randomUUID();nextFeatures=now+15000;
+    // The geometry-only protocol omits train positions, platforms and passenger tracks.
+    PacketDistributor.sendToServer(new CityMapNetwork.Request(featureRequest,binding.viewId(),binding.worldId(),
+            binding.dimension(),CityMapNetwork.ALL,CityMapNetwork.Action.LIST,CityMapNetwork.ALL,0,null));
+   }
    token=p.token();expected=0;total=p.total();staging.clear();
    if(lifecycle.panel()==null||!p.anchor().equals(anchor)||!p.dimension().equals(dimension)){
     cities=List.of();anchor=p.anchor();dimension=p.dimension();createPanel();
@@ -111,6 +126,14 @@ public final class MinimapClient {
  }
  public static boolean acceptsBorder(MapBorderPayload p){
   return p.viewId().equals(viewId) && p.requestId().equals(accepted) && p.dimension().equals(dimension);
+ }
+ static boolean receiveFeatures(CityMapNetwork.Reply reply){
+  if(!reply.nonce().equals(featureRequest))return false;
+  featureRequest=null;
+  if(featureScope!=null && featureScope.equals(MapViewBindings.binding(true,anchor,dimension))){
+   CityCartographyLayer.minimapFeatures("ok".equals(reply.status())?reply.features():List.of());
+  }
+  return true;
  }
  public static void tile(CityMapTilePayload p){
   var panel=lifecycle.panel();
@@ -128,6 +151,8 @@ public final class MinimapClient {
   g.fill(x+8,y-3,x+size-8,y-2,0xFFD1A75F);
   panel.renderMinimap(g,x,y,size,s.zoom);
   g.enableScissor(x,y,x+size,y+size);
+  if(s.cities && featureScope!=null && featureScope.equals(MapViewBindings.binding(true,anchor,dimension)))
+   CityCartographyLayer.drawMinimap(g,panel,x,y,size);
   if(s.cities)for(var city:cities){int cx=panel.worldToScreenX(city.pos().getX()),cy=panel.worldToScreenY(city.pos().getZ());
    if(cx<x-4||cy<y-4||cx>x+size+4||cy>y+size+4)continue;
    g.fill(cx-3,cy-3,cx+4,cy+4,0xF0192328);g.renderOutline(cx-2,cy-2,5,5,0xFF000000|city.colour());

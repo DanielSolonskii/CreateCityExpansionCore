@@ -103,7 +103,7 @@ public final class MapMarkerRenderer {
         if (warning) warningBadge(graphics, x + 19, y - 2);
     }
 
-    private static void warningBadge(GuiGraphics graphics, int x, int y) {
+    static void warningBadge(GuiGraphics graphics, int x, int y) {
         graphics.fill(x, y, x + 8, y + 8, WARNING);
         graphics.fill(x + 3, y + 1, x + 5, y + 5, BACKING);
         graphics.fill(x + 3, y + 6, x + 5, y + 7, BACKING);

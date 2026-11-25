@@ -1,4 +1,5 @@
 package com.example.examplemod;
+import com.example.examplemod.city.CityGazette;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityInvite;
 import com.example.examplemod.city.CityManager;
@@ -460,6 +461,9 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
      * Пульт управления доступом: открывает один блок города для ПКМ
      * любого игрока. Выключатель — повторное использование закрывает блок.
      */
+    public static final DeferredItem<com.example.examplemod.passenger.RailwayBinder> RAILWAY_BINDER =
+            ITEMS.registerItem("railway_binder",com.example.examplemod.passenger.RailwayBinder::new,new Item.Properties().stacksTo(1));
+
     public static final DeferredItem<Item> ACCESS_CONTROL_REMOTE =
             ITEMS.registerItem(
                     "access_control_remote",
@@ -1432,6 +1436,8 @@ registrar.playToServer(
                          * пилона останутся тёмными до перезагрузки чанка.
                          */
                         if (city == null) { reply.accept("occupied"); return; }
+                        CityGazette.get(serverPlayer.server).publish(CityGazette.Kind.FOUNDED, city.getId(), playerId,
+                                com.example.examplemod.auth.PlayerNames.name(serverPlayer), city.getName(), System.currentTimeMillis());
                         reply.accept("created");
                         CityPylonBlock.refreshActive(
                                 pylonLevel,
@@ -2012,6 +2018,8 @@ registrar.playToServer(
                         );
 
                         cityManager.setDirty();
+                        CityGazette.get(player.server).publish(CityGazette.Kind.JOINED, city.getId(), player.getUUID(),
+                                com.example.examplemod.auth.PlayerNames.name(player), city.getName(), System.currentTimeMillis());
 
                         CityInviteDirectory.reportOutcome(
                                 player.server,

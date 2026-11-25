@@ -18,6 +18,7 @@ final class AtlasPlaceEditor extends Screen {
     private final long version;
     private final AtlasPlace.Source source;
     private final boolean entranceOptional;
+    private final boolean previouslyPublic;
     private String name,description,notice="";
     private AtlasPlace.Category category;
     private BlockPos icon;
@@ -43,7 +44,8 @@ final class AtlasPlaceEditor extends Screen {
         description=existing==null?"":existing.description();
         category=existing==null?AtlasPlace.Category.OTHER:existing.category();
         icon=existing!=null?existing.icon():linked!=null?linked.pos():picked!=null?picked:player.blockPosition();
-        published=picked!=null || existing!=null&&existing.published();
+        previouslyPublic=existing!=null && existing.published();
+        published=picked!=null || previouslyPublic;
         entrances=new ArrayList<>(existing==null?List.of():existing.entrances());
         entranceOptional=picked!=null || existing!=null && source==null && entrances.isEmpty();
     }
@@ -75,8 +77,16 @@ final class AtlasPlaceEditor extends Screen {
         } else {
             nameBox=field(x,y+11,w,"name",AtlasPlace.NAME,name,v->name=v);
             noteBox=field(x,y+40,w,"description",AtlasPlace.DESCRIPTION,description,v->description=v);
-            button(x+20,y+61,h-20,tr("category."+AtlasPlaces.key(category)),()->{var kinds=AtlasPlace.Category.values();category=kinds[(category.ordinal()+1)%kinds.length];rebuildWidgets();},enabled);
-            button(x+h+4,y+61,w-h-4,tr(published?"public":"personal"),()->{published=!published;rebuildWidgets();},enabled);
+            button(x+20,y+61,h-20,tr("category."+AtlasPlaces.key(category)),()->{
+                var kinds=AtlasPlace.Category.values();
+                category=kinds[(category.ordinal()+1)%kinds.length];
+                if(category==AtlasPlace.Category.STATION && (minecraft.getConnection()==null ||
+                        !minecraft.getConnection().hasChannel(PlaceNetwork.CategorizedReply.TYPE))) category=kinds[0];
+                rebuildWidgets();
+            },enabled);
+            boolean canPublish=previouslyPublic || minecraft.player!=null && minecraft.player.hasPermissions(2);
+            var visibility=button(x+h+4,y+61,w-h-4,tr(published?"public":"personal"),()->{published=!published;rebuildWidgets();},enabled&&canPublish);
+            if(!canPublish)visibility.setTooltip(net.minecraft.client.gui.components.Tooltip.create(tr("status.publish_admin")));
             button(x,y+83,w,tr("icon_here",icon.getX(),icon.getZ()),()->{icon=minecraft.player.blockPosition();rebuildWidgets();},enabled&&source==null);
         }
         x-=6;w+=12;h=(w-4)/2;

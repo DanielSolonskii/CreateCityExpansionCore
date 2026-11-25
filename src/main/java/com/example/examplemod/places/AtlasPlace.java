@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 /** The icon represents a place on the atlas. Only surveyed feet positions may serve as entrances. */
 public record AtlasPlace(UUID id, UUID owner, long version, String name, Category category, String description,
                          ResourceLocation dimension, BlockPos icon, List<BlockPos> entrances, boolean published, Source source) {
-    public enum Category { HOME, SHOP, FACTORY, WAREHOUSE, MINE, PUBLIC, OTHER }
+    public enum Category { HOME, SHOP, FACTORY, WAREHOUSE, MINE, PUBLIC, OTHER, STATION }
     public enum SourceKind { CITY, PROJECT, WAREHOUSE }
     public record Source(SourceKind kind, UUID id) {
         public Source { Objects.requireNonNull(kind);Objects.requireNonNull(id); }

@@ -30,11 +30,24 @@ public final class JourneyMapLayer {
         Marker current = JourneyClient.displayTarget();
         boolean atlasObjective = !testing && editor == null && JourneyClient.hasAtlasGoal();
         String target=!testing && editor!=null?editor.selectedMarker():!atlasObjective && current!=null?current.id:"";
-        if (atlasObjective && current != null && current.point.dimension().equals(dim.toString())) {
+        var destination = atlasObjective ? JourneyClient.atlasMapDestination() : null;
+        if (current != null && destination != null && destination.dimension().equals(dim.toString())) {
             var steps=current.route;
             for(int i=1;i<steps.size();i++)line(g,map,steps.get(i-1),steps.get(i),0xd878d7c1);
-            int px=map.worldToScreenX(current.point.x()+.5), py=map.worldToScreenY(current.point.z()+.5);
-            if (px >= x && px < x+w && py >= y && py < y+h) {
+            if (JourneyClient.directAtlasBearing() && mc.player != null) {
+                var feet = mc.player.blockPosition();
+                line(g,map,new Point(dim.toString(),feet.getX(),feet.getY(),feet.getZ()),destination,BRASS);
+            }
+            double sx=map.worldToScreenXExact(destination.x()+.5), sy=map.worldToScreenZExact(destination.z()+.5);
+            boolean inside=sx>=x && sx<x+w && sy>=y && sy<y+h;
+            if (inside || hud && w>18 && h>18) {
+                if (!inside) {
+                    double cx=x+w/2.0, cy=y+h/2.0, dx=sx-cx, dy=sy-cy;
+                    double scale=Math.max(Math.abs(dx)/(w/2.0-8),Math.abs(dy)/(h/2.0-8));
+                    sx=cx+dx/scale;
+                    sy=cy+dy/scale;
+                }
+                int px=(int)Math.round(sx), py=(int)Math.round(sy);
                 int radius = hud ? 6 : 12;
                 JourneyAtlasStyle.line(g,px-radius,py,px,py-radius,BRASS);
                 JourneyAtlasStyle.line(g,px,py-radius,px+radius,py,BRASS);

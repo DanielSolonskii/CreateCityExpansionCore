@@ -5,7 +5,7 @@ gradle.projectsEvaluated {
     def navigation = p.hasProperty('mapNavigationChecks')
     def acceptance = p.hasProperty('mapAcceptanceChecks')
     def session = p.hasProperty('mapSessionChecks')
-    def expected = acceptance || session ? 1 : navigation ? 3 : industrial ? 3 : 1
+    def expected = acceptance || session ? 1 : navigation ? 4 : industrial ? 3 : 1
     def runDirectory = p.layout.buildDirectory.dir("checks/terrain-server/${UUID.randomUUID()}").get().asFile
     def fixture = p.sourceSets.create('foundationQa') {
         java.srcDirs = [p.file('src/mineVisualTest/java')]
@@ -14,7 +14,8 @@ gradle.projectsEvaluated {
         } else if (navigation || acceptance) {
             java.include('com/example/examplemod/navigation/JourneyTripGameTest.java',
                          'com/example/examplemod/passenger/PassengerRestartCheck.java')
-            if (!acceptance) java.include('com/example/examplemod/navigation/walk/WalkingGameTest.java',
+            if (!acceptance) java.include('com/example/examplemod/navigation/ProjectRouteGameTest.java',
+                                          'com/example/examplemod/navigation/walk/WalkingGameTest.java',
                                           'com/example/examplemod/places/AtlasPlaceGameTest.java')
         } else java.include('com/example/examplemod/city/TerrainSurfaceGameTest.java')
         if (industrial && !navigation && !acceptance && !session) {
@@ -41,6 +42,7 @@ gradle.projectsEvaluated {
     }
     def mods = p.tasks.register('prepareFoundationTestMods', Copy) {
         from(p.configurations.devRuntimeMods)
+        from(p.configurations.tfmgDevMod) { rename { 'tfmg-1.2.0.jar' } }
         from(p.file('libs/electroenergetics-1.21.1-1.1.2.jar'))
         into(new File(runDirectory, 'mods'))
         doLast {

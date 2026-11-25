@@ -40,7 +40,15 @@ final class PlaceBook extends SavedData {
         try {
             if(tag.getInt("Format")!=1 || !(tag.get("Places") instanceof ListTag list) || list.size()>MAX
                     || !list.isEmpty() && list.getElementType()!=Tag.TAG_COMPOUND)throw new IllegalArgumentException("Place format");
-            for(var entry:list){var p=AtlasPlace.load((CompoundTag)entry);if(data.entries.put(p.id(),p)!=null)throw new IllegalArgumentException("Duplicate place");}
+            for(var entry:list){
+                var p=AtlasPlace.load((CompoundTag)entry);
+                if(p.source()!=null && p.source().kind()==AtlasPlace.SourceKind.PROJECT){
+                    p=new AtlasPlace(p.id(),p.owner(),p.version(),p.name(),p.category(),p.description(),p.dimension(),
+                            p.icon(),p.entrances(),p.published(),null);
+                    data.setDirty();
+                }
+                if(data.entries.put(p.id(),p)!=null)throw new IllegalArgumentException("Duplicate place");
+            }
         } catch(RuntimeException invalid){data.entries.clear();data.unreadable=tag.copy();}
         return data;
     }

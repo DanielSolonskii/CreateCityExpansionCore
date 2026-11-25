@@ -52,6 +52,7 @@ final class NavigationMarkerProbe {
         var server=mc.getSingleplayerServer();var owner=mc.player.getUUID();
         job=server.submit(()->{
             var player=server.getPlayerList().getPlayer(owner);var level=player.serverLevel();
+            if(!player.hasPermissions(2))server.getPlayerList().op(player.getGameProfile());
             entrance=player.blockPosition();
             level.setBlockAndUpdate(entrance.below(),Blocks.STONE.defaultBlockState());
             level.setBlockAndUpdate(entrance,Blocks.AIR.defaultBlockState());
@@ -76,7 +77,10 @@ final class NavigationMarkerProbe {
                 if(ticks<8 || map==null)return false;
                 marker=entrance.offset(10,0,5);
                 int x=map.worldToScreenX(marker.getX()+.5),y=map.worldToScreenY(marker.getZ()+.5);
-                require(atlas.mouseClicked(x,y,1),"right click on free terrain opens a public place");
+                require(atlas.mouseClicked(x,y,1) && NavigationClientProbe.field(atlas,"atlasTool")==null,"plain right click keeps the atlas open");
+                var click=PolishedWorldMapScreen.class.getDeclaredMethod("mouseClicked",double.class,double.class,int.class,boolean.class);
+                click.setAccessible(true);
+                require((boolean)click.invoke(atlas,(double)x,(double)y,1,true),"shift and right click opens a public place");
                 atlas.mouseReleased(x,y,1);next(Step.EDIT);
             }
             case EDIT -> {

@@ -2,7 +2,8 @@
 gradle.projectsEvaluated {
     def project = gradle.rootProject
     def links = project.hasProperty('mapLinksOnly')
-    def ride = links || project.hasProperty('mapRideClient')
+    def editor = project.hasProperty('mapPassengerEditor')
+    def ride = links || editor || project.hasProperty('mapRideClient')
     def directory = project.file("build/map-stage6/client-${UUID.randomUUID()}")
     def probe = project.sourceSets.create('mapNavigationClientTest') {
         resources.srcDirs = []
@@ -18,7 +19,8 @@ gradle.projectsEvaluated {
         runtimeClasspath += project.sourceSets.main.runtimeClasspath
     }
     def markers = project.hasProperty('navigationMarkersOnly')
-    def scope = links ? 'links' : ride ? 'ride' : markers ? 'markers' : 'navigator'
+    def cityEditor = project.hasProperty('navigationCityEditor')
+    def scope = cityEditor ? 'city-editor' : editor ? 'editor' : links ? 'links' : ride ? 'ride' : markers ? 'markers' : 'navigator'
     [project.sourceSets.main, probe].each { set ->
             def output = project.file("build/map-stage6/${scope}-classes/${set.name}")
             set.java.destinationDirectory.set(output)
@@ -37,6 +39,7 @@ gradle.projectsEvaluated {
         systemProperty 'ccec.qa.dir', directory.canonicalPath
         if (ride) {
             systemProperty 'ccec.qa.interactiveRide', 'true'
+            systemProperty 'ccec.qa.passengerEditor', editor.toString()
             systemProperty 'ccec.qa.linksOnly', links.toString()
             systemProperty 'ccec.qa.interactiveRoot', directory.canonicalPath
         }
@@ -45,12 +48,14 @@ gradle.projectsEvaluated {
         systemProperty 'ccec.qa.dimensionOnly', project.providers.gradleProperty('navigationDimensionOnly').isPresent().toString()
         systemProperty 'ccec.qa.formsOnly', project.providers.gradleProperty('navigationFormsOnly').isPresent().toString()
         systemProperty 'ccec.qa.markersOnly', markers.toString()
+        systemProperty 'ccec.qa.cityEditor', cityEditor.toString()
         systemProperty 'ccec.qa.metricsOnly', project.providers.gradleProperty('navigationMetricsOnly').isPresent().toString()
         systemProperty 'ccec.qa.engineeringOnly', project.providers.gradleProperty('navigationEngineeringOnly').isPresent().toString()
     }
     project.tasks.named('prepareDevMods').configure { enabled = false }
     def assets = project.tasks.register('prepareMapNavigationClient', Copy) {
         from(project.configurations.devRuntimeMods)
+        from(project.configurations.tfmgDevMod)
         from(project.file('libs/electroenergetics-1.21.1-1.1.2.jar'))
         into(new File(directory,'mods'))
         doLast {

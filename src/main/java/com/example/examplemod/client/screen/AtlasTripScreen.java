@@ -26,14 +26,16 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.*;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-/** An embedded tool of the existing atlas. Only the accepted server itinerary can arm Journey. */
+/** A verified itinerary and a direct bearing are distinct ways to guide the player. */
 @EventBusSubscriber(modid="createcityexpansioncore",value=Dist.CLIENT)
 public final class AtlasTripScreen extends Screen {
     private static WeakReference<AtlasTripScreen> open = new WeakReference<>(null);
     private static TripRef customOrigin;
+    private static CityMapPanel.Selection originMarker;
     private static UUID originWorld;
     private static int heartbeats;
     private final PolishedWorldMapScreen atlas;
+    private final CityMapPanel map;
     private final ResourceLocation dimension;
     private final UUID world;
     private final CityMapPanel.Selection selected;
@@ -46,7 +48,7 @@ public final class AtlasTripScreen extends Screen {
     private boolean starting, handedOff;
     private CompoundTag response;
     private String status="loading";
-    private Button begin, nextOption;
+    private Button begin, nextOption, bearing;
     private record TextLine(FormattedCharSequence text,int paragraph,boolean first) {}
     private List<TextLine> wrapped = List.of();
     private CompoundTag wrappedResponse;
@@ -57,24 +59,30 @@ public final class AtlasTripScreen extends Screen {
 
     private AtlasTripScreen(PolishedWorldMapScreen atlas, CityMapPanel map, CityMapPanel.Selection selected,
                             TripRef start,TripRef goal,Mode mode) {
-        super(tr("title"));this.atlas=atlas;dimension=map.dimensionId();world=CityPublicDirectory.worldId(dimension);
+        super(tr("title"));this.atlas=atlas;this.map=map;dimension=map.dimensionId();world=CityPublicDirectory.worldId(dimension);
         this.selected=selected;this.goal=goal;this.origin=start;this.mode=mode;
     }
     public static void open(PolishedWorldMapScreen atlas, CityMapPanel map, CityMapPanel.Selection selected) {
+        openTo(atlas,map,selected,JourneyClient.routeReference(selected,map.dimensionId()));
+    }
+    static void openPlatform(PolishedWorldMapScreen atlas,CityMapPanel map,UUID id) {
+        openTo(atlas,map,null,new TripRef(TripRef.Kind.STATION,id));
+    }
+    private static void openTo(PolishedWorldMapScreen atlas, CityMapPanel map, CityMapPanel.Selection selected,TripRef destination) {
         var world=CityPublicDirectory.worldId(map.dimensionId());
         var origin=world!=null && world.equals(originWorld) && customOrigin!=null?customOrigin:TripRef.PLAYER;
-        var view=new AtlasTripScreen(atlas,map,selected,origin,JourneyClient.routeReference(selected,map.dimensionId()),Mode.MIXED);
+        var view=new AtlasTripScreen(atlas,map,selected,origin,destination,Mode.MIXED);
         atlas.openAtlasTool(view);open=new WeakReference<>(view);
     }
     public static void from(PolishedWorldMapScreen atlas, CityMapPanel map, CityMapPanel.Selection selected) {
         var key=JourneyClient.routeReference(selected,map.dimensionId());
         var mc=Minecraft.getInstance();
         if(selected.kind()==CityMapPanel.SelectionKind.PLAYER)key=TripRef.PLAYER;
-        if(key==null || key.kind()==TripRef.Kind.PIN){
+        if(key==null){
             if(mc.player!=null)mc.player.displayClientMessage(tr("state.entrance"),true);
             return;
         }
-        customOrigin=key;originWorld=CityPublicDirectory.worldId(map.dimensionId());
+        customOrigin=key;originMarker=selected;originWorld=CityPublicDirectory.worldId(map.dimensionId());
         if(mc.player!=null)mc.player.displayClientMessage(tr("origin_set",selected.title()),true);
     }
     public static boolean needsRecalculation(){return JourneyClient.needsTripUpdate();}
@@ -97,12 +105,16 @@ public final class AtlasTripScreen extends Screen {
         button(x,y,half,tr("mode."+mode.name().toLowerCase(Locale.ROOT)),()->{
             mode=Mode.values()[(mode.ordinal()+1)%Mode.values().length];restart();
         });
-        button(x+half+4,y,w-half-4,origin.equals(TripRef.PLAYER)?tr("player"):tr("reset_origin"),()->{origin=TripRef.PLAYER;customOrigin=null;restart();});
-        nextOption=addRenderableWidget(AtlasFormStyle.button(x,height-49,half,20,tr("next"),()->{
+        button(x+half+4,y,w-half-4,origin.equals(TripRef.PLAYER)?tr("player"):tr("reset_origin"),()->{origin=TripRef.PLAYER;customOrigin=null;originMarker=null;restart();});
+        int third=(w-8)/3;
+        button(x,height-49,third,tr("back"),this::onClose);
+        nextOption=addRenderableWidget(AtlasFormStyle.button(x+third+4,height-49,third,20,tr("next"),()->{
             index=(index+1)%Math.max(1,options().size());scroll=0;updateButtons();
         },false,false));
-        button(x+half+4,height-49,w-half-4,tr("refresh"),this::restart);
-        button(x,height-25,half,tr("back"),this::onClose);
+        button(x+2*third+8,height-49,w-2*third-8,tr("refresh"),this::restart);
+        bearing=addRenderableWidget(AtlasFormStyle.button(x,height-25,half,20,tr("bearing"),()->{
+            if (canFollowBearing() && JourneyClient.track(map,dimension,selected)) onClose();
+        },false,true));
         begin=addRenderableWidget(AtlasFormStyle.button(x+half+4,height-25,w-half-4,20,tr("begin"),()->{
             if(query==null || options().isEmpty() || starting)return;
             starting=true;status="starting";sent=Util.getMillis();send(query.action(Action.BEGIN,index));updateButtons();
@@ -116,16 +128,26 @@ public final class AtlasTripScreen extends Screen {
         status="loading";due=Math.max(Util.getMillis()+120,sent+850);rebuildWidgets();
     }
     private ListTag options(){return response==null?new ListTag():response.getList("Options",Tag.TAG_COMPOUND);}
+    private boolean canFollowBearing(){
+        var mc=Minecraft.getInstance();
+        return !starting && selected!=null && world!=null && mc.player!=null
+                && dimension.equals(mc.player.level().dimension().location()) && world.equals(CityPublicDirectory.worldId(dimension))
+                && JourneyClient.canTrack(map,dimension,selected);
+    }
     private void updateButtons(){
         if(begin!=null)begin.active=!starting && !options().isEmpty();
+        if(bearing!=null)bearing.active=canFollowBearing();
         if(nextOption!=null){nextOption.active=!starting && options().size()>1;
             nextOption.setMessage(options().isEmpty()?tr("next"):tr("variant",index+1,options().size()));}
     }
     private static void send(Query packet){if(available())PacketDistributor.sendToServer(packet);}
     private void cancelPreview(){if(query!=null && !handedOff)send(query.action(Action.CANCEL,0));}
     @Override public void tick(){
+        // Support and visibility may arrive after the embedded tool opens.
+        if (bearing!=null && Minecraft.getInstance().player!=null && Minecraft.getInstance().player.tickCount%10==0)
+            bearing.active=canFollowBearing();
         if(!available() || world==null || goal==null || goal.kind()==TripRef.Kind.PIN || origin.kind()==TripRef.Kind.PIN){
-            status=!available()?"unsupported":"entrance";return;
+            status=origin.kind()==TripRef.Kind.PIN || goal!=null && goal.kind()==TripRef.Kind.PIN?"bearing_only":!available()?"unsupported":"entrance";return;
         }
         var mc=Minecraft.getInstance();
         if(mc.level==null || !dimension.equals(mc.level.dimension().location()) || !world.equals(CityPublicDirectory.worldId(dimension))){
@@ -187,6 +209,18 @@ public final class AtlasTripScreen extends Screen {
         var lines=new ArrayList<Component>();
         if(!status.equals("options") || options().isEmpty()){
             lines.add(tr("state."+status));
+            if (bearing!=null && bearing.active && Minecraft.getInstance().player!=null) {
+                var start = Minecraft.getInstance().player.blockPosition();
+                if (!origin.equals(TripRef.PLAYER)) {
+                    var remote = originMarker == null ? null : map.resolveSelection(originMarker.kind(),originMarker.id(),originMarker.pos());
+                    start = remote == null ? null : remote.pos();
+                }
+                if (start != null) {
+                    long distance = Math.round(Math.hypot((double)selected.pos().getX()-start.getX(), (double)selected.pos().getZ()-start.getZ()));
+                    lines.add(tr("bearing_distance",distance));
+                }
+                lines.add(tr("bearing_hint"));
+            }
             if(response!=null && response.contains("KnownTo",Tag.TAG_LONG)){
                 var last=net.minecraft.core.BlockPos.of(response.getLong("KnownTo"));
                 lines.add(tr("known_to",last.getX(),last.getY(),last.getZ()));
@@ -194,7 +228,8 @@ public final class AtlasTripScreen extends Screen {
             return lines;
         }
         var option=options().getCompound(index);long time=response.getLong("Now");
-        lines.add(tr("between",response.getString("Origin"),response.getString("Goal")));
+        var goalTitle=response.getString("Goal");
+        lines.add(tr("between",response.getString("Origin"),goalTitle.isBlank() && selected!=null ? selected.title() : goalTitle));
         lines.add(tr("duration",seconds(option.getLong("Arrival")-time),option.getInt("Rides")));
         for(var el:option.getList("Steps",Tag.TAG_COMPOUND)){
             var row=(CompoundTag)el;
@@ -248,7 +283,7 @@ public final class AtlasTripScreen extends Screen {
         }
         super.render(g,mx,my,partial);
     }
-    @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event){open.clear();customOrigin=null;originWorld=null;heartbeats=0;}
+    @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event){open.clear();customOrigin=null;originMarker=null;originWorld=null;heartbeats=0;}
     @SubscribeEvent public static void tickGuidance(ClientTickEvent.Post event){
         if(++heartbeats%30!=0)return;
         var live=JourneyClient.itinerary();

@@ -2,6 +2,7 @@ package com.example.examplemod.client.map;
 
 import com.example.examplemod.client.screen.AtlasPlaces;
 import com.example.examplemod.places.AtlasPlace;
+import com.example.examplemod.projects.Project;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
@@ -9,9 +10,10 @@ import net.minecraft.resources.ResourceLocation;
 
 /** Pixel-art symbols shared by the map, its search results, the editor and the selected card. */
 public enum AtlasPlaceIcon {
-    HOME(0), SHOP(1), FACTORY(2), WAREHOUSE(3), MINE(4), PUBLIC(5), OTHER(6), PERSONAL(7);
+    HOME(0), SHOP(1), FACTORY(2), WAREHOUSE(3), MINE(4), PUBLIC(5), OTHER(6), PERSONAL(7),
+    STATION(8), TRAIN(9), CITY_PROJECT(10), SERVER_PROJECT(11);
 
-    private static final int CELL = 20, WIDTH = CELL * 8, HEIGHT = CELL * 4;
+    private static final int CELL = 20, WIDTH = CELL * values().length, HEIGHT = CELL * 4;
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(
             "createcityexpansioncore", "textures/gui/map/place_markers.png");
     private final int tile;
@@ -29,11 +31,27 @@ public enum AtlasPlaceIcon {
             case MINE -> MINE;
             case PUBLIC -> PUBLIC;
             case OTHER -> OTHER;
+            case STATION -> STATION;
+        };
+    }
+
+    public static AtlasPlaceIcon forProject(Project.Scope scope) {
+        return scope == Project.Scope.SERVER ? SERVER_PROJECT : CITY_PROJECT;
+    }
+
+    public static AtlasPlaceIcon forTransport(String kind) {
+        return switch (kind) {
+            case "station" -> STATION;
+            case "train" -> TRAIN;
+            case "warehouse" -> WAREHOUSE;
+            default -> null;
         };
     }
 
     public static AtlasPlaceIcon forSelection(CityMapPanel.Selection selection, ResourceLocation dimension) {
         if (selection == null) return null;
+        if (selection.kind() == CityMapPanel.SelectionKind.INDUSTRY) return MINE;
+        if (selection.atlasIcon() != null) return selection.atlasIcon();
         if (selection.kind() == CityMapPanel.SelectionKind.WAYPOINT) return PERSONAL;
         if (selection.kind() != CityMapPanel.SelectionKind.PLACE) return null;
         AtlasPlace place = AtlasPlaces.get(selection.id(), dimension);

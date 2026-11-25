@@ -11,25 +11,43 @@ import java.util.*;
 /** Only explicit publications and schedule ownership survive a restart. Observed timings require a fresh run. */
 final class PassengerData extends SavedData {
     static final int MAX_LINES = 12, MAX_PLATFORMS = 96;
-    record Platform(UUID id, UUID owner, ResourceLocation dimension, BlockPos entrance, BlockPos stationPos, UUID graph) {}
+    record Platform(UUID id, UUID owner, ResourceLocation dimension, BlockPos entrance, BlockPos stationPos, UUID graph, UUID feature) {
+        Platform withFeature(UUID feature) { return new Platform(id,owner,dimension,entrance,stationPos,graph,feature); }
+    }
     static final class Line {
         final UUID id, owner;
         final String name;
+        String description = "";
         final List<UUID> stops = new ArrayList<>();
-        UUID train, generation;
+        UUID train, generation, chosenTrain;
+        UUID trainOperator;
+        net.minecraft.world.item.DyeColor color = net.minecraft.world.item.DyeColor.ORANGE;
         CompoundTag schedule;
         PassengerTimetable clock;
         final long[] verifiedPlatforms = new long[PassengerTimetable.MAX_STOPS];
         String status = "checking";
         boolean verifiedDirection;
+        boolean firstServicePending = true;
         Line(UUID id, UUID owner, String name) {
             if (name.isBlank() || name.length() > 64) throw new IllegalArgumentException("line_name");
             this.id = id;
             this.owner = owner;
+            this.trainOperator = owner;
             this.name = name;
+        }
+        void changeDescription(String expected, String proposed) {
+            if (!validDescription(proposed)) throw new IllegalArgumentException("invalid_description");
+            String next = proposed.strip();
+            if (!description.equals(expected) && !description.equals(next)) throw new IllegalArgumentException("stale");
+            description = next;
+        }
+        private static boolean validDescription(String text) {
+            return text != null && text.length() <= PassengerService.MAX_DESCRIPTION &&
+                    text.codePoints().noneMatch(c -> Character.isISOControl(c) || c == 0xa7);
         }
         void release() {
             train = generation = null;
+            trainOperator = owner;
             schedule = null;
             clock = null;
             Arrays.fill(verifiedPlatforms,0);
@@ -55,7 +73,8 @@ final class PassengerData extends SavedData {
             for (var raw : list(root, "Platforms", Tag.TAG_COMPOUND, MAX_PLATFORMS)) {
                 var t = (CompoundTag) raw;
                 var p = new Platform(t.getUUID("Station"), t.getUUID("Owner"), ResourceLocation.parse(t.getString("Dimension")),
-                        BlockPos.of(t.getLong("Entrance")), BlockPos.of(t.getLong("StationPos")), t.getUUID("Graph"));
+                        BlockPos.of(t.getLong("Entrance")), BlockPos.of(t.getLong("StationPos")), t.getUUID("Graph"),
+                        t.hasUUID("Feature") ? t.getUUID("Feature") : null);
                 if (!t.contains("Entrance",Tag.TAG_LONG) || !t.contains("StationPos",Tag.TAG_LONG) ||
                         data.platforms.putIfAbsent(p.id(), p) != null) throw new IllegalArgumentException();
             }
@@ -63,6 +82,11 @@ final class PassengerData extends SavedData {
             for (var raw : list(root, "Lines", Tag.TAG_COMPOUND, MAX_LINES)) {
                 var t = (CompoundTag) raw;
                 var line = new Line(t.getUUID("Id"), t.getUUID("Owner"), t.getString("Name"));
+                line.firstServicePending = t.getBoolean("FirstServicePending");
+                String description = t.getString("Description");
+                if (Line.validDescription(description)) line.description = description.strip();
+                line.color = net.minecraft.world.item.DyeColor.byName(t.getString("Color"), line.color);
+                if (t.hasUUID("ChosenTrain")) line.chosenTrain=t.getUUID("ChosenTrain");
                 for (var node : list(t, "Stops", Tag.TAG_INT_ARRAY, PassengerTimetable.MAX_STOPS)) {
                     var id = NbtUtils.loadUUID(node);
                     if (!data.platforms.containsKey(id) || line.stops.contains(id)) throw new IllegalArgumentException();
@@ -70,6 +94,7 @@ final class PassengerData extends SavedData {
                 }
                 if (t.contains("Train")) {
                     line.train = t.getUUID("Train");
+                    if (t.hasUUID("TrainOperator")) line.trainOperator = t.getUUID("TrainOperator");
                     line.generation = t.getUUID("Generation");
                     line.schedule = t.getCompound("Schedule").copy();
                     line.clock = new PassengerTimetable(line.stops.size());
@@ -103,18 +128,24 @@ final class PassengerData extends SavedData {
             tag.putUUID("Station", p.id()); tag.putUUID("Owner", p.owner());
             tag.putString("Dimension", p.dimension().toString()); tag.putLong("Entrance", p.entrance().asLong());
             tag.putLong("StationPos",p.stationPos().asLong()); tag.putUUID("Graph",p.graph());
+            if (p.feature() != null) tag.putUUID("Feature",p.feature());
             places.add(tag);
         }
         root.put("Platforms", places);
         var services = new ListTag();
         for (var line : lines.values()) {
             var tag = new CompoundTag();
+            tag.putBoolean("FirstServicePending", line.firstServicePending);
             tag.putUUID("Id", line.id); tag.putUUID("Owner", line.owner); tag.putString("Name", line.name);
+            if (!line.description.isEmpty()) tag.putString("Description", line.description);
+            tag.putString("Color", line.color.getName());
+            if (line.chosenTrain!=null) tag.putUUID("ChosenTrain",line.chosenTrain);
             var stops = new ListTag();
             for (var stop : line.stops) stops.add(NbtUtils.createUUID(stop));
             tag.put("Stops", stops);
             if (line.train != null) {
                 tag.putUUID("Train", line.train); tag.putUUID("Generation", line.generation);
+                tag.putUUID("TrainOperator",line.trainOperator);
                 tag.put("Schedule", line.schedule.copy());
             }
             services.add(tag);

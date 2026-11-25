@@ -2,6 +2,7 @@ package com.example.examplemod.client.screen;
 
 import com.example.examplemod.client.ProjectClientState;
 import com.example.examplemod.client.map.CityMapPanel;
+import com.example.examplemod.client.map.AtlasPlaceIcon;
 
 import com.example.examplemod.network.*;
 import com.example.examplemod.projects.*;
@@ -31,6 +32,7 @@ final class ProjectPanel {
     private boolean saving;
     private int step,scroll,contentHeight,y,serial=-1,width,height,top;
     private UUID selected,editId,draftCity;
+    private long editRevision;
     private ProjectZone zone;
     private ProjectZone.Shape shape=ProjectZone.Shape.POINT;
     private Integer firstX,firstZ;
@@ -163,6 +165,7 @@ final class ProjectPanel {
         fields.clear();title=make(96,p==null?"":p.title());description=make(2048,p==null?"":p.description());
         stageText=make(2048,p==null?"":String.join("; ",p.stages().stream().map(Stage::title).toList()));reward=make(19,p==null?"0":Long.toString(p.reward()));
         reason=make(512,"");editing=true;saving=false;managementOpen=false;editId=p==null?null:p.id();selected=p==null?null:p.id();step=scroll=0;zone=p==null?null:p.zone();
+        editRevision=p==null?0:p.revision();
         category=p==null?Category.BUILDING:p.category();funding=p==null?(scope==Scope.SERVER?Funding.SERVER_ISSUANCE:Funding.FREE):p.funding();shape=zone==null?ProjectZone.Shape.POINT:zone.shape();picking=false;firstX=firstZ=null;validation="";
     }
     private void renderList() {
@@ -214,7 +217,10 @@ final class ProjectPanel {
             text(Component.literal(title.getValue()),WorldMapChrome.TEXT);text(Component.literal(description.getValue()),WorldMapChrome.MUTED);
             text(tr("funding."+funding.name().toLowerCase(Locale.ROOT)),WorldMapChrome.ACCENT);
             text(tr("reward_amount",funding==Funding.FREE?0:reward.getValue()),WorldMapChrome.TEXT);
-            text(tr("draft_hint"),WorldMapChrome.MUTED);button("save_draft",this::saveDraft,true);
+            var existing=selected();
+            boolean active=editId!=null && existing!=null && existing.status()!=Status.DRAFT;
+            text(tr(active?"active_edit_hint":"draft_hint"),WorldMapChrome.MUTED);
+            button(active?"save_changes":"save_draft",this::saveDraft,true);
         }
         if(step>0)button("back",()->{step--;scroll=0;unfocus();},false);
         if(step<3)button("next",()->{step++;scroll=0;unfocus();},true);
@@ -227,8 +233,13 @@ final class ProjectPanel {
             long amount=funding==Funding.FREE?0:Long.parseLong(reward.getValue());
             if(stages.size()>16||amount<0||amount>ProjectClientState.maximum||funding!=Funding.FREE&&funding!=Funding.SERVER_ISSUANCE&&amount==0||title.getValue().isBlank())throw new IllegalArgumentException();
             var draft=new ProjectManager.Draft(scope,title.getValue(),description.getValue(),category,zone,stages,funding,amount);
-            Project p=selected();if(editId!=null&&p==null){validation="stale";return;}
-            ProjectClientState.filter=ProjectClientState.typeFilter()*4;saving=true;send(editId==null?Action.CREATE:Action.UPDATE,p,null,0,false,"",draft);
+            Project p=selected();if(editId!=null&&(p==null || p.revision()!=editRevision)){validation="stale";return;}
+            boolean changedPublicZone=p!=null && p.scope()==Scope.SERVER && p.status()!=Status.DRAFT && !p.zone().equals(zone);
+            Runnable save=()->{
+                ProjectClientState.filter=ProjectClientState.typeFilter()*4;
+                saving=true;send(editId==null?Action.CREATE:Action.UPDATE,p,null,0,changedPublicZone,"",draft);
+            };
+            if(changedPublicZone)confirm(tr("change_zone_confirm"),save);else save.run();
         }catch(RuntimeException error){validation="invalid";}
     }
     private void renderDetails(Project p,float partial) {
@@ -268,6 +279,7 @@ final class ProjectPanel {
             else text(Component.literal((s.done()?"✓ ":"○ ")+s.title()),s.done()?0xFF86CFA0:WorldMapChrome.MUTED);
         }
         if(p.status().terminal())return;
+        if(server && manage && p.status()!=Status.DRAFT)button("edit",()->start(p),false);
         if(p.status()==Status.DRAFT&&manage) {
             button("edit",()->start(p),false);
             button(p.funding()==Funding.TREASURY?"request_funding":"publish",()->confirm(operationConfirm(p,tr("reserve_confirm",p.reward())),()->send(Action.PUBLISH,p,null,0,server&&!ProjectClientState.conflicts.getList(p.id().toString(),net.minecraft.nbt.Tag.TAG_STRING).isEmpty(),"",null)),true);
@@ -417,8 +429,7 @@ final class ProjectPanel {
         int color=ProjectMapStyle.color(marker.scope(),marker.status());boolean hover=box.contains(mouseX,mouseY);
         WorldMapChrome.rounded(g,box.x(),box.y(),box.width(),box.height(),5,chosen?0xFFECE8D5:hover?0xFF59686C:color);
         WorldMapChrome.rounded(g,box.x()+1,box.y()+1,box.width()-2,box.height()-2,4,WorldMapChrome.INSET);
-        int[] pixels=ProjectMapStyle.glyph(marker.scope(),marker.category(),marker.status());
-        for(int row=0;row<8;row++)for(int col=0;col<8;col++)if((pixels[row]&(1<<col))!=0)g.fill(x-4+col,z-4+row,x-3+col,z-3+row,color);
+        AtlasPlaceIcon.forProject(marker.scope()).draw(g, x-8, z-8, 16);
         mapHits.add(new MapHit(box,marker.id()));
         Font f=Minecraft.getInstance().font;
         if(!chosen&&!hover&&map.zoom()<.55)return;

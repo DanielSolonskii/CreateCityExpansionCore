@@ -93,7 +93,9 @@ public static EconomyManager get(ServerLevel anyLevel) {
 
     private static EconomyManager loadForStorage(CompoundTag root, HolderLookup.Provider registries) {
         try {
-            return load(root, registries);
+            var manager=load(root, registries);
+            manager.projects.retireSavedProjects();
+            return manager;
         } catch (RuntimeException failure) {
             EconomyManager unavailable = new EconomyManager();
             unavailable.unavailableData = root.copy();
@@ -173,7 +175,8 @@ private static void readUuidLongMap(CompoundTag root,String listKey,String idKey
         readCompanyAccounts(root,manager);
         manager.projects.load(root.getCompound("CityProjects"));manager.bank.load(root.getCompound("PersonalBank"));
         manager.cargo.load(root.getCompound("CargoCommerce"));
-        manager.loadingBalances=false;return manager;
+        manager.loadingBalances=false;
+        return manager;
     }
     @Override public CompoundTag save(CompoundTag root,HolderLookup.Provider registries){
         if(unavailableData!=null)return unavailableData.copy();

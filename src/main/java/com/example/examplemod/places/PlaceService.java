@@ -128,6 +128,7 @@ public final class PlaceService {
         if(actor instanceof FakePlayer)return "unavailable";
         var book=PlaceBook.get(actor.serverLevel().getServer());var old=book.entries.get(value.id());
         if(old!=null && !old.owner().equals(actor.getUUID()) || old==null && value.version()!=0)return "unavailable";
+        if(value.published() && (old==null || !old.published()) && !actor.hasPermissions(2))return "publish_admin";
         if(!actor.level().dimension().location().equals(value.dimension()) || old!=null && !old.dimension().equals(value.dimension()))return "dimension";
         if(value.source()!=null){
             var anchor=source(actor,value.dimension(),value.source(),true);

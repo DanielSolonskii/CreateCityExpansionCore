@@ -41,7 +41,7 @@ public final class WalkingGameTest {
         var leg=new WalkingRoutes.Leg(from,to);
         WalkingRoutes.find(actor,List.of(leg),ignored -> obsolete[0]=true);
         WalkingRoutes.find(actor,List.of(leg,new WalkingRoutes.Leg(unknown,unknown.east()),
-                new WalkingRoutes.Leg(from,from.east(120))),reply::set);
+                new WalkingRoutes.Leg(from,from.east(513))),reply::set);
         h.startSequence().thenWaitUntil(() -> h.assertTrue(reply.get()!=null,"Waiting for production walk queue"))
                 .thenExecute(() -> {
                     var results=reply.getAndSet(null);

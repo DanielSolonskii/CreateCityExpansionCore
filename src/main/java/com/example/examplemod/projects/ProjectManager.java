@@ -88,11 +88,19 @@ public final class ProjectManager {
                 state=Status.DRAFT;reserve=0;applications=List.of();note="";
             }
             case UPDATE -> {
-                if(!manage||state!=Status.DRAFT)return "permission";
+                if(!manage || !server && state!=Status.DRAFT)return "permission";
                 if(c.draft()==null||c.draft().scope()!=p.scope())return "invalid";
                 String error=validate(a,c.draft());if(!error.equals("ok"))return error;
-                Draft d=c.draft();p=new Project(p.id(),p.creationRequest(),p.scope(),p.city(),p.author(),d.title().strip(),d.description().strip(),d.category(),d.zone(),
-                        d.stages().stream().map(s->new Stage(s.title().strip(),false)).toList(),d.funding(),d.reward(),state,applications,assigned,0,false,p.revision(),note);
+                Draft d=c.draft();
+                if(state!=Status.DRAFT) {
+                    if(!p.zone().equals(d.zone()) && a.conflicts().test(d.zone()) && !c.done())return "conflict";
+                    if(d.reward()>reserve && d.reward()-reserve>serverAvailable())return "budget";
+                    reserve=d.reward();
+                }
+                stages=editedStages(stages,d.stages());
+                if(state==Status.REVIEW && stages.stream().anyMatch(stage->!stage.done()))state=Status.REWORK;
+                p=new Project(p.id(),p.creationRequest(),p.scope(),p.city(),p.author(),d.title().strip(),d.description().strip(),d.category(),d.zone(),
+                        stages,d.funding(),d.reward(),state,applications,assigned,reserve,false,p.revision(),note);
             }
             case PUBLISH -> {
                 if(!manage||state!=Status.DRAFT)return "permission";
@@ -176,6 +184,18 @@ public final class ProjectManager {
                 applications,assigned,reserve,paid,Math.addExact(p.revision(),1),note);
         projects.put(p.id(),updated);journal.record(p.id(),c.request(),a.player(),c.action().name(),updated.revision(),System.currentTimeMillis());accounts.dirty();return "ok";
     }
+    private static List<Stage> editedStages(List<Stage> original,List<Stage> proposed) {
+        var progress=new HashMap<String,ArrayDeque<Boolean>>();
+        for(var stage:original)progress.computeIfAbsent(stage.title(),key->new ArrayDeque<>()).add(stage.done());
+        var result=new ArrayList<Stage>();
+        for(var stage:proposed) {
+            String title=stage.title().strip();
+            var previous=progress.get(title);
+            result.add(new Stage(title,previous!=null && Boolean.TRUE.equals(previous.poll())));
+        }
+        return List.copyOf(result);
+    }
+
     private String validate(Actor a,Draft d) {
         if(d==null)return "invalid";
         boolean server=d.scope()==Scope.SERVER;
@@ -190,9 +210,24 @@ public final class ProjectManager {
         return applicant.kind()==ApplicantKind.CITY?server&&actor.representsCity().test(applicant.id(),applicant.representative())
                 :server||actor.member().test(applicant.representative());
     }
-    public net.minecraft.nbt.CompoundTag save(){var tag=ProjectCodec.save(all());tag.putLong("ServerIssued",serverIssued);tag.put("CommunityJournal",journal.save());return tag;}
+    private List<Project> issuanceReceipts=List.of();
+    public void retireSavedProjects() {
+        var old=all();
+        if(old.isEmpty())return;
+        for(var project:old) {
+            if(project.scope()!=Scope.CITY || project.reserved()==0)continue;
+            boolean treasury=project.funding()==Funding.TREASURY;
+            var payer=treasury?project.city():project.author();
+            if(!accounts.canCredit(treasury,payer,project.reserved()))throw new IllegalStateException("Project refund exceeds balance capacity");
+            accounts.credit(treasury,payer,project.reserved());
+        }
+        issuanceReceipts=old.stream().filter(p->p.scope()==Scope.SERVER && p.paid()).toList();
+        projects.clear();
+        if(old.size()!=issuanceReceipts.size())accounts.dirty();
+    }
+    public net.minecraft.nbt.CompoundTag save(){var records=new ArrayList<>(issuanceReceipts);records.addAll(all());var tag=ProjectCodec.save(records);tag.putLong("ServerIssued",serverIssued);tag.put("CommunityJournal",journal.save());return tag;}
     public void load(net.minecraft.nbt.CompoundTag tag) {
-        journal.load(tag.getCompound("CommunityJournal"));projects.clear();for(Project p:ProjectCodec.load(tag)) {
+        issuanceReceipts=List.of();journal.load(tag.getCompound("CommunityJournal"));projects.clear();for(Project p:ProjectCodec.load(tag)) {
             if(projects.putIfAbsent(p.id(),p)!=null)throw new IllegalStateException("Duplicate project in save");
         }
         long paid=projects.values().stream().filter(p->p.scope()==Scope.SERVER&&p.paid()).mapToLong(Project::reward).reduce(0,Math::addExact);

@@ -21,6 +21,14 @@ public final class CityMembershipService {
         else {if(!atPylon(p,city))return "pylon_required";if(action==Action.KICK?!mayKick(city,p.getUUID(),target):!mayTransfer(city,p.getUUID(),target))return "permission";}
         if(action==Action.TRANSFER){if(!city.transferOwnership(p.getUUID(),target))return "state";}else city.removeMember(target);
         manager.setDirty();events.record(receipt);
+        if (action == Action.TRANSFER) {
+            CityGazette.get(s).publish(CityGazette.Kind.LEADER,city.getId(),p.getUUID(),
+                    com.example.examplemod.auth.PlayerNames.name(p),city.getName(),
+                    com.example.examplemod.auth.PlayerNames.name(s,target),System.currentTimeMillis());
+        } else {
+            CityGazette.get(s).publish(CityGazette.Kind.LEFT, city.getId(), target,
+                    com.example.examplemod.auth.PlayerNames.name(s,target), city.getName(), System.currentTimeMillis());
+        }
         if(action!=Action.LEAVE)com.example.examplemod.community.CommunityInbox.get(s).add(target,request,action==Action.KICK?"city_removed":"city_owner",p.getUUID(),city.getId(),null,city.getName(),System.currentTimeMillis());CommunityData.get(s).audit(city.getId(),p.getUUID(),target,action==Action.KICK?"kicked":action==Action.LEAVE?"left":"ownership_transferred");
         // Close existing containers as well as revoking future interaction checks.
         var affected=s.getPlayerList().getPlayer(target);if(action!=Action.TRANSFER&&affected!=null&&(action==Action.KICK||affected.containerMenu!=affected.inventoryMenu))affected.closeContainer();

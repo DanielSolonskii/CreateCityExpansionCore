@@ -14,7 +14,7 @@ import static com.example.examplemod.navigation.walk.WalkingSnapshot.Passage;
 
 /** Incremental A* over cardinal walking steps and single-block climbs/descents. */
 final class WalkingSearch {
-    private static final int MAX_NODES = 2_048, MAX_PATH = 192, DETOUR = 12;
+    private static final int MAX_NODES = 2_048, MAX_PATH = MAX_HORIZONTAL + 128, DETOUR = 12;
     private record Node(BlockPos pos, Node parent, int cost, int remaining) {}
     private final PriorityQueue<Node> open = new PriorityQueue<>(Comparator
             .comparingInt((Node n) -> n.cost()+n.remaining()).thenComparingInt(Node::remaining));
@@ -28,7 +28,7 @@ final class WalkingSearch {
 
     void step(WalkingSnapshot terrain) {
         if (best == null) {
-            if (horizontal(leg.from(),leg.to()) > 96 || Math.abs((long)leg.from().getY()-leg.to().getY()) > 32) {
+            if (!leg.withinSearchRange()) {
                 finish(Status.LIMIT); return;
             }
             var start = terrain.stand(leg.from());

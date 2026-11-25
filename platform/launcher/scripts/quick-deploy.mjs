@@ -28,7 +28,8 @@ export function checkPlan(plan, expectedJar, modpack) {
     }
     const expected = [{path:'mods/createcityexpansioncore-1.0.2.jar',sha256:expectedJar}, ...modpack.install.filter(m=>m.server).map(m=>({path:'mods/'+m.name,sha256:m.sha256}))];
     if (plan.server.files.length !== expected.length || expected.some(e=>!plan.server.files.some(f=>f.path===e.path&&f.sha256===e.sha256))
-        || JSON.stringify([...plan.server.remove].sort((a,b)=>a.path.localeCompare(b.path))) !== JSON.stringify(modpack.serverRemove.map(m=>({path:'mods/'+m.name,expectedSha256:m.sha256})).sort((a,b)=>a.path.localeCompare(b.path)))) throw new Error('Unexpected modpack server diff');
+        || !canonicalBytes([...plan.server.remove].sort((a,b)=>a.path.localeCompare(b.path))).equals(
+          canonicalBytes(modpack.serverRemove.map(m=>({path:'mods/'+m.name,expectedSha256:m.sha256})).sort((a,b)=>a.path.localeCompare(b.path))))) throw new Error('Unexpected modpack server diff');
     return;
   }
   const changed = [...plan.client.added, ...plan.client.changed, ...plan.client.removed];

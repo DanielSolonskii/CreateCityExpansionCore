@@ -41,6 +41,7 @@ public final class RailNativeCheck {
         var point=new TravellingPoint(a,b,ab,0,false);var chosen=new ArrayList<TrackNode>();var control=train.navigation.control(point);double moved=point.travel(graph,cheapest.distance(),(g,options)->{var choice=control.apply(g,options);chosen.add(choice.getKey());return choice;});require(Math.abs(moved-cheapest.distance())<.001&&chosen.contains(f)&&!chosen.contains(c),"actual TravellingPoint follows approved fork");
         require(point.node1==d&&point.node2==e&&Math.abs(point.position-5)<.001,"native movement reaches real station offset");
         var split=node(graph,15,0);var left=new TrackEdge(b,split,null,null);var right=new TrackEdge(split,c,null,null);var original=RailGeometry.span(graph,paid,0,paid.getLength());require(Math.abs(original.overlap(RailGeometry.span(graph,left,0,left.getLength()))+original.overlap(RailGeometry.span(graph,right,0,right.getLength()))-paid.getLength())<.0001,"spatial claim survives straight-edge subdivision");
+        com.example.examplemod.passenger.PassengerRailMapCheck.run();
         System.out.println("PASS: "+checks+" actual Create graph/navigation/movement integration checks");
     }
 }

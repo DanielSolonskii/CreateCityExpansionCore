@@ -58,6 +58,10 @@ public final class NavigationRideProbe {
             ticks++;
             check(Util.getMillis()<deadline,"timeout, stage "+stage+" phase "+lastPhase+" feet "+(mc.player==null?"":mc.player.blockPosition()));
             if(mc.screen instanceof DailyRewardsScreen rewards){rewards.onClose();return;}
+            if(stage>=2 && Boolean.getBoolean("ccec.qa.passengerEditor")){
+                if(NavigationRideEditorProbe.tick(mc)){log("PASS");stage=-1;mc.stop();}
+                return;
+            }
             var atlas=mc.screen instanceof PolishedWorldMapScreen a?a:null;
             switch(stage){
                 case 0 -> {if(mc.screen instanceof TitleScreen title && mc.getOverlay()==null && ticks>20){

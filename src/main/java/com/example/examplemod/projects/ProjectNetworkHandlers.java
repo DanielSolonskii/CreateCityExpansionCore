@@ -34,6 +34,7 @@ public final class ProjectNetworkHandlers {
         CityManager cities=CityManager.get(player.getServer().overworld());City city=cities.getMemberCity(player.getUUID());
         CompoundTag out=new CompoundTag();out.putUUID("Request",payload.command().request());out.putInt("Filter",payload.filter());
         if(!consumeRequestBudget(player.getPersistentData(),net.minecraft.Util.getMillis())){reply(player,out,"busy",true);return;}
+        if(payload.command().action()!=ProjectManager.Action.REQUEST){reply(player,out,"retired",true);return;}
         var actor=actor(player,cities,city);out.putBoolean("Op",actor.op());
         int type=payload.filter()/4,statusFilter=payload.filter()%4;
         if(type==3&&!actor.op()){reply(player,out,"permission",true);return;}

@@ -21,6 +21,7 @@ public final class TripPlannerCheck {
     }
     private static void require(boolean x,String message){if(!x)throw new AssertionError(message);}
     public static void main(String[] args) {
+        com.example.examplemod.client.screen.PassengerLineEditorCheck.run();
         PassengerTimetableCheck.run();
         var late=ride(11,4,150,15,145);
         var first=ride(12,8,160,120,300);
@@ -48,7 +49,14 @@ public final class TripPlannerCheck {
         require(TripPlanner.solve(miss,walks,TripPlanner.Mode.MIXED,0).isEmpty(),"insufficient time to board");
         var direct=TripPlanner.survey(List.of(p(0)),List.of(p(4)),candidates,TripPlanner.Mode.WALK);
         require(direct.rides().isEmpty() && TripPlanner.solve(direct,walks,TripPlanner.Mode.WALK,0).getFirst().rides()==0,"walking alone uses verified geometry");
-        require(TripPlanner.survey(List.of(p(0)),List.of(p(110)),List.of(),TripPlanner.Mode.WALK).limited(),
+        var distant = TripPlanner.survey(List.of(p(0)),List.of(p(320)),List.of(),TripPlanner.Mode.WALK);
+        var longLeg = new Leg(p(0),p(320));
+        require(!distant.limited() && distant.legs().contains(longLeg) && longLeg.withinSearchRange(),
+                "long direct walk reaches the pedestrian search");
+        known(walks,0,320,80);
+        require(TripPlanner.solve(distant,walks,TripPlanner.Mode.WALK,0).getFirst().steps().getFirst().path().size()==321,
+                "a verified long path retains every walking step");
+        require(TripPlanner.survey(List.of(p(0)),List.of(p(513)),List.of(),TripPlanner.Mode.WALK).limited(),
                 "an entrance outside the walking search is a budget limit");
         var feet=new MockObservation();
         var follow=new TripProgress(options.getFirst());

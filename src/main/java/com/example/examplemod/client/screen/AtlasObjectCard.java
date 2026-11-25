@@ -8,9 +8,14 @@ import java.util.List;
 final class AtlasObjectCard {
     enum Action { TRACK, STOP, PROJECT, CARGO, CENTER, REMOVE_PIN, EDIT_CITY, ALLIANCE, RELATIONS,
         DIRECTIONS, DIRECT, ORIGIN_STATION, DESTINATION_STATION, BACK_TO_OBJECT, INSPECT_SHIPMENT,
-        ROUTE, FROM, EDIT_PLACE, FAVORITE_PLACE, UNFAVORITE_PLACE, SHARE_PLACE, LINK_PLACE }
-    record Row(Action action, String unavailable, com.example.examplemod.client.logistics.StationDirections.Landmark station) {
-        Row(Action action, String unavailable) { this(action, unavailable, null); }
+        ROUTE, FROM, EDIT_PLACE, FAVORITE_PLACE, UNFAVORITE_PLACE, SHARE_PLACE, LINK_PLACE, EDIT_CARTOGRAPHY, TO_PLATFORM,
+        SHOW_PASSENGER_LINE, SHOW_PASSENGER_TRAIN }
+    record Row(Action action, String unavailable, com.example.examplemod.client.logistics.StationDirections.Landmark station,
+               com.example.examplemod.passenger.PassengerService.Stop platform) {
+        Row(Action action, String unavailable) { this(action, unavailable, null, null); }
+        Row(Action action, String unavailable, com.example.examplemod.client.logistics.StationDirections.Landmark station) {
+            this(action,unavailable,station,null);
+        }
         boolean enabled() { return unavailable.isEmpty(); }
     }
 

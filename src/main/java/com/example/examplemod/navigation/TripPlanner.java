@@ -12,7 +12,6 @@ import net.minecraft.core.BlockPos;
 public final class TripPlanner {
     public enum Mode { WALK, MIXED, FEWER }
     public static final int BOARD_TICKS = 60;
-    private static final int WALK_RANGE = 96;
     public record Step(List<BlockPos> path, Ride ride, long start, long end) {
         public boolean walking() { return ride == null; }
     }
@@ -51,7 +50,9 @@ public final class TripPlanner {
         limited |= addPairs(pairs, starts, stops, 8, false);
         limited |= addPairs(pairs, stops, goals, 8, false);
         limited |= addPairs(pairs, stops, stops, 32 - pairs.size(), true);
-        return new Survey(starts, goals, rides, List.copyOf(pairs), limited);
+        // Verify short station approaches before a long direct walk consumes the shared tick budget.
+        var ordered = pairs.stream().sorted(Comparator.comparingDouble(TripPlanner::distance)).toList();
+        return new Survey(starts, goals, rides, ordered, limited);
     }
 
     private static boolean addPairs(Set<Leg> pairs, Collection<BlockPos> from, Collection<BlockPos> to,
@@ -63,7 +64,7 @@ public final class TripPlanner {
             if (transfers && a.equals(b)) continue;
             var leg = new Leg(a,b);
             if (pairs.contains(leg)) continue;
-            if (distance(leg) <= WALK_RANGE * WALK_RANGE) candidates.add(leg);
+            if (leg.withinSearchRange()) candidates.add(leg);
             else outside = true;
         }
         candidates.sort(Comparator.comparingDouble(TripPlanner::distance).thenComparing(l -> l.from().asLong()).thenComparing(l -> l.to().asLong()));

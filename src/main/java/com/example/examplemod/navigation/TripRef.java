@@ -6,7 +6,7 @@ import net.minecraft.network.FriendlyByteBuf;
 
 /** A source reference carries no coordinates or access claims from the client. */
 public record TripRef(Kind kind, UUID id) {
-    public enum Kind { PLAYER, PLACE, CITY, PROJECT, INDUSTRY, STATION, WAREHOUSE, POINT, TRAIN, SHIPMENT, OFFER, DEMAND, INTAKE, ROAD, PIN }
+    public enum Kind { PLAYER, PLACE, CITY, PROJECT, INDUSTRY, STATION, WAREHOUSE, POINT, TRAIN, SHIPMENT, OFFER, DEMAND, INTAKE, ROAD, PIN, CARTOGRAPHY }
     public static final TripRef PLAYER = new TripRef(Kind.PLAYER, new UUID(0, 0));
     public String source() { return kind.name().toLowerCase(Locale.ROOT); }
     void write(FriendlyByteBuf b) { b.writeEnum(kind); b.writeUUID(id); }

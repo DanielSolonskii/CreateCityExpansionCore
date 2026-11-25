@@ -75,6 +75,62 @@ final class WorldMapUiLayout {
         }
     }
 
+    record Workspace(Rect map, Rect inspector, Rect legend) {}
+
+    static boolean compactWorkspaceTools(int width, int height, int[] labels) {
+        int required = 0;
+        for (int label : labels) required += label + SECTION;
+        return height < 320 || required + Math.max(0, labels.length - 1) * MICRO > width - EDGE * 2;
+    }
+
+    static java.util.List<Rect> workspaceTools(int width, int height, int headerBottom, int[] labels) {
+        int available = Math.max(1, width - EDGE * 2);
+        boolean compact = compactWorkspaceTools(width, height, labels);
+        var result = new java.util.ArrayList<Rect>(labels.length);
+        int x = EDGE, y = headerBottom + NORMAL;
+        for (int label : labels) {
+            int w = Math.min(available, compact ? BUTTON_HEIGHT : label + SECTION);
+            if (x > EDGE && x + w > EDGE + available) {
+                x = EDGE;
+                y += BUTTON_HEIGHT + MICRO;
+            }
+            result.add(new Rect(x,y,w,BUTTON_HEIGHT));
+            x += w + MICRO;
+        }
+        return result;
+    }
+
+    static Workspace workspace(int width, int height, int toolsBottom, int mapHintHeight, boolean pinned) {
+        int bottom = Math.max(1, statusStrip(width,height).y() - MICRO);
+        int top = Math.clamp(toolsBottom + NORMAL,0,bottom - 1);
+        int divider = contextPanelLeft(width);
+        int mapTop = Math.min(bottom - 1,top + Math.max(0,mapHintHeight));
+        var map = new Rect(EDGE,mapTop,Math.max(1,divider - EDGE - NORMAL),bottom - mapTop);
+
+        int minimumLegend = COMPACT_LEGEND_HEADER + LEGEND_ROW;
+        int reservedForCard = pinned ? CARD_HEADER + 96 : OVERVIEW_HEADER + SUMMARY_ROW_HEIGHT + 1;
+        int legendSpace = bottom - top - NORMAL - reservedForCard;
+        Rect legend = null;
+        if (legendSpace >= minimumLegend) {
+            int legendHeight = Math.min(legend(width,height).height(),legendSpace);
+            legend = new Rect(divider,bottom - legendHeight,contextPanelWidth(width),legendHeight);
+        }
+        int cardBottom = legend == null ? bottom : legend.y() - NORMAL;
+        var inspector = new Rect(divider,top,contextPanelWidth(width),cardBottom - top);
+        return new Workspace(map,inspector,legend);
+    }
+
+    static Rect visiblePart(Rect control, Rect clip) {
+        int x = Math.max(control.x(),clip.x()), y = Math.max(control.y(),clip.y());
+        return new Rect(x,y,Math.max(0,Math.min(control.right(),clip.right()) - x),
+                Math.max(0,Math.min(control.bottom(),clip.bottom()) - y));
+    }
+
+    static Rect layerBody(Rect panel) {
+        int y = Math.min(panel.bottom(),panel.y() + POPOVER_HEADER);
+        return new Rect(panel.x(),y,panel.width(),panel.bottom() - y);
+    }
+
     // ------------------------------------------------------------ responsive decisions
 
     /** Mode names have priority over secondary utility labels. */
@@ -303,8 +359,9 @@ final class WorldMapUiLayout {
         return new Rect((screenWidth - width) / 2, Math.max(EDGE, screenHeight - 48), width, 18);
     }
 
-    static final int CARD_PADDING=12, CARD_HEADER=58, STATUS_HEIGHT=22, FACT_GAP=8;
-    static final int SUMMARY_ROW_HEIGHT=32, SUMMARY_ROW_PITCH=40;
+    static final int CARD_PADDING=12, CARD_HEADER=44, STATUS_HEIGHT=22, FACT_GAP=8;
+    static final int OVERVIEW_HEADER=28;
+    static final int SUMMARY_ROW_HEIGHT=24, SUMMARY_ROW_PITCH=28;
     static final int ACTION_HEIGHT=24, ACTION_PITCH=30, LEGEND_ROW=18, LEGEND_HEADER=30;
     static final int COMPACT_LEGEND_HEADER=22;
     static int utilityGroupExtra(int width){return width>=320?MICRO:0;}
@@ -324,8 +381,11 @@ final class WorldMapUiLayout {
                 legend.width()-2*CARD_PADDING,LEGEND_ROW);
     }
     static Rect cardScrollTrack(Rect panel) {
-        int top=Math.min(panel.bottom(),panel.y()+CARD_HEADER);
-        return new Rect(panel.right()-5,top,2,Math.max(0,panel.bottom()-CARD_PADDING-top));
+        return inspectorScrollTrack(panel,CARD_HEADER,CARD_PADDING);
+    }
+    static Rect inspectorScrollTrack(Rect panel,int header,int bottomInset) {
+        int top=Math.min(panel.bottom(),panel.y()+header);
+        return new Rect(panel.right()-5,top,2,Math.max(0,panel.bottom()-bottomInset-top));
     }
     static Rect cardBody(Rect panel) {
         int bottom=Math.max(panel.y(),panel.bottom()-1);
@@ -333,7 +393,10 @@ final class WorldMapUiLayout {
         return new Rect(panel.x()+1,top,Math.max(0,panel.width()-2),bottom-top);
     }
     static Rect cardScrollThumb(Rect panel,int scroll,int maxScroll) {
-        var track=cardScrollTrack(panel);int h=Math.min(track.height(),Math.max(12,track.height()*track.height()/Math.max(1,track.height()+maxScroll)));
+        return scrollThumb(cardScrollTrack(panel),scroll,maxScroll);
+    }
+    static Rect scrollThumb(Rect track,int scroll,int maxScroll) {
+        int h=Math.min(track.height(),Math.max(12,track.height()*track.height()/Math.max(1,track.height()+maxScroll)));
         return new Rect(track.x(),track.y()+(track.height()-h)*Math.max(0,Math.min(scroll,maxScroll))/Math.max(1,maxScroll),track.width(),h);
     }
     static Rect cardAction(Rect panel,int top,int index) {

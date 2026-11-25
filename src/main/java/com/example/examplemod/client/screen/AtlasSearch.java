@@ -7,6 +7,7 @@ import com.example.examplemod.client.ProjectClientState;
 import com.example.examplemod.client.journey.JourneyClient;
 import com.example.examplemod.client.logistics.LogisticsMapOverlay;
 import com.example.examplemod.client.map.CityMapPanel;
+import com.example.examplemod.client.map.AtlasPlaceIcon;
 import com.example.examplemod.projects.Project;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -16,7 +17,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 public final class AtlasSearch {
-    public enum Type { ALL, CITY, STATION, INDUSTRY, PROJECT, WAYPOINT, LOGISTICS, JOURNEY, COORDINATES, TRADE, PLACE }
+    public enum Type { ALL, CITY, STATION, INDUSTRY, PROJECT, WAYPOINT, LOGISTICS, JOURNEY, COORDINATES, TRADE, PLACE, CARTOGRAPHY }
     public enum Tab { ALL, FAVORITES, RECENT, VIEWS }
     enum Arrival { READY, WAIT, EXPIRED }
     static Arrival arrival(UUID requestedView,UUID activeView,ResourceLocation requestedDimension,ResourceLocation activeDimension,
@@ -57,7 +58,7 @@ public final class AtlasSearch {
                 pos,marker.city()!=null&&marker.city().equals(ProjectClientState.city),
                 List.of(Component.translatable("gui.createcityexpansioncore.projects.status."+marker.status().name().toLowerCase(Locale.ROOT)),
                         Component.translatable("gui.createcityexpansioncore.projects.scope."+marker.scope().name().toLowerCase(Locale.ROOT))),
-                ItemStack.EMPTY, marker.status()==Project.Status.REWORK);
+                ItemStack.EMPTY, marker.status()==Project.Status.REWORK, AtlasPlaceIcon.forProject(marker.scope()));
     }
     public static CityMapPanel.Selection projectSelection(UUID id, ResourceLocation dimension) {
         for (var marker:ProjectClientState.mapMarkers())
@@ -88,6 +89,11 @@ public final class AtlasSearch {
             rows.add(new Entry(Type.TRADE,row.id().toString(),row.title().getString(),row.place(),dim,row.pos(),false,false,row.selection()));
         }
         for(var place:AtlasPlaces.selections(dim))rows.add(entry(Type.PLACE,place,place.details().getFirst().getString(),dim));
+        for(var feature:com.example.examplemod.client.map.CityMapFeatures.all(dim)){
+            var selection=com.example.examplemod.client.map.CityCartographyLayer.selection(feature);
+            var city=CityPublicDirectory.profile(feature.city());
+            if(selection!=null)rows.add(entry(Type.CARTOGRAPHY,selection,city==null?"":city.name(),dim));
+        }
         for(var marker:JourneyClient.markers.values()) {
             if(!marker.onMap||!marker.enabled) continue;
             var point=marker.point;
@@ -111,11 +117,18 @@ public final class AtlasSearch {
             }
         }
         for(var item:catalog) {
-            if(type!=Type.ALL&&item.type!=type || problems&&!item.warning || owner!=0&&item.own!=(owner==1)) continue;
+            var drawn=item.type==Type.CARTOGRAPHY && item.selection!=null
+                    ? com.example.examplemod.client.map.CityMapFeatures.get(item.selection.id()):null;
+            boolean drawnStation=drawn!=null && drawn.kind()==com.example.examplemod.citymap.CityMapFeature.Kind.STATION;
+            if(type!=Type.ALL&&item.type!=type && !(type==Type.STATION && drawnStation)
+                    || problems&&!item.warning || owner!=0&&item.own!=(owner==1)) continue;
             if(tab==Tab.FAVORITES && (library==null||!library.favorite(item.key()))
                     ||tab==Tab.RECENT && (library==null||library.recency(item.key())<0)) continue;
             if(!needle.isEmpty()&&!item.name.toLowerCase(Locale.ROOT).contains(needle)
                     &&!item.city.toLowerCase(Locale.ROOT).contains(needle)&&!item.dimension.toString().contains(needle)
+                    && !(drawn!=null && (drawn.description().toLowerCase(Locale.ROOT).contains(needle) ||
+                        Component.translatable("gui.createcityexpansioncore.city_editor.kind."+drawn.kind().name().toLowerCase(Locale.ROOT))
+                                .getString().toLowerCase(Locale.ROOT).contains(needle)))
                     && !(item.type==Type.PLACE && ("place:"+item.id).equals(needle))
                     && !(item.type==Type.TRADE && AtlasTradeDirectory.matches(item.id,dimension,needle))) continue;
             matches.add(item);

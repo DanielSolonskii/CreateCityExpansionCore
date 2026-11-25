@@ -2,6 +2,12 @@ package com.example.examplemod.navigation;
 
 import com.example.examplemod.city.CityMapSavedData;
 import com.example.examplemod.city.CityManager;
+import com.example.examplemod.city.CityPlot;
+import com.example.examplemod.city.CityPublicAtlas;
+import com.example.examplemod.citymap.CityMapFeature;
+import com.example.examplemod.citymap.CityMapNetwork;
+import com.example.examplemod.citymap.CityMapService;
+import com.example.examplemod.network.RequestCityWorldMapPayload;
 import com.example.examplemod.economy.EconomyManager;
 import com.example.examplemod.projects.*;
 import com.example.examplemod.network.ProjectPlanRequest;
@@ -111,6 +117,12 @@ public final class JourneyTripGameTest {
     private CompoundTag reply;
     private String observedPhase="";
     private UUID lastVehicle;
+    private boolean reachedStationEntrance;
+    private record DistrictWalk(ServerPlayer rider, TripNetwork.Query query, BlockPos bend, BlockPos vestibule,
+                                BlockPos boarding, BlockPos otherBoarding, String selectedName) {}
+    private DistrictWalk districtWalk;
+    private CompoundTag districtReply;
+    private boolean districtBegan;
 
     private JourneyTripGameTest(GameTestHelper test) {
         this.test=test;level=test.getLevel();interactiveRun=Boolean.getBoolean("ccec.qa.interactiveRide");
@@ -157,7 +169,19 @@ public final class JourneyTripGameTest {
         }
         var profile=new com.mojang.authlib.GameProfile(UUID.randomUUID(),"AtlasSurveyor");
         member=new ServerPlayer(level.getServer(),level,profile,ClientInformation.createDefault());
+        var commands = level.getServer().getCommands().getDispatcher().getRoot().getChild("ccec").getChild("passenger");
+        test.assertTrue(!commands.canUse(member.createCommandSourceStack()),"Passenger setup commands require OP");
+        try {
+            PassengerService.create(member,"Unauthorized");
+            throw new AssertionError("Non-OP created a line");
+        } catch (IllegalArgumentException denied) {
+            test.assertTrue("op_required".equals(denied.getMessage()),"Line creation requires OP");
+        }
         level.getServer().getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(actor.getGameProfile(),2,false));
+        if(interactiveRun && Boolean.getBoolean("ccec.qa.passengerEditor")){
+            prepareEditor();
+            return;
+        }
         place(home,start);place(shop,goal);standAt(start);
         var viewId=UUID.randomUUID();
         com.example.examplemod.city.CityPublicAtlas.open(actor,new com.example.examplemod.network.RequestCityWorldMapPayload(viewId,UUID.randomUUID()));
@@ -196,9 +220,12 @@ public final class JourneyTripGameTest {
                 })
                 .thenExecute(()->checked("Passenger services",()->trains.forEach(this::launch)))
                 .thenWaitUntil(()-> {
+                    test.assertTrue(interactiveRun || reachedStationEntrance, "City station route ends at its saved passenger entrance");
                     var visible=PassengerService.departures(member).stream().map(PassengerService.Ride::line).distinct().toList();
                     test.assertTrue(visible.containsAll(lines.values()),"Both public services must complete their own cycle");
                 })
+                .thenExecute(() -> { if (!interactiveRun) checked("Linked district and two physical platforms", this::checkDistrict); })
+                .thenWaitUntil(() -> { if (!interactiveRun) verifyDistrict(); })
                 .thenExecute(()->{standAt(start);if(interactiveRun)openInteractive();else request(TripPlanner.Mode.MIXED);})
                 .thenWaitUntil(()->test.assertTrue(interactiveRun || reply!=null && "options".equals(reply.getString("State")),"Mixed options: "+reply))
                 .thenExecute(()->{if(!interactiveRun)choose();})
@@ -219,6 +246,75 @@ public final class JourneyTripGameTest {
         var parcel=delivery.parcelPositions().getFirst().getUUID("Id");
         interactive=new Interactive(driver.getUUID(),home,shop,start,goal,rails,project,delivery.id(),parcel);
         System.out.println("QA interactive ready client="+driver.getUUID()+" places="+home+"/"+shop+" rails="+rails);
+    }
+    private void prepareEditor(){
+        var driver=level.getServer().getPlayerList().getPlayers().getFirst();
+        var players = level.getServer().getPlayerList();
+        players.op(driver.getGameProfile());
+        players.sendPlayerPermissionLevel(driver);
+        var s=trains.keySet().iterator().next();
+        test.startSequence()
+                .thenWaitUntil(()->test.assertTrue(s.a.getStation()!=null && s.b.getStation()!=null,"Editor stations"))
+                .thenExecute(()->checked("Assemble editor train",()->assemble(s,driver.getUUID())))
+                .thenWaitUntil(()->test.assertTrue(s.a.getStation().getPresentTrain()!=null,"Physical train at west station"))
+                .thenWaitUntil(()->{
+                    var train=s.a.getStation().getPresentTrain();
+                    test.assertTrue(train!=null && (train.hasForwardConductor() || train.doubleEnded && train.hasBackwardConductor()),
+                            "Create registered the assembled train's conductor");
+                })
+                .thenExecute(()->checked("Publish editor platforms",()->{
+                    var tablet=com.example.examplemod.CreateCityExpansionCore.RAILWAY_BINDER.get().getDefaultInstance();
+                    // The publishing operator stays authorized when the train owner later returns as an ordinary visitor.
+                    actor.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,tablet.copy());
+                    markWithTablet(actor,s.a.getBlockPos(),s.west,false);
+                    markWithTablet(actor,s.b.getBlockPos(),s.east,false);
+                    driver.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,tablet);
+                    markWithTablet(driver,s.b.getBlockPos(),s.east,false);
+                    markWithTablet(driver,s.a.getBlockPos(),s.west,false);
+                    markWithTablet(driver,s.a.getBlockPos(),s.west,true);
+                    markCarriageWithTablet(driver,s.a.getStation().getPresentTrain());
+                    standAt(s.west);face(s.a.getBlockPos());
+                    var train=s.a.getStation().getPresentTrain();
+                    var shared = PassengerService.create(actor,"Shared operator fixture");
+                    PassengerService.append(actor,shared);
+                    standAt(s.east);face(s.b.getBlockPos());PassengerService.append(actor,shared);
+                    PassengerRestartCheck.checkSharedDispatch(actor,driver,shared);
+                    var rail=new Rail(s.name,train.id,s.a.getStation().id,s.b.getStation().id,s.west,s.east);
+                    var remote = s.west.east(10);
+                    level.setBlockAndUpdate(remote.below(),Blocks.STONE.defaultBlockState());
+                    driver.teleportTo(level,remote.getX()+.5,remote.getY(),remote.getZ()+.5,0,-80);
+                    interactive=new Interactive(driver.getUUID(),home,shop,remote,s.east,List.of(rail),null,null,null);
+                }))
+                .thenWaitUntil(()->test.assertTrue(shop.equals(completedGoal),"Client creates and dispatches its passenger line"))
+                .thenSucceed();
+    }
+    private void markWithTablet(ServerPlayer driver,BlockPos station,BlockPos boarding,boolean selectTrain) {
+        driver.teleportTo(level,boarding.getX()+.5,boarding.getY(),boarding.getZ()+.5,0,0);
+        var delta=Vec3.atCenterOf(station).subtract(driver.getEyePosition());
+        driver.setYRot((float)Math.toDegrees(Math.atan2(-delta.x,delta.z)));
+        driver.setXRot((float)-Math.toDegrees(Math.atan2(delta.y,delta.horizontalDistance())));
+        driver.setOnGround(true);driver.setShiftKeyDown(selectTrain);
+        var hit=new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(station),Direction.UP,station,false);
+        driver.gameMode.useItemOn(driver,level,driver.getMainHandItem(),net.minecraft.world.InteractionHand.MAIN_HAND,hit);
+        driver.setShiftKeyDown(false);
+        var be=(StationBlockEntity)level.getBlockEntity(station);
+        test.assertTrue(PassengerService.stop(driver,be.getStation().id)!=null,"Tablet publishes physical platform "+station);
+    }
+    private void markCarriageWithTablet(ServerPlayer driver,Train train) {
+        var carriage=train.carriages.getFirst().anyAvailableEntity();
+        for(var pos:carriage.getContraption().getBlocks().keySet()){
+            var aim=carriage.toGlobalVector(Vec3.atCenterOf(pos),1F);
+            var delta=aim.subtract(driver.getEyePosition());
+            driver.setYRot((float)Math.toDegrees(Math.atan2(-delta.x,delta.z)));
+            driver.setXRot((float)-Math.toDegrees(Math.atan2(delta.y,delta.horizontalDistance())));
+            if(com.example.examplemod.passenger.RailwayBinder.aimedCarriage(driver)!=carriage)continue;
+            driver.gameMode.useItem(driver,level,driver.getMainHandItem(),net.minecraft.world.InteractionHand.MAIN_HAND);
+            return;
+        }
+        throw new AssertionError("Tablet ray missed carriage "+carriage.getBoundingBox()+" from "+driver.getEyePosition()
+                +" blocks="+carriage.getContraption().getBlocks().keySet().stream().map(p->carriage.toGlobalVector(Vec3.atCenterOf(p),1F)).toList()
+                +" reach="+driver.blockInteractionRange()+" nativeEntities="+level.getEntitiesOfClass(
+                        com.simibubi.create.content.trains.entity.CarriageContraptionEntity.class,driver.getBoundingBox().inflate(8)).size());
     }
     private void followInteractive(){
         var setup=interactive;
@@ -288,6 +384,9 @@ public final class JourneyTripGameTest {
         actor.setXRot((float)-Math.toDegrees(Math.atan2(delta.y,delta.horizontalDistance())));
     }
     private void assemble(Service service) {
+        assemble(service,actor.getUUID());
+    }
+    private void assemble(Service service, UUID owner) {
         var a=service.a;var b=service.b;
         a.updateName(service.name+" West");b.updateName(service.name+" East");
         test.assertTrue(a.enterAssemblyMode(actor),"Enter Create assembly mode");
@@ -302,10 +401,11 @@ public final class JourneyTripGameTest {
                 .setValue(BlazeBurnerBlock.HEAT_LEVEL,BlazeBurnerBlock.HeatLevel.SMOULDERING));
         level.setBlockAndUpdate(burner.east(),create("controls").setValue(ControlsBlock.FACING,Direction.WEST));
         level.setBlockAndUpdate(burner.west(),create("controls").setValue(ControlsBlock.FACING,Direction.EAST));
-        level.setBlockAndUpdate(burner.offset(0,0,seatSide),create("blue_seat"));
+        if (!Boolean.getBoolean("ccec.qa.passengerEditor"))
+            level.setBlockAndUpdate(burner.offset(0,0,seatSide),create("blue_seat"));
         var min=bogey.offset(-1,0,Math.min(0,seatSide));var max=bogey.offset(2,2,1+Math.max(0,seatSide));
         level.addFreshEntity(new SuperGlueEntity(level,new AABB(min.getX(),min.getY(),min.getZ(),max.getX(),max.getY(),max.getZ())));
-        a.assemble(actor.getUUID()); a.exitAssemblyMode();
+        a.assemble(owner); a.exitAssemblyMode();
     }
     private static BlockState create(String name) {
         return BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath("create",name)).defaultBlockState();
@@ -315,7 +415,8 @@ public final class JourneyTripGameTest {
         // Station administration uses the same actor, eye ray, ownership and feet checks as the commands.
         level.getServer().getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(actor.getGameProfile(),2,false));
         test.assertTrue(actor.hasPermissions(2),"QA operator has explicit publication authority");
-        standAt(platformA);face(a.getBlockPos());PassengerService.platform(actor,false);
+        if (!interactiveRun && lines.isEmpty()) registerMapStation(s);
+        else {standAt(platformA);face(a.getBlockPos());PassengerService.platform(actor,false);}
         standAt(platformB);face(b.getBlockPos());PassengerService.platform(actor,false);
         var line=PassengerService.create(actor,s.name);lines.put(s,line);
         standAt(platformA);face(a.getBlockPos());PassengerService.append(actor,line);
@@ -353,6 +454,192 @@ public final class JourneyTripGameTest {
         standAt(start);
         test.assertTrue(PassengerService.departures(actor).isEmpty(),"Unmeasured rail connectivity is insufficient");
     }
+
+    private void registerMapStation(Service service) {
+        var dim = level.dimension().location();
+        var cities = CityManager.get(level.getServer().overworld());
+        var city = cities.getMemberCity(actor.getUUID());
+        var station = service.a.getBlockPos();
+        var entrance = service.west;
+        var cityPlot = CityPlot.at(dim, base);
+        var stationPlot = CityPlot.at(dim, station);
+        cities.claimPlot(city, new CityPlot(dim, cityPlot.plotX(), stationPlot.plotZ()), actor.getUUID());
+        cities.claimPlot(city, stationPlot, actor.getUUID());
+        cities.claimPlot(city, CityPlot.at(dim, entrance), actor.getUUID());
+        var feature = new CityMapFeature(UUID.randomUUID(), city.getId(), 0, dim, CityMapFeature.Kind.STATION, CityMapFeature.Shape.POINT,
+                "Platform house", "7", "", List.of(station), List.of(entrance));
+        var view = UUID.randomUUID();
+        CityPublicAtlas.open(actor, new RequestCityWorldMapPayload(view, UUID.randomUUID()));
+        var world = CityMapSavedData.get(level).worldId();
+        var saved = CityMapService.handle(actor, new CityMapNetwork.Request(
+                UUID.randomUUID(), view, world, dim, city.getId(), CityMapNetwork.Action.SAVE,
+                feature.id(), 0, feature));
+        test.assertTrue("ok".equals(saved.status()), "Saved a city station: "+saved.status());
+        var current = CityMapService.resolve(actor, feature.id());
+        try {
+            PassengerService.registerCityStation(member, current);
+            throw new AssertionError("Non-operator registered a map station");
+        } catch (IllegalArgumentException denied) {
+            test.assertTrue("op_required".equals(denied.getMessage()), "Setting up a platform requires operator authority");
+        }
+        var registered = CityMapService.handle(actor, new CityMapNetwork.Request(
+                UUID.randomUUID(), view, world, dim, city.getId(), CityMapNetwork.Action.REGISTER_STATION,
+                current.id(), current.revision(), null));
+        test.assertTrue("ok".equals(registered.status()), "Registered a real Create station through the atlas: "+registered.status());
+        var stop = PassengerService.stop(actor, service.a.getStation().id);
+        test.assertTrue(stop != null && entrance.equals(stop.entrance()) && station.equals(stop.stationPos()),
+                "Cartography publishes the real station UUID and saved platform entrance");
+        var emptyPlot = new CityMapFeature(UUID.randomUUID(), city.getId(), 0, dim, CityMapFeature.Kind.STATION,
+                CityMapFeature.Shape.POINT, "Future station", "", "", List.of(entrance), List.of(entrance));
+        var drawn = CityMapService.handle(actor, new CityMapNetwork.Request(UUID.randomUUID(), view, world, dim, city.getId(),
+                CityMapNetwork.Action.SAVE, emptyPlot.id(), 0, emptyPlot));
+        test.assertTrue("ok".equals(drawn.status()), "A planned station can stay in the atlas");
+        var missing = CityMapService.handle(actor, new CityMapNetwork.Request(UUID.randomUUID(), view, world, dim, city.getId(),
+                CityMapNetwork.Action.REGISTER_STATION, emptyPlot.id(), CityMapService.resolve(actor, emptyPlot.id()).revision(), null));
+        test.assertTrue("station_missing".equals(missing.status()) && PassengerService.stop(actor, emptyPlot.id()) == null,
+                "A map symbol alone cannot register a passenger platform: "+missing.status());
+        CityPublicAtlas.close(actor, view);
+        member.moveTo(start.getX()+.5, start.getY(), start.getZ()+.5, 0, 0);
+        var trip = new TripNetwork.Query(TripNetwork.Action.PLAN, UUID.randomUUID(), world, TripRef.PLAYER,
+                new TripRef(TripRef.Kind.CARTOGRAPHY, current.id()), TripPlanner.Mode.WALK, 0);
+        TripServer.handle(member, trip, (p, answer) -> {
+            if (!"options".equals(answer.data().getString("State"))) return;
+            var choices = answer.data().getList("Options", Tag.TAG_COMPOUND);
+            var steps = choices.getCompound(0).getList("Steps", Tag.TAG_COMPOUND);
+            reachedStationEntrance = !steps.isEmpty() && BlockPos.of(steps.getCompound(steps.size()-1).getLong("To")).equals(entrance);
+        });
+    }
+    private ServerPlayer districtPlayer(String name) {
+        var profile = new com.mojang.authlib.GameProfile(UUID.randomUUID(), name);
+        var player = new ServerPlayer(level.getServer(), level, profile, ClientInformation.createDefault());
+        player.connection = new ServerGamePacketListenerImpl(level.getServer(), new Connection(PacketFlow.SERVERBOUND),
+                player, CommonListenerCookie.createInitial(profile, false)) {
+            @Override public void send(net.minecraft.network.protocol.Packet<?> packet) {}
+        };
+        return player;
+    }
+
+    private CityMapNetwork.Reply districtEdit(ServerPlayer editor, UUID view, UUID city, CityMapNetwork.Action action,
+                                               UUID id, long revision, CityMapFeature value, UUID platform) {
+        var request = new CityMapNetwork.Request(UUID.randomUUID(), view, CityMapSavedData.get(level).worldId(),
+                level.dimension().location(), city, action, id, revision, value, platform);
+        var result = CityMapService.handle(editor, request);
+        test.assertTrue("ok".equals(result.status()), "District " + action + " returned " + result.status());
+        return result;
+    }
+
+    private void checkDistrict() {
+        var dim = level.dimension().location();
+        var cities = CityManager.get(level.getServer().overworld());
+        var city = cities.getMemberCity(actor.getUUID());
+        var id = city.getId();
+        remoteCityAccess(cities, city);
+        var resident = districtPlayer("DistrictResident");
+        var operator = districtPlayer("DistrictOperator");
+        level.getServer().getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(operator.getGameProfile(), 2, false));
+        city.addMember(resident.getUUID());
+        for (int x = CityPlot.plotXOf(base.getX()); x <= CityPlot.plotXOf(base.getX() + 15); x++)
+            for (int z = CityPlot.plotZOf(base.getZ()); z <= CityPlot.plotZOf(base.getZ() + 15); z++) {
+                var plot = new CityPlot(dim, x, z);
+                cities.claimPlot(city, plot, actor.getUUID());
+                test.assertTrue(city.hasClaim(plot), "District fixture lies in one city's territory");
+            }
+        resident.moveTo(start.getX() + .5, start.getY(), start.getZ() + .5, 0, 0);
+        UUID residentView = UUID.randomUUID(), operatorView = UUID.randomUUID();
+        CityPublicAtlas.open(resident, new RequestCityWorldMapPayload(residentView, UUID.randomUUID()));
+        CityPublicAtlas.open(operator, new RequestCityWorldMapPayload(operatorView, UUID.randomUUID()));
+        var rail = trains.keySet().stream().filter(service -> "North".equals(service.name)).findFirst().orElseThrow();
+        var bend = base.offset(2, 0, 8);
+        var vestibule = base.offset(10, 0, 11);
+        var street = new CityMapFeature(UUID.randomUUID(), id, 0, dim, CityMapFeature.Kind.STREET, CityMapFeature.Shape.LINE,
+                "Вокзальная", "", "", List.of(base.offset(1, 0, 7), base.offset(8, 0, 7)), List.of());
+        var house = new CityMapFeature(UUID.randomUUID(), id, 0, dim, CityMapFeature.Kind.BUILDING, CityMapFeature.Shape.POLYGON,
+                "", "12", "", List.of(start.west(), start, start.north(), start.north().west()), List.of(start),
+                new CityMapFeature.Links(street.id(), null, null));
+        var station = new CityMapFeature(UUID.randomUUID(), id, 0, dim, CityMapFeature.Kind.STATION, CityMapFeature.Shape.POINT,
+                "Северный вокзал", "", "", List.of(rail.a.getBlockPos()), List.of(vestibule));
+        var walkway = new CityMapFeature(UUID.randomUUID(), id, 0, dim, CityMapFeature.Kind.PATH, CityMapFeature.Shape.LINE,
+                "Проход к вокзалу", "", "", List.of(start, bend, base.offset(10, 0, 8), vestibule), List.of(),
+                new CityMapFeature.Links(null, new CityMapFeature.Endpoint(house.id(), start), new CityMapFeature.Endpoint(station.id(), vestibule)));
+        for (var row : List.of(street, house, station, walkway))
+            districtEdit(resident, residentView, id, CityMapNetwork.Action.SAVE, row.id(), 0, row, null);
+
+        var revision = CityMapService.resolve(operator, station.id()).revision();
+        var first = districtEdit(operator, operatorView, id, CityMapNetwork.Action.BIND_PLATFORM, station.id(), revision, null, rail.a.getStation().id);
+        revision = first.features().stream().filter(f -> f.id().equals(station.id())).findFirst().orElseThrow().revision();
+        districtEdit(operator, operatorView, id, CityMapNetwork.Action.BIND_PLATFORM, station.id(), revision, null, rail.b.getStation().id);
+        var catalog = districtEdit(resident, residentView, id, CityMapNetwork.Action.LIST, CityMapNetwork.ALL, 0, null, null);
+        var stops = catalog.platforms().stream().filter(p -> station.id().equals(p.feature())).toList();
+        test.assertTrue(stops.size() == 2, "One saved station lists exactly two distinct native platforms");
+        var selected = stops.stream().filter(p -> p.id().equals(rail.b.getStation().id)).findFirst().orElseThrow();
+        test.assertTrue(rail.east.equals(selected.entrance()) && !vestibule.equals(selected.entrance())
+                        && stops.stream().anyMatch(p -> p.id().equals(rail.a.getStation().id) && rail.west.equals(p.entrance())),
+                "A passenger selects the east platform independently of the public entrance and the west platform");
+        CityPublicAtlas.close(resident, residentView);
+        CityPublicAtlas.close(operator, operatorView);
+        var plan = new TripNetwork.Query(TripNetwork.Action.PLAN, UUID.randomUUID(), CityMapSavedData.get(level).worldId(),
+                new TripRef(TripRef.Kind.CARTOGRAPHY, house.id()), new TripRef(TripRef.Kind.STATION, selected.id()), TripPlanner.Mode.WALK, 0);
+        districtWalk = new DistrictWalk(resident, plan, bend, vestibule, selected.entrance(), rail.west, selected.name());
+        TripServer.handle(resident, plan, (p, answer) -> districtReply = answer.data());
+    }
+
+    private void remoteCityAccess(CityManager cities, com.example.examplemod.city.City homeCity) {
+        var player = districtPlayer("RemoteCartograph");
+        homeCity.addMember(player.getUUID());
+        player.moveTo(start.getX() + .5, start.getY(), start.getZ() + .5, 0, 0);
+        var dim = level.dimension().location();
+        var position = base.offset(base.getX() > 0 ? -12_000 : 12_000, 0, 0);
+        var remote = cities.createCity("Remote cartography fixture", UUID.randomUUID(), dim, position);
+        test.assertTrue(remote != null && !remote.hasMember(player.getUUID()) && !level.hasChunkAt(position), "Remote city is unloaded and has a different membership");
+        var view = UUID.randomUUID();
+        var world = CityMapSavedData.get(level).worldId();
+        CityPublicAtlas.open(player, new RequestCityWorldMapPayload(view, UUID.randomUUID()));
+        test.assertTrue(CityPublicAtlas.view(player, view).cities().stream().anyMatch(c -> c.id().equals(remote.getId()) && !c.own()),
+                "The server directory includes the remote city even outside the visible area");
+
+        var feature = new CityMapFeature(UUID.randomUUID(), remote.getId(), 0, dim, CityMapFeature.Kind.BUILDING,
+                CityMapFeature.Shape.POINT, "Remote house", "", "", List.of(position), List.of());
+        var denied = CityMapService.handle(player, new CityMapNetwork.Request(UUID.randomUUID(), view, world, dim, remote.getId(),
+                CityMapNetwork.Action.SAVE, feature.id(), 0, feature));
+        test.assertTrue("permission".equals(denied.status()) && !denied.canEdit(), "A resident of another city cannot edit its map");
+        var ops = level.getServer().getPlayerList().getOps();
+        ops.add(new net.minecraft.server.players.ServerOpListEntry(player.getGameProfile(), 2, false));
+        var result = districtEdit(player, view, remote.getId(), CityMapNetwork.Action.SAVE, feature.id(), 0, feature, null);
+        test.assertTrue(result.canEdit() && !level.hasChunkAt(position), "OP2 edits the selected city without travelling or loading its terrain");
+        var saved = result.features().stream().filter(row -> row.id().equals(feature.id())).findFirst().orElseThrow();
+        var outside = new CityMapFeature(saved.id(), saved.city(), saved.revision(), dim, saved.kind(), saved.shape(), saved.name(),
+                saved.houseNumber(), saved.description(), List.of(homeCity.getPylonPos()), List.of());
+        var wrongClaim = CityMapService.handle(player, new CityMapNetwork.Request(UUID.randomUUID(), view, world, dim, remote.getId(),
+                CityMapNetwork.Action.SAVE, saved.id(), saved.revision(), outside));
+        test.assertTrue("territory".equals(wrongClaim.status()) && saved.equals(CityMapService.resolve(player, saved.id())),
+                "Selecting another city cannot use the operator's own-city claim as the target footprint");
+        ops.remove(player.getGameProfile());
+        var revoked = CityMapService.handle(player, new CityMapNetwork.Request(UUID.randomUUID(), view, world, dim, remote.getId(),
+                CityMapNetwork.Action.DELETE, saved.id(), saved.revision(), null));
+        test.assertTrue("permission".equals(revoked.status()) && !revoked.canEdit(), "Removing OP revokes remote editing in an already open atlas");
+        CityPublicAtlas.close(player, view);
+        System.out.println("QA remote city outside viewport: directory, cross-city OP2 edit, claim enforcement and immediate revocation passed");
+    }
+
+    private void verifyDistrict() {
+        var walk = districtWalk;
+        if (!districtBegan) {
+            test.assertTrue(districtReply != null && "options".equals(districtReply.getString("State")), "Waiting for the district route: " + districtReply);
+            test.assertTrue("Вокзальная 12".equals(districtReply.getString("Origin")) && walk.selectedName.equals(districtReply.getString("Goal")),
+                    "Trip offer identifies the house address and selected physical platform");
+            districtBegan = true;
+            TripServer.handle(walk.rider, walk.query.action(TripNetwork.Action.BEGIN, 0), (p, answer) -> districtReply = answer.data());
+        }
+        test.assertTrue("guide".equals(districtReply.getString("State")), "Waiting for guide to the selected platform: " + districtReply);
+        var ahead = java.util.Arrays.stream(districtReply.getLongArray("Ahead")).mapToObj(BlockPos::of).toList();
+        test.assertTrue(!districtReply.getBoolean("Replan") && walk.boarding.equals(BlockPos.of(districtReply.getLong("GoalPos")))
+                        && ahead.contains(walk.bend) && ahead.contains(walk.vestibule) && ahead.getLast().equals(walk.boarding)
+                        && !ahead.contains(walk.otherBoarding), "Verified guide follows the drawn path through the station entrance to only the chosen boarding point: " + ahead);
+        System.out.println("QA district Вокзальная 12 via " + walk.vestibule + " to selected " + walk.selectedName
+                + " at " + walk.boarding + ", alternate platform " + walk.otherBoarding);
+        TripServer.handle(walk.rider, walk.query.action(TripNetwork.Action.CANCEL, 0), (p, answer) -> {});
+    }
+
     private void checked(String action,Runnable work) {
         try {work.run();}
         catch (RuntimeException failure) {

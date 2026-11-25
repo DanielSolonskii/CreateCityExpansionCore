@@ -65,6 +65,8 @@ public final class PassengerTimetable {
         changed = tick;
     }
 
+    boolean inTransitFromOrigin() { return !parked && last == 0; }
+
     public java.util.UUID run() { return run; }
 
     /** The native train can arrive between the five-tick samples. Only the expected next station can advance the ordinal. */

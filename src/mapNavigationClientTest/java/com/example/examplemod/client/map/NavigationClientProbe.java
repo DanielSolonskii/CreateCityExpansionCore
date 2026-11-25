@@ -140,6 +140,10 @@ public final class NavigationClientProbe {
             case 1 -> {
                 if(mc.player==null || mc.level==null || mc.getOverlay()!=null || ticks<25)return;
                 if(mc.screen!=null){mc.setScreen(null);return;}
+                if(Boolean.getBoolean("ccec.qa.cityEditor")){
+                    if(!mc.player.onGround())return;
+                    smallDisplay(mc);NavigationCityEditorProbe.prepare(mc);next(24);return;
+                }
                 if(Boolean.getBoolean("ccec.qa.markersOnly")){
                     if(!mc.player.onGround())return;
                     NavigationMarkerProbe.prepare(mc);next(23);return;
@@ -352,6 +356,12 @@ public final class NavigationClientProbe {
             case 23 -> {
                 if(NavigationMarkerProbe.tick(mc,atlas,map)){
                     mark("Public shop published by right click with zero entrances. Seven categories rendered. Second profile can read the shop; its owner then saved a surveyed entrance with the same marker ID and icon.");
+                    next(19);
+                }
+            }
+            case 24 -> {
+                if(NavigationCityEditorProbe.tick(mc,atlas,map)){
+                    mark("Resident saved a named building, address, polygon and entrances. An unrelated player read it. The public map reopened the same geometry for editing. Deletion removed it from the public map.");
                     next(19);
                 }
             }

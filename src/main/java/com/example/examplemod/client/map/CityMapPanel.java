@@ -334,10 +334,10 @@ private boolean showCities = true;
             if(showPlotGrid&&plotClaimRequest!=null)renderPlotGrid(g);
             renderPeers(g,-10000,-10000);renderTerritory(g);if(!projectFocus)renderClaimHint(g);
         });
-        drawLayer(g,Overlay.RELATIONS,()->renderPeers(g,-10000,-10000));
         drawLayer(g,Overlay.CITIES,()->renderPeers(g,cityX,mouseY));
         drawLayer(g,Overlay.TRACKS,()->{if(this.railOverlay!=null)this.railOverlay.accept(g,this);});
         drawLayer(g,Overlay.CITIES,()->renderMarkers(g,cityX,mouseY));
+        drawLayer(g,Overlay.RELATIONS,()->renderPeers(g,-10000,-10000));
         drawLayer(g,Overlay.PROJECTS,()->renderMarkers(g,projectX,mouseY));
         // The player has no visibility toggle and is drawn exactly once above the other layers.
         withOverlayMask(0,()->renderMarkers(g,mouseX,mouseY));
@@ -696,6 +696,8 @@ private final ItemStack networkIcon = item("create:track");
     /** Resolve a remembered target against this view's current data and permissions. */
     public Selection resolveSelection(SelectionKind kind, UUID id, BlockPos pos) {
         switch (kind) {
+            case PASSENGER_LINE, PASSENGER_TRAIN -> { return PassengerMapLayer.resolve(kind,id,pos,dimensionId); }
+            case CARTOGRAPHY -> { return CityCartographyLayer.selection(id,dimensionId); }
             case PLACE -> { return com.example.examplemod.client.screen.AtlasPlaces.selection(id,dimensionId); }
             case PLAYER -> {
                 Selection player = playerSelection();
@@ -968,13 +970,14 @@ for (int index = 0; index < this.personalPins.size(); index++) {
                     guiGraphics.fill(x, y, x + width, y + this.viewportHeight, 0x32101618);
                 }
                 if (this.showCoordinateGrid) renderGrid(guiGraphics);
+                if(!hud && showCities) CityCartographyLayer.draw(guiGraphics,this,dimensionId,viewportX,viewportY,viewportWidth,viewportHeight);
                 renderSnapshotNotice(guiGraphics);
                 if(motionEnabled&&!projectPicking)renderDispatchLayers(guiGraphics,mouseX,mouseY);
                 else {
                 if (this.showTerritory && this.showPlotGrid && this.plotClaimRequest != null) renderPlotGrid(guiGraphics);
                 // Соседи рисуются ДО своей территории: собственный город
                 // остаётся главным акцентом, чужие — фоном.
-                if (this.showTerritory || this.showCities || this.projectPicking) renderPeers(guiGraphics, mouseX, mouseY);
+                if (this.showTerritory || this.showCities || this.showRelations || this.projectPicking) renderPeers(guiGraphics, mouseX, mouseY);
                 if (this.showTerritory || this.projectPicking) {
                     if (projectPicking) renderConstructionMask(guiGraphics);
                     renderTerritory(guiGraphics);
@@ -990,6 +993,7 @@ for (int index = 0; index < this.personalPins.size(); index++) {
                 if(motionEnabled)renderHoverGlow(guiGraphics);
                 // Placement previews and project markers must stay visible over city/player icons.
                 if (this.visualOverlay != null) this.visualOverlay.accept(guiGraphics);
+                if (passengersVisible()) PassengerMapLayer.drawTrains(guiGraphics,this);
                 if (!hud && Minecraft.getInstance().level != null && dimensionId.equals(Minecraft.getInstance().level.dimension().location()) && !projectPicking)
                     com.example.examplemod.client.screen.MapSocialLayer.render(guiGraphics, this, viewportX, viewportY, viewportWidth, viewportHeight, mouseX, mouseY);
                 else com.example.examplemod.client.screen.MapSocialLayer.clear(this);
@@ -1178,6 +1182,10 @@ for (int index = 0; index < this.personalPins.size(); index++) {
             return true;
         }
         Selection hit = findSelection(mouseX, mouseY);
+        if (hit!=null && hit.kind()==SelectionKind.PASSENGER_LINE && selection!=null
+                && selection.kind()==SelectionKind.PASSENGER_LINE) {
+            hit=PassengerMapLayer.lineAt(this,mouseX,mouseY,selection.id());
+        }
         if (hit != null) {
             setSelection(hit);
             if (hit.kind() != SelectionKind.WAYPOINT) beginPan();
@@ -1204,6 +1212,10 @@ if (insideViewport(mouseX, mouseY)) {
         return false;
     }
 
+    private boolean passengersVisible() {
+        return !hud && showTracks && railOverlay!=null && !preciseTool()
+                && !com.example.examplemod.client.logistics.LogisticsMapOverlay.isSession();
+    }
     private Selection findSelection(double mouseX, double mouseY) {
         if (!insideViewport(mouseX,mouseY)) return null;
         int markerRadius = AtlasPlaceIcon.radius(zoom);
@@ -1215,6 +1227,16 @@ if (insideViewport(mouseX, mouseY)) {
         if(placesVisible())for(var place:com.example.examplemod.client.screen.AtlasPlaces.selections(dimensionId).reversed()){
             int x=worldToScreenX(place.pos().getX()+.5),y=worldToScreenY(place.pos().getZ()+.5);
             if(insideViewport(x,y) && AtlasPlaceIcon.contains(mouseX,mouseY,x,y,markerRadius))return place;
+        }
+        Selection passengerLine=null;
+        if (passengersVisible()) {
+            var train=PassengerMapLayer.trainAt(this,mouseX,mouseY);
+            if(train!=null)return train;
+            passengerLine=PassengerMapLayer.lineAt(this,mouseX,mouseY,null);
+        }
+        if (passengerLine==null && showCities && zoom>=1.75) {
+            var drawn = CityCartographyLayer.hit(this,mouseX,mouseY);
+            if (drawn!=null) return drawn;
         }
         Selection player = playerSelection();
         if (player != null) {
@@ -1243,7 +1265,8 @@ if (insideViewport(mouseX, mouseY)) {
             ScreenPoint point = markerPoint(candidate.kind(), candidate.id(), candidate.pos());
             if (insideCityMarker(mouseX, mouseY, point.x(), point.y())) return candidate;
         }
-        return null;
+        if(passengerLine!=null)return passengerLine;
+        return showCities && zoom<1.75 ? CityCartographyLayer.hit(this,mouseX,mouseY) : null;
     }
 
     /** Карточка своего города: участки и их площадь вместо старого размера квадрата. */
@@ -1607,23 +1630,26 @@ if (insideViewport(mouseX, mouseY)) {
     private boolean insideCityMarker(double mx,double my,int x,int y) {
         int r=TerritoryPresentation.cityRadius(this.zoom);return inside(mx,my,x-r,y-r,r*2,r*2);
     }
-    private void renderCityMarker(GuiGraphics g,int x,int y,boolean owned,boolean hover,boolean selected) {
-        int r=TerritoryPresentation.cityRadius(this.zoom),color=selected?MapPalette.SELECTED:hover?0xFFE0C395:owned?MapPalette.OWN:MapPalette.NEUTRAL;
-        g.fill(x-r,y-r,x+r,y+r,0xEE172025);g.renderOutline(x-r,y-r,r*2,r*2,color);
-        float scale=(r-3)/8F;
-        g.pose().pushPose();g.pose().translate(x,y,0);g.pose().scale(scale,scale,1);
-        MapMarkerRenderer.drawGlyph(g,AtlasGlyph.CITY,-8,-8,color);g.pose().popPose();
+    private static final ResourceLocation CITY_MARKER=ResourceLocation.fromNamespaceAndPath(
+            "createcityexpansioncore","textures/gui/map/city_marker.png");
+    private void renderCityMarker(GuiGraphics g,int x,int y,int rgb,boolean hover,boolean selected) {
+        int r=TerritoryPresentation.cityRadius(this.zoom);
+        int row=selected?2:hover?1:0;
+        var matrix=g.pose().last().pose();
+        var vertices=g.bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.text(CITY_MARKER));
+        int light=net.minecraft.client.renderer.LightTexture.FULL_BRIGHT;
+        for(int layer=0;layer<2;layer++){
+            // The right half contains only the roof and flag accents.
+            int color=layer==0?-1:CityColors.argb(rgb,255);
+            float u=layer*.5f,v=row/3f,bottom=(row+1)/3f;
+            vertices.addVertex(matrix,x-r,y-r,0).setColor(color).setUv(u,v).setLight(light);
+            vertices.addVertex(matrix,x-r,y+r,0).setColor(color).setUv(u,bottom).setLight(light);
+            vertices.addVertex(matrix,x+r,y+r,0).setColor(color).setUv(u+.5f,bottom).setLight(light);
+            vertices.addVertex(matrix,x+r,y-r,0).setColor(color).setUv(u+.5f,v).setLight(light);
+        }
     }
     private void renderPeers(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         com.example.examplemod.client.AllianceClient.ensure();
-        if (this.showRelations) for (CityMapPeersPayload.Peer peer : this.peers) {
-            CityRelationSnapshot.Status status = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
-            if (status == CityRelationSnapshot.Status.NONE || peer.own()) continue;
-            int color = status == CityRelationSnapshot.Status.PARTNER ? 0xB365D8AF
-                    : status == CityRelationSnapshot.Status.TRUSTED ? 0xA06EAED0 : 0x906F7596;
-            drawLine(guiGraphics, worldToScreenX(this.pylonPos.getX() + .5), worldToScreenY(this.pylonPos.getZ() + .5),
-                    worldToScreenX(peer.pylonX() + .5), worldToScreenY(peer.pylonZ() + .5), color);
-        }
         for (CityMapPeersPayload.Peer peer : this.peers) {
             // Свой город рисуется отдельно и ярче.
             if ((this.showTerritory || this.projectPicking) && !peer.own()) renderClaims(guiGraphics, peer, false);
@@ -1656,10 +1682,15 @@ if (insideViewport(mouseX, mouseY)) {
              * чужих городов делал соседние территории неразличимыми.
              */
 
-if (!this.showCities) continue;
+            if (this.showRelations && !peer.own()) {
+                int radius = TerritoryPresentation.cityRadius(this.zoom);
+                CityRelationBadge.draw(guiGraphics,markerX-radius+2,markerY+radius,
+                        relations.getOrDefault(peer.cityId(),CityRelationSnapshot.Status.NONE),true);
+            }
+            if (!this.showCities) continue;
             drawMarkerLeader(guiGraphics, markerX, markerY,
                     worldToScreenX(peer.pylonX() + 0.5), worldToScreenY(peer.pylonZ() + 0.5));
-            renderCityMarker(guiGraphics, markerX, markerY, peer.own(),
+            renderCityMarker(guiGraphics, markerX, markerY, peer.colorRgb(),
                     matchesTargetAt(this.hoveredSelection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()),
                     matchesTargetAt(this.selection, SelectionKind.CITY, peer.pylonX(), peer.pylonZ()));
             AllianceMapPresentation.marker(guiGraphics,markerX,markerY,peer.cityId());
@@ -1671,10 +1702,6 @@ if (!this.showCities) continue;
             if (insideCityMarker(mouseX, mouseY, markerX, markerY)) {
                 deferCityTooltip(mouseX, mouseY, peer);
             }
-            CityRelationSnapshot.Status relation = this.relations.getOrDefault(peer.cityId(), CityRelationSnapshot.Status.NONE);
-            if (relation != CityRelationSnapshot.Status.NONE) guiGraphics.renderOutline(markerX - 7, markerY - 7, 14, 14,
-                    relation == CityRelationSnapshot.Status.PARTNER ? 0xFF65D8AF : relation == CityRelationSnapshot.Status.TRUSTED ? 0xFF79BBD8 : 0xFF9D8BC2);
-
             // Название — только если рядом, чтобы не превращать карту
             // в россыпь текста при множестве городов.
             String name = peer.name();
@@ -2198,12 +2225,12 @@ if (!this.showCities) continue;
         int markerY = ownMarker.y();
         drawMarkerLeader(guiGraphics, markerX, markerY,
                 worldToScreenX(this.pylonPos.getX() + 0.5), worldToScreenY(this.pylonPos.getZ() + 0.5));
-        boolean ownedAnchor = this.peers.stream().anyMatch(peer -> atAnchor(peer) && peer.own());
-        if (this.showCities) renderCityMarker(guiGraphics, markerX, markerY, ownedAnchor,
+        var anchorPeer=this.peers.stream().filter(this::atAnchor).findFirst();
+        if (this.showCities) renderCityMarker(guiGraphics, markerX, markerY, anchorPeer.map(CityMapPeersPayload.Peer::colorRgb).orElse(MapPalette.NEUTRAL),
                 matchesTarget(this.hoveredSelection, SelectionKind.CITY, null, this.pylonPos),
                 matchesTarget(this.selection, SelectionKind.CITY, null, this.pylonPos));
-        if(this.showCities)this.peers.stream().filter(this::atAnchor).findFirst().ifPresent(peer->AllianceMapPresentation.marker(guiGraphics,markerX,markerY,peer.cityId()));
-        String name = peers.stream().filter(this::atAnchor).findFirst().map(CityMapPeersPayload.Peer::name)
+        if(this.showCities)anchorPeer.ifPresent(peer->AllianceMapPresentation.marker(guiGraphics,markerX,markerY,peer.cityId()));
+        String name = anchorPeer.map(CityMapPeersPayload.Peer::name)
                 .orElseGet(() -> Component.translatable("gui.createcityexpansioncore.map.city_pylon").getString());
         labels.offer("city/anchor",name,0xFFF4D49A,markerX,markerY,Math.max(14,TerritoryPresentation.cityRadius(zoom)+4),
                 Minecraft.getInstance().font.width(name),matchesTargetAt(selection,SelectionKind.CITY,pylonPos.getX(),pylonPos.getZ())
@@ -2222,10 +2249,11 @@ if (!this.showCities) continue;
                     worldToScreenY(project.controllerPos().getZ() + 0.5));
             int markerRadius=projectRadius(project);
             labels.reserve(projectX-markerRadius,projectY-markerRadius,2*markerRadius,2*markerRadius);
-            MapMarkerRenderer.renderMap(guiGraphics, this.zoom, projectX, projectY, this.mineIcon, true,
-                    !"RUNNING".equals(project.status()),
-                    matchesTarget(this.hoveredSelection, SelectionKind.INDUSTRY, project.projectId()),
-                    matchesTarget(this.selection, SelectionKind.INDUSTRY, project.projectId()));
+            AtlasPlaceIcon.MINE.badge(guiGraphics,projectX,projectY,markerRadius,
+                    matchesTarget(this.selection, SelectionKind.INDUSTRY, project.projectId()),
+                    matchesTarget(this.hoveredSelection, SelectionKind.INDUSTRY, project.projectId()));
+            if(!"RUNNING".equals(project.status()))
+                MapMarkerRenderer.warningBadge(guiGraphics,projectX+markerRadius-5,projectY-markerRadius-2);
             if (inside(mouseX,mouseY,projectX-markerRadius,projectY-markerRadius,2*markerRadius,2*markerRadius)) {
                 deferTooltip(mouseX, mouseY,
                         Component.translatable(
@@ -2668,10 +2696,15 @@ public void setPresentation(boolean grid, boolean overview) { this.showCoordinat
 
     public enum Focus { WORLD, ENERGY }
 
-    public enum SelectionKind { WAYPOINT, PLAYER, CITY, INDUSTRY, PROJECT, LOGISTICS, PLACE }
+    public enum SelectionKind { WAYPOINT, PLAYER, CITY, INDUSTRY, PROJECT, LOGISTICS, PLACE, CARTOGRAPHY,
+        PASSENGER_LINE, PASSENGER_TRAIN }
 
     public record Selection(SelectionKind kind, UUID id, Component title, BlockPos pos,
-                            boolean own, List<Component> details, ItemStack icon, boolean warning) {
+                            boolean own, List<Component> details, ItemStack icon, boolean warning, AtlasPlaceIcon atlasIcon) {
+        public Selection(SelectionKind kind, UUID id, Component title, BlockPos pos,
+                         boolean own, List<Component> details, ItemStack icon, boolean warning) {
+            this(kind, id, title, pos, own, details, icon, warning, null);
+        }
         public Selection {
             details = List.copyOf(details);
         }

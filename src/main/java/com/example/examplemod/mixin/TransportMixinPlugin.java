@@ -1,6 +1,7 @@
 package com.example.examplemod.mixin;
 
 import net.neoforged.fml.ModList;
+import net.neoforged.fml.loading.LoadingModList;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -23,6 +24,7 @@ import java.util.Set;
  */
 public class TransportMixinPlugin implements IMixinConfigPlugin {
 
+    private static final String VANILLA_CUTSCENE_RENDERER = "com.example.examplemod.mixin.CutsceneLevelRendererMixin";
     private static final String SIMULATED_MIXIN_PREFIX = "com.example.examplemod.mixin.simulated.";
     private static final String SIMULATED_CLASS = "dev.simulated_team.simulated.Simulated";
     private static final String SIMULATED_CLASS_RESOURCE = "dev/simulated_team/simulated/Simulated.class";
@@ -36,6 +38,10 @@ public class TransportMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.equals(VANILLA_CUTSCENE_RENDERER)) {
+            // Sodium replaces setupRender and tracks render sections from the camera itself.
+            return LoadingModList.get().getModFileById("sodium") == null;
+        }
         if (!mixinClassName.startsWith(SIMULATED_MIXIN_PREFIX)) {
             return true;
         }

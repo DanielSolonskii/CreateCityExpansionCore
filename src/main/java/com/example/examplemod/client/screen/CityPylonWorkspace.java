@@ -41,6 +41,10 @@ public final class CityPylonWorkspace extends Screen {
         super(Component.translatable("gui.createcityexpansioncore.city.pylon"));
         this.root=root;this.overview=new CityPylonOverviewScreen(root);this.page=overview;
     }
+    public static void receiveEdition(com.example.examplemod.network.GazetteEditionPayload packet) {
+        if (session != null && session.valid() && session.root.getMenu().containerId == packet.container())
+            session.newspaper.update(packet.stories());
+    }
     private boolean valid() {var p=Minecraft.getInstance().player;return p!=null&&p.containerMenu==root.getMenu();}
 
     @SubscribeEvent public static void opening(ScreenEvent.Opening event) {
@@ -301,7 +305,7 @@ public final class CityPylonWorkspace extends Screen {
     }
     @Override public boolean mouseReleased(double x,double y,int b) {boolean result=pointerCaptured&&page.mouseReleased(geometry.localX(x),geometry.localY(y),b);pointerCaptured=false;return result;}
     @Override public boolean mouseDragged(double x,double y,int b,double dx,double dy) {return pointerCaptured&&page.mouseDragged(geometry.localX(x),geometry.localY(y),b,dx/geometry.scale(),dy/geometry.scale());}
-    @Override public boolean mouseScrolled(double x,double y,double dx,double dy) {return geometry.contains(x,y)&&page.mouseScrolled(geometry.localX(x),geometry.localY(y),dx,dy);}
+    @Override public boolean mouseScrolled(double x,double y,double dx,double dy) {if (page == overview && newspaper.scroll(geometry,width,x,y,dy)) return true; return geometry.contains(x,y)&&page.mouseScrolled(geometry.localX(x),geometry.localY(y),dx,dy);}
     @Override public void mouseMoved(double x,double y) {page.mouseMoved(geometry.localX(x),geometry.localY(y));}
     @Override public boolean charTyped(char c,int modifiers) {return page.charTyped(c,modifiers);}
     @Override public boolean keyPressed(int key,int scan,int modifiers) {if(key==256){onClose();return true;}return page.keyPressed(key,scan,modifiers);}

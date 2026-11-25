@@ -30,6 +30,11 @@ public final class AtlasPlaceGameTest {
         h.assertTrue(PlaceService.save(owner,draft(owner,id,0,icon,entry,false)).equals("saved"),"Capture occupied walkable entrance");
         h.assertTrue(PlaceService.resolve(visitor,id)==null && PlaceService.delete(visitor,id,1).equals("unavailable"),"Private place is invisible");
         var visible=draft(owner,id,1,icon,entry,true);
+        h.assertTrue(PlaceService.save(owner,visible).equals("publish_admin") && PlaceService.resolve(visitor,id)==null,
+                "A private place can only be made public by an operator");
+        h.assertTrue(PlaceService.save(visitor,draft(visitor,UUID.randomUUID(),0,icon,entry,true)).equals("publish_admin"),
+                "A non-operator cannot create a public place directly");
+        server.getPlayerList().getOps().add(new net.minecraft.server.players.ServerOpListEntry(owner.getGameProfile(),2,false));
         h.assertTrue(PlaceService.save(owner,visible).equals("saved"),"Explicitly publish existing entrance");
         var result=PlaceService.resolve(visitor,id);
         h.assertTrue(result!=null && result.version()==2 && !result.icon().equals(entry) && result.entrances().equals(List.of(entry)),"Icon and approach retain distinct coordinates");
@@ -49,6 +54,7 @@ public final class AtlasPlaceGameTest {
         h.assertTrue(PlaceService.save(owner,renamed).equals("saved") && PlaceService.resolve(visitor,id).name().equals("Foundry west"),
                 "Renaming preserves the published destination ID");
         var territory=cities.createCity("Receiver",visitor.getUUID(),level.dimension().location(),icon);
+        server.getPlayerList().getOps().remove(owner.getGameProfile());
         h.assertTrue(territory!=null && PlaceService.resolve(visitor,id)==null && !PlaceService.resolve(owner,id).published(),
                 "Changed territorial publication authority withdraws the card even for a previous reader");
         h.assertTrue(PlaceService.delete(owner,id,4).equals("saved") && PlaceService.resolve(owner,id)==null,"Deleted destination is gone");

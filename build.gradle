@@ -850,6 +850,7 @@ def railTestClasspathReceipt = layout.buildDirectory.file('logistics-implementat
     checkRailNative: 'com.example.examplemod.cargo.center.RailNativeCheck',
     checkRailJourneys: 'com.example.examplemod.cargo.center.RailJourneyCheck',
     checkMapNavigation: 'com.example.examplemod.navigation.TripPlannerCheck',
+    checkCityCartography: 'com.example.examplemod.citymap.CityMapFeatureCheck',
     checkSocial: 'com.example.examplemod.social.SocialCheck',
     checkEconomyCompatibility: 'com.example.examplemod.economy.EconomyCompatibilityCheck',
     checkDailyRewards: 'com.example.examplemod.daily.DailyRewardsCheck',

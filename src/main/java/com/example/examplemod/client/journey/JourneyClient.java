@@ -57,7 +57,8 @@ public final class JourneyClient {
     public static boolean track(CityMapPanel panel, ResourceLocation dim, CityMapPanel.Selection value) {
         if (JourneyPlaytest.running() || Minecraft.getInstance().getConnection() == null || !sourceSupported(value)) return false;
         var resolved = AtlasObjective.resolve(panel, dim, value);
-        if (resolved == null || isTracking(dim, resolved)) return false;
+        if (resolved == null) return false;
+        if (isTracking(dim, resolved) && itinerary() == null) return true;
         releaseTrip();
         atlasGoal = AtlasObjective.create(resolved, dim);
         previousGuidanceHidden = !paused && (!target.isEmpty() || !activeQuest.isEmpty());
@@ -78,6 +79,17 @@ public final class JourneyClient {
         return new com.example.examplemod.navigation.TripRef(com.example.examplemod.navigation.TripRef.Kind.valueOf(type.name()),trade==null?value.id():trade.object());
     }
     public static com.example.examplemod.navigation.TripNetwork.Query itinerary() { return atlasGoal==null?null:atlasGoal.trip; }
+    public static boolean directAtlasBearing() {
+        return atlasGoal != null && atlasGoal.trip == null && atlasGoal.readable() && !JourneyPlaytest.running();
+    }
+    public static Point atlasMapDestination() {
+        var goal = atlasGoal;
+        if (goal == null || JourneyPlaytest.running() || !goal.readable() || !riderIn(goal.dimension)) return null;
+        // The atlas releases its directory on close. The live objective has its own access lease.
+        var openWorld = CityPublicDirectory.worldId(goal.dimension);
+        if (openWorld != null && !goal.world.equals(openWorld)) return null;
+        return goal.trip == null ? goal.marker.point : goal.itineraryDestination;
+    }
     public static boolean needsTripUpdate(){return atlasGoal!=null && atlasGoal.trip!=null && atlasGoal.recalculate && atlasGoal.readable();}
     public static void endTrip(UUID request) {
         if(itinerary()!=null && itinerary().request().equals(request))atlasGoal=null;
@@ -110,7 +122,11 @@ public final class JourneyClient {
                 packet.getString("Train"),packet.getString("From"),packet.getString("Stop"));
         var pos=net.minecraft.core.BlockPos.of(packet.getLong("Pos"));
         goal.marker.point=new Point(dim.toString(),pos.getX(),pos.getY(),pos.getZ());
-        goal.marker.title=packet.getString("Goal");
+        if (packet.contains("GoalPos", Tag.TAG_LONG)) {
+            var endpoint=net.minecraft.core.BlockPos.of(packet.getLong("GoalPos"));
+            goal.itineraryDestination=new Point(dim.toString(),endpoint.getX(),endpoint.getY(),endpoint.getZ());
+        }
+        if (!packet.getString("Goal").isBlank()) goal.marker.title=packet.getString("Goal");
         goal.marker.route.clear();
         for(long packed:packet.getLongArray("Ahead")){
             var next=net.minecraft.core.BlockPos.of(packed);

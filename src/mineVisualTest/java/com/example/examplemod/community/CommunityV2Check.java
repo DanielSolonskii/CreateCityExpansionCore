@@ -1,5 +1,6 @@
 package com.example.examplemod.community;
 import com.example.examplemod.projects.*;
+import com.example.examplemod.city.CityGazette;
 import com.example.examplemod.client.screen.*;
 import net.minecraft.nbt.*;
 import net.minecraft.resources.ResourceLocation;
@@ -92,7 +93,26 @@ public final class CommunityV2Check {
     }
     private static int checks;
     private static void require(boolean value,String reason){checks++;if(!value)throw new AssertionError(reason);}
+    private static void newspaper() {
+        var paper = new CityGazette();
+        UUID town = UUID.randomUUID(), other = UUID.randomUUID(), player = UUID.randomUUID();
+        paper.publish(CityGazette.Kind.FOUNDED,town,player,"Alex","Town",1);
+        paper.publish(CityGazette.Kind.JOINED,town,player,"Alex","Town",2);
+        paper.publish(CityGazette.Kind.LEFT,town,player,"Alex","Town",3);
+        paper.publish(CityGazette.Kind.ALLIANCE,town,player,"League","Town",4);
+        require(paper.edition(town).stream().map(CityGazette.Story::kind).toList().equals(
+                List.of(CityGazette.Kind.ALLIANCE,CityGazette.Kind.LEFT,CityGazette.Kind.JOINED,CityGazette.Kind.FOUNDED)),
+                "membership changes appear in the local edition, newest first");
+        require(paper.edition(other).size()==2,"only founding and alliance stories appear abroad");
+        paper.newcomer(player,"Alex",5);
+        require(paper.edition(other).getFirst().equals(paper.edition(town).getFirst())
+                && paper.edition(other).getFirst().kind()==CityGazette.Kind.NEWCOMER, "newcomer makes every city edition");
+        require(CityGazette.load(paper.save(new CompoundTag(),null),null).edition(town).equals(paper.edition(town)),
+                "chronicle survives restart");
+    }
     public static void main(String[] args){
+        newspaper();
+        com.example.examplemod.city.GazetteArchiveCheck.run();
         UUID owner=UUID.randomUUID(),peer=UUID.randomUUID(),other=UUID.randomUUID(),alliance=UUID.randomUUID(),first=UUID.randomUUID(),second=UUID.randomUUID(),third=UUID.randomUUID();
         var inbox=new CommunityInbox();inbox.add(owner,first,"alliance_message",peer,null,alliance,"A",10);inbox.readAllianceThrough(owner,alliance,first,List.of(first));
         inbox.add(owner,second,"alliance_message",peer,null,alliance,"A",20);inbox.readAllianceThrough(owner,alliance,first,List.of(first,second));require(inbox.unread(owner)==1,"late read acknowledgement must not erase a newer message");

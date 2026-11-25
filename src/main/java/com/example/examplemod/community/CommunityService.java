@@ -1,4 +1,5 @@
 package com.example.examplemod.community;
+import com.example.examplemod.city.CityGazette;
 import com.example.examplemod.city.*;
 import com.example.examplemod.network.*;
 import com.example.examplemod.auth.PlayerNames;
@@ -27,7 +28,10 @@ public final class CommunityService {
         if(invite==null||token==null||!invite.token().equals(token))return "stale";
         if(invite.getInvokerId()!=null&&!city.isAdmin(invite.getInvokerId()))return "permission";
         if(accept&&manager.getMemberCity(actor)!=null)return "membership";
-        CommunityInbox.get(s).resolve(actor,invite.token(),accept?"city_invite_accepted":"city_invite_declined");if(accept)city.acceptInvite(actor);else city.removeInvite(actor);manager.setDirty();
+        CommunityInbox.get(s).resolve(actor,invite.token(),accept?"city_invite_accepted":"city_invite_declined");if(accept) {
+            city.acceptInvite(actor);
+            CityGazette.get(s).publish(CityGazette.Kind.JOINED,cityId,actor,PlayerNames.name(s,actor),city.getName(),System.currentTimeMillis());
+        } else city.removeInvite(actor);manager.setDirty();
         CityInviteDirectory.reportOutcome(s,invite.getInvokerId(),PlayerNames.name(s,actor),city.getName(),accept);CityInviteDirectory.publishMembers(s,city);
         CommunityData.get(s).audit(cityId,actor,null,accept?"joined":"declined");if(invite.getInvokerId()!=null)CommunityInbox.get(s).add(invite.getInvokerId(),invite.token(),accept?"city_joined":"city_declined",actor,cityId,null,city.getName(),System.currentTimeMillis());return "ok";
     }

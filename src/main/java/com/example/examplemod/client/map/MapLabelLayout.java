@@ -17,6 +17,8 @@ public final class MapLabelLayout {
     private Map<String, Integer> previous = new HashMap<>();
     private Map<String, Integer> next = new HashMap<>();
     private final BitSet occupied = new BitSet();
+    private record RoadLabel(boolean selected,String id,int x,int y,int w,int h,Runnable draw) {}
+    private final TreeSet<RoadLabel> roadLabels=new TreeSet<>(Comparator.comparing(RoadLabel::selected).reversed().thenComparing(RoadLabel::id));
     private int left, top, width, height, columns;
 
     void begin(int left, int top, int width, int height) {
@@ -26,6 +28,7 @@ public final class MapLabelLayout {
         this.height = height;
         columns = (width + 1) / 2;
         candidates.clear();
+        roadLabels.clear();
         occupied.clear();
     }
 
@@ -53,6 +56,11 @@ public final class MapLabelLayout {
         return true;
     }
 
+    void offerRoad(boolean selected,String id,int x,int y,int w,int h,Runnable draw) {
+        roadLabels.add(new RoadLabel(selected,id,x,y,w,h,draw));
+        if(roadLabels.size()>LIMIT)roadLabels.pollLast();
+    }
+
     void paint(Paint paint) {
         next.clear();
         for (var label : candidates) {
@@ -77,6 +85,12 @@ public final class MapLabelLayout {
                 break;
             }
         }
+        for(var road:roadLabels) {
+            if(!fits(road.x,road.y,road.w,road.h))continue;
+            reserve(road.x,road.y,road.w,road.h);
+            road.draw.run();
+        }
+        roadLabels.clear();
         var swap = previous;
         previous = next;
         next = swap;

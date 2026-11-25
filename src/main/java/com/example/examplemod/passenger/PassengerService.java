@@ -4,6 +4,8 @@ import com.example.examplemod.block.TransportProtection;
 import com.example.examplemod.cargo.CargoTrainRegistry;
 import com.example.examplemod.cargo.center.*;
 import com.example.examplemod.city.CityManager;
+import com.example.examplemod.citymap.CityMapFeature;
+import com.example.examplemod.citymap.CityMapService;
 import com.example.examplemod.policy.GameplayRestrictions;
 import com.mojang.authlib.GameProfile;
 import com.simibubi.create.content.trains.RailwaySavedData;
@@ -27,7 +29,30 @@ import java.util.*;
 
 @EventBusSubscriber(modid = "createcityexpansioncore")
 public final class PassengerService {
-    public record Stop(UUID id, String name, ResourceLocation dimension, BlockPos entrance, BlockPos stationPos) {}
+    public static final int MAX_DESCRIPTION = 180;
+    public record Stop(UUID id, String name, ResourceLocation dimension, BlockPos entrance, BlockPos stationPos, UUID feature) {}
+    public record MapLine(UUID id, String name, String description, int color, List<UUID> stops, UUID train) {
+        public MapLine(UUID id, String name, int color, List<UUID> stops, UUID train) {
+            this(id, name, "", color, stops, train);
+        }
+    }
+
+    /** Map publication is independent of ETA calibration. Only an active, owned native schedule is public. */
+    public static List<MapLine> publicLines(ServerPlayer actor, ResourceLocation dimension) {
+        var server = actor.getServer();
+        var data = PassengerData.get(server);
+        var lines = new ArrayList<MapLine>();
+        for (var line : data.lines.values()) {
+            if (line.train == null || line.stops.size() < 2) continue;
+            var first = data.platforms.get(line.stops.getFirst());
+            if (first == null || !dimension.equals(first.dimension())) continue;
+            var train = active(server, line);
+            if (train == null || !publishedStops(server, data, line, train) || !matchingNames(data,line,train)) continue;
+            lines.add(new MapLine(line.id, line.name, line.description, line.color.getTextureDiffuseColor() & 0xffffff,
+                    List.copyOf(line.stops), line.train));
+        }
+        return List.copyOf(lines);
+    }
     public record Ride(UUID line, UUID generation, UUID train, UUID from, UUID to, String lineName,
                        String trainName, String fromName, String toName, ResourceLocation dimension,
                        BlockPos fromEntrance, BlockPos toEntrance, long departTick, long arriveTick,
@@ -98,12 +123,7 @@ public final class PassengerService {
         if(visit.number()!=ride.fromVisit() || !ride.from().equals(visit.station()) ||
                 !actor.serverLevel().dimension().location().equals(ride.dimension()) || !operating(server,ride))
             return Boarding.CANCELLED;
-        var train=RailwaySavedData.load(server).getTrains().get(ride.train());
-        return switch(boardable(actor.serverLevel(),ride.fromEntrance(),train)){
-            case OPEN->Boarding.READY;
-            case BLOCKED->Boarding.BLOCKED;
-            case UNKNOWN->Boarding.UNKNOWN;
-        };
+        return Boarding.READY;
     }
     private static boolean operating(MinecraftServer server, Ride ride) {
         var data = PassengerData.get(server);
@@ -147,7 +167,7 @@ public final class PassengerService {
             station = graph == null ? null : graph.getPoint(EdgePointType.STATION,p.id());
         }
         if (!published(server,p,station) || station.name.isBlank() || station.name.length() > 96) return null;
-        return new Stop(p.id(),station.name,p.dimension(),p.entrance(),p.stationPos());
+        return new Stop(p.id(),station.name,p.dimension(),p.entrance(),p.stationPos(),p.feature());
     }
     private static boolean publishedStops(MinecraftServer server, PassengerData data, PassengerData.Line line, Train train) {
         for (UUID stop : line.stops) {
@@ -204,29 +224,98 @@ public final class PassengerService {
     public static void platform(ServerPlayer player, boolean remove) {
         var data = writable(player);
         var station = lookedAt(player);
-        var old = data.platforms.get(station.id);
-        if (old != null && !old.owner().equals(player.getUUID()) && !player.hasPermissions(2)) throw fail("permission");
         if (remove) {
             withdrawPlatform(player,station.id);
             return;
-        } else {
-            if (data.lines.values().stream().anyMatch(line -> line.stops.contains(station.id))) throw fail("in_use");
-            var level = player.serverLevel();
-            var pos = player.blockPosition();
-            var manager = CityManager.get(player.getServer().overworld());
-            var owner = manager.getCityAt(level.dimension().location(),station.getBlockEntityPos());
-            var entranceOwner = manager.getCityAt(level.dimension().location(),pos);
-            if (!player.hasPermissions(2) && (owner == null || !owner.canBuild(player.getUUID()) ||
-                    entranceOwner != null && !entranceOwner.canBuild(player.getUUID()))) throw fail("platform_permission");
-            if (player.isPassenger() || !player.onGround() || !walkable(level, pos) ||
-                    !GameplayRestrictions.trainsAllowedIn(level) || !level.mayInteract(player, pos)) throw fail("platform_ground");
-            if (old == null && (data.platforms.size() >= PassengerData.MAX_PLATFORMS ||
-                    data.platforms.values().stream().filter(p -> p.owner().equals(player.getUUID())).count() >= 24)) throw fail("limit");
-            var binding = CargoRailConnections.station(player.getServer(),station.id);
-            if (binding == null) throw fail("look");
-            data.platforms.put(station.id,new PassengerData.Platform(station.id,player.getUUID(),level.dimension().location(),
-                    pos.immutable(),station.getBlockEntityPos().immutable(),binding.graph().id));
         }
+        var level = player.serverLevel();
+        var pos = player.blockPosition();
+        if (player.isPassenger() || !player.onGround() || !walkable(level, pos) ||
+                !GameplayRestrictions.trainsAllowedIn(level) || !level.mayInteract(player, pos)) throw fail("platform_ground");
+        var binding = CargoRailConnections.station(player.getServer(), station.id);
+        if (binding == null) throw fail("look");
+        publishPlatform(player, data, binding, pos);
+    }
+
+    /** Registers the physical rail stop at the saved map entrance without bringing any chunks into memory. */
+    public static UUID registerCityStation(ServerPlayer actor, CityMapFeature selected) {
+        var data = writable(actor);
+        var feature = CityMapService.resolve(actor, selected.id());
+        if (feature == null || feature.revision() != selected.revision()) throw fail("stale");
+        if (feature.kind() != CityMapFeature.Kind.STATION || feature.entrances().isEmpty()) throw fail("station_entrance");
+        var entrance = feature.entrances().getFirst();
+        var level = actor.serverLevel();
+        if (!feature.dimension().equals(level.dimension().location()) || !GameplayRestrictions.trainsAllowedIn(level))
+            throw fail("unavailable");
+        if (!walkable(level, entrance) || !level.mayInteract(actor, entrance)) throw fail("station_entrance");
+        CargoRailConnections.Station binding = null;
+        for (var graph : RailwaySavedData.load(actor.getServer()).getTrackNetworks().values()) {
+            for (var station : graph.getPoints(EdgePointType.STATION)) {
+                if (station.assembling || !level.dimension().equals(station.getBlockEntityDimension())) continue;
+                var pos = station.getBlockEntityPos();
+                if (Math.abs(pos.getY() - entrance.getY()) > 3 || pos.distSqr(entrance) > 64
+                        || !feature.containsXZ(pos.getX(), pos.getZ())) continue;
+                if (binding != null) throw fail("station_ambiguous");
+                binding = new CargoRailConnections.Station(graph, station);
+            }
+        }
+        if (binding == null) throw fail("station_missing");
+        var station = binding.station();
+        var pos = station.getBlockEntityPos();
+        if (!level.hasChunkAt(pos) || !level.mayInteract(actor, pos)
+                || !(level.getBlockEntity(pos) instanceof StationBlockEntity be) || be.getStation() == null
+                || !station.id.equals(be.getStation().id) || station.name.isBlank() || station.name.length() > 96
+                || station.name.contains("*") || station.name.contains("?")) throw fail("station_missing");
+        CityMapService.stationForBinding(actor, feature.id(), feature.revision(), pos, entrance);
+        var existing = data.platforms.get(station.id);
+        if (existing != null && existing.feature() != null && !feature.id().equals(existing.feature())) throw fail("platform_bound");
+        publishPlatform(actor, data, binding, entrance);
+        if (existing == null || existing.feature() == null) {
+            data.platforms.put(station.id, data.platforms.get(station.id).withFeature(feature.id()));
+            data.setDirty();
+            CityMapService.platformsChanged(actor,feature.id());
+        }
+        return station.id;
+    }
+
+    public static void bindCityPlatform(ServerPlayer actor, UUID feature, long revision, UUID stopId) {
+        var data = writable(actor);
+        var p = data.platforms.get(stopId);
+        if (p == null || !p.dimension().equals(actor.level().dimension().location()) || publicStop(actor.getServer(),p) == null)
+            throw fail("platform");
+        CityMapService.stationForBinding(actor,feature,revision,p.stationPos(),p.entrance());
+        if (feature.equals(p.feature())) return;
+        if (p.feature()!=null) throw fail("platform_bound");
+        data.platforms.put(stopId, p.withFeature(feature));
+        data.setDirty();
+        CityMapService.platformsChanged(actor,feature);
+    }
+    public static void unbindCityPlatform(ServerPlayer actor, UUID feature, long revision, UUID stopId) {
+        var data = writable(actor);
+        var p = data.platforms.get(stopId);
+        var saved = CityMapService.resolve(actor,feature);
+        if (saved == null || saved.revision() != revision) throw fail("stale");
+        if (p == null || !feature.equals(p.feature())) throw fail("platform");
+        data.platforms.put(stopId, p.withFeature(null));
+        data.setDirty();
+        CityMapService.platformsChanged(actor,feature);
+    }
+    public static boolean hasCityPlatforms(MinecraftServer server, UUID feature) {
+        return PassengerData.get(server).platforms.values().stream().anyMatch(p -> feature.equals(p.feature()));
+    }
+
+    private static void publishPlatform(ServerPlayer actor, PassengerData data, CargoRailConnections.Station binding, BlockPos entrance) {
+        var station = binding.station();
+        var old = data.platforms.get(station.id);
+        var platform = new PassengerData.Platform(station.id, actor.getUUID(), actor.level().dimension().location(),
+                entrance.immutable(), station.getBlockEntityPos().immutable(), binding.graph().id, old == null ? null : old.feature());
+        if (old != null && old.graph().equals(platform.graph()) && old.dimension().equals(platform.dimension())
+                && old.stationPos().equals(platform.stationPos()) && old.entrance().equals(entrance)
+                && publicStop(actor.getServer(), old) != null) return;
+        if (old != null && old.feature() != null) throw fail("platform_bound");
+        if (data.lines.values().stream().anyMatch(line -> line.stops.contains(station.id))) throw fail("in_use");
+        if (old == null && data.platforms.size() >= PassengerData.MAX_PLATFORMS) throw fail("limit");
+        data.platforms.put(station.id, platform);
         data.setDirty();
     }
     /** Stable-ID withdrawal remains available after the station block itself has disappeared. */
@@ -242,6 +331,7 @@ public final class PassengerService {
         }
         data.platforms.remove(id);
         data.setDirty();
+        if (old.feature()!=null) CityMapService.platformsChanged(actor,old.feature());
     }
     private static boolean walkable(ServerLevel level, BlockPos pos) {
         if (!level.hasChunkAt(pos) || !level.getWorldBorder().isWithinBounds(pos) || level.isOutsideBuildHeight(pos)
@@ -252,22 +342,75 @@ public final class PassengerService {
     }
     public static UUID create(ServerPlayer player, String name) {
         var data = writable(player);
-        if (data.lines.size() >= PassengerData.MAX_LINES ||
-                data.lines.values().stream().filter(line -> line.owner.equals(player.getUUID())).count() >= 4) throw fail("limit");
+        if (data.lines.size() >= PassengerData.MAX_LINES) throw fail("limit");
         var line = new PassengerData.Line(UUID.randomUUID(),player.getUUID(),name.strip());
         data.lines.put(line.id,line); data.setDirty();
         return line.id;
     }
+    static void setColor(ServerPlayer player,UUID id,String name) {
+        var data=writable(player);
+        var line=managed(player,data,id);
+        var color=net.minecraft.world.item.DyeColor.byName(name,null);
+        if (color==null) throw fail("unavailable");
+        line.color=color;
+        data.setDirty();
+    }
+    public static void setDescription(ServerPlayer player, UUID id, String expected, String description) {
+        var data = writable(player);
+        var line = managed(player, data, id);
+        line.changeDescription(expected, description);
+        data.setDirty();
+    }
+    static void chooseTrain(ServerPlayer player,UUID lineId,UUID trainId) {
+        var data=writable(player);
+        var line=managed(player,data,lineId);
+        if (line.train!=null) throw fail("in_use");
+        if (trainId!=null) {
+            var train=RailwaySavedData.load(player.getServer()).getTrains().get(trainId);
+            if (!RailwayBinder.selected(player,RailwayBinder.TRAINS).contains(trainId) || train==null ||
+                    !TransportProtection.canModifyTrain(player,train)) throw fail("train_changed");
+        }
+        line.chosenTrain=trainId;
+        data.setDirty();
+    }
     public static void append(ServerPlayer player, UUID id) {
+        append(player, id, lookedAt(player).id, false);
+    }
+
+    static void append(ServerPlayer player, UUID id, UUID stationId, boolean registerHere) {
         var data = writable(player);
         var line = managed(player,data,id);
-        var station = lookedAt(player);
-        var platform = data.platforms.get(station.id);
-        if (!published(player.getServer(),platform,station)) throw fail("platform");
         if (line.train != null) throw fail("in_use");
-        if (line.stops.size() >= PassengerTimetable.MAX_STOPS || line.stops.contains(station.id) ||
-                !line.stops.isEmpty() && !data.platforms.get(line.stops.getFirst()).dimension().equals(platform.dimension())) throw fail("stops");
-        line.stops.add(station.id); data.setDirty();
+        if (stationId == null) {
+            var aimed = lookedAt(player);
+            if (aimed.name.isBlank() || aimed.name.length() > 96 || aimed.name.contains("*") || aimed.name.contains("?"))
+                throw fail("ambiguous");
+            stationId = aimed.id;
+        }
+        if (line.stops.contains(stationId)) throw fail("duplicate_stop");
+        if (line.stops.size() >= PassengerTimetable.MAX_STOPS) throw fail("stops");
+        var dimension = player.level().dimension().location();
+        if (!line.stops.isEmpty() && !data.platforms.get(line.stops.getFirst()).dimension().equals(dimension))
+            throw fail("other_dimension");
+        if (!line.stops.isEmpty()) {
+            var first = CargoRailConnections.station(player.getServer(),line.stops.getFirst());
+            if (first == null) throw fail("platform");
+            if (first.graph().getPoint(EdgePointType.STATION,stationId) == null) throw fail("different_network");
+        }
+        if (registerHere && !data.platforms.containsKey(stationId)) platform(player,false);
+        var stop = publicStop(player.getServer(), data.platforms.get(stationId));
+        if (stop == null || !dimension.equals(stop.dimension())) throw fail("platform");
+        line.stops.add(stationId);
+        data.setDirty();
+    }
+
+    static void clearStops(ServerPlayer player, UUID id) {
+        var data = writable(player);
+        var line = managed(player,data,id);
+        release(player.getServer(),line);
+        line.stops.clear();
+        line.chosenTrain=null;
+        data.setDirty();
     }
     static void pop(ServerPlayer player, UUID id) {
         var data = writable(player); var line = managed(player,data,id);
@@ -275,16 +418,33 @@ public final class PassengerService {
         line.stops.removeLast(); data.setDirty();
     }
     public static void start(ServerPlayer actor, UUID id, int dwellSeconds) {
+        start(actor,id,dwellSeconds,null);
+    }
+
+    static GlobalStation departureStation(ServerPlayer actor, PassengerData data, PassengerData.Line line) {
+        if (line.stops.isEmpty()) return null;
+        var platform = data.platforms.get(line.stops.getFirst());
+        if (platform == null) return null;
+        var binding = CargoRailConnections.station(actor.getServer(),platform.id());
+        GlobalStation station = binding == null ? null : binding.station();
+        return station == null || station.assembling ? null : station;
+    }
+
+    static void start(ServerPlayer actor, UUID id, int dwellSeconds, UUID expectedTrain) {
         var server = actor.getServer();
         var data = writable(actor);
         var line = managed(actor,data,id);
         if (line.train != null || line.stops.size() < 2 || dwellSeconds < 10 || dwellSeconds > 120) throw fail("stops");
-        var origin = lookedAt(actor);
+        var origin = departureStation(actor,data,line);
+        if (origin == null || origin.getPresentTrain() == null) throw fail("no_docked_train");
         var train = origin.getPresentTrain();
+        if (expectedTrain != null && (train == null || !expectedTrain.equals(train.id))) throw fail("train_changed");
+        if (line.chosenTrain != null && !line.chosenTrain.equals(train.id)) throw fail("train_changed");
         if (!line.stops.getFirst().equals(origin.id) || train == null || !origin.id.equals(stoppedAt(server, train.id)) ||
-                train.invalid || train.derailed || train.manualTick || train.graph == null || train.carriages.size() > 32 ||
-                !(train.hasForwardConductor() || train.doubleEnded && train.hasBackwardConductor())) throw fail("train");
-        if (!trainManager(server,line.owner,train) || !TransportProtection.canModifyTrain(actor,train)) throw fail("permission");
+                train.invalid || train.derailed || train.manualTick || train.graph == null || train.carriages.size() > 32) throw fail("train");
+        if (!(train.hasForwardConductor() || train.doubleEnded && train.hasBackwardConductor())) throw fail("no_driver");
+        UUID operator = trainManager(server,actor.getUUID(),train) ? actor.getUUID() : line.owner;
+        if (!trainManager(server,operator,train) || !TransportProtection.canModifyTrain(actor,train)) throw fail("permission");
         if (assigned(server,train.id) || CargoCharters.get(server).reservesTrain(server,train.id) ||
                 PublicFleetRegistry.get(server).hasJob(train.id) || PublicFleetRegistry.get(server).service(train.id).filter(PublicFleetRegistry.Service::enabled).isPresent() ||
                 CargoShipmentRegistry.get(server).inUse("train",train.id)) throw fail("in_use");
@@ -292,55 +452,15 @@ public final class PassengerService {
         if (!publishedStops(server,data,line,train)) throw fail("platform");
         var names = names(data,line,train);
         if (names.isEmpty()) throw fail("ambiguous");
-        var reach=boardable(actor.serverLevel(),data.platforms.get(origin.id).entrance(),train);
-        if(reach!=PassengerSeatRay.Reach.OPEN)throw fail(reach==PassengerSeatRay.Reach.UNKNOWN?"seat_unknown":"seat");
         var schedule = CargoSchedules.build(server.registryAccess(), names, dwellSeconds);
         train.runtime.setSchedule(schedule,true);
         line.train = train.id; line.generation = UUID.randomUUID();
+        line.trainOperator = operator;
         line.schedule = CargoSchedulePlan.shape(schedule.write(server.registryAccess()));
         line.clock = new PassengerTimetable(line.stops.size());
         line.verifiedPlatforms[0] = server.overworld().getGameTime();
+        line.clock.observe(0,line.verifiedPlatforms[0]);
         data.setDirty(); RailwaySavedData.load(server).setDirty();
-    }
-    /** A real non-driving seat must be reachable from the registered point while the train is physically docked. */
-    private static PassengerSeatRay.Reach boardable(ServerLevel level, BlockPos platform, Train train) {
-        if (!level.hasChunkAt(platform))return PassengerSeatRay.Reach.UNKNOWN;
-        if (!walkable(level,platform)) return PassengerSeatRay.Reach.BLOCKED;
-        Vec3 eyes = Vec3.atBottomCenterOf(platform).add(0,1.62,0);
-        int count = 0;
-        boolean unknown=false;
-        for (var carriage : train.carriages) {
-            var inDimension = carriage.getDimensionalIfPresent(level.dimension());
-            var entity = inDimension == null ? null : inDimension.entity.get();
-            if (entity == null || !(entity.getContraption() instanceof CarriageContraption contraption)){unknown=true;continue;}
-            var localEye=entity.toLocalVector(eyes,1);
-            java.util.function.Function<BlockPos,net.minecraft.world.phys.shapes.VoxelShape> outline=pos->{
-                var block=contraption.getBlocks().get(pos);
-                if(block==null || contraption.isHiddenInPortal(pos))return net.minecraft.world.phys.shapes.Shapes.empty();
-                if(block.state().getBlock().hasDynamicShape())return null;
-                return block.state().getShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE,BlockPos.ZERO.below());
-            };
-            for (var seat : contraption.getSeats()) {
-                if (++count > 256) return PassengerSeatRay.Reach.UNKNOWN;
-                if (contraption.conductorSeats.containsKey(seat)) continue;
-                var shape=outline.apply(seat);
-                if(shape==null){unknown=true;continue;}
-                if(shape.isEmpty())continue;
-                var aim=shape.bounds().getCenter().add(seat.getX(),seat.getY(),seat.getZ());
-                var target = entity.toGlobalVector(aim,1);
-                if (eyes.distanceToSqr(target) > 4.5 * 4.5) continue;
-                // Native ray checks should not pull in an adjacent unloaded chunk around a corner.
-                if (!level.hasChunkAt(BlockPos.containing(target)) ||
-                        !level.hasChunkAt(new BlockPos(platform.getX(),platform.getY(),(int)Math.floor(target.z))) ||
-                        !level.hasChunkAt(new BlockPos((int)Math.floor(target.x),platform.getY(),platform.getZ()))){unknown=true;continue;}
-                var hit = level.clip(new ClipContext(eyes,target,ClipContext.Block.OUTLINE,ClipContext.Fluid.NONE,entity));
-                if(hit.getType()!=HitResult.Type.MISS)continue;
-                var selection=PassengerSeatRay.first(localEye,aim,seat,outline);
-                if(selection==PassengerSeatRay.Reach.OPEN)return selection;
-                if(selection==PassengerSeatRay.Reach.UNKNOWN)unknown=true;
-            }
-        }
-        return unknown?PassengerSeatRay.Reach.UNKNOWN:PassengerSeatRay.Reach.BLOCKED;
     }
     private static boolean trainManager(MinecraftServer server, UUID operator, Train train) {
         if (train.owner == null) return false;
@@ -358,7 +478,7 @@ public final class PassengerService {
     private static void release(MinecraftServer server, PassengerData.Line line) {
         if (line.train != null) {
             var train = RailwaySavedData.load(server).getTrains().get(line.train);
-            if (train != null && trainManager(server,line.owner,train) && owns(server,line,train)) {
+            if (train != null && trainManager(server,line.trainOperator,train) && owns(server,line,train)) {
                 train.runtime.discardSchedule();
                 RailwaySavedData.load(server).setDirty();
             }
@@ -366,6 +486,7 @@ public final class PassengerService {
         }
     }
     private static PassengerData writable(ServerPlayer player) {
+        if (!player.hasPermissions(2)) throw fail("op_required");
         var data = PassengerData.get(player.getServer());
         if (data.unavailable != null || player.isSpectator()) throw fail("unavailable");
         return data;
@@ -392,7 +513,7 @@ public final class PassengerService {
         var train = RailwaySavedData.load(server).getTrains().get(line.train);
         return train != null && !train.invalid && !train.derailed && !train.manualTick && train.graph != null &&
                 !train.runtime.paused && !train.runtime.completed && (train.hasForwardConductor() || train.doubleEnded && train.hasBackwardConductor()) &&
-                trainManager(server,line.owner,train) && owns(server,line,train) ? train : null;
+                trainManager(server,line.trainOperator,train) && owns(server,line,train) ? train : null;
     }
     /** Native destinations match names, while our identities remain station UUIDs. Ambiguity withdraws the ride. */
     private static List<String> names(PassengerData data, PassengerData.Line line, Train train) {
@@ -412,6 +533,15 @@ public final class PassengerService {
         for (var station : stations) if (wanted.contains(station.name) && !seen.add(station.name)) return List.of();
         return names;
     }
+    private static boolean matchingNames(PassengerData data, PassengerData.Line line, Train train) {
+        var names=names(data,line,train);
+        var entries=train.runtime.getSchedule().entries;
+        if (names.isEmpty() || names.size()!=entries.size()) return false;
+        for(int i=0;i<names.size();i++) {
+            if(!CargoSchedulePlan.filter(names.get(i)).equals(entries.get(i).instruction.getData().getString("Text")))return false;
+        }
+        return true;
+    }
     @SubscribeEvent public static void tick(ServerTickEvent.Post event) {
         var server = event.getServer(); long now = server.overworld().getGameTime();
         var data = PassengerData.get(server);
@@ -422,12 +552,7 @@ public final class PassengerService {
             var train = active(server,line);
             if (train == null) { line.clock.reset(); line.status = "changed"; continue; }
             if (!publishedStops(server,data,line,train)) { line.clock.reset(); line.status = "permission"; continue; }
-            var names = names(data,line,train);
-            var entries = train.runtime.getSchedule().entries;
-            boolean matches = names.size() == entries.size();
-            for (int i = 0; matches && i < names.size(); i++)
-                matches = CargoSchedulePlan.filter(names.get(i)).equals(entries.get(i).instruction.getData().getString("Text"));
-            if (!matches) { line.clock.reset(); line.status = "invalid_names"; continue; }
+            if (!matchingNames(data,line,train)) { line.clock.reset(); line.status = "invalid_names"; continue; }
             line.verifiedDirection = true;
             UUID docked = stoppedAt(server,train.id);
             int index = docked == null ? -1 : line.stops.indexOf(docked);
@@ -435,24 +560,20 @@ public final class PassengerService {
                 var p = data.platforms.get(docked);
                 var level = p == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION,p.dimension()));
                 if (index < 0 || level == null) { line.clock.reset(); line.verifiedDirection = false; line.status = "invalid_names"; continue; }
-                if (level.hasChunkAt(p.entrance()) &&
-                        train.carriages.stream().anyMatch(c -> {
-                            var d = c.getDimensionalIfPresent(level.dimension());
-                            return d != null && d.entity.get() != null;
-                        })) {
-                    var reach=boardable(level,p.entrance(),train);
-                    line.verifiedPlatforms[index] = switch(reach){case OPEN->now;case BLOCKED->-1;case UNKNOWN->0;};
-                }
-                if (line.verifiedPlatforms[index] <= 0 || now - line.verifiedPlatforms[index] > 24_000) {
-                    line.clock.observe(index,now);
-                    line.status = line.verifiedPlatforms[index]<0?"no_seat":"seat_unknown"; continue;
-                }
+                line.verifiedPlatforms[index] = now;
             }
             line.clock.observe(index,now);
+            if (line.firstServicePending && index == -1 && line.clock.inTransitFromOrigin() && Math.abs(train.speed) > .001) {
+                var origin = train.graph.getPoint(EdgePointType.STATION,line.stops.getFirst());
+                var terminus = train.graph.getPoint(EdgePointType.STATION,line.stops.getLast());
+                com.example.examplemod.city.CityGazette.get(server).publish(com.example.examplemod.city.CityGazette.Kind.FIRST_SERVICE,
+                        null,line.id,line.name,origin.name,terminus.name,System.currentTimeMillis());
+                line.firstServicePending = false;
+                data.setDirty();
+            }
             line.status = line.clock.calibrated() ? "late" : "checking";
             if(line.clock.calibrated() && !platformsFresh(line,now)) {
-                line.status="seat_unknown";
-                for(int i=0;i<line.stops.size();i++)if(line.verifiedPlatforms[i]<0){line.status="no_seat";break;}
+                line.status="checking";
             }
         }
     }
