@@ -1,6 +1,11 @@
 package com.example.examplemod.machine;
 
 import com.example.examplemod.CreateCityExpansionCore;
+import com.simibubi.create.content.equipment.armor.BacktankUtil;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.DyeItem;
 import com.example.examplemod.city.CityProtectionManager;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -59,20 +64,48 @@ public final class PanelPainterItem extends Item {
         var level = context.getLevel();
         var pos = context.getClickedPos();
         var state = level.getBlockState(pos);
-        if (!MachinePanels.isPanel(state)) return InteractionResult.PASS;
+        var stack = context.getItemInHand();
+        var selected = color(stack);
+        var sign = level.getBlockEntity(pos) instanceof SignBlockEntity target ? target : null;
+        BlockState next = sign == null ? PaintableBlocks.recolor(state, selected) : null;
+        if (sign == null && next == null) return InteractionResult.PASS;
         if (!player.mayBuild()) return InteractionResult.FAIL;
         if (player instanceof ServerPlayer serverPlayer) {
             if (!CityProtectionManager.canModify(serverPlayer.serverLevel(), serverPlayer, pos)) {
                 player.displayClientMessage(Component.translatable("message.createcityexpansioncore.panel_painter.denied"), true);
                 return InteractionResult.FAIL;
             }
-            var next = state.setValue(MachinePanels.COLOR, color(context.getItemInHand()));
-            if (state != next && !level.setBlock(pos, next, Block.UPDATE_CLIENTS)) return InteractionResult.FAIL;
+            if (sign != null) {
+                boolean front = sign.isFacingFrontText(player);
+                if (sign.isWaxed() || sign.getPlayerWhoMayEdit() != null
+                        || sign.getText(front).getColor() == selected
+                        || !DyeItem.byColor(selected).tryApplyToSign(level, sign, front, player)) {
+                    return InteractionResult.CONSUME;
+                }
+            } else {
+                if (next == state) return InteractionResult.CONSUME;
+                if (!level.setBlock(pos, next, Block.UPDATE_ALL)) return InteractionResult.FAIL;
+            }
+            if (!player.getAbilities().instabuild && !BacktankUtil.canAbsorbDamage(player, stack.getMaxDamage())) {
+                stack.hurtAndBreak(1, player, LivingEntity.getSlotForHand(context.getHand()));
+            }
             com.example.examplemod.network.PaintSprayFeedback.send(serverPlayer, context.getHand(),
                     context.getClickLocation().add(net.minecraft.world.phys.Vec3.atLowerCornerOf(
-                            context.getClickedFace().getNormal()).scale(.025)), color(context.getItemInHand()));
+                            context.getClickedFace().getNormal()).scale(.025)), selected);
         }
         return InteractionResult.CONSUME;
+    }
+
+    @Override public boolean isBarVisible(ItemStack stack) {
+        return BacktankUtil.isBarVisible(stack, stack.getMaxDamage());
+    }
+
+    @Override public int getBarWidth(ItemStack stack) {
+        return BacktankUtil.getBarWidth(stack, stack.getMaxDamage());
+    }
+
+    @Override public int getBarColor(ItemStack stack) {
+        return BacktankUtil.getBarColor(stack, stack.getMaxDamage());
     }
 
     public static Component colorName(DyeColor color) {
