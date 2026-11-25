@@ -79,6 +79,9 @@ public final class CutsceneCueScreen extends Screen {
     private String status = "";
     private boolean statusError;
     private Easing easing;
+    private boolean fadeIn;
+    private boolean fadeOut;
+    private boolean hideBars;
     private int panelX;
     private int panelY;
     private int panelWidth;
@@ -146,13 +149,16 @@ public final class CutsceneCueScreen extends Screen {
     private void cameraFields(int x, int y, int contentWidth, int third) {
         int easingX = x + third + 8;
         labels.add(new Label("Переход", easingX, y));
+        int effectsWidth = contentWidth < 225 ? 49 : 85;
         Button easingButton = addRenderableWidget(CutsceneEditorScreen.button(easingName(easing), easingX, y + 10,
-                contentWidth - third - 8, false, button -> {
+                contentWidth - third - 12 - effectsWidth, false, button -> {
             Easing[] modes = Easing.values();
             easing = modes[(easing.ordinal() + 1) % modes.length];
             button.setMessage(Component.literal(easingName(easing)));
         }));
         easingButton.setTooltip(Tooltip.create(Component.literal("Переход от этого ключа к следующему. Щёлкните для смены режима")));
+        add("Эффекты", x + contentWidth - effectsWidth, y + 10, effectsWidth, false,
+                () -> minecraft.setScreen(new CameraEffectsScreen()));
 
         field(Field.X, x, y + rowStep, third);
         field(Field.Y, x + third + 8, y + rowStep, third);
@@ -275,7 +281,8 @@ public final class CutsceneCueScreen extends Screen {
             }
             switch (track) {
                 case CAMERA -> parent.applyCamera(index, new CameraKeyframe(tick, decimal(Field.X), decimal(Field.Y),
-                        decimal(Field.Z), (float) decimal(Field.YAW), (float) decimal(Field.PITCH), easing));
+                        decimal(Field.Z), (float) decimal(Field.YAW), (float) decimal(Field.PITCH), easing,
+                        fadeIn, fadeOut, hideBars));
                 case SOUND -> parent.applySound(index, soundCue(tick));
                 case TEXT -> {
                     int duration = integer(Field.DURATION);
@@ -375,6 +382,56 @@ public final class CutsceneCueScreen extends Screen {
         values.put(Field.TICK, Integer.toString(key.tick()));
         loadCameraPosition(key);
         easing = key.easing();
+        fadeIn = key.fadeIn();
+        fadeOut = key.fadeOut();
+        hideBars = key.hideBars();
+    }
+
+    private final class CameraEffectsScreen extends Screen {
+        private CameraEffectsScreen() {
+            super(Component.literal("Эффекты ключа камеры"));
+        }
+
+        @Override
+        protected void init() {
+            int w = Math.min(310, width - 24);
+            int x = (width - w) / 2;
+            int y = Math.max(25, (height - 130) / 2);
+            addRenderableWidget(CutsceneEditorScreen.button(toggleLabel("Фейд-ин", fadeIn), x, y + 16, w, false, button -> {
+                fadeIn = !fadeIn;
+                button.setMessage(Component.literal(toggleLabel("Фейд-ин", fadeIn)));
+            })).setTooltip(Tooltip.create(Component.literal("Выход из чёрного за 0.5 секунды после этого ключа")));
+            addRenderableWidget(CutsceneEditorScreen.button(toggleLabel("Фейд-аут", fadeOut), x, y + 40, w, false, button -> {
+                fadeOut = !fadeOut;
+                button.setMessage(Component.literal(toggleLabel("Фейд-аут", fadeOut)));
+            })).setTooltip(Tooltip.create(Component.literal("Затемнение за 0.5 секунды перед этим ключом. Включите оба фейда для перехода через чёрный")));
+            addRenderableWidget(CutsceneEditorScreen.button(toggleLabel("Убирать полосы", hideBars), x, y + 64, w, false, button -> {
+                hideBars = !hideBars;
+                button.setMessage(Component.literal(toggleLabel("Убирать полосы", hideBars)));
+            })).setTooltip(Tooltip.create(Component.literal("С этого ключа полосы плавно исчезают к концу сцены. При нескольких отметках действует первая")));
+            addRenderableWidget(CutsceneEditorScreen.button("Готово", x, y + 96, w, true, this::onClose));
+        }
+
+        @Override
+        public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            graphics.fill(0, 0, width, height, BACKGROUND);
+            int y = Math.max(25, (height - 130) / 2);
+            graphics.drawCenteredString(font, title, width / 2, y, INK);
+        }
+
+        @Override
+        public boolean isPauseScreen() {
+            return false;
+        }
+
+        @Override
+        public void onClose() {
+            minecraft.setScreen(CutsceneCueScreen.this);
+        }
+
+        private String toggleLabel(String label, boolean enabled) {
+            return label + (enabled ? " · ВКЛ" : " · ВЫКЛ");
+        }
     }
 
     private void loadCameraPosition(CameraKeyframe key) {

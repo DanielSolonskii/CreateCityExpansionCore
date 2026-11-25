@@ -89,6 +89,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -322,7 +323,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MinePowerPortBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0f)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_POWER_PORT)
                     )
             );
     public static final DeferredBlock<MineControllerBlock> MINE_CONTROLLER =
@@ -331,7 +332,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MineControllerBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_CONTROLLER)
                     )
             );
 
@@ -427,9 +428,8 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     "example_block",
                     BlockBehaviour.Properties
                             .of()
-                            .mapColor(
-                                    MapColor.STONE
-                            )
+                            .mapColor(MapColor.STONE)
+                            .sound(SoundType.STONE)
             );
 
     public static final DeferredItem<BlockItem>
@@ -547,7 +547,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MineFrameBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_FRAME)
                     )
             );
     public static final DeferredBlock<DrillUnitBlock> DRILL_UNIT =
@@ -556,7 +556,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new DrillUnitBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(SoundType.ANVIL)
                     )
             );
     public static final DeferredBlock<TechnicalBlock> TECHNICAL_BLOCK =
@@ -565,7 +565,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new TechnicalBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_TECHNICAL_BLOCK)
                     )
             );
     public static final DeferredBlock<ControlBlock> CONTROL_BLOCK =
@@ -574,7 +574,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new ControlBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_CONTROL_BLOCK)
                     )
             );
 
@@ -596,7 +596,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                             .mapColor(MapColor.STONE)
                             .strength(2.0F)
                             .requiresCorrectToolForDrops()
-                            .sound(net.minecraft.world.level.block.SoundType.STONE)
+                            .sound(SoundType.STONE)
             );
     public static final DeferredItem<BlockItem> REINFORCED_CONCRETE_ITEM =
             ITEMS.registerSimpleBlockItem(
@@ -609,7 +609,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MineGatewayBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_GATEWAY)
                     )
             );
 
@@ -631,7 +631,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
 
     public static final DeferredBlock<com.example.examplemod.machine.MachineDisplayBlock> TECHNICAL_SCREEN =
             BLOCKS.register("technical_screen", () -> new com.example.examplemod.machine.MachineDisplayBlock(
-                    BlockBehaviour.Properties.of().strength(3.0F).mapColor(MapColor.METAL)));
+                    BlockBehaviour.Properties.of().strength(3.0F).mapColor(MapColor.METAL).sound(ModSounds.PLACE_TECHNICAL_SCREEN)));
     public static final DeferredItem<Item> TECHNICAL_SCREEN_ITEM = ITEMS.registerItem("technical_screen",
             properties -> new BlockItem(TECHNICAL_SCREEN.get(), properties), new Item.Properties());
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.machine.MachineDisplayBlockEntity>> TECHNICAL_SCREEN_ENTITY =
@@ -640,7 +640,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
 
     public static final DeferredBlock<com.example.examplemod.block.TransportRegistrationTerminalBlock> TRANSPORT_REGISTRATION_TERMINAL =
             BLOCKS.register("transport_registration_terminal", () -> new com.example.examplemod.block.TransportRegistrationTerminalBlock(
-                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL)));
+                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL).sound(ModSounds.PLACE_TRANSPORT_REGISTRATION_TERMINAL)));
     public static final DeferredItem<BlockItem> TRANSPORT_REGISTRATION_TERMINAL_ITEM = ITEMS.registerSimpleBlockItem(
             "transport_registration_terminal", TRANSPORT_REGISTRATION_TERMINAL);
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.block.TransportRegistrationTerminalBlockEntity>>

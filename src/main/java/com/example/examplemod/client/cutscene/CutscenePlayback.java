@@ -2,9 +2,9 @@ package com.example.examplemod.client.cutscene;
 
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.cutscene.Cutscene;
-import com.example.examplemod.cutscene.CutsceneChunks;
 import com.example.examplemod.cutscene.CutsceneChunkNetwork;
 import com.example.examplemod.cutscene.CutsceneJson;
+import com.example.examplemod.cutscene.CutscenePresentation;
 import java.util.UUID;
 import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.ArrayList;
@@ -116,7 +116,7 @@ public final class CutscenePlayback {
             return;
         }
         playback.sendProgress((int) time);
-        if (time >= playback.scene.durationTicks()) {
+        if (time >= CutscenePresentation.endTick(playback.scene)) {
             finish(true);
         } else {
             playback.playSounds(client, time);
@@ -150,6 +150,14 @@ public final class CutscenePlayback {
             return null;
         }
         return playback.cameraPose(playback.time());
+    }
+
+    public static void capturePlayerView(Camera camera) {
+        Playback playback = current();
+        if (playback != null && camera == Minecraft.getInstance().gameRenderer.getMainCamera()) {
+            var position = camera.getPosition();
+            playback.playerView = new CameraPose(position.x, position.y, position.z, camera.getYRot(), camera.getXRot());
+        }
     }
 
     public static void acceptChunks(UUID session) {
@@ -219,6 +227,7 @@ public final class CutscenePlayback {
         private final List<SoundInstance> sounds = new ArrayList<>();
         private int soundIndex;
         private int cameraIndex;
+        private CameraPose playerView;
 
         private Playback(Cutscene scene, ClientLevel level, LocalPlayer player, PlaybackScreen screen, int startTick,
                          @Nullable Runnable onFinish) {
@@ -228,6 +237,8 @@ public final class CutscenePlayback {
             this.screen = screen;
             this.startTick = startTick;
             this.onFinish = onFinish;
+            var eyes = player.getEyePosition();
+            playerView = new CameraPose(eyes.x, eyes.y, eyes.z, player.getYRot(), player.getXRot());
             while (soundIndex < scene.sounds().size() && scene.sounds().get(soundIndex).tick() < startTick) {
                 soundIndex++;
             }
@@ -257,12 +268,14 @@ public final class CutscenePlayback {
             if (streaming && now - lastProgress >= 100_000_000L) {
                 lastProgress = now;
                 PacketDistributor.sendToServer(new CutsceneChunkNetwork.Request(session, 1,
-                        Math.min(tick, scene.durationTicks() - 1), ""));
+                        Math.min(tick, CutscenePresentation.endTick(scene) - 1), ""));
             }
         }
 
         private boolean initialChunksLoaded() {
-            var center = CutsceneChunks.position(scene, startTick);
+            var pose = cameraPose(startTick);
+            var center = new net.minecraft.world.level.ChunkPos((int) Math.floor(pose.x() / 16),
+                    (int) Math.floor(pose.z() / 16));
             for (int x = -1; x <= 1; x++) {
                 for (int z = -1; z <= 1; z++) {
                     if (!level.getChunkSource().hasChunk(center.x + x, center.z + z)) {
@@ -295,6 +308,14 @@ public final class CutscenePlayback {
 
         private CameraPose cameraPose(double time) {
             List<Cutscene.CameraKeyframe> frames = scene.camera();
+            var last = frames.getLast();
+            if (time >= last.tick()) {
+                double progress = CutscenePresentation.returnProgress(scene, time);
+                return new CameraPose(Mth.lerp(progress, last.x(), playerView.x()),
+                        Mth.lerp(progress, last.y(), playerView.y()), Mth.lerp(progress, last.z(), playerView.z()),
+                        last.yaw() + (float) progress * Mth.wrapDegrees(playerView.yaw() - last.yaw()),
+                        Mth.lerp((float) progress, last.pitch(), playerView.pitch()));
+            }
             while (cameraIndex + 1 < frames.size() && frames.get(cameraIndex + 1).tick() <= time) {
                 cameraIndex++;
             }
@@ -348,7 +369,9 @@ public final class CutscenePlayback {
         @Override
         public void onClose() {
             if (active != null && active.screen == this) {
-                stop();
+                if (!active.started || CutscenePresentation.canSkip(active.time() - active.startTick)) {
+                    stop();
+                }
             } else {
                 super.onClose();
             }
@@ -387,7 +410,10 @@ public final class CutscenePlayback {
                 graphics.drawCenteredString(font, SKIP, width / 2, height / 2 + 20, 0xFFACBACB);
                 return;
             }
-            int bottom = height - 28;
+            int barHeight = (int) Math.round(height * 0.12 * CutscenePresentation.barsAmount(playback.scene, time));
+            graphics.fill(0, 0, width, barHeight, 0xFF000000);
+            graphics.fill(0, height - barHeight, width, height, 0xFF000000);
+            int bottom = height - Math.max(28, barHeight + 10);
             int lineHeight = font.lineHeight + 3;
             int maxWidth = Math.max(1, Math.min(420, width - 40));
             List<Cutscene.TextCue> cues = playback.scene.texts();
@@ -414,9 +440,16 @@ public final class CutscenePlayback {
                 }
                 bottom = top - 6;
             }
-            int hintLeft = width - font.width(SKIP) - 12;
+            int fade = (int) Math.round(255 * CutscenePresentation.fadeAlpha(playback.scene, time));
+            if (fade > 0) {
+                graphics.fill(0, 0, width, height, fade << 24);
+            }
+            double elapsed = time - playback.startTick;
+            Component hint = CutscenePresentation.canSkip(elapsed) ? SKIP : Component.literal(
+                    "Пропуск через " + (int) Math.ceil((CutscenePresentation.SKIP_LOCK_TICKS - elapsed) / 20) + " с");
+            int hintLeft = width - font.width(hint) - 12;
             graphics.fill(hintLeft - 5, height - 21, width - 7, height - 6, 0x88000000);
-            graphics.drawString(font, SKIP, hintLeft, height - 18, 0xFFE3E9EF, false);
+            graphics.drawString(font, hint, hintLeft, height - 18, 0xFFE3E9EF, false);
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.example.examplemod.cargo;
 
+import com.example.examplemod.sound.ModSounds;
 import com.example.examplemod.CreateCityExpansionCore;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -13,7 +14,7 @@ import net.neoforged.neoforge.registries.DeferredItem;
 /** Uses CCEC's existing deferred registers, not a second set of mod registries. */
 public final class CargoBlocks {
     public static final DeferredBlock<CargoRouterBlock> ROUTER = CreateCityExpansionCore.BLOCKS.register(
-            "cargo_router", () -> new CargoRouterBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL)
+            "cargo_router", () -> new CargoRouterBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).sound(ModSounds.PLACE_CARGO_ROUTER)
                     .strength(3.5F).noOcclusion().requiresCorrectToolForDrops().pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<BlockItem> ROUTER_ITEM =
             CreateCityExpansionCore.ITEMS.registerSimpleBlockItem("cargo_router", ROUTER);
@@ -23,7 +24,7 @@ public final class CargoBlocks {
 
     private CargoBlocks() {}
     public static final DeferredBlock<CargoTickerBlock> TICKER = CreateCityExpansionCore.BLOCKS.register(
-            "cargo_ticker", () -> new CargoTickerBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL)
+            "cargo_ticker", () -> new CargoTickerBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).sound(ModSounds.PLACE_CARGO_TICKER)
                     .strength(3.5F).noOcclusion().requiresCorrectToolForDrops().pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<com.simibubi.create.content.logistics.packagerLink.LogisticallyLinkedBlockItem> TICKER_ITEM =
             CreateCityExpansionCore.ITEMS.register("cargo_ticker", () ->
@@ -32,7 +33,7 @@ public final class CargoBlocks {
             CreateCityExpansionCore.BLOCK_ENTITY_TYPES.register("cargo_ticker",
                     () -> BlockEntityType.Builder.of(CargoTickerBlockEntity::new, TICKER.get()).build(null));
     public static final DeferredBlock<com.example.examplemod.cargo.center.MasterCityCustomsBufferBlock> CUSTOMS_BUFFER = CreateCityExpansionCore.BLOCKS.register(
-            "customs_buffer", () -> new com.example.examplemod.cargo.center.MasterCityCustomsBufferBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL)
+            "customs_buffer", () -> new com.example.examplemod.cargo.center.MasterCityCustomsBufferBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).sound(ModSounds.PLACE_CUSTOMS_BUFFER)
                     .strength(4F).requiresCorrectToolForDrops().pushReaction(PushReaction.BLOCK)));
     public static final DeferredItem<BlockItem> CUSTOMS_BUFFER_ITEM = CreateCityExpansionCore.ITEMS.registerSimpleBlockItem("customs_buffer",CUSTOMS_BUFFER);
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.example.examplemod.cargo.center.MasterCityCustomsBufferBlockEntity>> CUSTOMS_BUFFER_ENTITY =
