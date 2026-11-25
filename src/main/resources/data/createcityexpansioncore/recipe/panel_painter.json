@@ -1,11 +1,11 @@
 {
   "type": "minecraft:crafting_shaped",
   "category": "equipment",
-  "pattern": ["AC", " S"],
+  "pattern": ["  T", " PP", "  H"],
   "key": {
-    "A": {"item": "create:andesite_alloy"},
-    "C": {"item": "minecraft:copper_ingot"},
-    "S": {"item": "minecraft:stick"}
+    "T": {"item": "create:fluid_tank"},
+    "P": {"item": "create:fluid_pipe"},
+    "H": {"item": "create:hand_crank"}
   },
   "result": {"id": "createcityexpansioncore:panel_painter"}
 }

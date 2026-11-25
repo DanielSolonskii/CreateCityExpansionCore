@@ -627,7 +627,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
 
     public static final DeferredItem<com.example.examplemod.machine.PanelPainterItem> PANEL_PAINTER =
             ITEMS.registerItem("panel_painter", com.example.examplemod.machine.PanelPainterItem::new,
-                    new Item.Properties().stacksTo(1));
+                    new Item.Properties().durability(200));
 
     public static final DeferredBlock<com.example.examplemod.machine.MachineDisplayBlock> TECHNICAL_SCREEN =
             BLOCKS.register("technical_screen", () -> new com.example.examplemod.machine.MachineDisplayBlock(

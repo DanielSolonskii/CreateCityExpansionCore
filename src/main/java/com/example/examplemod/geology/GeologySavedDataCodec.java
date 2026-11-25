@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 final class GeologySavedDataCodec {
 
     static final int CURRENT_FORMAT_VERSION = 7;
-    private static final int POLYGON_FORMAT_VERSION = 6;
+    static final int POLYGON_FORMAT_VERSION = 6;
     private static final int LEGACY_V2 = 2;
     private static final int LEGACY_V1 = 1;
 
@@ -92,10 +92,11 @@ final class GeologySavedDataCodec {
     static CompoundTag save(
             CompoundTag tag,
             ResourceLocation dimensionId,
-            Iterable<GeologicalRegion> regions
+            Iterable<GeologicalRegion> regions,
+            int generatorVersion
     ) {
         tag.putInt("FormatVersion", CURRENT_FORMAT_VERSION);
-        tag.putInt("GeneratorVersion", GeologyGenerator.GENERATOR_VERSION);
+        tag.putInt("GeneratorVersion", generatorVersion);
         tag.putString("Dimension", dimensionId.toString());
         ListTag regionList = new ListTag();
 

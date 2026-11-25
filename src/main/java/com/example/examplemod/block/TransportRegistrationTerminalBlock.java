@@ -160,13 +160,6 @@ public final class TransportRegistrationTerminalBlock extends Block implements E
     /**
      * Строит форму коллизии для каждой из четырёх сторон.
      *
-     * <p>Боксы модели (facing = NORTH):
-     * <ul>
-     *   <li>полка клавиатуры: 1..15 x 0..2 x 0..3 (выступ спереди)</li>
-     *   <li>корпус: 1..15 x 1..15 x 3..15</li>
-     *   <li>латунная подставка: 4..12 x 0..1 x 5..13</li>
-     * </ul>
-     *
      * <p>Повороты повторяют правила blockstate y-rotation:
      * north->east при 90°, north->south при 180°, north->west при 270°.
      */
@@ -178,9 +171,9 @@ public final class TransportRegistrationTerminalBlock extends Block implements E
         }
 
         Box[] modelBoxes = new Box[]{
-                new Box(1.0D, 0.0D, 0.0D, 15.0D, 2.0D, 3.0D),
-                new Box(1.0D, 1.0D, 3.0D, 15.0D, 15.0D, 15.0D),
-                new Box(4.0D, 0.0D, 5.0D, 12.0D, 1.0D, 13.0D)
+                new Box(1, 0, 3, 15, 1.5, 14),
+                new Box(0.5, 1, 2, 15.5, 15, 15),
+                new Box(1, 2, 1, 15, 14, 2)
         };
 
         Map<Direction, VoxelShape> shapes = new EnumMap<>(Direction.class);
