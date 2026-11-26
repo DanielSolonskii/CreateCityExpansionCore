@@ -17,6 +17,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
@@ -53,11 +55,15 @@ public final class PanelPainterItem extends Item {
 
     @Override
     public InteractionResult onItemUseFirst(ItemStack stack, UseOnContext context) {
-        return useOn(context);
+        return paint(context, true);
     }
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
+        return paint(context, false);
+    }
+
+    private InteractionResult paint(UseOnContext context, boolean allowBlockInteraction) {
         var player = context.getPlayer();
         if (player == null) return InteractionResult.PASS;
         if (player.isShiftKeyDown()) return use(context.getLevel(), player, context.getHand()).getResult();
@@ -68,8 +74,10 @@ public final class PanelPainterItem extends Item {
         var selected = color(stack);
         var sign = level.getBlockEntity(pos) instanceof SignBlockEntity target ? target : null;
         BlockState next = sign == null ? PaintableBlocks.recolor(state, selected) : null;
-        if (sign == null && next == null) return InteractionResult.PASS;
-        if (!player.mayBuild()) return InteractionResult.FAIL;
+        boolean useBlockInteraction = sign == null && next == null;
+        if (useBlockInteraction && (!allowBlockInteraction || level.isClientSide)) return InteractionResult.PASS;
+        if (!player.mayBuild() || !level.mayInteract(player, pos)
+                || !player.mayUseItemAt(pos, context.getClickedFace(), stack)) return InteractionResult.FAIL;
         if (player instanceof ServerPlayer serverPlayer) {
             if (!CityProtectionManager.canModify(serverPlayer.serverLevel(), serverPlayer, pos)) {
                 player.displayClientMessage(Component.translatable("message.createcityexpansioncore.panel_painter.denied"), true);
@@ -82,6 +90,13 @@ public final class PanelPainterItem extends Item {
                         || !DyeItem.byColor(selected).tryApplyToSign(level, sign, front, player)) {
                     return InteractionResult.CONSUME;
                 }
+            } else if (useBlockInteraction) {
+                var hit = new BlockHitResult(context.getClickLocation(), context.getClickedFace(),
+                        pos, context.isInside());
+                var dye = new ItemStack(DyeItem.byColor(selected));
+                ItemInteractionResult result = state.useItemOn(dye, level, player, context.getHand(), hit);
+                if (result == ItemInteractionResult.FAIL) return InteractionResult.FAIL;
+                if (!result.consumesAction()) return InteractionResult.PASS;
             } else {
                 if (next == state) return InteractionResult.CONSUME;
                 if (!level.setBlock(pos, next, Block.UPDATE_ALL)) return InteractionResult.FAIL;
