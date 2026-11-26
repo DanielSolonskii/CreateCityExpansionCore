@@ -1,5 +1,7 @@
 package com.example.examplemod.machine;
 
+import com.simibubi.create.content.kinetics.crank.ValveHandleBlock;
+
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,6 +35,14 @@ final class PaintableBlocks {
 
     static BlockState recolor(BlockState state, DyeColor color) {
         if (MachinePanels.isPanel(state)) return state.setValue(MachinePanels.COLOR, color);
+        if (state.getBlock() instanceof ValveHandleBlock valve) {
+            if (valve.color == color) return state;
+            var id = ResourceLocation.fromNamespaceAndPath("create", color.getName() + "_valve_handle");
+            return BuiltInRegistries.BLOCK.getOptional(id)
+                    .filter(ValveHandleBlock.class::isInstance)
+                    .map(block -> block.withPropertiesOf(state))
+                    .orElse(null);
+        }
         var family = FAMILIES.get(state.getBlock());
         return family == null ? null : family.get(color).withPropertiesOf(state);
     }
