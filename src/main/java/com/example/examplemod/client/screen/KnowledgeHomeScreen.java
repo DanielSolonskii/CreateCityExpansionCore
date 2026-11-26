@@ -1,7 +1,5 @@
 package com.example.examplemod.client.screen;
 
-import com.example.examplemod.CreateCityExpansionCore;
-import com.mojang.blaze3d.platform.Lighting;
 import com.example.examplemod.client.CommunityFx;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,16 +10,19 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ItemStack;
+
+import static com.example.examplemod.client.screen.KnowledgeChrome.image;
+import static com.example.examplemod.client.screen.KnowledgeChrome.stepped;
+import static com.example.examplemod.client.screen.KnowledgeChrome.texture;
 
 final class KnowledgeHomeScreen extends Screen {
     enum Topic {
-        FIRST_STEPS("РїРµСЂРІС‹Рµ С€Р°РіРё", "first steps"),
-        CITY("РіРѕСЂРѕРґСЃРєРѕР№ С†РµРЅС‚СЂ", "city center", "РіРѕСЂРѕРґ", "city"),
-        TERRITORIES("С‚РµСЂСЂРёС‚РѕСЂРёРё", "territories"),
-        PROJECTS("РїСЂРѕРµРєС‚С‹", "projects"),
-        COMMUNITY("СЃРѕРѕР±С‰РµСЃС‚РІРѕ", "community"),
-        MAPS("РєР°СЂС‚С‹ Рё РјРµС‚РєРё", "maps and markers", "РєР°СЂС‚С‹", "maps");
+        FIRST_STEPS("первые шаги", "first steps"),
+        CITY("города", "городской центр", "город", "cities", "city center", "city"),
+        TERRITORIES("территории", "territories"),
+        PROJECTS("проекты", "projects"),
+        COMMUNITY("сообщество", "community"),
+        MAPS("карты и метки", "карты", "maps and markers", "maps");
 
         private final List<String> folders;
 
@@ -34,7 +35,9 @@ final class KnowledgeHomeScreen extends Screen {
         }
 
         static Topic forPath(String path) {
-            for (String part : path.toLowerCase(Locale.ROOT).split("/")) {
+            int fileStart = path.lastIndexOf('/');
+            if (fileStart < 0) return FIRST_STEPS;
+            for (String part : path.substring(0, fileStart).toLowerCase(Locale.ROOT).split("/")) {
                 for (Topic topic : values()) {
                     if (topic.folders.contains(part)) return topic;
                 }
@@ -47,24 +50,13 @@ final class KnowledgeHomeScreen extends Screen {
     private static final int CAPTION_TEXTURE_WIDTH = 384;
     private static final int CAPTION_TEXTURE_HEIGHT = 44;
     private final Screen parent;
-    private final ItemStack cityPylon = new ItemStack(CreateCityExpansionCore.CITY_PYLON_ITEM.get());
     private final SocialHubIcons.HoverMotion motion = new SocialHubIcons.HoverMotion();
     private static final ResourceLocation TITLE = texture("title_clean");
-    private static final ResourceLocation BOOK = texture("book_clean");
-    private static final ResourceLocation CLOSE = texture("close");
     private final List<Card> cards = new ArrayList<>();
     private Card close;
     private int left, top, panelWidth, panelHeight, headerHeight;
     private int gridTop, gridBottom, contentHeight, rowPitch;
     private double scroll;
-
-    private static ResourceLocation texture(String name) {
-        return ResourceLocation.fromNamespaceAndPath("createcityexpansioncore", "textures/gui/knowledge/" + name + ".png");
-    }
-
-    private static void image(GuiGraphics g, ResourceLocation texture, int x, int y, int w, int h) {
-        g.blit(texture, x, y, w, h, 0f, 0f, 1, 1, 1, 1);
-    }
 
     KnowledgeHomeScreen(Screen parent) {
         super(Component.translatable("gui.createcityexpansioncore.knowledge.title"));
@@ -157,7 +149,7 @@ final class KnowledgeHomeScreen extends Screen {
             super(x, y, w, h, label, press, DEFAULT_NARRATION);
             this.topic = topic;
             String key = topic == null ? "close" : topic.name().toLowerCase(Locale.ROOT);
-            artwork = topic == null ? CLOSE : topic == Topic.CITY ? null : texture("art_" + key);
+            artwork = topic == null ? KnowledgeChrome.CLOSE : texture("art_" + key);
             lettering = topic == null ? null : texture("caption_" + key);
         }
 
@@ -180,7 +172,7 @@ final class KnowledgeHomeScreen extends Screen {
             try {
                 SocialHubIcons.scaleButton(g, bounds, hover);
                 if (topic == null) {
-                    image(g, CLOSE, getX(), getY(), getWidth(), getHeight());
+                    image(g, artwork, getX(), getY(), getWidth(), getHeight());
                     return;
                 }
                 drawTile(g, bounds, hover, lit);
@@ -196,14 +188,11 @@ final class KnowledgeHomeScreen extends Screen {
                 int captionY = bounds.bottom() - captionSpace - Math.max(4, getHeight() / 14);
                 int artY = getY() + Math.max(3, getHeight() / 20);
                 int artHeight = Math.max(1, captionY - artY - Math.max(3, getHeight() / 24));
-                if (topic == Topic.CITY) {
-                    drawPylon(g, getX() + getWidth() / 2, artY, artHeight);
-                } else {
-                    int artWidth = Math.max(1, Math.min(getWidth() * 88 / 100, artHeight * 384 / 200));
-                    int drawHeight = Math.max(1, artWidth * 200 / 384);
-                    image(g, artwork, getX() + (getWidth() - artWidth) / 2,
-                            artY + artHeight - drawHeight, artWidth, drawHeight);
-                }
+                int textureWidth = topic == Topic.CITY ? 200 : 384;
+                int artWidth = Math.max(1, Math.min(getWidth() * 88 / 100, artHeight * textureWidth / 200));
+                int drawHeight = Math.max(1, artWidth * 200 / textureWidth);
+                image(g, artwork, getX() + (getWidth() - artWidth) / 2,
+                        artY + artHeight - drawHeight, artWidth, drawHeight);
                 if (illustratedCaption) {
                     image(g, lettering, getX() + (getWidth() - captionWidth) / 2,
                             captionY, captionWidth, captionHeight);
@@ -219,75 +208,24 @@ final class KnowledgeHomeScreen extends Screen {
         }
     }
 
-    private void drawPylon(GuiGraphics g, int centerX, int artY, int artHeight) {
-        float size = artHeight * 1.25f;
-        g.flush();
-        Lighting.setupForFlatItems();
-        g.pose().pushPose();
-        try {
-            g.pose().translate(centerX - size / 2, artY + (artHeight - size) / 2 - artHeight * .07f, 0);
-            g.pose().scale(size / 16, size / 16, 1);
-            g.renderItem(cityPylon, 0, 0);
-        } finally {
-            g.pose().popPose();
-            Lighting.setupFor3DItems();
-        }
-    }
-
     private static void drawTile(GuiGraphics g, WorldMapUiLayout.Rect bounds, float motion, boolean lit) {
         float warmth = CommunityFx.reduced ? (lit ? 1 : 0) : motion;
-        int edge = net.minecraft.util.FastColor.ARGB32.lerp(warmth, 0xFF747587, 0xFFC38D40);
-        int background = net.minecraft.util.FastColor.ARGB32.lerp(warmth, 0xFF181A21, 0xFF302419);
+        int edge = net.minecraft.util.FastColor.ARGB32.lerp(warmth, KnowledgeChrome.EDGE, KnowledgeChrome.ACCENT);
+        int background = net.minecraft.util.FastColor.ARGB32.lerp(warmth, KnowledgeChrome.SURFACE, KnowledgeChrome.HIGHLIGHT);
         stepped(g, bounds.x(), bounds.y(), bounds.width(), bounds.height(), 4, 0xFF101117);
         stepped(g, bounds.x()+1, bounds.y()+1, bounds.width()-2, bounds.height()-2, 3, edge);
         stepped(g, bounds.x()+3, bounds.y()+3, bounds.width()-6, bounds.height()-6, 2, background);
     }
 
-    private static void stepped(GuiGraphics g, int x, int y, int w, int h, int corner, int color) {
-        if (w <= 0 || h <= 0) return;
-        int inset = Math.min(corner, Math.min(w, h) / 2);
-        g.fill(x, y + inset, x + w, y + h - inset, color);
-        for (int i = 0; i < inset; i++) {
-            int cut = inset - i;
-            g.fill(x + cut, y + i, x + w - cut, y + i + 1, color);
-            g.fill(x + cut, y + h - i - 1, x + w - cut, y + h - i, color);
-        }
-    }
-
-    private void drawFrame(GuiGraphics g) {
-        stepped(g, left, top, panelWidth, panelHeight, 9, 0xFF0F1016);
-        stepped(g, left+1, top+1, panelWidth-2, panelHeight-2, 8, 0xFF555765);
-        stepped(g, left+2, top+2, panelWidth-4, panelHeight-4, 7, 0xFF9292A1);
-        stepped(g, left+4, top+4, panelWidth-8, panelHeight-8, 5, 0xFF191B21);
-        for (int side = 0; side < 2; side++) {
-            for (int end = 0; end < 2; end++) {
-                int x = side == 0 ? left + 1 : left + panelWidth - 15;
-                int y = end == 0 ? top + 1 : top + panelHeight - 15;
-                int capX = side == 0 ? x+5 : x;
-                int capY = end == 0 ? y : y+10;
-                int stemX = side == 0 ? x : x+10;
-                int stemY = end == 0 ? y+5 : y;
-                g.fill(capX, capY, capX+9, capY+4, 0xFFB87D30);
-                g.fill(stemX, stemY, stemX+4, stemY+9, 0xFFB87D30);
-                g.fill(capX, capY, capX+9, capY+1, 0xFFE9BC69);
-                g.fill(stemX, stemY, stemX+1, stemY+9, 0xFFE9BC69);
-            }
-        }
-    }
-
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         motion.beginFrame();
-        g.fill(0, 0, width, height, 0x88090E10);
-        drawFrame(g);
+        g.fill(0, 0, width, height, KnowledgeChrome.BACKDROP);
+        KnowledgeChrome.frame(g, left, top, panelWidth, panelHeight);
         int titleHeight = headerHeight / 2;
         int titleX = left + panelWidth / 18;
         int titleY = top + headerHeight / 4;
-        int bookWidth = titleHeight * 3 / 2;
-        image(g, BOOK, titleX, titleY, bookWidth, titleHeight);
-        int divider = titleX + bookWidth + Math.max(3, titleHeight / 8);
-        g.fill(divider, titleY, divider+1, titleY+titleHeight, 0xFFC38D40);
-        int textX = divider + Math.max(4, titleHeight / 5);
+        int textX = KnowledgeChrome.headingMark(g, titleX, titleY, titleHeight);
         int textWidth = Math.max(1, close.getX() - textX - 6);
         if (minecraft.getLanguageManager().getSelected().equals("ru_ru")) {
             int titleWidth = Math.min(titleHeight * 7, textWidth);
@@ -295,7 +233,7 @@ final class KnowledgeHomeScreen extends Screen {
             image(g, TITLE, textX, titleY + (titleHeight-textHeight)/2, titleWidth, textHeight);
         } else {
             g.drawString(font, WorldMapChrome.fit(font, getTitle(), textWidth), textX,
-                    titleY + (titleHeight - font.lineHeight) / 2, 0xFFEEDFBF);
+                    titleY + (titleHeight - font.lineHeight) / 2, KnowledgeChrome.TEXT);
         }
         g.enableScissor(left, gridTop, left + panelWidth, gridBottom);
         try {
