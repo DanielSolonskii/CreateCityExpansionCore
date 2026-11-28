@@ -129,6 +129,8 @@ public final class CityProjectNetworkHandlers {
                 return;
             }
             city.setLevel(2);
+            CityGazette.get(player.server).publish(CityGazette.Kind.LEVEL,city.getId(),player.getUUID(),city.getName(),
+                    Integer.toString(city.getLevel()),Integer.toString(city.getProjectCapacity()),System.currentTimeMillis());
             context.manager().markChanged();
             player.sendSystemMessage(Component.translatable(
                     "message.createcityexpansioncore.development.level_two_complete"

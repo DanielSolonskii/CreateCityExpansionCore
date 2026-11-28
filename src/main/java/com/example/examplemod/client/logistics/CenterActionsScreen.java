@@ -1,5 +1,7 @@
 package com.example.examplemod.client.logistics;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -25,7 +27,7 @@ public final class CenterActionsScreen extends Screen implements CenterResponseS
     private int bodyTop(){return height<240?82:102;}
     @Override protected void init(){
         panelWidth=Math.min(680,width-24);left=(width-panelWidth)/2;entries.clear();groups.clear();
-        search=new EditBox(font,left+12,height<240?58:68,panelWidth-24,20,tr("search_actions"));
+        search=AtlasFormStyle.field(font,left+12,height<240?58:68,panelWidth-24,20,tr("search_actions"));
         search.setHint(tr("search_actions"));search.setValue(query);search.setTooltip(net.minecraft.client.gui.components.Tooltip.create(tr("ui.available_actions")));
         search.setResponder(value->{query=value;scroll=0;rebuild=true;});addRenderableWidget(search);
         var forms=new ArrayList<CompoundTag>();

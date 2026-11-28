@@ -25,6 +25,7 @@ import java.util.List;
  */
 public final class CityTerritorySnapshot {
 
+    private static java.lang.ref.WeakReference<com.example.examplemod.menu.CityPylonMenu> pendingMenu;
     private static BlockPos pendingPylon;
     private static List<CityMapPeersPayload.Peer> pendingPeers;
 
@@ -33,14 +34,18 @@ public final class CityTerritorySnapshot {
 
     /** Применяет снимок к открытому экрану, иначе сохраняет его до открытия. */
     public static void accept(CityMapPeersPayload payload) {
-        /*
-         * Сессия карты по клавише тоже забирает снимок: имя и число жителей
-         * есть только у собственного города в этом списке, а отдельного пакета
-         * ради двух строк заводить не за что. Снимок не служебный — он уже
-         * приходит участнику города, поэтому это не расширение доступа.
-         */
-        CityWorldMapSession.INSTANCE.acceptPeers(payload.peers());
-
+        if (!payload.viewId().equals(com.example.examplemod.network.RequestCityDirectoryPayload.NEW)) {
+            if (!CityPublicDirectory.acceptsPeers(payload)) return;
+            CityWorldMapSession.INSTANCE.acceptPeers(payload.peers());
+            var atlas = PolishedWorldMapScreen.activeView();
+            if (atlas != null && atlas.isReadOnly())
+                atlas.acceptTerritories(payload);
+            return;
+        }
+        var player = Minecraft.getInstance().player;
+        if (player == null || !(player.containerMenu instanceof com.example.examplemod.menu.CityPylonMenu menu)
+                || menu.containerId != payload.containerId() || !menu.getDimensionId().equals(payload.dimensionId())
+                || !menu.getPylonPos().equals(payload.pylonPos())) return;
         CityPylonScreen screen = openPylonScreen(payload.pylonPos());
         if (screen != null) {
             apply(screen, payload.peers());
@@ -75,6 +80,7 @@ public final class CityTerritorySnapshot {
             clearPending();
             return;
         }
+        pendingMenu = new java.lang.ref.WeakReference<>(menu);
         pendingPylon = payload.pylonPos();
         pendingPeers = payload.peers();
     }
@@ -86,7 +92,7 @@ public final class CityTerritorySnapshot {
      * карта ждала бы следующего снимка, то есть до переоткрытия пилона.
      */
     public static void applyPending(CityPylonScreen screen) {
-        if (screen == null || pendingPeers == null
+        if (screen == null || pendingPeers == null || pendingMenu == null || pendingMenu.get() != screen.getMenu()
                 || !screen.getMenu().getPylonPos().equals(pendingPylon)) {
             return;
         }
@@ -126,6 +132,7 @@ public final class CityTerritorySnapshot {
 
     private static void clearPending() {
         pendingPylon = null;
+        pendingMenu = null;
         pendingPeers = null;
     }
 }

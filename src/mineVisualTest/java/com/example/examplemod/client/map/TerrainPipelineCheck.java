@@ -14,22 +14,35 @@ public final class TerrainPipelineCheck {
     private static int checks;
     private static void require(boolean ok,String label){checks++;if(!ok)throw new AssertionError(label);}
     public static void run()throws Exception {
-        // A render-thread regression cannot be exercised by the headless raster checks below.
-        // Guard the production integration seam too: Minecraft owns render state, and terrain is
-        // submitted in a finished pass before marker/border GUI batches are built.
-        String atlasSource=Files.readString(Path.of("src/main/java/com/example/examplemod/client/map/TerrainAtlas.java"));
-        require(atlasSource.contains("g.bufferSource().getBuffer(RenderType.textSeeThrough(page.id))"),
-                "atlas uses managed Minecraft render type, including shader-mod hooks");
-        require(!atlasSource.contains("RenderSystem.")&&!atlasSource.contains("BufferUploader.drawWithShader"),
-                "terrain cannot leak manually forced shader/depth/blend state to city markers");
-        require(atlasSource.contains("setColor(1f,1f,1f,q.alpha)")&&atlasSource.contains("setLight(0xF000F0)"),
-                "terrain preserves white RGB and full brightness while allowing the tile transition alpha");
-        String panelSource=Files.readString(Path.of("src/main/java/com/example/examplemod/client/map/CityMapPanel.java"));
-        require(panelSource.contains("guiGraphics.drawManaged(() -> renderTerrain(guiGraphics));"),
-                "terrain flush and marker submission have separate managed passes");
-        require(panelSource.contains("renderMissingTile(guiGraphics,key,requestedTiles.containsKey(key));")
-                &&panelSource.contains("double span = key.span();"),
-                "missing terrain remains visible at every LOD without 32-block placeholder gaps");
+        TerrainFreshnessCheck.run();
+        {
+            int lod=AtlasMapScale.displayLevel(.83,320,200,1,-1);
+            require(lod==0,"initial physical scale");
+            for (double zoom : new double[]{.79,.81,.78,.82,.69}) {
+                lod=AtlasMapScale.displayLevel(zoom,320,200,1,lod);
+                require(lod==0,"small zoom changes must not oscillate at the LOD boundary");
+            }
+            lod=AtlasMapScale.displayLevel(.67,320,200,1,lod);
+            require(lod==1,"crossing lower boundary coarsens");
+            for (double zoom : new double[]{.72,.8,.88,.91}) require(AtlasMapScale.displayLevel(zoom,320,200,1,lod)==1,
+                    "coarse level survives return through hysteresis band");
+            require(AtlasMapScale.displayLevel(.93,320,200,1,lod)==0,"crossing upper boundary refines");
+            int resized=AtlasMapScale.displayLevel(.82,4000,2000,1,0);
+            require(resized>0 && (Math.ceil(4000/(.82*AtlasMapScale.span(resized)))+4)
+                    *(Math.ceil(2000/(.82*AtlasMapScale.span(resized)))+4)<=AtlasMapScale.ACTIVE_TILES,"resize enforces atlas budget");
+            for (int d=1;d<=7;d++) for (int x : new int[]{-935000,-33,-1,0,1,35,935000}) {
+                var crop=AtlasMapScale.ancestor(x,-x,d);
+                double scale=1<<d;
+                require(crop.x()*scale+crop.u()/crop.size()==x && crop.z()*scale+crop.v()/crop.size()==-x,
+                        "parent crop follows true coordinates");
+                require(crop.u()>=0 && crop.u()+crop.size()<=32 && crop.v()>=0 && crop.v()+crop.size()<=32,
+                        "crop stays inside padded slot");
+            }
+            require(TerrainTileTexture.retainsCoverage(new int[]{0x00112233,0x40706050},new int[]{0x10112233,0xFF112233}),
+                    "old image remains drawable while survey expands");
+            require(!TerrainTileTexture.retainsCoverage(new int[]{0xFF112233},new int[]{0x80112233}),
+                    "old image must be hidden before it can expose a now-unknown area");
+        }
         int[] white=new int[1024];Arrays.fill(white,0xFFFFFFFF);short[] height=new short[1024];Arrays.fill(height,(short)80);
         var pyramid=new TerrainPyramid();
         for(int z=-2;z<2;z++)for(int x=-2;x<2;x++)pyramid.put(x,z,white,height);

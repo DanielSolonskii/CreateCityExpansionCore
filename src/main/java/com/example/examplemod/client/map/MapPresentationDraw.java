@@ -7,6 +7,19 @@ import net.minecraft.client.gui.GuiGraphics;
 public final class MapPresentationDraw {
     private MapPresentationDraw() {}
 
+    /** GUI text and geometry use different buffers. Finish both sides of a floating surface at its own depth. */
+    public static void foreground(GuiGraphics graphics, int depth, double alpha, Runnable draw) {
+        graphics.flush();
+        graphics.pose().pushPose();
+        try {
+            graphics.pose().translate(0,0,depth);
+            opacity(graphics,alpha,draw);
+            graphics.flush();
+        } finally {
+            graphics.pose().popPose();
+        }
+    }
+
     public static void opacity(GuiGraphics graphics, double opacity, Runnable draw) {
         if(opacity>=1) {draw.run();return;} // No extra flushes during the steady state.
         graphics.flush();

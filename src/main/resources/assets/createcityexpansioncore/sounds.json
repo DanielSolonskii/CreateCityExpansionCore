@@ -334,5 +334,101 @@
         "volume": 0.663
       }
     ]
+  },
+  "block.place.mine_power_port": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/mine_power_port",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.mine_controller": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/mine_controller",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.mine_frame": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/mine_frame",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.technical_block": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/technical_block",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.control_block": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/control_block",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.mine_gateway": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/mine_gateway",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.technical_screen": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/technical_screen",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.transport_registration_terminal": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/transport_registration_terminal",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.chunk_loader": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/chunk_loader",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.cargo_router": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/cargo_router",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.cargo_ticker": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/cargo_ticker",
+        "volume": 0.76
+      }
+    ]
+  },
+  "block.place.customs_buffer": {
+    "sounds": [
+      {
+        "name": "createcityexpansioncore:block/placement/customs_buffer",
+        "volume": 0.76
+      }
+    ]
   }
 }

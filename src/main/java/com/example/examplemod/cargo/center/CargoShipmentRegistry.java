@@ -25,6 +25,7 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         private final Map<UUID,CompoundTag> parcels=new LinkedHashMap<>();
         private final List<String> history=new ArrayList<>();
         private Stage stage=Stage.REQUESTED;
+        private int[] inspectionHopUnits;
         private boolean packagingClaimed;
         private boolean rejectedBeforeDispatch;
         private boolean cancellationRequested;
@@ -53,7 +54,55 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         public int parcelCount(){return parcels.size();}
         public boolean cancellationRequested(){return cancellationRequested;}
         public Stage stage(){return stage;} public String problem(){return problem;} public List<String> history(){return List.copyOf(history);}
-        public List<CompoundTag> parcelPositions(){var result=new ArrayList<CompoundTag>();for(var parcel:parcels.values()){var t=new CompoundTag();t.putUUID("Id",parcel.getUUID("Id"));if(parcel.contains("Location"))t.put("Location",parcel.getCompound("Location").copy());if(parcel.hasUUID("Train")&&parcel.hasUUID("BoardStation"))t.putUUID("Train",parcel.getUUID("Train"));t.putString("Status",parcel.getString("Status"));result.add(t);}return List.copyOf(result);}
+        public List<CompoundTag> parcelPositions() {
+            return parcelPositions(parcels.size());
+        }
+        List<CompoundTag> parcelPositions(int limit) {
+            return parcels.values().stream().limit(Math.max(0,limit)).map(Shipment::observation).toList();
+        }
+        private static CompoundTag observation(CompoundTag parcel) {
+            var result = new CompoundTag();
+            result.putUUID("Id", parcel.getUUID("Id"));
+            if (!parcel.getBoolean("Delivered") && !parcel.getBoolean("Recovered") && parcel.contains("Location")) result.put("Location", parcel.getCompound("Location").copy());
+            if (parcel.hasUUID("Train") && parcel.hasUUID("BoardStation")) result.putUUID("Train", parcel.getUUID("Train"));
+            result.putString("Status", parcel.getString("Status"));
+            for (String key : List.of("Point","ObservedStation","ObservedAt","Observation")) {
+                if (parcel.contains(key)) result.put(key,parcel.get(key).copy());
+            }
+            if (!result.contains("Observation")) result.putString("Observation",parcel.getBoolean("Delivered")?"DELIVERED":
+                    parcel.hasUUID("BoardStation")?"IN_TRANSIT":parcel.getString("Status"));
+            return result;
+        }
+        int inspectionUnits(int hop) {
+            if(inspectionHopUnits==null) {
+                inspectionHopUnits=new int[Math.min(32,route.size())];
+                for(var p:parcels.values()) for(int h:p.getIntArray("Hops")) {
+                    if(h>=0 && h<inspectionHopUnits.length) inspectionHopUnits[h]+=p.getInt("Units");
+                }
+            }
+            return inspectionHopUnits[hop];
+        }
+        CompoundTag latestObservation() {
+            UUID latest=null;
+            long newest=-1;
+            for(var entry:parcels.entrySet()) {
+                long time=entry.getValue().getLong("ObservedAt");
+                if(time>newest) {newest=time;latest=entry.getKey();}
+            }
+            // With several undated legacy parcels the order of their observations is unknown.
+            return latest==null || newest==0 && parcels.size()!=1 ? new CompoundTag() : navigationObservation(latest);
+        }
+        public CompoundTag navigationObservation(UUID id) {
+            var parcel = parcels.get(id);
+            if (parcel == null) return new CompoundTag();
+            var result = observation(parcel);
+            int total = trip.getBoolean("Fleet") ? 1 : route.size();
+            int done = (int)Arrays.stream(parcel.getIntArray("Hops")).filter(i -> i >= 0 && i < total).distinct().count();
+            result.putInt("NextLeg",ShipmentInspection.nextLeg(parcel.getIntArray("Hops"),total));
+            result.putInt("TotalLegs", total);
+            result.putInt("CompletedLegs", done);
+            return result;
+        }
         public boolean receivingOwnerValid(MinecraftServer s){var destination=CargoWarehouseRegistry.get(s).find(destinationWarehouse).orElse(null);return receiverOwner!=null&&receiverOwner.available(s)&&destination!=null&&receiverOwner.equals(CargoWarehouseRegistry.access(s,destination).owner());}
         public int packaged(){return parcels.values().stream().mapToInt(p->p.getInt("Units")).sum();}
         public int delivered(){return parcels.values().stream().filter(p->p.getBoolean("Delivered")).mapToInt(p->p.getInt("Units")).sum();}
@@ -67,7 +116,7 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
     }
     private CompoundTag unavailableData;
     private RuntimeException loadFailure;
-    private final Map<UUID,Shipment> entries=new LinkedHashMap<>();
+    private final LinkedHashMap<UUID,Shipment> entries=new LinkedHashMap<>();
     private final Map<UUID,UUID> parcelShipments=new HashMap<>();
     public static CargoShipmentRegistry get(MinecraftServer s){if(!s.isSameThread())throw new IllegalStateException("Server thread");return fromStorage(s.overworld().getDataStorage());}
     static CargoShipmentRegistry fromStorage(DimensionDataStorage storage){
@@ -79,7 +128,11 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
         try{return load(root,lookup);}catch(RuntimeException invalid){var data=new CargoShipmentRegistry();data.unavailableData=root.copy();data.loadFailure=invalid;return data;}
     }
     public List<Shipment> all(){return List.copyOf(entries.values());}
+    Collection<Shipment> recentMapShipments(int limit) {
+        return entries.sequencedValues().reversed().stream().limit(limit).toList();
+    }
     public Optional<Shipment> find(UUID id){return Optional.ofNullable(entries.get(id));}
+    public Optional<Shipment> forParcel(UUID parcel) { return find(parcelShipments.get(parcel)); }
     public boolean inUse(String kind,UUID id){return entries.values().stream().anyMatch(shipment->ShipmentLocks.blocks(shipment.stage,kind,id,new ShipmentLocks.References(shipment.sourceWarehouse,shipment.destinationWarehouse,shipment.source,shipment.finalPoint,shipment.route)));}
     public void requireUnused(String kind,UUID id){if(inUse(kind,id))throw new IllegalArgumentException("shipment_in_use");}
     public boolean claimPackaging(UUID id){var shipment=entries.get(id);if(shipment==null||shipment.cancellationRequested||shipment.packagingClaimed||shipment.stage!=Stage.REQUESTED)return false;
@@ -107,7 +160,7 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
                 ||CargoDeliveryReceipts.find(server,parcel).isPresent()||!p.getCompound("Contents").equals(PackageItem.getContents(box).serializeNBT(server.registryAccess())))return null;
         return p.copy();
     }
-    void recovered(UUID shipmentId,UUID parcel){var shipment=entries.get(shipmentId);var p=shipment.parcels.get(parcel);p.putBoolean("Recovered",true);p.putString("Status","RECOVERED");p.remove("Train");p.remove("BoardStation");p.remove("Location");event(shipment,"RECOVERED "+shipment.recovered()+"/"+shipment.quantity);}
+    void recovered(UUID shipmentId,UUID parcel){var shipment=entries.get(shipmentId);var p=shipment.parcels.get(parcel);p.putBoolean("Recovered",true);p.putString("Status","RECOVERED");p.putString("Observation","RECOVERED");p.putLong("ObservedAt",System.currentTimeMillis());p.remove("Train");p.remove("BoardStation");p.remove("Location");event(shipment,"RECOVERED "+shipment.recovered()+"/"+shipment.quantity);}
     public Shipment create(MinecraftServer server,UUID id,UUID creator,OwnerRef owner,CargoWarehouseRegistry.Warehouse source,CargoWarehouseRegistry.Warehouse destination,ItemStack type,int count,CargoRoutePlanner.Route route){
         var inventory=CargoWarehouseRegistry.receivingInventory(server,destination);
         if(entries.containsKey(id)||count<1||count>CargoTickerBlockEntity.MAX_REQUEST_COUNT||type.isEmpty()||source.id().equals(destination.id())||inventory==null||destination.receiver()==null)throw new IllegalArgumentException("Invalid shipment or receiving Packager unavailable");
@@ -136,14 +189,24 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
             if(units<=0||shipment.packaged()+units>shipment.quantity){data.blocked(shipment.id,"Physical quantity mismatch");return;}
             current=new CompoundTag();current.putUUID("Id",parcel);current.put("Contents",contents);current.putInt("Units",units);current.putIntArray("Hops",new int[0]);shipment.parcels.put(parcel,current);data.parcelShipments.put(parcel,shipment.id);shipment.stage=Stage.PACKAGED;data.event(shipment,"PACKAGED "+shipment.packaged()+"/"+shipment.quantity);
         }else if(current.getBoolean("Recovered")||current.getBoolean("Delivered")){return;}else if(!contents.equals(current.getCompound("Contents"))){data.failed(shipment.id,"Parcel contents changed");return;}
-        if(!current.hasUUID("Point")||!current.getUUID("Point").equals(point)||!current.getString("Status").equals(status.name())){current.putUUID("Point",point);current.put("Location",location.save());current.putString("Status",status.name());
+        var previousLocation=current.getCompound("Location");
+        boolean changedLocation=current.hasUUID("ObservedStation") || !previousLocation.contains("Pos")
+                || previousLocation.getLong("Pos")!=location.pos().asLong()
+                || !previousLocation.getString("Dimension").equals(location.dimension().toString());
+        if(changedLocation || !current.hasUUID("Point") || !current.getUUID("Point").equals(point) || !current.getString("Status").equals(status.name())){
+            current.putUUID("Point",point);current.put("Location",location.save());current.putString("Status",status.name());
+            current.remove("ObservedStation"); current.putLong("ObservedAt",System.currentTimeMillis());
+            current.putString("Observation",status.name());
             if(shipment.stage!=Stage.BLOCKED){shipment.stage=status==CargoTransshipment.Status.ARRIVED?Stage.ARRIVED:point.equals(shipment.source)?Stage.PACKAGED:Stage.TRANSSHIPMENT;}data.event(shipment,status+" "+CargoPointRegistry.find(server,point).map(CargoPointRegistry.Point::name).orElse("MISSING"));}
     }
     /** Post-insertion source clearing in native mail transfer proves actual boarding/alighting. */
     public static void mailTransfer(MinecraftServer server,ItemStack stack,GlobalStation station,Train train,boolean boarding){
         if(server==null||train==null||stack.isEmpty())return;var parcel=CargoParcelIdentity.id(stack).orElse(null);if(parcel==null)return;
         var data=get(server);var shipId=data.parcelShipments.get(parcel);var shipment=shipId==null?null:data.entries.get(shipId);if(shipment==null||shipment.stage==Stage.CANCELLED)return;var p=shipment.parcels.get(parcel);if(p.getBoolean("Recovered")||p.getBoolean("Delivered"))return;
-        if(boarding){p.putUUID("BoardStation",station.id);p.putUUID("Train",train.id);if(shipment.stage!=Stage.BLOCKED)shipment.stage=Stage.IN_TRANSIT;data.event(shipment,"IN_TRANSIT "+train.name.getString());}
+        if(boarding){
+            if(p.hasUUID("BoardStation") && station.id.equals(p.getUUID("BoardStation")) && p.hasUUID("Train") && train.id.equals(p.getUUID("Train"))) return;
+            recordStation(p,station,"IN_TRANSIT");
+            p.putUUID("BoardStation",station.id);p.putUUID("Train",train.id);if(shipment.stage!=Stage.BLOCKED)shipment.stage=Stage.IN_TRANSIT;data.event(shipment,"IN_TRANSIT "+train.name.getString());}
         else if(p.hasUUID("Train")&&train.id.equals(p.getUUID("Train"))&&p.hasUUID("BoardStation")){
             var completed=new TreeSet<Integer>();for(int h:p.getIntArray("Hops"))completed.add(h);
             if(shipment.trip.getBoolean("Fleet")&&shipment.trip.getUUID("Train").equals(train.id)&&shipment.trip.getUUID("SourceStation").equals(p.getUUID("BoardStation"))&&shipment.trip.getUUID("DestinationStation").equals(station.id)&&PublicFleetRegistry.get(server).assigned(shipment.id,train.id))completed.add(0);
@@ -151,13 +214,20 @@ public final class CargoShipmentRegistry extends net.minecraft.world.level.saved
                 var order=com.example.examplemod.economy.EconomyManager.get(server.overworld()).cargo().order(shipment.id).orElse(null);
                 int index=i;if(order!=null&&order.fees().stream().anyMatch(f->f.hop()==index&&!f.recipient().equals(CargoLineRegistry.access(server,line).owner())))continue;
                 for(int j=0;j<line.stops().size()-1;j++)if(line.stops().get(j).point().equals(leg.from())&&line.stops().get(j+1).point().equals(leg.next())&&line.stops().get(j).station().equals(p.getUUID("BoardStation"))&&line.stops().get(j+1).station().equals(station.id))completed.add(i);}
-            p.putIntArray("Hops",completed.stream().mapToInt(Integer::intValue).toArray());p.remove("BoardStation");p.put("Location",new CargoInfrastructure.Location(station.getBlockEntityDimension().location(),station.getBlockEntityPos()).save());data.event(shipment,"UNLOADED "+station.name);}
+            shipment.inspectionHopUnits=null;
+            p.putIntArray("Hops",completed.stream().mapToInt(Integer::intValue).toArray());p.remove("BoardStation");recordStation(p,station,"UNLOADED");data.event(shipment,"UNLOADED "+station.name);}
         data.setDirty();
+    }
+    private static void recordStation(CompoundTag parcel,GlobalStation station,String observation) {
+        parcel.putUUID("ObservedStation",station.id);
+        parcel.putString("Observation",observation);
+        parcel.putLong("ObservedAt",System.currentTimeMillis());
+        parcel.put("Location",new CargoInfrastructure.Location(station.getBlockEntityDimension().location(),station.getBlockEntityPos()).save());
     }
     /** Can safely be repeated after restart; UUID receipts are credited only to the frozen receiving equipment. */
     public void reconcile(MinecraftServer server){for(var shipment:entries.values()){if(shipment.stage==Stage.COMPLETED||shipment.stage==Stage.FAILED&&!shipment.cancellationRequested||shipment.stage==Stage.CANCELLED)continue;
         for(var entry:shipment.parcels.entrySet()){var p=entry.getValue();if(p.getBoolean("Delivered")||p.getBoolean("Recovered"))continue;var receipt=CargoDeliveryReceipts.find(server,entry.getKey()).orElse(null);
-            if(receipt==null||!shipment.finalPoint.equals(receipt.finalPoint())||!shipment.inventory.dimension().equals(receipt.dimension())||!shipment.inventory.pos().equals(receipt.inventory())||!shipment.receiver.pos().equals(receipt.packager()))continue;p.putBoolean("Delivered",true);event(shipment,"DELIVERED "+shipment.delivered()+"/"+shipment.quantity);}
+            if(receipt==null||!shipment.finalPoint.equals(receipt.finalPoint())||!shipment.inventory.dimension().equals(receipt.dimension())||!shipment.inventory.pos().equals(receipt.inventory())||!shipment.receiver.pos().equals(receipt.packager()))continue;p.putBoolean("Delivered",true);p.putString("Observation","DELIVERED");p.putLong("ObservedAt", System.currentTimeMillis());event(shipment,"DELIVERED "+shipment.delivered()+"/"+shipment.quantity);}
         if(shipment.physicalComplete()&&shipment.stage!=Stage.DELIVERED){if(!shipment.receivingOwnerValid(server)){blocked(shipment.id,"Receiving warehouse ownership changed");continue;}shipment.stage=Stage.DELIVERED;event(shipment,"DELIVERED");}}}
     public static CargoShipmentRegistry load(CompoundTag root,HolderLookup.Provider lookup){if(root.getInt("Version")<1||root.getInt("Version")>3)throw new IllegalArgumentException("Shipment version");var data=new CargoShipmentRegistry();for(Tag raw:root.getList("Entries",10)){var t=(CompoundTag)raw;var route=new ArrayList<CargoRoutePlanner.Leg>();for(Tag value:t.getList("Route",10)){var v=(CompoundTag)value;route.add(new CargoRoutePlanner.Leg(v.getUUID("Line"),v.getUUID("From"),v.getUUID("Next"),v.getUUID("Train"),v.getLong("Tariff")));}
         var shipment=new Shipment(t.getUUID("Id"),t.getUUID("Creator"),OwnerRef.load(t.getCompound("Owner")),t.getUUID("SourceWarehouse"),t.getUUID("DestinationWarehouse"),t.getUUID("Source"),t.getUUID("Final"),ItemStack.parseOptional(lookup,t.getCompound("Item")),t.getInt("Quantity"),route,CargoInfrastructure.Location.load(t.getCompound("Receiver")),CargoInfrastructure.Location.load(t.getCompound("Inventory")));shipment.trip=t.getCompound("Trip").copy();shipment.receiverOwner=t.contains("ReceiverOwner")?OwnerRef.load(t.getCompound("ReceiverOwner")):null;shipment.packagingClaimed=t.getBoolean("PackagingClaimed");shipment.rejectedBeforeDispatch=t.getBoolean("RejectedBeforeDispatch");shipment.cancellationRequested=t.getBoolean("CancellationRequested");shipment.stage=Stage.valueOf(t.getString("Stage"));shipment.problem=t.getString("Problem");for(Tag value:t.getList("History",8))shipment.history.add(value.getAsString());for(Tag value:t.getList("Parcels",10)){var parcel=((CompoundTag)value).copy();UUID id=parcel.getUUID("Id");if(shipment.parcels.putIfAbsent(id,parcel)!=null||data.parcelShipments.putIfAbsent(id,shipment.id)!=null)throw new IllegalArgumentException("Duplicate physical parcel");}if(data.entries.putIfAbsent(shipment.id,shipment)!=null)throw new IllegalArgumentException("Duplicate shipment");}return data;}

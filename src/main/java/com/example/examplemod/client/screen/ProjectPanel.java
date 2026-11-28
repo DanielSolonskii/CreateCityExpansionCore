@@ -2,6 +2,7 @@ package com.example.examplemod.client.screen;
 
 import com.example.examplemod.client.ProjectClientState;
 import com.example.examplemod.client.map.CityMapPanel;
+import com.example.examplemod.client.map.AtlasPlaceIcon;
 
 import com.example.examplemod.network.*;
 import com.example.examplemod.projects.*;
@@ -19,6 +20,9 @@ import static com.example.examplemod.projects.ProjectManager.Action;
 final class ProjectPanel {
     private record Hit(WorldMapUiLayout.Rect bounds,Runnable action){}
     private final List<Hit> hits=new ArrayList<>();
+    private final AtlasFocus keyboard=new AtlasFocus();
+    private final Map<String,EditBox> focusFields=new HashMap<>();
+    private int focusOrder;
     private record MapHit(WorldMapUiLayout.Rect bounds,UUID id){}
     private final List<MapHit> mapHits=new ArrayList<>();
     private final List<WorldMapUiLayout.Rect> labels=new ArrayList<>();
@@ -27,7 +31,8 @@ final class ProjectPanel {
     private boolean open,editing,picking;
     private boolean saving;
     private int step,scroll,contentHeight,y,serial=-1,width,height,top;
-    private UUID selected,editId;
+    private UUID selected,editId,draftCity;
+    private long editRevision;
     private ProjectZone zone;
     private ProjectZone.Shape shape=ProjectZone.Shape.POINT;
     private Integer firstX,firstZ;
@@ -62,7 +67,15 @@ final class ProjectPanel {
     private static Component tr(String key,Object...args){return Component.translatable("gui.createcityexpansioncore.projects."+key,args);}
     private UUID me(){return Minecraft.getInstance().player.getUUID();}
     private String name(UUID id){String known=ProjectClientState.names.getString(id.toString());return known.isBlank()?tr("member",id.toString().substring(0,8)).getString():known;}
-    private Project selected(){return ProjectClientState.records.stream().filter(p->p.id().equals(selected)).findFirst().orElse(null);}
+    private Project selected(){return ProjectClientState.mapRecords().stream().filter(p->p.id().equals(selected)).findFirst().orElse(null);}
+    private boolean highlighted(UUID id){
+        var pinned=map.getSelection();
+        return open?id.equals(selected):pinned!=null&&pinned.kind()==CityMapPanel.SelectionKind.PROJECT&&id.equals(pinned.id());
+    }
+    private boolean draftAvailable(){
+        return (scope==Scope.SERVER?ProjectClientState.op:Objects.equals(draftCity,ProjectClientState.city))
+                && (editId==null || selected()!=null || ProjectClientState.mapMarkers().stream().anyMatch(m->m.id().equals(editId)));
+    }
     public void render(GuiGraphics g,Font font,CityMapPanel map,net.minecraft.resources.ResourceLocation dimension,
                        int width,int height,int top,WorldMapUiLayout.Rect viewport,int mx,int my,float partial,boolean enabled) {
         this.graphics=g;this.font=font;this.map=map;this.dimension=dimension;this.width=width;this.height=height;this.top=top;this.viewport=viewport;this.mouseX=mx;this.mouseY=my;
@@ -72,20 +85,40 @@ final class ProjectPanel {
         if(!open)return;
         panel=ProjectLayout.panel(width,height,top);body=ProjectLayout.body(panel);
         WorldMapChrome.panel(g,panel.x(),panel.y(),panel.width(),panel.height());
+        if(!ProjectClientState.hasMapSnapshot()){
+            hits.clear();mapHits.clear();keyboard.begin();keyboard.reset();focusFields.clear();
+            fields.forEach(f->{f.setFocused(false);f.setVisible(false);});
+            confirmation=null;
+            g.drawWordWrap(font,tr("result."+("permission".equals(ProjectClientState.result)?"permission":"loading")),
+                    panel.x()+10,panel.y()+10,panel.width()-20,WorldMapChrome.MUTED);
+            return;
+        }
         g.drawString(font,tr(adminMode()?"admin_title":editing?"create":selected==null?"title":"details"),panel.x()+10,panel.y()+10,WorldMapChrome.TEXT,false);
         g.drawString(font,WorldMapChrome.fit(font,editing?tr("balances",ProjectClientState.wallet,ProjectClientState.treasury):tr("workspace_hint"),panel.width()-20),panel.x()+10,panel.y()+24,WorldMapChrome.MUTED,false);
         if(serial!=ProjectClientState.serial) {
             serial=ProjectClientState.serial;
+            if(confirmation!=null && selected!=null && selected()==null
+                    && ProjectClientState.mapMarkers().stream().noneMatch(marker->marker.id().equals(selected)))confirmation=null;
             if(ProjectClientState.created!=null&&ProjectClientState.result.equals("ok")){selected=ProjectClientState.created;editing=false;scroll=0;ProjectClientState.created=null;}
             if(saving&&!ProjectClientState.pending()){if(ProjectClientState.result.equals("ok"))editing=false;saving=false;}
         }
         hits.clear();fields.forEach(f->f.setVisible(false));y=0;
+        keyboard.begin();focusFields.clear();focusOrder=0;
         g.enableScissor(body.x(),body.y(),body.right(),body.bottom());
-        if(confirmation!=null)renderConfirmation();
+        if(editing && !draftAvailable()){
+            confirmation=null;
+            text(tr("result.permission"),WorldMapChrome.ACCENT);
+            button("discard",()->{editing=picking=false;fields.clear();scroll=0;},false);
+        } else if(confirmation!=null)renderConfirmation();
         else if(editing)renderForm(partial);
         else if(selected!=null&&selected()!=null)renderDetails(selected(),partial);
         else renderList();
         contentHeight=y;scroll=ProjectLayout.clampScroll(scroll,contentHeight,body.height());
+        var control=keyboard.current();
+        if(control!=null) {
+            var r=control.bounds();
+            g.renderOutline(r.x(),r.y(),r.width(),r.height(),0xFFFFFFFF);
+        }
         g.disableScissor();
         if(contentHeight>body.height()) {
             int thumb=Math.max(10,body.height()*body.height()/contentHeight);
@@ -104,22 +137,35 @@ final class ProjectPanel {
         var r=ProjectLayout.row(body,scroll,y,24);boolean available=enabled&&!ProjectClientState.pending();
         WorldMapChrome.control(graphics,r,false,r.contains(mouseX,mouseY)&&body.contains(mouseX,mouseY),available,primary);
         graphics.drawString(font,WorldMapChrome.fit(font,label,r.width()-12),r.x()+6,r.y()+8,available?WorldMapChrome.TEXT:WorldMapChrome.MUTED,false);
-        if(available)hits.add(new Hit(r,action));y+=29;
+        if(available) {
+            int snapshot=ProjectClientState.serial;
+            Runnable current=()->{if(ProjectClientState.hasMapSnapshot()&&snapshot==ProjectClientState.serial)action.run();};
+            hits.add(new Hit(r,current));
+            keyboard.add("button."+(focusOrder++),label,PolishedWorldMapScreen.atlasText("activate"),r,current);
+        }
+        y+=29;
     }
     private void button(String key,Runnable action,boolean primary){button(tr(key),action,primary,true);}
     private void field(EditBox field,String label,float partial) {
         text(tr(label),WorldMapChrome.MUTED);var r=ProjectLayout.row(body,scroll,y,20);
+        var name=tr(label);
+        String key="field."+(focusOrder++);
+        field.setMessage(name);
+        focusFields.put(key,field);
+        keyboard.add(key,name,PolishedWorldMapScreen.atlasText("edit_field"),r,()->field.setFocused(true));
         field.setX(r.x());field.setY(r.y());field.setWidth(r.width());field.setVisible(true);field.render(graphics,mouseX,mouseY,partial);y+=28;
     }
     private EditBox make(int max,String value) {
-        EditBox box=new EditBox(font,0,0,100,20,Component.empty());box.setMaxLength(max);box.setValue(value);fields.add(box);return box;
+        EditBox box=AtlasFormStyle.field(font,0,0,100,20,Component.empty());box.setMaxLength(max);box.setValue(value);fields.add(box);return box;
     }
     private void start(Project p) {
         map.setOverlay(CityMapPanel.Overlay.PROJECTS,true);
+        draftCity=ProjectClientState.city;
         scope=p==null?(adminMode()?Scope.SERVER:Scope.CITY):p.scope();
         fields.clear();title=make(96,p==null?"":p.title());description=make(2048,p==null?"":p.description());
         stageText=make(2048,p==null?"":String.join("; ",p.stages().stream().map(Stage::title).toList()));reward=make(19,p==null?"0":Long.toString(p.reward()));
         reason=make(512,"");editing=true;saving=false;managementOpen=false;editId=p==null?null:p.id();selected=p==null?null:p.id();step=scroll=0;zone=p==null?null:p.zone();
+        editRevision=p==null?0:p.revision();
         category=p==null?Category.BUILDING:p.category();funding=p==null?(scope==Scope.SERVER?Funding.SERVER_ISSUANCE:Funding.FREE):p.funding();shape=zone==null?ProjectZone.Shape.POINT:zone.shape();picking=false;firstX=firstZ=null;validation="";
     }
     private void renderList() {
@@ -133,8 +179,8 @@ final class ProjectPanel {
         }else if(ProjectClientState.city!=null&&ProjectClientState.typeFilter()!=2)button("create",()->start(null),true);
         button(tr("filter."+ProjectClientState.statusFilter()),()->{ProjectClientState.filter=ProjectClientState.typeFilter()*4+(ProjectClientState.statusFilter()+1)%4;ProjectClientState.page=0;selected=null;scroll=0;ProjectClientState.request(null);},false,true);
         text(tr("count",ProjectClientState.total,ProjectClientState.page+1,Math.max(1,(ProjectClientState.total+15)/16)),WorldMapChrome.MUTED);
-        if(ProjectClientState.records.isEmpty())text(tr("empty"),WorldMapChrome.MUTED);
-        for(Project p:ProjectClientState.records) {
+        if(ProjectClientState.mapRecords().isEmpty())text(tr("empty"),WorldMapChrome.MUTED);
+        for(Project p:ProjectClientState.mapRecords()) {
             button(Component.literal(p.title()),()->{selected=p.id();scroll=0;reason=null;map.centerOn(new BlockPos(p.zone().x1(),64,p.zone().z1()));},false,true);
             text(tr("scope."+p.scope().name().toLowerCase(Locale.ROOT)),ProjectMapStyle.color(p.scope(),p.status()));
             text(tr("status."+p.status().name().toLowerCase(Locale.ROOT)),statusColor(p.status()));
@@ -171,7 +217,10 @@ final class ProjectPanel {
             text(Component.literal(title.getValue()),WorldMapChrome.TEXT);text(Component.literal(description.getValue()),WorldMapChrome.MUTED);
             text(tr("funding."+funding.name().toLowerCase(Locale.ROOT)),WorldMapChrome.ACCENT);
             text(tr("reward_amount",funding==Funding.FREE?0:reward.getValue()),WorldMapChrome.TEXT);
-            text(tr("draft_hint"),WorldMapChrome.MUTED);button("save_draft",this::saveDraft,true);
+            var existing=selected();
+            boolean active=editId!=null && existing!=null && existing.status()!=Status.DRAFT;
+            text(tr(active?"active_edit_hint":"draft_hint"),WorldMapChrome.MUTED);
+            button(active?"save_changes":"save_draft",this::saveDraft,true);
         }
         if(step>0)button("back",()->{step--;scroll=0;unfocus();},false);
         if(step<3)button("next",()->{step++;scroll=0;unfocus();},true);
@@ -184,8 +233,13 @@ final class ProjectPanel {
             long amount=funding==Funding.FREE?0:Long.parseLong(reward.getValue());
             if(stages.size()>16||amount<0||amount>ProjectClientState.maximum||funding!=Funding.FREE&&funding!=Funding.SERVER_ISSUANCE&&amount==0||title.getValue().isBlank())throw new IllegalArgumentException();
             var draft=new ProjectManager.Draft(scope,title.getValue(),description.getValue(),category,zone,stages,funding,amount);
-            Project p=selected();if(editId!=null&&p==null){validation="stale";return;}
-            ProjectClientState.filter=ProjectClientState.typeFilter()*4;saving=true;send(editId==null?Action.CREATE:Action.UPDATE,p,null,0,false,"",draft);
+            Project p=selected();if(editId!=null&&(p==null || p.revision()!=editRevision)){validation="stale";return;}
+            boolean changedPublicZone=p!=null && p.scope()==Scope.SERVER && p.status()!=Status.DRAFT && !p.zone().equals(zone);
+            Runnable save=()->{
+                ProjectClientState.filter=ProjectClientState.typeFilter()*4;
+                saving=true;send(editId==null?Action.CREATE:Action.UPDATE,p,null,0,changedPublicZone,"",draft);
+            };
+            if(changedPublicZone)confirm(tr("change_zone_confirm"),save);else save.run();
         }catch(RuntimeException error){validation="invalid";}
     }
     private void renderDetails(Project p,float partial) {
@@ -225,6 +279,7 @@ final class ProjectPanel {
             else text(Component.literal((s.done()?"✓ ":"○ ")+s.title()),s.done()?0xFF86CFA0:WorldMapChrome.MUTED);
         }
         if(p.status().terminal())return;
+        if(server && manage && p.status()!=Status.DRAFT)button("edit",()->start(p),false);
         if(p.status()==Status.DRAFT&&manage) {
             button("edit",()->start(p),false);
             button(p.funding()==Funding.TREASURY?"request_funding":"publish",()->confirm(operationConfirm(p,tr("reserve_confirm",p.reward())),()->send(Action.PUBLISH,p,null,0,server&&!ProjectClientState.conflicts.getList(p.id().toString(),net.minecraft.nbt.Tag.TAG_STRING).isEmpty(),"",null)),true);
@@ -282,9 +337,11 @@ final class ProjectPanel {
     }
     public boolean click(double x,double z,int button,boolean enabled) {
         if(!enabled)return false;
+        keyboard.reset();
         if(ProjectLayout.toggle(width,height).contains(x,z)&&button==0){if(!editing&&confirmation==null){open=!open;if(open)map.setOverlay(CityMapPanel.Overlay.PROJECTS,true);scroll=0;unfocus();}return true;}
+        if(!ProjectClientState.hasMapSnapshot())return open&&panel!=null&&panel.contains(x,z);
         if(!editing&&confirmation==null&&button==0&&viewport!=null&&viewport.contains(x,z)&&map.isOverlayEnabled(CityMapPanel.Overlay.PROJECTS))
-            for(MapHit hit:mapHits)if(hit.bounds().contains(x,z)){selectProject(hit.id());return true;}
+            for(MapHit hit:mapHits)if(hit.bounds().contains(x,z)){pinOrOpen(hit.id());return true;}
         if(!open)return false;
         if(panel!=null&&panel.contains(x,z)) {
             if(button!=0)return true;
@@ -306,16 +363,40 @@ final class ProjectPanel {
         }
         if(editing)return false;
         double wx=map.screenToWorldX(x),wz=map.screenToWorldZ(z),radius=8/map.zoom();
-        var marker=ProjectClientState.markers.stream().filter(m->m.zone().dimension().equals(dimension)&&ProjectMapStyle.zones(map.zoom(),m.id().equals(selected))&&map.isOverlayEnabled(CityMapPanel.Overlay.PROJECTS)&&m.zone().distance(wx,wz)<=radius)
+        var marker=ProjectClientState.mapMarkers().stream().filter(m->m.zone().dimension().equals(dimension)&&ProjectMapStyle.zones(map.zoom(),highlighted(m.id()))&&map.isOverlayEnabled(CityMapPanel.Overlay.PROJECTS)&&m.zone().distance(wx,wz)<=radius)
                 .min(Comparator.comparingDouble(m->m.zone().distance(wx,wz))).orElse(null);
-        if(marker!=null){selectProject(marker.id());return true;}
+        if(marker!=null){pinOrOpen(marker.id());return true;}
         return false;
+    }
+    private void pinOrOpen(UUID id) {
+        if(ProjectClientState.mapMarkers().stream().noneMatch(m->m.id().equals(id)&&dimension.equals(m.zone().dimension())))return;
+        if (open) { selectProject(id); return; }
+        var atlas=PolishedWorldMapScreen.activeView();
+        if (atlas!=null) atlas.pinMapObject(AtlasSearch.projectSelection(id,dimension));
     }
     public boolean scroll(double x,double y,double amount){if(open&&panel!=null&&panel.contains(x,y)){scroll=ProjectLayout.clampScroll(scroll-(int)(amount*20),contentHeight,body.height());return true;}return confirmation!=null;}
     private void unfocus(){fields.forEach(f->f.setFocused(false));}
     public boolean key(int key,int scan,int mods) {
         if(!open)return false;
         if(key==GLFW.GLFW_KEY_ESCAPE){if(confirmation!=null)confirmation=null;else if(picking){picking=false;firstX=firstZ=null;}else if(editing)confirm(tr("discard"),()->{editing=false;fields.clear();scroll=0;});else if(selected!=null){selected=null;fields.clear();reason=null;scroll=0;}else open=false;return true;}
+        if(key==GLFW.GLFW_KEY_TAB) {
+            var control=keyboard.move((mods&GLFW.GLFW_MOD_SHIFT)!=0);
+            if(control!=null) {
+                var r=control.bounds();
+                unfocus();
+                if(focusFields.containsKey(control.id())) focusFields.get(control.id()).setFocused(true);
+                scroll=ProjectLayout.clampScroll(scroll+(r.y()<body.y()?r.y()-body.y():Math.max(0,r.bottom()-body.bottom())),contentHeight,body.height());
+                Minecraft.getInstance().getNarrator().sayNow(control.name().copy().append(". ").append(control.hint()));
+            }
+            return true;
+        }
+        var control=keyboard.current();
+        if ((key==GLFW.GLFW_KEY_ENTER || key==GLFW.GLFW_KEY_KP_ENTER || key==GLFW.GLFW_KEY_SPACE)
+                && control!=null && !focusFields.containsKey(control.id())) {
+            keyboard.reset();
+            control.activate().run();
+            return true;
+        }
         if(confirmation!=null)return true;
         for(EditBox f:fields)if(f.visible&&f.isFocused()){f.keyPressed(key,scan,mods);return true;}
         return false;
@@ -325,20 +406,21 @@ final class ProjectPanel {
     private void drawZones(GuiGraphics g) {
         mapHits.clear();labels.clear();
         g.enableScissor(viewport.x(),viewport.y(),viewport.right(),viewport.bottom());
-        var visible=ProjectClientState.markers.stream().filter(m->m.zone().dimension().equals(dimension))
-                .filter(m->map.isOverlayEnabled(CityMapPanel.Overlay.PROJECTS)||m.id().equals(selected))
-                .sorted(Comparator.comparing(m->!m.id().equals(selected))).toList();
-        for(var marker:visible.reversed())if(ProjectMapStyle.zones(map.zoom(),marker.id().equals(selected)))
-            drawZone(g,marker.zone(),ProjectMapStyle.color(marker.scope(),marker.status()),marker.id().equals(selected),ProjectMapStyle.dashed(marker.status()));
+        var visible=ProjectClientState.mapMarkers().stream().filter(m->m.zone().dimension().equals(dimension))
+                .filter(m->map.isOverlayEnabled(CityMapPanel.Overlay.PROJECTS)||open&&highlighted(m.id()))
+                .sorted(Comparator.comparing(m->!highlighted(m.id()))).toList();
+        for(var marker:visible.reversed())if(ProjectMapStyle.zones(map.zoom(),highlighted(marker.id())))
+            drawZone(g,marker.zone(),ProjectMapStyle.color(marker.scope(),marker.status()),highlighted(marker.id()),ProjectMapStyle.dashed(marker.status()));
         for(var marker:visible)drawProjectMarker(g,marker);
-        if(editing&&zone!=null&&zone.dimension().equals(dimension))drawZone(g,zone,WorldMapChrome.ACCENT,true,true);
-        if(picking&&viewport.contains(mouseX,mouseY)) {
+        boolean preview=editing&&ProjectClientState.hasMapSnapshot()&&draftAvailable();
+        if(preview&&zone!=null&&zone.dimension().equals(dimension))drawZone(g,zone,WorldMapChrome.ACCENT,true,true);
+        if(preview&&picking&&viewport.contains(mouseX,mouseY)) {
             try{drawZone(g,previewZone(dimension,shape,firstX,firstZ,(int)Math.floor(map.screenToWorldX(mouseX)),(int)Math.floor(map.screenToWorldZ(mouseY))),WorldMapChrome.ACCENT,true,true);}catch(IllegalArgumentException ignored){}
         }
         g.disableScissor();
     }
     private void drawProjectMarker(GuiGraphics g,ProjectClientState.Marker marker) {
-        boolean chosen=marker.id().equals(selected);
+        boolean chosen=highlighted(marker.id());
         if(!ProjectMapStyle.markers(map.zoom(),chosen))return;
         int x=map.worldToScreenX((marker.zone().minX()+marker.zone().maxX()+1)/2.0),z=map.worldToScreenY((marker.zone().minZ()+marker.zone().maxZ()+1)/2.0);
         var box=ProjectMapStyle.marker(x,z);
@@ -347,8 +429,7 @@ final class ProjectPanel {
         int color=ProjectMapStyle.color(marker.scope(),marker.status());boolean hover=box.contains(mouseX,mouseY);
         WorldMapChrome.rounded(g,box.x(),box.y(),box.width(),box.height(),5,chosen?0xFFECE8D5:hover?0xFF59686C:color);
         WorldMapChrome.rounded(g,box.x()+1,box.y()+1,box.width()-2,box.height()-2,4,WorldMapChrome.INSET);
-        int[] pixels=ProjectMapStyle.glyph(marker.scope(),marker.category(),marker.status());
-        for(int row=0;row<8;row++)for(int col=0;col<8;col++)if((pixels[row]&(1<<col))!=0)g.fill(x-4+col,z-4+row,x-3+col,z-3+row,color);
+        AtlasPlaceIcon.forProject(marker.scope()).draw(g, x-8, z-8, 16);
         mapHits.add(new MapHit(box,marker.id()));
         Font f=Minecraft.getInstance().font;
         if(!chosen&&!hover&&map.zoom()<.55)return;

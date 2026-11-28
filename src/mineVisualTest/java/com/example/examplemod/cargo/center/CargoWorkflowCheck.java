@@ -18,7 +18,35 @@ public final class CargoWorkflowCheck {
         public long maximum(){return 10000;}
         public void dirty(){}
     }
+    private static void shipmentInspection() {
+        var a=UUID.randomUUID(); var b=UUID.randomUUID(); var line=UUID.randomUUID();
+        var leg=new CargoRoutePlanner.Leg(line,a,b,UUID.randomUUID(),0);
+        require(ShipmentInspection.visibleLeg(leg,Set.of(a,b),line::equals),"authorized geometry");
+        require(!ShipmentInspection.visibleLeg(leg,Set.of(b),line::equals),"hidden endpoint");
+        require(!ShipmentInspection.visibleLeg(leg,Set.of(a,b),id->false),"withdrawn line access");
+        require(ShipmentInspection.nextLeg(new int[]{1,1,-2},3)==0,"a later receipt cannot prove an earlier handoff");
+        require(ShipmentInspection.nextLeg(new int[]{0,1,1,8},3)==2,"duplicate and out-of-range receipts");
+        require(ShipmentInspection.nextLeg(new int[]{0,1},2)==-1 && ShipmentInspection.nextLeg(new int[0],33)==-1,"complete or oversized route");
+        require(ShipmentInspection.ageSeconds(0,5000)==-1 && ShipmentInspection.ageSeconds(8,7)==-1,"legacy and reversed clocks");
+        require(ShipmentInspection.ageSeconds(2000,122000)==120,"physical observation age across reconnect");
+        require(ShipmentInspection.waitReason(CargoShipmentRegistry.Stage.PACKAGED,"WAITING_TRAIN","").equals("train"),"observed wait");
+        require(ShipmentInspection.waitReason(CargoShipmentRegistry.Stage.IN_TRANSIT,"UNLOADED","").equals("unreported"),"ordinary stop without confirmed cause");
+        require(ShipmentInspection.waitReason(CargoShipmentRegistry.Stage.BLOCKED,"WAITING_TRAIN","private node name").equals("recorded_block"),"filtered block reason");
+    }
+
     public static void run()throws Exception{
+        shipmentInspection();
+        var contract=new MasterCityTradeBook.Contract(UUID.randomUUID(),UUID.randomUUID(),1,"Copper",32,7,224,2000,
+                MasterCityTradeBook.ContractState.OPEN);
+        require(PublicTradeMap.openContract(contract,true,1999,1),"open public contract before expiry");
+        require(!PublicTradeMap.openContract(contract,true,2000,1) && !PublicTradeMap.openContract(contract,false,1999,1)
+                && !PublicTradeMap.openContract(contract,true,1999,0),"expired, paused and exhausted contracts leave the atlas");
+        var quote=new CompoundTag();quote.putString("Name","Copper ingot");quote.putString("ItemId","minecraft:copper_ingot");
+        var results=new net.minecraft.nbt.ListTag();
+        require(PublicTradeMap.include(results,quote,"minecraft:overworld","медь",Set.of("minecraft:copper_ingot")),
+                "localized query matches registry key without any private warehouse position");
+        var place=new CompoundTag();place.putString("Dimension","minecraft:the_nether");quote.put("Location",place);
+        require(!PublicTradeMap.include(results,quote,"minecraft:overworld","copper",Set.of()),"no off-dimension result");
         var payer=OwnerRef.player(UUID.randomUUID());var seller=OwnerRef.player(UUID.randomUUID());var carrier=OwnerRef.player(UUID.randomUUID());
         var accounts=new Accounts();accounts.balances.put(payer,1000L);var book=new CargoCommerceBook(accounts);
         var item=new CompoundTag();item.putString("id","minecraft:iron_ingot");UUID offer=UUID.randomUUID(),orderId=UUID.randomUUID();

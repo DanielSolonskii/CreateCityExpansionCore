@@ -10,10 +10,12 @@ import com.example.examplemod.multiblock.BlueprintCatalog;
 import com.example.examplemod.multiblock.BlueprintCatalog.Structure;
 import com.example.examplemod.multiblock.BlueprintCatalog.Tier;
 import com.example.examplemod.multiblock.MineMultiblock;
+import com.example.examplemod.sound.ModSounds;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -109,12 +111,20 @@ public final class IndustrialMineService {
     ) {
         MineMultiblock.ValidationResult validation = MineMultiblock.validate(level, controllerPos);
         Tier tier = operatingTier(level, controllerPos, controller, validation);
+        IndustrialMineState previousState = controller.getRuntimeState();
         switch (command) {
             case START -> start(level, controllerPos, controller, validation, tier);
             case STOP -> stop(controller);
             case EMERGENCY -> emergency(controller);
         }
         refreshPower(level, controller, validation, tier);
+        IndustrialMineState currentState = controller.getRuntimeState();
+        if (currentState != previousState
+                && ((command == MineControlCommand.START && currentState == IndustrialMineState.STARTING)
+                || (command == MineControlCommand.STOP && currentState == IndustrialMineState.STOPPING))) {
+            float pitch = command == MineControlCommand.START ? 1.0F : 0.85F;
+            level.playSound(null, controllerPos, ModSounds.MINE_CONTROLLER_BOOT.get(), SoundSource.BLOCKS, 0.7F, pitch);
+        }
         return createSnapshot(level, controllerPos, controller, validation, tier);
     }
 

@@ -24,6 +24,7 @@ import static com.example.examplemod.journey.JourneyModel.*;
 
 @EventBusSubscriber(modid="createcityexpansioncore")
 public final class JourneyServer {
+    private static final Map<ServerPlayer,Long> nextLookup = new WeakHashMap<>();
     public static boolean visible(Marker m,Progress p){return m.enabled&&(!m.newcomers||!p.graduated)&&(m.afterQuest.isEmpty()||p.completed.contains(m.afterQuest));}
     private static boolean visible(JourneyData data, Marker marker, Progress progress) {
         return marker != null && visible(marker, progress) && JourneyRouteAuthoring.accessible(data, progress, marker.id);
@@ -36,6 +37,13 @@ public final class JourneyServer {
         var budget=player.getPersistentData();long window=net.minecraft.Util.getMillis()/1000;
         if(budget.getLong("CCECJourneyWindow")!=window){budget.putLong("CCECJourneyWindow",window);budget.putInt("CCECJourneyRequests",0);}
         int count=budget.getInt("CCECJourneyRequests");if(count>=6)return;budget.putInt("CCECJourneyRequests",count+1);
+        if (request.action() == JourneyRequestPayload.Action.STATE && request.id().startsWith("n/")) {
+            var query = NavigationLookup.parse(request.id());
+            if (query == null || window < nextLookup.getOrDefault(player, 0L)) return;
+            nextLookup.put(player, window + 2);
+            PacketDistributor.sendToPlayer(player, new JourneyStatePayload(JourneyObjectLookup.read(player, query)));
+            return;
+        }
         if (request.action() == JourneyRequestPayload.Action.STATE || request.action() == JourneyRequestPayload.Action.JOURNAL) {
             send(player, request.action() == JourneyRequestPayload.Action.JOURNAL, "");
             return;
@@ -178,7 +186,7 @@ public final class JourneyServer {
         PacketDistributor.sendToPlayer(player, new JourneyStatePayload(state));
     }
     public static CompoundTag snapshot(JourneyData d,Progress p,boolean open,String completed){
-        var t=new CompoundTag();var markers=new ListTag();String target=target(d,p);d.markers.values().stream().filter(m->visible(d,m,p)).forEach(m->{var v=JourneyCodec.marker(m);if(!m.id.equals(target))v.remove("Route");markers.add(v);});t.put("Markers",markers);
+        var t=new CompoundTag();t.putInt("NavigationLookupVersion",1);var markers=new ListTag();String target=target(d,p);d.markers.values().stream().filter(m->visible(d,m,p)).forEach(m->{var v=JourneyCodec.marker(m);if(!m.id.equals(target))v.remove("Route");markers.add(v);});t.put("Markers",markers);
         var quests=new ListTag();for(var q:d.quests.values()){if(!q.enabled||!JourneyRouteAuthoring.accessible(d,p,q.id))continue;var v=JourneyCodec.quest(q);for(var raw:v.getList("Objectives",10)){var o=(CompoundTag)raw;o.putBoolean("Met",p.met.contains(q.id+"/"+o.getString("Id")));o.remove("Id");}v.putBoolean("Available",available(q,p,d.chains.values()));v.putBoolean("Done",p.completed.contains(q.id));v.putBoolean("Pinned",p.accepted.contains(q.id));int done=(int)q.objectives.stream().filter(o->p.met.contains(q.id+"/"+o.id())).count();v.putInt("DoneCount",done);quests.add(v);}t.put("Quests",quests);
         var chains=new ListTag();for(var c:d.chains.values())if(c.enabled&&JourneyRouteAuthoring.accessible(d,p,c.id)){var v=new CompoundTag();v.putString("Id",c.id);v.putString("Title",c.title);v.put("Steps",JourneyCodec.strings(c.steps));v.putInt("Total",c.steps.size());v.putInt("Done",(int)c.steps.stream().filter(p.completed::contains).count());chains.add(v);}t.put("Chains",chains);
         t.putString("Target",target);t.putString("ActiveQuest",p.activeQuest);t.putString("Chain",p.chain);t.putBoolean("Paused",p.paused);

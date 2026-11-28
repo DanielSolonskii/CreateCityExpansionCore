@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { authGateway } from "../services/authGateway";
 import { errorMessage } from "../services/accountApi";
 import { deviceGateway, type DeviceEnrollment } from "../services/deviceGateway";
+import { AccessSteps, CodeLifetime } from "./AccessSteps";
 import { QRCodeSVG } from "qrcode.react";
 import "../phone-verification.css";
 import { useOverlay } from "./useOverlay";
@@ -12,8 +13,10 @@ export function LoginModal({
   onClose,
   onSuccess,
   onRegister,
+  initialUsername,
 }: {
   open: boolean;
+  initialUsername?: string;
   onClose: () => void;
   onSuccess: () => void;
   onRegister: () => void;
@@ -27,6 +30,10 @@ export function LoginModal({
   const [error, setError] = useState("");
   const active = useRef<AbortController | null>(null);
   const [enrollment, setEnrollment] = useState<DeviceEnrollment | null>(null);
+
+  useEffect(() => {
+    if (initialUsername) setUsername(initialUsername);
+  }, [initialUsername]);
 
   useEffect(() => {
     if (open) setError("");
@@ -81,8 +88,8 @@ export function LoginModal({
       <section className="login-modal" role="dialog" aria-modal="true" aria-label="Вход в RE:CREATED">
         <button className="login-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
         <div className="login-emblem"><KeyRound size={24} /><i /><i /></div>
-        <span className="eyebrow">ДОСТУП К СЕТИ</span>
-        <h2>Добро пожаловать,<br /><em>инженер</em></h2>
+        <AccessSteps step={enrollment ? 1 : 0}/>
+        <h2>{enrollment ? "Подтверждение устройства" : "Вход в аккаунт"}</h2>
         <p>Первый вход на этом ПК нужно подтвердить в Telegram. Затем Launcher будет входить автоматически.</p>
 
         {!enrollment && <form onSubmit={submit}>
@@ -95,7 +102,7 @@ export function LoginModal({
             <div><LockKeyhole size={17} /><input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Показать пароль">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div>
           </label>
           <div className="login-options">
-            <button type="button" className={`mock-check ${remember ? "is-checked" : ""}`} onClick={() => setRemember((value) => !value)}><i /> Запомнить логин</button>
+            <button type="button" aria-pressed={remember} className={`mock-check ${remember ? "is-checked" : ""}`} onClick={() => setRemember((value) => !value)}><i /> Запомнить логин</button>
             <button type="button" disabled title="Восстановление пароля пока недоступно">Забыли пароль?</button>
           </div>
           <div className={`login-error ${error ? "is-visible" : ""}`}>{error || "Проверьте введённые данные"}</div>
@@ -105,16 +112,16 @@ export function LoginModal({
           </button>
         </form>}
         {enrollment && <div>
-          <h3>Подтвердите устройство</h3>
+          <CodeLifetime expiresAt={enrollment.expiresAt}/>
           <div className="phone-verification-qr"><QRCodeSVG value={enrollment.telegramDeepLink} size={176} role="img" aria-label="QR-код подтверждения устройства" /></div>
           <p>Отсканируйте QR телефоном. В своём Telegram нажмите «Подтвердить устройство». Подтверждайте только свой запрос.</p>
           <small>Действует до {new Date(enrollment.expiresAt).toLocaleTimeString()}. Ожидаем подтверждение…</small>
           {error && <div className="login-error is-visible" role="alert">{error}</div>}
           <button className="auth-switch" onClick={() => { setEnrollment(null); setError(""); }}>Отменить / войти заново</button>
         </div>}
-        <div className="mock-hint"><span>CREATE SERVER ACCOUNT</span><strong>Telegram verification</strong></div>
+
         <button className="auth-switch" onClick={onRegister}>Нет аккаунта? <strong>Зарегистрироваться</strong></button>
-        <small className="login-note">Пароль не сохраняется. Credential устройства защищён Windows. Отзыв: Telegram → Аккаунт → Устройства. Это не игровая сессия.</small>
+        <small className="login-note">Отозвать доступ устройства можно в Telegram → Аккаунт → Устройства.</small>
       </section>
     </div>
   );

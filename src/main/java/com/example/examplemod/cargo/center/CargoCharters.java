@@ -14,6 +14,18 @@ public final class CargoCharters extends SavedData {
     private final Map<UUID,CompoundTag> permits=new HashMap<>(),jobs=new HashMap<>();
     /** Read-only active legacy leases; completed history never grants a toll exemption. */
     public Map<UUID,CompoundTag> activeJobs(){var active=new HashMap<UUID,CompoundTag>();jobs.forEach((train,job)->{if(!job.getString("Phase").equals("DONE"))active.put(train,job.copy());});return Map.copyOf(active);}
+    /** An enabled charter permit also owns its train between physical jobs. */
+    public boolean reservesTrain(MinecraftServer server, UUID train) {
+        var job = jobs.get(train);
+        if (job != null && !"DONE".equals(job.getString("Phase"))) return true;
+        var lines = CargoLineRegistry.get(server);
+        for (UUID id : permits.keySet()) {
+            var line = lines.find(id).orElse(null);
+            if (line != null && line.enabled() && line.mode() == CargoLineRegistry.Mode.CHARTER &&
+                    line.trains().contains(train) && permitted(server,line,train)) return true;
+        }
+        return false;
+    }
     public static CargoCharters get(MinecraftServer s){return s.overworld().getDataStorage().computeIfAbsent(new Factory<>(CargoCharters::new,CargoCharters::load,null),"ccec_cargo_charters");}
     public void authorize(ServerPlayer actor,UUID lineId,boolean enabled,boolean returns){
         var s=actor.getServer();var line=CargoLineRegistry.get(s).find(lineId).orElseThrow();
@@ -22,6 +34,7 @@ public final class CargoCharters extends SavedData {
         var permit=new CompoundTag();permit.put("Owner",CargoLineRegistry.access(s,line).owner().save());permit.putBoolean("Return",returns);
         var trains=new ListTag();for(UUID id:line.trains()){
             if(!CenterOperations.access(actor,"train",id).owner().manages(s,actor.getUUID()))throw new IllegalArgumentException("charter_permission");
+            if(enabled && com.example.examplemod.passenger.PassengerService.assigned(s,id))throw new IllegalArgumentException("shipment_in_use");
             var t=new CompoundTag();t.putUUID("Id",id);t.put("Owner",CenterOperations.access(actor,"train",id).owner().save());trains.add(t);
         }
         if(returns)for(int i=1;i<line.stops().size();i++)if(CargoRailConnections.path(s,line.stops().get(i).station(),line.stops().get(i-1).station()).isEmpty())throw new IllegalArgumentException("schedule_disconnected");

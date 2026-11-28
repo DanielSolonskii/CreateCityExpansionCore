@@ -28,12 +28,27 @@ public final class CargoCommerceBook {
     }
     private final Accounts accounts;
     private final Map<UUID,Offer> offers=new LinkedHashMap<>();
+    private final LinkedHashSet<UUID> availableOfferIds = new LinkedHashSet<>();
     private final Map<UUID,Order> orders=new LinkedHashMap<>();
     private final Set<UUID> paidGoods=new HashSet<>();
     private final Map<UUID,Long> refunds=new HashMap<>();
     private final Map<UUID,CompoundTag> carrierTerms=new HashMap<>();
     public CargoCommerceBook(Accounts accounts){this.accounts=accounts;}
-    public List<Offer> offers(){return List.copyOf(offers.values());}public List<Order> orders(){return List.copyOf(orders.values());}
+    public List<Offer> offers(){return List.copyOf(offers.values());}
+    List<Offer> mapCandidates(int limit) {
+        return availableOfferIds.stream().limit(limit).map(offers::get).toList();
+    }
+
+    void deferUnpublishedOffer(UUID id) {
+        if (availableOfferIds.contains(id)) availableOfferIds.addLast(id);
+    }
+
+    private void storeOffer(Offer offer) {
+        offers.put(offer.id(), offer);
+        if (offer.active() && offer.remaining() > 0) availableOfferIds.add(offer.id());
+        else availableOfferIds.remove(offer.id());
+    }
+    public List<Order> orders(){return List.copyOf(orders.values());}
     public long refunded(UUID id){return refunds.getOrDefault(id,0L);}
     public long carrierEarned(UUID id){var terms=carrierTerms.get(id);if(terms==null)return 0;long amount=0;for(var raw:terms.getList("Paid",8)){String phase=raw.getAsString();amount=Math.addExact(amount,terms.getCompound("PaidAmounts").contains(phase)?terms.getCompound("PaidAmounts").getLong(phase):terms.getCompound("Terms").getLong(phase));}return amount;}
     public void configureCarrier(UUID id,Map<String,Long> phases){var order=orders.get(id);if(order==null||order.fees().size()!=1)throw new IllegalArgumentException("Carrier phase order");var values=new CompoundTag();long total=0;for(var entry:phases.entrySet()){if(entry.getValue()<0)throw new IllegalArgumentException("Carrier phase amount");values.putLong(entry.getKey(),entry.getValue());total=Math.addExact(total,entry.getValue());}if(total!=order.fees().getFirst().amount())throw new IllegalArgumentException("Carrier phase total");var old=carrierTerms.get(id);if(old!=null){if(!old.getCompound("Terms").equals(values))throw new IllegalArgumentException("Carrier phase identity conflict");return;}var t=new CompoundTag();t.put("Terms",values);t.put("Paid",new ListTag());carrierTerms.put(id,t);accounts.dirty();}
@@ -43,11 +58,11 @@ public final class CargoCommerceBook {
     public Optional<Offer> offer(UUID id){return Optional.ofNullable(offers.get(id));}public Optional<Order> order(UUID id){return Optional.ofNullable(orders.get(id));}
     public Offer publish(UUID id,UUID actor,OwnerRef owner,UUID warehouse,CompoundTag item,String itemName,int count,long price){
         if(offers.containsKey(id)||item.isEmpty()||count<1||count>4096||price<1||price>accounts.maximum())throw new IllegalArgumentException("Invalid offer");
-        var offer=new Offer(id,actor,owner,warehouse,item,itemName,count,price,true);offers.put(id,offer);accounts.dirty();return offer;
+        var offer=new Offer(id,actor,owner,warehouse,item,itemName,count,price,true);storeOffer(offer);accounts.dirty();return offer;
     }
-    public boolean close(UUID id){var o=offers.get(id);if(o==null||!o.active())return false;offers.put(id,new Offer(id,o.creator(),o.owner(),o.warehouse(),o.item(),o.itemName(),o.remaining(),o.unitPrice(),false));accounts.dirty();return true;}
+    public boolean close(UUID id){var o=offers.get(id);if(o==null||!o.active())return false;storeOffer(new Offer(id,o.creator(),o.owner(),o.warehouse(),o.item(),o.itemName(),o.remaining(),o.unitPrice(),false));accounts.dirty();return true;}
     /** Trusted recovery only: restores the same frozen offer after its durable physical receipt was verified. */
-    public boolean reopen(UUID id){var o=offers.get(id);if(o==null||o.remaining()<=0||o.active())return false;offers.put(id,new Offer(id,o.creator(),o.owner(),o.warehouse(),o.item(),o.itemName(),o.remaining(),o.unitPrice(),true));accounts.dirty();return true;}
+    public boolean reopen(UUID id){var o=offers.get(id);if(o==null||o.remaining()<=0||o.active())return false;storeOffer(new Offer(id,o.creator(),o.owner(),o.warehouse(),o.item(),o.itemName(),o.remaining(),o.unitPrice(),true));accounts.dirty();return true;}
     /** Retry of the same purchase cannot debit or consume offer capacity again. Goods remain unreserved in Create. */
     public Order reserve(UUID id,OwnerRef payer,OwnerRef seller,UUID shipment,UUID offerId,int quantity,long goods,List<Fee> fees){
         var recipient=accounts.saleRecipient(offerId,seller);
@@ -56,7 +71,7 @@ public final class CargoCommerceBook {
         if(offerId!=null&&(offer==null||!offer.active()||quantity>offer.remaining()||!offer.owner().equals(seller)||Math.multiplyExact(offer.unitPrice(),quantity)!=goods))throw new IllegalArgumentException("Offer changed");
         var order=new Order(id,payer,recipient,shipment,offerId,goods,fees,quantity,State.HELD,"");long total=order.total();
         if(total<0||total>accounts.maximum()||!accounts.debit(payer,total))throw new IllegalArgumentException("Insufficient CR");
-        orders.put(id,order);if(offer!=null)offers.put(offerId,new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),offer.remaining()-quantity,offer.unitPrice(),offer.active()));accounts.dirty();return order;
+        orders.put(id,order);if(offer!=null)storeOffer(new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),offer.remaining()-quantity,offer.unitPrice(),offer.active()));accounts.dirty();return order;
     }
     /** Mark before invoking Create. Ambiguous interrupted attempts are held, never automatically rebroadcast/refunded. */
     public boolean markAttempted(UUID id){var o=orders.get(id);if(o==null||o.state()!=State.HELD)return false;orders.put(id,o.with(State.ATTEMPTED,""));accounts.dirty();return true;}
@@ -77,7 +92,7 @@ public final class CargoCommerceBook {
     private boolean refundReservation(Order o) {
         UUID id = o.id();
         long refund=Math.subtractExact(o.total(),carrierEarned(id));if(!accounts.canCredit(o.payer(),refund))return false;
-        var offer=o.offer()==null?null:offers.get(o.offer());if(offer!=null)offers.put(offer.id(),new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),Math.addExact(offer.remaining(),o.quantity()),offer.unitPrice(),offer.active()));
+        var offer=o.offer()==null?null:offers.get(o.offer());if(offer!=null)storeOffer(new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),Math.addExact(offer.remaining(),o.quantity()),offer.unitPrice(),offer.active()));
         accounts.credit(o.payer(),refund);refunds.put(id,refund);orders.put(id,o.with(State.REFUNDED,"Cancelled before Create request"));accounts.dirty();return true;}
     /** Stop dispatch without treating an attempted Create call as proof that no box exists. */
     public boolean requestCancellation(UUID id){
@@ -109,7 +124,7 @@ public final class CargoCommerceBook {
         int capacity=offer==null?0:Math.addExact(offer.remaining(),recovered);
         for(var credit:credits.entrySet())accounts.revenue(RailTollBook.component(id,"cancel/"+credit.getKey()),credit.getKey(),credit.getValue());
         if(refund>0)accounts.credit(order.payer(),refund);refunds.put(id,refund);
-        if(offer!=null)offers.put(offer.id(),new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),capacity,offer.unitPrice(),offer.active()));
+        if(offer!=null)storeOffer(new Offer(offer.id(),offer.creator(),offer.owner(),offer.warehouse(),offer.item(),offer.itemName(),capacity,offer.unitPrice(),offer.active()));
         orders.put(id,order.with(State.CANCELLED,""));accounts.dirty();return true;
     }
     private static long proportion(long amount,int units,int quantity){
@@ -127,8 +142,8 @@ public final class CargoCommerceBook {
     }
     public CompoundTag save(){var root=new CompoundTag();root.putInt("Version",3);var catalog=new ListTag();for(var o:offers.values()){var t=new CompoundTag();t.putUUID("Id",o.id());t.putUUID("Creator",o.creator());t.put("Owner",o.owner().save());t.putUUID("Warehouse",o.warehouse());t.put("Item",o.item());t.putString("ItemName",o.itemName());t.putInt("Remaining",o.remaining());t.putLong("Price",o.unitPrice());t.putBoolean("Active",o.active());catalog.add(t);}root.put("Offers",catalog);
         var list=new ListTag();for(var o:orders.values()){var t=new CompoundTag();t.putUUID("Id",o.id());t.put("Payer",o.payer().save());t.put("Seller",o.seller().save());t.putUUID("Shipment",o.shipment());if(o.offer()!=null)t.putUUID("Offer",o.offer());t.putLong("Goods",o.goods());t.putInt("Quantity",o.quantity());t.putString("State",o.state().name());t.putString("Problem",o.problem());var fees=new ListTag();for(var f:o.fees()){var v=new CompoundTag();v.putUUID("Line",f.line());v.putInt("Hop",f.hop());v.put("Recipient",f.recipient().save());v.putLong("Amount",f.amount());fees.add(v);}t.put("Fees",fees);list.add(t);}root.put("Orders",list);var paid=new ListTag();paidGoods.stream().sorted().forEach(id->paid.add(NbtUtils.createUUID(id)));root.put("PaidGoods",paid);var rs=new ListTag();refunds.forEach((id,amount)->{var t=new CompoundTag();t.putUUID("Id",id);t.putLong("Amount",amount);rs.add(t);});root.put("Refunds",rs);var phases=new ListTag();carrierTerms.forEach((id,terms)->{var t=terms.copy();t.putUUID("Id",id);phases.add(t);});root.put("CarrierTerms",phases);return root;}
-    public void load(CompoundTag root){if(root.isEmpty())return;if(root.getInt("Version")<1||root.getInt("Version")>3)throw new IllegalArgumentException("Cargo commerce version");offers.clear();orders.clear();paidGoods.clear();refunds.clear();carrierTerms.clear();for(var raw:root.getList("CarrierTerms",10)){var t=((CompoundTag)raw).copy();if(carrierTerms.putIfAbsent(t.getUUID("Id"),t)!=null)throw new IllegalArgumentException("Duplicate carrier terms");}for(var raw:root.getList("PaidGoods",11))paidGoods.add(NbtUtils.loadUUID(raw));for(var raw:root.getList("Refunds",10)){var t=(CompoundTag)raw;if(t.getLong("Amount")<0||refunds.putIfAbsent(t.getUUID("Id"),t.getLong("Amount"))!=null)throw new IllegalArgumentException("Invalid refund receipt");}
-        for(Tag raw:root.getList("Offers",10)){var t=(CompoundTag)raw;var offer=new Offer(t.getUUID("Id"),t.getUUID("Creator"),OwnerRef.load(t.getCompound("Owner")),t.getUUID("Warehouse"),t.getCompound("Item"),t.getString("ItemName"),t.getInt("Remaining"),t.getLong("Price"),t.getBoolean("Active"));if(offers.putIfAbsent(offer.id(),offer)!=null)throw new IllegalArgumentException("Duplicate offer");}
+    public void load(CompoundTag root){if(root.isEmpty())return;if(root.getInt("Version")<1||root.getInt("Version")>3)throw new IllegalArgumentException("Cargo commerce version");offers.clear();availableOfferIds.clear();orders.clear();paidGoods.clear();refunds.clear();carrierTerms.clear();for(var raw:root.getList("CarrierTerms",10)){var t=((CompoundTag)raw).copy();if(carrierTerms.putIfAbsent(t.getUUID("Id"),t)!=null)throw new IllegalArgumentException("Duplicate carrier terms");}for(var raw:root.getList("PaidGoods",11))paidGoods.add(NbtUtils.loadUUID(raw));for(var raw:root.getList("Refunds",10)){var t=(CompoundTag)raw;if(t.getLong("Amount")<0||refunds.putIfAbsent(t.getUUID("Id"),t.getLong("Amount"))!=null)throw new IllegalArgumentException("Invalid refund receipt");}
+        for(Tag raw:root.getList("Offers",10)){var t=(CompoundTag)raw;var offer=new Offer(t.getUUID("Id"),t.getUUID("Creator"),OwnerRef.load(t.getCompound("Owner")),t.getUUID("Warehouse"),t.getCompound("Item"),t.getString("ItemName"),t.getInt("Remaining"),t.getLong("Price"),t.getBoolean("Active"));if(offers.containsKey(offer.id()))throw new IllegalArgumentException("Duplicate offer");storeOffer(offer);}
         for(Tag raw:root.getList("Orders",10)){var t=(CompoundTag)raw;var fees=new ArrayList<Fee>();for(Tag value:t.getList("Fees",10)){var v=(CompoundTag)value;fees.add(new Fee(v.getUUID("Line"),v.getInt("Hop"),OwnerRef.load(v.getCompound("Recipient")),v.getLong("Amount")));}var order=new Order(t.getUUID("Id"),OwnerRef.load(t.getCompound("Payer")),OwnerRef.load(t.getCompound("Seller")),t.getUUID("Shipment"),t.hasUUID("Offer")?t.getUUID("Offer"):null,t.getLong("Goods"),fees,t.getInt("Quantity"),State.valueOf(t.getString("State")),t.getString("Problem"));if(order.total()<0||orders.putIfAbsent(order.id(),order)!=null)throw new IllegalArgumentException("Invalid/duplicate order");}validateFinancialReceipts();
     }
 }

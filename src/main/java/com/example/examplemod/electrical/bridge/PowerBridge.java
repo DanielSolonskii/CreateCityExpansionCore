@@ -8,6 +8,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.neoforged.bus.api.IEventBus;
@@ -33,7 +34,7 @@ public final class PowerBridge {
             DeferredRegister.create(CEERegistries.SIMULATED_DEVICE_TYPE, MOD_ID);
 
     public static final net.neoforged.neoforge.registries.DeferredBlock<DcBridgeBlock> BLOCK =
-            BLOCKS.register(NAME, () -> new DcBridgeBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).noOcclusion()));
+            BLOCKS.register(NAME, () -> new DcBridgeBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).sound(SoundType.ANVIL).noOcclusion()));
     public static final net.neoforged.neoforge.registries.DeferredItem<net.minecraft.world.item.BlockItem> ITEM =
             ITEMS.registerSimpleBlockItem(NAME, BLOCK);
     public static final net.neoforged.neoforge.registries.DeferredHolder<BlockEntityType<?>, BlockEntityType<DcBridgeEntity>> ENTITY =

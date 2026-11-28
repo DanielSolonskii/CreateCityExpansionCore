@@ -1,0 +1,20 @@
+[Unit]
+Description=RE:CREATED daily player report
+Requires=create-server-telegram-guard.service create-server-telegram-routing.service
+BindsTo=wg-quick@wgtelegram.service
+After=postgresql.service create-server-telegram-routing.service wg-quick@wgtelegram.service
+
+[Service]
+Type=oneshot
+User=createtelegram
+Group=createtelegram
+EnvironmentFile=/opt/create-server/secrets/telegram-bot.env
+EnvironmentFile=/etc/create-server-work-digest.env
+StateDirectory=create-server-work-digest
+StateDirectoryMode=0700
+UMask=0077
+ExecStartPre=+/usr/bin/python3 /opt/create-server/work-digest/digest.py collect
+ExecStart=/usr/bin/python3 /opt/create-server/work-digest/digest.py send
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes

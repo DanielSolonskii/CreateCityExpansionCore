@@ -26,8 +26,10 @@ public final class PublicFleetRegistry extends SavedData {
     public void publish(ServerPlayer actor,UUID id,OwnerRef owner,UUID home,long rate,long dispatch){
         var s=actor.getServer();var train=RailwaySavedData.load(s).getTrains().get(id);var registration=CargoTrainRegistry.find(s,id).orElse(null);
         if(train==null||!owner.manages(s,actor.getUUID())||CargoRailConnections.station(s,home)==null)throw new IllegalArgumentException("fleet_permission");
-        if(registration==null){if(!actor.getUUID().equals(train.owner)||!CargoTrainRegistry.register(s,actor.getUUID(),id,CargoTrainRegistry.AccessMode.PUBLIC))throw new IllegalArgumentException("fleet_permission");registration=CargoTrainRegistry.find(s,id).orElseThrow();}
-        if(!CargoOwners.get(s).owner("train/"+id,registration.ownerId()).manages(s,actor.getUUID())||hasJob(id)||CargoShipmentRegistry.get(s).inUse("train",id))throw new IllegalArgumentException("shipment_in_use");
+        if(registration==null && !actor.getUUID().equals(train.owner))throw new IllegalArgumentException("fleet_permission");
+        if(registration!=null && !CargoOwners.get(s).owner("train/"+id,registration.ownerId()).manages(s,actor.getUUID()))throw new IllegalArgumentException("shipment_in_use");
+        if(com.example.examplemod.passenger.PassengerService.assigned(s,id)||hasJob(id)||CargoShipmentRegistry.get(s).inUse("train",id))throw new IllegalArgumentException("shipment_in_use");
+        if(registration==null){if(!CargoTrainRegistry.register(s,actor.getUUID(),id,CargoTrainRegistry.AccessMode.PUBLIC))throw new IllegalArgumentException("fleet_permission");registration=CargoTrainRegistry.find(s,id).orElseThrow();}
         if(!CargoOwners.get(s).change(s,actor.getUUID(),"train/"+id,registration.ownerId(),registration.accessMode(),new CargoOwners.Access(owner,CargoTrainRegistry.AccessMode.PUBLIC,Set.of(),Set.of())))throw new IllegalArgumentException("fleet_permission");
         services.put(id,new Service(id,owner,home,train.name.getString(),rate,dispatch,true));setDirty();
     }

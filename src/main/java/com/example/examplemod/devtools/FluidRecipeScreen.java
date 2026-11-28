@@ -1,5 +1,7 @@
 package com.example.examplemod.devtools;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import com.google.gson.*;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
@@ -31,13 +33,13 @@ public final class FluidRecipeScreen extends Screen {
     }
 
     private void button(String text, int x, int y, int w, Runnable action) {
-        addRenderableWidget(Button.builder(Component.literal(text), b -> {
+        addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal(text), b -> {
             try { store(); action.run(); rebuild(); } catch (Exception e) { error = e.getMessage(); }
-        }).bounds(x, y, w, 20).build());
+        }).bounds(x, y, w, 20)));
     }
 
     private EditBox field(String value, int x, int y, int w) {
-        var box = addRenderableWidget(new EditBox(font, x, y, w, 20, Component.empty()));
+        var box = addRenderableWidget(AtlasFormStyle.field(font, x, y, w, 20, Component.empty()));
         box.setMaxLength(256); box.setValue(value); return box;
     }
 
@@ -98,7 +100,7 @@ public final class FluidRecipeScreen extends Screen {
             amountBox = field(String.valueOf(amount(obj)), 596, 100, 72);
             if (!entries.get(active).result()) button(tagMode() ? "Тег жидкости" : "Конкретная жидкость", 320, 128, 170, () -> draft.toggleTag(active));
             button("Применить", 496, 128, 80, this::write);
-            addRenderableWidget(Button.builder(Component.literal("Из ведра"), b -> { try { pickBucket(); } catch (Exception e) { error = e.getMessage(); } }).bounds(584, 128, 84, 20).build());
+            addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal("Из ведра"), b -> { try { pickBucket(); } catch (Exception e) { error = e.getMessage(); } }).bounds(584, 128, 84, 20)));
         }
         top = Math.min(top, Math.max(0, entries.size() - ROWS));
     }

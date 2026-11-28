@@ -4,6 +4,8 @@ import com.example.examplemod.CreateCityExpansionCore;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.level.block.SoundType;
+import net.neoforged.neoforge.common.util.DeferredSoundType;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -25,6 +27,26 @@ public final class ModSounds {
 
     public static final DeferredRegister<SoundEvent> SOUNDS =
             DeferredRegister.create(Registries.SOUND_EVENT, CreateCityExpansionCore.MODID);
+
+    public static final SoundType PLACE_MINE_POWER_PORT = metalPlacement("mine_power_port");
+    public static final SoundType PLACE_MINE_CONTROLLER = metalPlacement("mine_controller");
+    public static final SoundType PLACE_MINE_FRAME = metalPlacement("mine_frame");
+    public static final SoundType PLACE_TECHNICAL_BLOCK = metalPlacement("technical_block");
+    public static final SoundType PLACE_CONTROL_BLOCK = metalPlacement("control_block");
+    public static final SoundType PLACE_MINE_GATEWAY = metalPlacement("mine_gateway");
+    public static final SoundType PLACE_TECHNICAL_SCREEN = metalPlacement("technical_screen");
+    public static final SoundType PLACE_TRANSPORT_REGISTRATION_TERMINAL = metalPlacement("transport_registration_terminal");
+    public static final SoundType PLACE_CHUNK_LOADER = metalPlacement("chunk_loader");
+    public static final SoundType PLACE_CARGO_ROUTER = metalPlacement("cargo_router");
+    public static final SoundType PLACE_CARGO_TICKER = metalPlacement("cargo_ticker");
+    public static final SoundType PLACE_CUSTOMS_BUFFER = metalPlacement("customs_buffer");
+
+    private static SoundType metalPlacement(String blockName) {
+        var placement = sound("block.place." + blockName);
+        var metal = SoundType.METAL;
+        return new DeferredSoundType(metal.getVolume(), metal.getPitch(),
+                metal::getBreakSound, metal::getStepSound, placement, metal::getHitSound, metal::getFallSound);
+    }
 
     private ModSounds() {
     }

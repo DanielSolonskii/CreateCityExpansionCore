@@ -6,6 +6,7 @@ const selector = 'button:not(:disabled), a[href], input:not(:disabled), select:n
 /** Shared keyboard contract for animated overlays that stay mounted when closed. */
 export function useOverlay<T extends HTMLElement>(open: boolean, onClose: () => void) {
   const ref = useRef<T>(null);
+  const opener = useRef<HTMLElement | null>(null);
   const close = useRef(onClose);
   close.current = onClose;
   useLayoutEffect(() => {
@@ -13,7 +14,9 @@ export function useOverlay<T extends HTMLElement>(open: boolean, onClose: () => 
     if (!root) return;
     root.inert = !open;
     if (!open) return;
-    const previous = document.activeElement as HTMLElement | null;
+    const focused = document.activeElement as HTMLElement | null;
+    if (focused && !root.contains(focused)) opener.current = focused;
+    const previous = opener.current;
     stack.push(root);
     const candidates = () => [...root.querySelectorAll<HTMLElement>(selector)].filter(el => {
       const style = getComputedStyle(el);

@@ -10,7 +10,24 @@ import java.util.*;
 /** Only authorized objects are serialized. Pages and stock details are bounded; no chunk loading. */
 public final class CenterView {
     private CenterView() {}
+    public static boolean visiblePoint(ServerPlayer actor, UUID point) {
+        var server = actor.getServer();
+        return CargoPointRegistry.find(server, point).isPresent() && visiblePoint(actor, point,
+                CenterOperations.access(actor, "point", point), CargoLineRegistry.get(server).all(),
+                CargoWarehouseRegistry.get(server).all());
+    }
+    private static boolean visiblePoint(ServerPlayer actor, UUID point, CargoOwners.Access access,
+                                        Collection<CargoLineRegistry.Line> lines,
+                                        Collection<CargoWarehouseRegistry.Warehouse> warehouses) {
+        var server = actor.getServer();
+        var viewer = OwnerRef.player(actor.getUUID());
+        return CargoOwners.permits(server, viewer, access)
+                || lines.stream().anyMatch(line -> CargoOwners.permits(server, viewer, CargoLineRegistry.access(server, line))
+                        && line.stops().stream().anyMatch(stop -> stop.point().equals(point)))
+                || warehouses.stream().anyMatch(w -> w.point().equals(point) && CargoWarehouseRegistry.permits(actor, w));
+    }
     public static CompoundTag snapshot(ServerPlayer actor,CompoundTag q){
+        if ("atlas_trade".equals(q.getString("Section"))) return PublicTradeMap.snapshot(actor,q);
         if(EconomicCenter.section(q.getString("Section")))return EconomicCenter.snapshot(actor,q);
         var s=actor.getServer();var requester=OwnerRef.player(actor.getUUID());var data=new CompoundTag();var all=new ArrayList<CompoundTag>();var choices=new CompoundTag();String section=q.getString("Section");data.putString("Section",section);
         var trains=CargoTrainRegistry.get(s).registrations();var points=CargoPointRegistry.get(s).points();var warehouses=CargoWarehouseRegistry.get(s).all();var lines=CargoLineRegistry.get(s).all();var live=RailwaySavedData.load(s).getTrains();
@@ -24,7 +41,7 @@ public final class CenterView {
             if(nativeTrain!=null)for(var dimension:nativeTrain.getPresentDimensions()){var pos=nativeTrain.getPositionInDimension(dimension);if(pos.isPresent()){row.put("Location",new CargoInfrastructure.Location(dimension.location(),pos.get()).save());break;}}all.add(row);}
         choices.put("Trains",trainOptions);data.putInt("TrainCount",trainCount);
         var pointOptions=new ListTag();var stationOptions=new ListTag();var routerOptions=new ListTag();int pointCount=0;
-        for(var p:points){var access=CenterOperations.access(actor,"point",p.id());boolean visible=CargoOwners.permits(s,requester,access)||lines.stream().anyMatch(l->CargoOwners.permits(s,requester,CargoLineRegistry.access(s,l))&&l.stops().stream().anyMatch(stop->stop.point().equals(p.id())))||warehouses.stream().anyMatch(w->w.point().equals(p.id())&&CargoWarehouseRegistry.permits(actor,w));if(!visible)continue;pointCount++;option(pointOptions,p.id().toString(),p.name());
+        for(var p:points){var access=CenterOperations.access(actor,"point",p.id());if(!visiblePoint(actor,p.id(),access,lines,warehouses))continue;pointCount++;option(pointOptions,p.id().toString(),p.name());
             if(section.equals("points")||section.equals("access")){var row=object(actor,p.id(),"point",p.name(),"",p.routers().isEmpty()?"WAITING_POINT":"CONFIGURED",access);p.routers().stream().findFirst().ifPresent(r->row.put("Location",new CargoInfrastructure.Location(r.dimension(),r.pos()).save()));pointDetails(actor,p,row);all.add(row);}
             for(var binding:CargoLineRegistry.get(s).stations().entrySet())if(binding.getValue().equals(p.id())){var station=CargoRailConnections.station(s,binding.getKey());option(stationOptions,binding.getKey().toString(),station==null?p.name():p.name()+" / "+station.station().name);}}
         choices.put("Points",pointOptions);choices.put("Stations",stationOptions);choices.put("Routers",routerOptions);data.putInt("PointCount",pointCount);
@@ -42,14 +59,25 @@ public final class CenterView {
             for(UUID id:new TreeSet<>(l.trains())){var train=live.get(id);CenterCardData.part(details,"train",train==null?"":train.name.getString(),CargoSchedules.state(train),"");}
             row.put("Details",details);row.putInt("StationCount",l.stops().size());row.putInt("LineTrainCount",l.trains().size());row.putString("Mode",l.mode().name());row.putLong("Tariff",l.tariff());row.putString("Terms",l.terms());row.putBoolean("Enabled",l.enabled());all.add(row);}
         var book=com.example.examplemod.economy.EconomyManager.get(actor.serverLevel()).cargo();
-        if(section.equals("trade")||section.equals("access"))for(var offer:book.offers()){var access=CenterOperations.access(actor,"offer",offer.id());if(!CargoOwners.permits(s,requester,access)||!offer.active()&&!access.owner().manages(s,actor.getUUID()))continue;var warehouse=CargoWarehouseRegistry.get(s).find(offer.warehouse()).orElse(null);var row=object(actor,offer.id(),"offer",offer.itemName(),"",offer.active()?"QUEUED":"DISABLED",access);row.putLong("Price",offer.unitPrice());row.putInt("Remaining",offer.remaining());row.putString("WarehouseName",warehouse==null?"":warehouse.name());row.putString("TermsCode","stock_unreserved");itemName(row,net.minecraft.world.item.ItemStack.parseOptional(s.registryAccess(),offer.item()));if(warehouse!=null)row.put("Location",warehouse.ticker().save());all.add(row);}
-        int shipmentCount=0;for(var shipment:CargoShipmentRegistry.get(s).all()){boolean visible=actor.hasPermissions(2)||shipment.owner().operates(s,actor.getUUID())||shipment.creator().equals(actor.getUUID())||warehouses.stream().anyMatch(w->w.id().equals(shipment.sourceWarehouse())&&CargoWarehouseRegistry.access(s,w).owner().operates(s,actor.getUUID()));if(!visible)continue;shipmentCount++;
+        if(section.equals("trade")||section.equals("access"))for(var offer:book.offers()){var access=CenterOperations.access(actor,"offer",offer.id());if(!CargoOwners.permits(s,requester,access)||!offer.active()&&!access.owner().manages(s,actor.getUUID()))continue;var warehouse=CargoWarehouseRegistry.get(s).find(offer.warehouse()).orElse(null);var row=object(actor,offer.id(),"offer",offer.itemName(),"",offer.active()?"QUEUED":"DISABLED",access);row.putLong("Price",offer.unitPrice());row.putInt("Remaining",offer.remaining());boolean visibleWarehouse=warehouse!=null && CargoWarehouseRegistry.permits(actor,warehouse);row.putString("WarehouseName",visibleWarehouse?warehouse.name():"");row.putString("TermsCode","stock_unreserved");itemName(row,net.minecraft.world.item.ItemStack.parseOptional(s.registryAccess(),offer.item()));if(visibleWarehouse)row.put("Location",warehouse.ticker().save());all.add(row);}
+        Set<UUID> shipmentPoints=new HashSet<>(), shipmentLines=new HashSet<>();
+        if(section.equals("shipments")) {
+            for(var raw:pointOptions) shipmentPoints.add(UUID.fromString(((CompoundTag)raw).getString("Value")));
+            for(var line:lines) if(CargoOwners.permits(s,requester,CargoLineRegistry.access(s,line))) shipmentLines.add(line.id());
+        }
+        int shipmentCount=0;for(var shipment:CargoShipmentRegistry.get(s).all()){boolean visible=ShipmentInspection.permits(actor,shipment);if(!visible)continue;shipmentCount++;
             if(section.equals("shipments")){var row=CenterService.row(shipment.id(),shipment.type().getHoverName().getString(),shipment.problem(),shipment.stage().name());row.putString("Kind","shipment");row.putString("Dispatch",shipment.trip().getBoolean("Fleet")?PublicFleetRegistry.get(s).progress(shipment.id()):CargoCharters.get(s).progress(shipment.id()));if(shipment.trip().getBoolean("Fleet"))row.putString("Warning",PublicFleetRegistry.get(s).warning(shipment.id()));row.putString("OwnerName",shipment.owner().name(s));
                 itemName(row,shipment.type());row.putInt("ItemCount",shipment.quantity());
                 row.putInt("Quantity",shipment.quantity());row.putInt("Packaged",shipment.packaged());row.putInt("Delivered",shipment.delivered());row.putInt("Recovered",shipment.recovered());row.putBoolean("CancellationRequested",shipment.cancellationRequested());
-                row.putString("SourceName",CargoWarehouseRegistry.get(s).find(shipment.sourceWarehouse()).map(CargoWarehouseRegistry.Warehouse::name).orElse(""));
-                var routeNodes=new ListTag();for(var leg:shipment.route()){var node=new CompoundTag();node.putString("Name",CargoPointRegistry.find(s,leg.from()).map(CargoPointRegistry.Point::name).orElse(""));routeNodes.add(node);}var destinationNode=new CompoundTag();destinationNode.putString("Name",CargoPointRegistry.find(s,shipment.finalPoint()).map(CargoPointRegistry.Point::name).orElse(""));routeNodes.add(destinationNode);row.put("RouteNodes",routeNodes);row.putString("DestinationName",CargoWarehouseRegistry.get(s).find(shipment.destinationWarehouse()).map(CargoWarehouseRegistry.Warehouse::name).orElse(""));
-                var details=new ListTag();for(String event:shipment.history()){var t=new CompoundTag();t.putString("Name",event);details.add(t);}row.put("Details",details);var order=book.order(shipment.id()).orElse(null);
+                row.putString("SourceName",CargoWarehouseRegistry.get(s).find(shipment.sourceWarehouse()).filter(w->CargoWarehouseRegistry.permits(actor,w)).map(CargoWarehouseRegistry.Warehouse::name).orElse(""));
+                var routeNodes=new ListTag();
+                if(shipmentPoints.contains(shipment.finalPoint()) && shipment.route().size()<=32
+                        && shipment.route().stream().allMatch(leg->ShipmentInspection.visibleLeg(leg,shipmentPoints,shipmentLines::contains))) {
+                    for(var leg:shipment.route()){var node=new CompoundTag();node.putString("Name",CargoPointRegistry.find(s,leg.from()).map(CargoPointRegistry.Point::name).orElse(""));routeNodes.add(node);}
+                    var dest=new CompoundTag();dest.putString("Name",CargoPointRegistry.find(s,shipment.finalPoint()).map(CargoPointRegistry.Point::name).orElse(""));routeNodes.add(dest);
+                }
+                row.put("RouteNodes",routeNodes);row.putString("DestinationName",CargoWarehouseRegistry.get(s).find(shipment.destinationWarehouse()).filter(w->CargoWarehouseRegistry.permits(actor,w)).map(CargoWarehouseRegistry.Warehouse::name).orElse(""));
+                var details=new ListTag();for(String event:shipment.history()){var t=new CompoundTag();t.putString("Name",ShipmentInspection.historyLabel(event));details.add(t);}row.put("Details",details);var order=book.order(shipment.id()).orElse(null);
                 if(order!=null){row.putString("OrderState",order.state().name());row.putLong("TotalCr",order.total());row.putBoolean("CanCancel",shipment.canCancel(order,actor.hasPermissions(2)||order.payer().manages(s,actor.getUUID())));
                     if(shipment.trip().getBoolean("Fleet")){
                         var trip=shipment.trip();var reserve=com.example.examplemod.economy.EconomyManager.get(actor.serverLevel()).roadTolls().trip(shipment.id()).orElse(new CompoundTag());

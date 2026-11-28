@@ -12,6 +12,7 @@ public final class TerrainVisualCheck {
     }
     public static void main(String[] args) throws Exception {
         TerrainPipelineCheck.run();
+        TerrainExchangeCheck.run();
         int size=32;
         int[] noise=new int[size*size];
         for(int z=0;z<size;z++)for(int x=0;x<size;x++)noise[z*size+x]=((x+z)&1)==0?0xFF629132:0xFF70A040;

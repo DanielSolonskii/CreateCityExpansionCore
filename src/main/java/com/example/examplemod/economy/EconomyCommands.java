@@ -1,6 +1,7 @@
 package com.example.examplemod.economy;
 
 import com.example.examplemod.city.City;
+import com.example.examplemod.city.CityGazette;
 import com.example.examplemod.city.CityManager;
 import com.example.examplemod.city.CityProjectNetworkHandlers;
 import com.mojang.brigadier.CommandDispatcher;
@@ -82,6 +83,8 @@ public final class EconomyCommands {
         boolean already = city.getLevel() >= 2;
         city.setLevel(2);
         cities.markChanged();
+        if (!already) CityGazette.get(source.getServer()).publish(CityGazette.Kind.LEVEL,city.getId(),city.getOwner(),city.getName(),
+                Integer.toString(city.getLevel()),Integer.toString(city.getProjectCapacity()),System.currentTimeMillis());
 
         net.minecraft.server.MinecraftServer server = source.getServer();
         ServerPlayer sender = source.getPlayer();

@@ -24,11 +24,16 @@ public final class CommunitySummary {
         out.putString("SelfName",PlayerNames.name(p));out.putString("OwnRole",own==null?"":own.getMember(p.getUUID()).getRole().name());
         if(own!=null){out.putUUID("OwnCity",own.getId());out.putString("OwnName",own.getName());out.putInt("OwnColor",own.getColorRgb());out.putInt("OwnMembers",own.getMemberCount());}
         out.putInt("Unread",(int)social.dialogs.keySet().stream().filter(pair->pair.includes(p.getUUID())&&social.unread(p.getUUID(),pair.other(p.getUUID()))>0).count());
-        out.putInt("FriendRequests",(int)social.requests.stream().filter(e->e.to().equals(p.getUUID())).count());out.putInt("InboxUnread",inbox.unread(p.getUUID()));
-        if(includeInbox){out.put("Inbox",inbox.page(p.getUUID(),Math.clamp(page,0,1)));out.putInt("InboxTotal",inbox.history(p.getUUID()).size());}
+        out.putInt("FriendRequests",(int)social.requests.stream().filter(e->e.to().equals(p.getUUID())).count());
+        var actor = ProjectNetworkHandlers.actor(p, cities, own);
+        var projects = EconomyManager.get(s.overworld()).projects();
+        inbox.projectPage(p.getUUID(), out, includeInbox, page, id -> {
+            var project = projects.get(id);
+            return project != null && CommunityActions.visible(project, actor) ? project : null;
+        }, projects.journal());
         var tasks=new ListTag();
         for(var c:cities.getCities()){var invite=c.getInvite(p.getUUID());if(invite!=null&&tasks.size()<24){var t=task("invite",c.getId(),c.getName(),"invite");t.putUUID("Token",invite.token());t.putBoolean("Allowed",cities.getMemberCity(p.getUUID())==null&&(invite.getInvokerId()==null||c.isAdmin(invite.getInvokerId())));tasks.add(t);}}
-        var actor=ProjectNetworkHandlers.actor(p,cities,own);int projectTotal=0;
+        int projectTotal=0;
         for(var project:EconomyManager.get(s.overworld()).projects().all())if(CommunityActions.visible(project,actor)&&!project.status().terminal()){
             projectTotal++;String action=CommunityActions.attention(project,actor);if(!action.isBlank()&&tasks.size()<24){var t=task("project",project.id(),project.title(),action);t.putString("Status",project.status().name());t.putBoolean("Allowed",true);tasks.add(t);}
         }

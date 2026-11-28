@@ -46,8 +46,22 @@ public final class ProjectCheck {
         for(int i=0;i<8;i++)require(ProjectNetworkHandlers.consumeRequestBudget(budget,1000),"requests within real-time budget allowed");
         require(!ProjectNetworkHandlers.consumeRequestBudget(budget,1999),"burst is still limited");
         require(ProjectNetworkHandlers.consumeRequestBudget(budget,2000),"budget recovers without advancing world time");
-        config();personal();treasury();permissions();failures();geometry();compatibility();cityGuards();codecs();clientSession();serverProjects();
+        config();personal();treasury();permissions();failures();geometry();compatibility();cityGuards();codecs();clientSession();serverProjects();retirement();
         System.out.println("PASS: "+checks+" City Projects lifecycle, money, save and security checks");
+    }
+    private static void retirement()throws Exception {
+        com.example.examplemod.places.PlaceRetirementCheck.run();
+        var load=EconomyManager.class.getDeclaredMethod("loadForStorage",CompoundTag.class,HolderLookup.Provider.class);
+        load.setAccessible(true);
+        for(var funding:List.of(Funding.TREASURY,Funding.PERSONAL)){
+            var f=new Fixture();var id=f.create(funding,300);
+            require(f.run(f.author,Action.PUBLISH,id).equals("ok"),"legacy funded project");
+            if(funding==Funding.TREASURY)require(f.run(f.admin,Action.APPROVE,id).equals("ok"),"legacy treasury approval");
+            for(int i=0;i<2;i++){
+                f.economy=(EconomyManager)load.invoke(null,f.economy.save(new CompoundTag(),null),null);
+                require(f.manager().all().isEmpty() && f.economy.wallet(f.author)==1000 && f.economy.treasury(f.city)==2000,"retirement refunds exactly once");
+            }
+        }
     }
     private static Actor publicActor(Fixture f,UUID player,boolean op,boolean conflict) {
         return new Actor(player,null,false,id->false,z->false,op,(city,representative)->city.equals(f.city)&&representative.equals(f.admin),z->conflict);
@@ -69,6 +83,8 @@ public final class ProjectCheck {
         UUID id=serverDraft(f,500);Project p=f.manager().get(id);
         require(p.city()==null&&p.scope()==Scope.SERVER,"SERVER has no Master City or city binding");
         require(f.manager().visible(player,0).isEmpty()&&f.manager().visible(op,0).size()==1,"only OP sees SERVER drafts");
+        require(ProjectManager.visibleTo(op,p) && !ProjectManager.visibleTo(player,p),
+                "single-object navigation rechecks current rights, including loss of OP");
         require(f.manager().execute(player,serverCommand(f,Action.CREATE,ZERO,ZERO,false,new Draft(Scope.SERVER,p.title(),p.description(),p.category(),p.zone(),p.stages(),p.funding(),p.reward()))).equals("permission"),"non-OP cannot create SERVER");
         for(Action a:List.of(Action.UPDATE,Action.PUBLISH,Action.CANCEL,Action.ASSIGN,Action.ACCEPT,Action.RETURN))
             require(f.manager().execute(player,serverCommand(f,a,id,f.worker,false,null)).equals("permission"),"forged SERVER management denied: "+a);
@@ -77,6 +93,7 @@ public final class ProjectCheck {
         require(f.manager().serverReserved()==0&&f.economy.wallet(f.worker)==0,"rejected publication never reserves or issues");
         require(f.manager().execute(conflicts,serverCommand(f,Action.PUBLISH,id,ZERO,true,null)).equals("ok"),"OP confirms territorial overlap separately");
         require(f.manager().visible(player,0).size()==1,"outsider sees published SERVER projects");
+        require(ProjectManager.visibleTo(player, f.manager().get(id)), "published project can be followed without management rights");
         require(f.manager().serverReserved()==500&&f.manager().serverIssued()==0&&f.economy.wallet(f.author)==1000,"publication only reserves capacity, no debit or emission");
         f.economy=reload(f.economy);require(f.manager().serverReserved()==500,"SERVER reservation survives restart");
         require(f.manager().execute(player,serverCommand(f,Action.APPLY,id,ZERO,false,null)).equals("ok"),"player without city applies");
@@ -84,6 +101,18 @@ public final class ProjectCheck {
         require(f.manager().execute(op,serverCommand(f,Action.STAGE,id,ZERO,true,null)).equals("permission"),"unassigned OP cannot mark executor stage");
         require(f.manager().execute(player,serverCommand(f,Action.STAGE,id,ZERO,true,null)).equals("ok"),"outsider executor marks stages");
         require(f.manager().execute(player,serverCommand(f,Action.SUBMIT,id,ZERO,false,null)).equals("ok"),"outsider submits for OP review");
+        Project inReview=f.manager().get(id);
+        Actor secondOp=publicActor(f,f.admin,true,false);
+        var details=new Draft(Scope.SERVER,"Updated by another operator",inReview.description(),inReview.category(),
+                inReview.zone(),List.of(new Stage("Build",false)),inReview.funding(),inReview.reward());
+        var edit=serverCommand(f,Action.UPDATE,id,ZERO,false,details);
+        require(f.manager().execute(player,edit).equals("permission") && f.manager().execute(secondOp,edit).equals("ok"),
+                "Any server OP can edit an active project, including projects owned by another OP");
+        Project updated=f.manager().get(id);
+        require(updated.title().equals(details.title()) && updated.status()==Status.REVIEW && updated.stages().getFirst().done()
+                && updated.author().equals(inReview.author()) && updated.executor().equals(inReview.executor()) && updated.reserved()==500,
+                "Renaming through the editor retains the author, assigned executor, funding and completed stages");
+        require(f.manager().execute(secondOp,edit).equals("stale"),"Concurrent editors cannot overwrite a newer revision");
         require(f.economy.wallet(f.worker)==0,"stage and submission do not mint");
         require(f.manager().execute(publicActor(f,f.author,false,false),serverCommand(f,Action.ACCEPT,id,ZERO,false,null)).equals("permission"),"demoted OP author loses acceptance authority");
         require(f.manager().execute(op,serverCommand(f,Action.RETURN,id,ZERO,false,null)).equals("ok"),"OP returns to rework");
@@ -115,6 +144,15 @@ public final class ProjectCheck {
         var edited=new Draft(Scope.SERVER,"Edited public project",editable.description(),editable.category(),editable.zone(),editable.stages(),editable.funding(),2);
         require(budget.manager().execute(budgetOp,serverCommand(budget,Action.UPDATE,second,ZERO,false,edited)).equals("ok")&&budget.manager().get(second).reward()==2,"OP edits shared draft fields and budget");
         require(budget.manager().execute(budgetOp,serverCommand(budget,Action.PUBLISH,second,ZERO,false,null)).equals("ok")&&budget.manager().serverReserved()==2,"edited reward is reserved only on republishing");
+        Project open=budget.manager().get(second);
+        var move=new Draft(Scope.SERVER,open.title(),open.description(),open.category(),
+                new ProjectZone(DIM,ProjectZone.Shape.POINT,2000,2000,2000,2000),open.stages(),open.funding(),3);
+        Actor otherAdmin=publicActor(budget,budget.admin,true,true);
+        require(budget.manager().execute(otherAdmin,serverCommand(budget,Action.UPDATE,second,ZERO,false,move)).equals("conflict")
+                && budget.manager().get(second).equals(open),"Moving a published zone into claimed land requires explicit acknowledgement");
+        require(budget.manager().execute(otherAdmin,serverCommand(budget,Action.UPDATE,second,ZERO,true,move)).equals("ok")
+                && budget.manager().get(second).status()==Status.OPEN && budget.manager().serverReserved()==3,
+                "Changing the reward on an open project adjusts its reservation without withdrawing it");
         Fixture cityPay=new Fixture();UUID cityProject=serverDraft(cityPay,300);Actor cityOp=publicActor(cityPay,cityPay.author,true,false);
         cityPay.manager().execute(cityOp,serverCommand(cityPay,Action.PUBLISH,cityProject,ZERO,false,null));
         Actor representative=new Actor(cityPay.admin,cityPay.city,true,cityPay.members::contains,z->false,false,(city,who)->city.equals(cityPay.city)&&who.equals(cityPay.admin),z->false);
@@ -280,6 +318,15 @@ public final class ProjectCheck {
         pending.set(null,payload);CompoundTag busy=new CompoundTag();busy.putUUID("Request",command.request());busy.putBoolean("KeepState",true);busy.putString("Result","busy");
         com.example.examplemod.client.ProjectClientState.accept(new com.example.examplemod.network.ProjectStatePayload(busy));
         require(com.example.examplemod.client.ProjectClientState.records.size()==1&&!com.example.examplemod.client.ProjectClientState.pending(),"rate rejection preserves last valid map snapshot");
+        require(com.example.examplemod.client.ProjectClientState.mapMarkers().size()==1
+                &&com.example.examplemod.client.ProjectClientState.mapRecords().size()==1,"bounded permission snapshot is readable in overlay and workspace");
+        long receipt=com.example.examplemod.client.ProjectClientState.mapReceipt();
+        require(!com.example.examplemod.client.ProjectClientState.recentReceipt(receipt,receipt+30_000_000_000L),"HUD pointer expires without a validating response");
+        var denied=busy.copy();denied.putString("Result","permission");denied.putBoolean("Op",false);
+        pending.set(null,payload);
+        com.example.examplemod.client.ProjectClientState.accept(new com.example.examplemod.network.ProjectStatePayload(denied));
+        require(com.example.examplemod.client.ProjectClientState.mapMarkers().isEmpty()
+                &&com.example.examplemod.client.ProjectClientState.mapRecords().isEmpty(),"permission rejection hides project markers and list immediately");
         com.example.examplemod.client.ProjectClientState.op=true;com.example.examplemod.client.ProjectClientState.serverIssued=10;
         com.example.examplemod.client.ProjectClientState.clear();
         require(!com.example.examplemod.client.ProjectClientState.op&&com.example.examplemod.client.ProjectClientState.serverIssued==0,"closed session clears OP capability and budget snapshot");

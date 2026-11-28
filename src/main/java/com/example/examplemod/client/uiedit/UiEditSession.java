@@ -1,5 +1,7 @@
 package com.example.examplemod.client.uiedit;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -527,7 +529,7 @@ public final class UiEditSession {
         textTarget = widget;
         textMode = true;
         if (textBox == null) {
-            textBox = new EditBox(Minecraft.getInstance().font, 0, 0, 10, 16, Component.literal(""));
+            textBox = AtlasFormStyle.field(Minecraft.getInstance().font, 0, 0, 10, 16, Component.literal(""));
             textBox.setMaxLength(512);
         }
         textBox.setValue(textOf(widget));

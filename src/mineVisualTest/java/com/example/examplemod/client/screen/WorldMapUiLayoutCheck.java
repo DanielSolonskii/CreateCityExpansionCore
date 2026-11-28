@@ -25,6 +25,9 @@ public final class WorldMapUiLayoutCheck {
     private static int[] globalLabels() { return new int[] { 40, 44, 52, 50, 64, 72, 30, 50 }; }
 
     public static void main(String[] args) {
+        AtlasInteractionCheck.run();
+        checkControlMotion();
+        checkWorkspace();
         require(CityMapClaimAccess.allowed(true,true,true,false,false,false),"root enables claim");
         require(CityMapClaimAccess.allowed(true,true,false,true,false,false),"workspace enables claim");
         require(CityMapClaimAccess.allowed(true,true,false,false,true,false),"own management atlas enables claim");
@@ -45,6 +48,28 @@ public final class WorldMapUiLayoutCheck {
         }
         int[] modes = modeLabels();
         int[] globals = globalLabels();
+        for (int width : new int[]{320, 427, 480, 640, 854, 1280}) {
+            for (int height : new int[]{240, 270, 300, 360, 480}) {
+                int mapWidth = WorldMapUiLayout.contextPanelLeft(width) - WorldMapUiLayout.EDGE - WorldMapUiLayout.NORMAL;
+                int top = WorldMapUiLayout.popoverY(width,modes,globals) + WorldMapUiLayout.NORMAL;
+                var controls = WorldMapUiLayout.viewButtons(mapWidth,height,top,new int[]{90,100,96,84});
+                require(controls.getLast().bottom() + WorldMapUiLayout.NORMAL
+                                < WorldMapUiLayout.statusStrip(width,height).y() - 60,
+                        "large GUI keeps usable map height below the navigation controls");
+                for (var control : controls) require(WorldMapUiLayout.withinScreen(width,height,control),
+                        "atlas navigation controls fit at each GUI size");
+                if (height < 320) require(controls.getFirst().y() == controls.getLast().y(),
+                        "short atlas windows use one compact navigation row");
+                if (height < 320) {
+                    var legend = WorldMapUiLayout.legend(width,height);
+                    var context = WorldMapUiLayout.contextPanel(width,height,modes,globals,Integer.MAX_VALUE);
+                    require(legend.height() == WorldMapUiLayout.COMPACT_LEGEND_HEADER + WorldMapUiLayout.LEGEND_ROW,
+                            "short atlas windows show one scrollable legend row");
+                    require(context.height() >= WorldMapUiLayout.CARD_HEADER + WorldMapUiLayout.ACTION_HEIGHT,
+                            "the compact legend leaves space for a complete selected-object action");
+                }
+            }
+        }
 
         // ------------------------------------------------- mode tabs never overlap each other
         for (int width : WorldMapUiLayout.RESPONSIVE_WIDTHS) {
@@ -236,5 +261,71 @@ public final class WorldMapUiLayoutCheck {
         require(WorldMapUiLayout.EDGE == WorldMapUiLayout.NORMAL, "the screen edge uses the normal step");
 
         System.out.println("PASS: " + checks + " City hub / World Map responsive layout checks");
+    }
+
+    private static void checkWorkspace() {
+        int[] labels = {50,74,61,46,90,72,52,68,84,96};
+        for (int width : WorldMapUiLayout.RESPONSIVE_WIDTHS) for (int height : new int[]{240,360,540}) {
+            int header=WorldMapUiLayout.headerBottom(width,modeLabels(),globalLabels());
+            var tools=WorldMapUiLayout.workspaceTools(width,height,header,labels);
+            require(tools.size()==labels.length,"all optional tools keep a hit box");
+            require(tools.getFirst().y()==tools.getLast().y(),"supported widths fit all tools on one ribbon");
+            for (boolean pinned : new boolean[]{false,true}) {
+                var layout=WorldMapUiLayout.workspace(width,height,tools.getLast().bottom(),0,pinned);
+                var map=layout.map();
+                var card=layout.inspector();
+                require(WorldMapUiLayout.withinScreen(width,height,map) && WorldMapUiLayout.withinScreen(width,height,card),
+                        "canvas and inspector fit within the workspace");
+                require(!map.overlaps(card) && map.y()==card.y(),"canvas and inspector align beneath a shared ribbon");
+                var status=WorldMapUiLayout.statusStrip(width,height);
+                require(!map.overlaps(status) && !card.overlaps(status),"workspace leaves the status controls clear");
+                for (var tool : tools) {
+                    require(!tool.overlaps(map) && !tool.overlaps(card),"toolbar bounds never intersect the canvas or inspector");
+                }
+                if (layout.legend()!=null) {
+                    require(!layout.legend().overlaps(card) && !layout.legend().overlaps(map),
+                            "legend owns a separate section of the dock");
+                }
+                if (pinned) {
+                    var primary=WorldMapUiLayout.cardAction(card,card.y()+WorldMapUiLayout.CARD_HEADER,0);
+                    require(WorldMapUiLayout.visiblePart(primary,WorldMapUiLayout.cardBody(card)).equals(primary),
+                            "primary action is fully visible before scrolling");
+                }
+            }
+        }
+        var panel=new WorldMapUiLayout.Rect(200,40,110,100);
+        var body=WorldMapUiLayout.layerBody(panel);
+        var scrolled=new WorldMapUiLayout.Rect(205,body.y()-5,70,16);
+        var visible=WorldMapUiLayout.visiblePart(scrolled,body);
+        require(!visible.contains(206,body.y()-1) && visible.contains(206,body.y()),
+                "clipped layer actions cannot consume the header's clicks or paint focus there");
+        require(!visible.contains(visible.right(),visible.y()) && !visible.contains(visible.x(),visible.bottom()),
+                "adjacent hit zones use exclusive right and bottom edges");
+    }
+
+    private static void checkControlMotion() {
+        var control = new ControlMotion();
+        long ms = 1_000_000L;
+        control.update(0,false,false,false,false);
+        control.update(10*ms,false,true,true,true);
+        require(control.hovered==0 && control.pressed==0 && control.selected==0,
+                "new control transitions start at the current appearance");
+        control.update(80*ms,false,true,true,true);
+        require(control.hovered>0 && control.hovered<1 && control.pressed==1 && control.selected>0 && control.selected<1,
+                "press, hover and selection use independent elapsed times");
+        double hoverBefore = control.hovered;
+        double selectedBefore = control.selected;
+        control.update(80*ms,false,false,false,false);
+        require(control.hovered==hoverBefore && control.pressed==1 && control.selected==selectedBefore,
+                "reversing an in-flight transition preserves its current value");
+        control.update(240*ms,false,false,false,false);
+        require(control.hovered==0 && control.pressed==0 && control.selected==0,
+                "all release transitions end without a queued replay");
+        control.update(241*ms,true,true,true,true);
+        require(control.hovered==1 && control.pressed==1 && control.selected==1,
+                "Reduced Motion applies interaction states immediately");
+        control.update(242*ms,true,false,false,false);
+        require(control.hovered==0 && control.pressed==0 && control.selected==0,
+                "Reduced Motion clears interaction states immediately");
     }
 }

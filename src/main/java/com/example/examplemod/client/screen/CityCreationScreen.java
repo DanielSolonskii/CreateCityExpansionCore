@@ -43,7 +43,7 @@ public class CityCreationScreen extends Screen {
     @Override protected void init() {
         layout=CityFoundingLayout.compute(width,height);
         var field=layout.name();
-        cityName=new EditBox(font,field.x(),field.y(),field.width(),field.height(),text("name"));
+        cityName=AtlasFormStyle.field(font,field.x(),field.y(),field.width(),field.height(),text("name"));
         cityName.setMaxLength(32); cityName.setHint(text("name_hint")); cityName.setValue(draft);
         cityName.setResponder(value -> {draft=value;if(!waiting&&!created)status="ready";});
         addRenderableWidget(cityName);

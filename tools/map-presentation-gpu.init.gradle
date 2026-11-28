@@ -1,0 +1,39 @@
+// Opt-in Minecraft/GL integration check. The application JAR uses the unmodified main source set.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def runDirectory = p.layout.buildDirectory.dir("checks/map-render/${UUID.randomUUID()}").get().asFile
+    def fixture = p.sourceSets.create('mapPresentationGpuTest') {
+        java.srcDirs = [p.file('src/mapPresentationGpuTest/java')]
+        resources.srcDirs = []
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += p.sourceSets.main.runtimeClasspath
+    }
+    // A frozen QA mod combines the real application classes/resources with the probe subscriber.
+    p.tasks.named(fixture.processResourcesTaskName).configure { from(p.sourceSets.main.output) }
+    p.neoForge.mods.named(p.mod_id).configure { modSourceSets.set([fixture]) }
+    p.neoForge.runs.named('client').configure {
+        gameDirectory = runDirectory
+        systemProperty 'ccec.telemetry.disabled', 'true'
+        systemProperty 'ccec.qa.dir', runDirectory.canonicalPath
+    }
+    p.tasks.named('prepareDevMods').configure { enabled = false }
+    def mods = p.tasks.register('preparePresentationGpuMods', Copy) {
+        from(p.configurations.devRuntimeMods)
+        from(p.file('libs/electroenergetics-1.21.1-1.1.2.jar'))
+        into(new File(runDirectory,'mods'))
+        doLast {
+            new File(runDirectory,'options.txt').setText('onboardAccessibility:false\npauseOnLostFocus:false\n','UTF-8')
+            logger.lifecycle("Running the GPU probes in ${runDirectory}")
+        }
+    }
+    p.tasks.named('runClient').configure {
+        dependsOn(mods, fixture.classesTaskName)
+        doLast {
+            def receipt = new File(runDirectory,'rail-terrain-gl.txt')
+            if (!receipt.isFile() || receipt.readLines('UTF-8').last() != 'PASS') {
+                throw new GradleException("Map presentation GPU check failed. See ${runDirectory}/logs/latest.log")
+            }
+            logger.lifecycle("Map presentation GPU check passed: ${receipt}")
+        }
+    }
+}

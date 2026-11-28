@@ -14,7 +14,8 @@ final class TerrainTileTexture {
     private final String name;
     private TerrainAtlas.Slot slot;
     private boolean uploaded;
-    private long uploadedAt;
+    // Immutable raw array already owned by the tile cache. Released together with its slot.
+    private int[] displayed;
     private int builtStride = -1;
 
     TerrainTileTexture(String name) { this.name = name; }
@@ -22,17 +23,18 @@ final class TerrainTileTexture {
     /** The registered texture identifier, or null while it has not been built yet. */
     ResourceLocation id() { return valid() && uploaded ? slot.id() : null; }
     private boolean valid() { return slot!=null&&slot.belongs(this); }
-    void pin() { if(valid())slot.pin(); }
-    void draw(int left,int top,int right,int bottom,float u,float v,float size) {
-        draw(left,top,right,bottom,u,v,size,1);
+    void keepVisible(boolean targetLevel) {
+        if (!valid()) return;
+        if (targetLevel) slot.pin(); else slot.prefer();
     }
-    void draw(int left,int top,int right,int bottom,float u,float v,float size,float alpha) {
-        if(valid())TerrainAtlas.queue(slot,left,top,right,bottom,u,v,size,alpha);
+    void draw(double left,double top,double right,double bottom,float u,float v,float size,
+              boolean smooth,boolean coarse,float alpha) {
+        if(valid())TerrainAtlas.queue(slot,left,top,right,bottom,u,v,size,smooth,coarse,alpha);
     }
-    double reveal(long now) { return MapMotion.ease((now-uploadedAt)/140_000_000.0); }
 
     /** True when this texture already represents the tile at the wanted level of detail. */
     boolean matches(int stride) { return valid() && uploaded && this.builtStride == stride; }
+    boolean current(long hash) { return matches(1) && sourceHash==hash; }
 
     /** Marks the texture stale so the next frame rebuilds it, e.g. after new samples arrived. */
     void invalidate() { this.builtStride = -1;if(pending!=null){pending.cancel(false);pending=null;} }
@@ -40,8 +42,49 @@ final class TerrainTileTexture {
     private static final java.util.concurrent.ThreadPoolExecutor WORK=new java.util.concurrent.ThreadPoolExecutor(1,2,30,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.ArrayBlockingQueue<>(128),r->{Thread t=new Thread(r,"CCEC terrain raster");t.setDaemon(true);return t;});
     private java.util.concurrent.Future<int[]> pending;
     private int pendingStride;
-    void build(int[] colors,java.util.BitSet contours,int stride){build(colors,contours,stride,new short[0],0);}
-    void build(int[] colors,java.util.BitSet contours,int stride,short[] heights,int level) {
+    private long sourceHash;
+    private boolean known;
+    private boolean complete;
+    private boolean gutterDirty;
+    static int queueSize() { return WORK.getQueue().size(); }
+    boolean hasSurvey() { return known; }
+    boolean opaque() { return uploaded && valid() && complete; }
+    boolean hasSurvey(float u, float v, float size, boolean coarse) {
+        if (!known || displayed == null) return false;
+        if (!coarse && size == SIZE) return true;
+        int endX = Math.min(SIZE,(int)Math.ceil(u+size)), endZ = Math.min(SIZE,(int)Math.ceil(v+size));
+        for (int z=(int)v;z<endZ;z++) for (int x=(int)u;x<endX;x++)
+            if (displayed[z*SIZE+x] >>> 24 >= (coarse ? 255 : 1)) return true;
+        return false;
+    }
+    static boolean retainsCoverage(int[] displayed, int[] replacement) {
+        for (int i=0;i<displayed.length;i++) if ((displayed[i] >>> 24) > (replacement[i] >>> 24)) return false;
+        return true;
+    }
+    void useSource(long hash, int[] colors) {
+        if (sourceHash == hash) return;
+        invalidate();
+        if (uploaded && !retainsCoverage(displayed, colors)) { uploaded = false; known = false; }
+        sourceHash = hash;
+    }
+    void neighbourChanged() { gutterDirty=true; }
+    boolean needsGutter() { return gutterDirty && uploaded && valid(); }
+
+    private static TerrainAtlas.Slot[] slots(TerrainTileTexture[] neighbours) {
+        var slots=new TerrainAtlas.Slot[9];
+        for(int i=0;i<slots.length;i++) {
+            var neighbour=neighbours[i];
+            if(neighbour!=null && neighbour.uploaded && neighbour.valid()) slots[i]=neighbour.slot;
+        }
+        return slots;
+    }
+
+    void refreshGutter(TerrainTileTexture[] neighbours) {
+        TerrainAtlas.refreshGutters(slot,slots(neighbours));
+        gutterDirty=false;
+    }
+
+    void build(int[] colors,java.util.BitSet contours,int stride,short[] heights,int level,TerrainTileTexture[] neighbours) {
         if(pending==null){
             int[] copy=colors.clone();short[] h=heights.clone();pendingStride=stride;
             try{pending=WORK.submit(()->h.length==1156?TerrainRelief.raster(copy,h,level):raster(copy,contours,stride));}catch(java.util.concurrent.RejectedExecutionException busy){return;}
@@ -50,7 +93,15 @@ final class TerrainTileTexture {
         if(!valid()){slot=TerrainAtlas.acquire(this);uploaded=false;if(slot==null)return;}
         int[] raster;
         try{raster=pending.get();}catch(Exception failed){pending=null;return;}pending=null;
-        TerrainAtlas.upload(slot,raster);uploaded=true;this.builtStride=pendingStride;uploadedAt=System.nanoTime();
+        TerrainAtlas.upload(slot,raster,slots(neighbours));
+        gutterDirty=false;
+        for (var neighbour:neighbours) if(neighbour!=null) neighbour.neighbourChanged();
+        displayed=colors; known=false; complete=true;
+        for (int color : colors) {
+            known |= (color >>> 24) != 0;
+            complete &= (color >>> 24) == 255;
+        }
+        uploaded=true;this.builtStride=pendingStride;
     }
 
     /**
@@ -149,6 +200,8 @@ final class TerrainTileTexture {
         if(valid())slot.owner=null;
         this.slot = null;
         this.uploaded = false;
+        this.displayed = null;
+        this.known = false;
         this.builtStride = -1;
     }
 }

@@ -47,7 +47,7 @@ public class CityInviteScreen extends Screen {
          */
 
         this.addRenderableWidget(
-                Button.builder(
+                AtlasFormStyle.button(Button.builder(
                         Component.literal(
                                 "ПРИНЯТЬ"
                         ),
@@ -59,7 +59,7 @@ public class CityInviteScreen extends Screen {
                         top + 175,
                         175,
                         30
-                ).build()
+                ))
         );
 
         /*
@@ -67,7 +67,7 @@ public class CityInviteScreen extends Screen {
          */
 
         this.addRenderableWidget(
-                Button.builder(
+                AtlasFormStyle.button(Button.builder(
                         Component.literal(
                                 "ОТКЛОНИТЬ"
                         ),
@@ -79,7 +79,7 @@ public class CityInviteScreen extends Screen {
                         top + 175,
                         175,
                         30
-                ).build()
+                ))
         );
     }
 

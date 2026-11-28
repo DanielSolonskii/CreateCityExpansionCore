@@ -25,7 +25,54 @@ public final class CommunityInbox extends SavedData {
         if(kind.equals("message")||kind.equals("alliance_message"))list.removeIf(e->e.kind.equals(kind)&&(kind.equals("message")?Objects.equals(e.peer,peer):Objects.equals(e.alliance,alliance))&&!e.read);
         list.addFirst(new Event(nonce,kind,peer,city,alliance,name,now,false));while(list.size()>HISTORY)list.removeLast();while(events.size()>OWNERS)events.remove(events.keySet().iterator().next());setDirty();
     }
-    public void addProject(UUID owner,UUID event,UUID project,UUID actor,String title){if(history(owner).stream().anyMatch(e->e.id.equals(event)))return;var existing=events.get(owner);if(existing!=null)existing.removeIf(e->!e.read&&project.equals(e.project));add(owner,event,"project_update",actor,null,null,title,System.currentTimeMillis());var list=events.get(owner);for(int i=0;i<list.size();i++){var e=list.get(i);if(e.id.equals(event)){list.set(i,new Event(e.id,e.kind,e.peer,e.city,e.alliance,e.name,e.time,e.read,project));break;}}setDirty();}
+    public void addProject(UUID owner,UUID event,UUID project,UUID actor,String title) {
+        addProject(owner, event, project, actor, title, "project_update", System.currentTimeMillis());
+    }
+
+    boolean addProject(UUID owner, UUID id, UUID project, UUID actor, String title, String kind, long time) {
+        var list = events.computeIfAbsent(owner, ignored -> new ArrayList<>());
+        if (list.stream().anyMatch(event -> event.id.equals(id))) return false;
+        if (title.length() > 128) title = title.substring(0, 127) + "…";
+        list.addFirst(new Event(id, kind, actor, null, null, title, time, false, project));
+        while (list.size() > HISTORY) list.removeLast();
+        while (events.size() > OWNERS) events.remove(events.keySet().iterator().next());
+        setDirty();
+        return true;
+    }
+
+    /** Authorize before counting or paging so even the totals cannot disclose a private project. */
+    void projectPage(UUID owner, CompoundTag out, boolean include, int page,
+                     java.util.function.Function<UUID, com.example.examplemod.projects.Project> visible,
+                     com.example.examplemod.projects.ProjectJournal journal) {
+        int total = 0, unread = 0;
+        var rows = new ListTag();
+        int start = Math.clamp(page, 0, 1) * 40;
+        for (var event : history(owner)) {
+            var project = event.project == null ? null : visible.apply(event.project);
+            if (event.project != null && project == null) continue;
+            if (!event.read) unread++;
+            if (include && total >= start && rows.size() < 40) {
+                var row = encode(event);
+                if (project != null) {
+                    row.putString("Name", project.title());
+                    boolean resolved = project.status().terminal();
+                    if (event.kind.equals("project_return")) {
+                        UUID current = journal.activeReturn(project.id());
+                        resolved = project.status() != com.example.examplemod.projects.Project.Status.REWORK
+                                || current != null && !event.id.equals(current);
+                    }
+                    row.putBoolean("Resolved", resolved);
+                }
+                rows.add(row);
+            }
+            total++;
+        }
+        out.putInt("InboxUnread", unread);
+        if (include) {
+            out.putInt("InboxTotal", total);
+            out.put("Inbox", rows);
+        }
+    }
     public void read(UUID owner,UUID id){var list=events.get(owner);if(list==null||id==null)return;for(int i=0;i<list.size();i++){var e=list.get(i);if(e.id.equals(id)&&!e.read){list.set(i,new Event(e.id,e.kind,e.peer,e.city,e.alliance,e.name,e.time,true,e.project));setDirty();return;}}}
     public void readPeer(UUID owner,UUID peer,String kind){for(var e:history(owner))if(e.kind.equals(kind)&&Objects.equals(e.peer,peer))read(owner,e.id);}
     public void readAlliance(UUID owner,UUID alliance){for(var e:history(owner))if(e.kind.equals("alliance_message")&&Objects.equals(e.alliance,alliance))read(owner,e.id);}

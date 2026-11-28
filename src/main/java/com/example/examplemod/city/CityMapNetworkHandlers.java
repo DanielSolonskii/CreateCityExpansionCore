@@ -8,14 +8,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 public final class CityMapNetworkHandlers {
 
     private static final int MAX_REQUESTS_PER_TICK = 8;
-    private static final Map<UUID, RequestWindow> REQUEST_WINDOWS = new HashMap<>();
+    private static final Map<net.minecraft.server.network.ServerGamePacketListenerImpl, RequestWindow> REQUEST_WINDOWS = new java.util.WeakHashMap<>();
 
     private CityMapNetworkHandlers() {
     }
@@ -24,13 +23,11 @@ public final class CityMapNetworkHandlers {
             ServerPlayer player,
             RequestCityMapTilePayload request
     ) {
-        BlockPos anchor = viewerPylon(player);
-        if (!com.example.examplemod.policy.AtlasTileAccess.allowed(anchor != null,
-                anchor != null && anchor.equals(request.pylonPos()),
-                request.dimensionId().equals(viewerDimension(player)))
-                || !allowRequest(player)) {
-            return;
-        }
+        var view = CityPublicAtlas.view(player, request.viewId());
+        if (!com.example.examplemod.policy.AtlasTileAccess.allowed(view != null,
+                view != null && view.anchor().equals(request.pylonPos()),
+                view != null && view.dimension().equals(request.dimensionId()))
+                || !allowRequest(player)) return;
 
         long originXLong = (long) request.tileX() * (CityMapTilePayload.WORLD_SIZE<<request.level());
         long originZLong = (long) request.tileZ() * (CityMapTilePayload.WORLD_SIZE<<request.level());
@@ -45,16 +42,28 @@ public final class CityMapNetworkHandlers {
                 net.minecraft.core.registries.Registries.DIMENSION, request.dimensionId()));
         if (mapLevel == null) return;
         CityMapSavedData atlas = CityMapSavedData.get(mapLevel);
-        // The player is about to hold this tile, so later changes to it are pushed instead of
-        // waiting for a reopen that may never happen.
-        if(request.level()==0){atlas.watch(player.getUUID(),request.tileX(),request.tileZ());atlas.refreshLoaded(request.tileX(),request.tileZ());}
-        var key=new TerrainPyramid.Key(request.level(),request.tileX(),request.tileZ());
-        var data=atlas.terrain(key);int[] colors=data==null?new int[1024]:data.colors();
-        short[] heights=atlas.terrainHeights(key);long revision=TerrainPyramid.revision(colors,heights);
-        boolean same=request.worldId().equals(atlas.worldId())&&request.revision()==revision;
-        boolean complete=java.util.Arrays.stream(colors).allMatch(c->(c>>>24)==255);
-        PacketDistributor.sendToPlayer(player,new CityMapTilePayload(request.pylonPos(),request.dimensionId(),request.tileX(),request.tileZ(),complete,
-                same?new int[0]:colors,new java.util.BitSet(),request.level(),same?new short[0]:heights,atlas.worldId(),revision,same));
+        if (!atlas.worldId().equals(view.worldId()) || !view.worldId().equals(request.worldId())) return;
+        var key = new TerrainPyramid.Key(request.level(), request.tileX(), request.tileZ());
+        atlas.prioritize(key, player.serverLevel() == mapLevel ? player.blockPosition() : view.anchor());
+        var snapshot = atlas.snapshot(key);
+        boolean pending = snapshot == null;
+        boolean unchanged = !pending && request.revision() == snapshot.hash();
+        atlas.watch(player.getUUID(), request.viewId(), key, mapLevel.getGameTime(),
+                pending ? -1 : snapshot.version());
+        boolean hasBody = !pending && !unchanged;
+        PacketDistributor.sendToPlayer(player, new CityMapTilePayload(view.anchor(), view.dimension(),
+                key.x(), key.z(), !pending && snapshot.complete(), hasBody ? snapshot.colors() : new int[0],
+                new java.util.BitSet(), key.level(), hasBody ? snapshot.heights() : new short[0],
+                view.worldId(), pending ? 0 : snapshot.hash(), unchanged, view.viewId(), request.requestId(),
+                pending ? 0 : snapshot.version(), pending));
+    }
+
+    public static void invalidate(ServerPlayer player, UUID viewId, net.minecraft.resources.ResourceLocation dimension,
+                                  UUID worldId, TerrainPyramid.Key key, long version) {
+        var view = CityPublicAtlas.view(player, viewId);
+        if (view != null && dimension.equals(view.dimension()) && worldId.equals(view.worldId()))
+            PacketDistributor.sendToPlayer(player, new com.example.examplemod.network.TerrainInvalidatedPayload(
+                    viewId, dimension, worldId, key.level(), key.x(), key.z(), version));
     }
 
     /** Read-only atlas access; the server chooses the anchor, never the packet. */
@@ -88,15 +97,15 @@ public final class CityMapNetworkHandlers {
 
     private static boolean allowRequest(ServerPlayer player) {
         long gameTime = player.serverLevel().getGameTime();
-        RequestWindow current = REQUEST_WINDOWS.get(player.getUUID());
+        RequestWindow current = REQUEST_WINDOWS.get(player.connection);
         if (current == null || current.gameTime() != gameTime) {
-            REQUEST_WINDOWS.put(player.getUUID(), new RequestWindow(gameTime, 1));
+            REQUEST_WINDOWS.put(player.connection, new RequestWindow(gameTime, 1));
             return true;
         }
         if (current.count() >= MAX_REQUESTS_PER_TICK) {
             return false;
         }
-        REQUEST_WINDOWS.put(player.getUUID(), new RequestWindow(gameTime, current.count() + 1));
+        REQUEST_WINDOWS.put(player.connection, new RequestWindow(gameTime, current.count() + 1));
         return true;
     }
 

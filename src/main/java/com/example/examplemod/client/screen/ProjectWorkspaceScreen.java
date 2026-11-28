@@ -23,10 +23,10 @@ public final class ProjectWorkspaceScreen extends CommunityPage {
     private Runnable confirmation; private Component confirmText;
     private ProjectWorkspaceScreen(Screen parent,UUID id){super(parent,"workspace");this.id=id;}
     public static void open(Screen parent,UUID id){SocialHubScreen.show(parent,new ProjectWorkspaceScreen(parent,id),SocialHubScreen.Section.HOME);}
-    @Override protected void init(){super.init();if(input!=null)draft=input.getValue();input=new EditBox(font,16,layout.height()-64,430,23,tr("input"));input.setMaxLength(200);input.setValue(draft);input.setResponder(value->draft=value);addWidget(input);pending=null;view();}
+    @Override protected void init(){super.init();if(input!=null)draft=input.getValue();input=AtlasFormStyle.field(font,16,layout.height()-64,430,23,tr("input"));input.setMaxLength(200);input.setValue(draft);input.setResponder(value->draft=value);addWidget(input);pending=null;view();}
     public static void accept(WorkspaceState response){var page=SocialHubScreen.find(ProjectWorkspaceScreen.class,p->p.pending!=null&&response.data().hasUUID("Request")&&p.pending.equals(response.data().getUUID("Request")));if(page==null)return;var data=response.data();var action=page.pendingAction;page.pending=null;page.received=net.minecraft.Util.getMillis();page.result=data.getString("Result");
-        if(data.hasUUID("ProjectId")&&data.getUUID("ProjectId").equals(page.id)){if(data.getBoolean("RoomUnchanged")){if(page.state.contains("Chat"))data.put("Chat",page.state.getList("Chat",10).copy());if(page.state.contains("Marks"))data.put("Marks",page.state.getList("Marks",10).copy());}page.state=data;page.project=ProjectCodec.read(data.getCompound("Project"));if(action==WorkspaceRequest.Action.CHAT&&page.result.equals("ok")){page.input.setValue("");page.scroll=Integer.MAX_VALUE;}if(action!=WorkspaceRequest.Action.VIEW)CommunityFx.sound(page.result.equals("ok")?"success":"error");}
-        else if(page.result.equals("permission")){page.state=new CompoundTag();page.project=null;}
+        if(data.hasUUID("ProjectId")&&data.getUUID("ProjectId").equals(page.id)){if(data.getBoolean("RoomUnchanged")){if(page.state.contains("Chat"))data.put("Chat",page.state.getList("Chat",10).copy());if(page.state.contains("Marks"))data.put("Marks",page.state.getList("Marks",10).copy());}page.state=data;page.project=ProjectCodec.read(data.getCompound("Project"));if(action==WorkspaceRequest.Action.CHAT&&page.result.equals("ok")){page.input.setValue("");page.scroll=Integer.MAX_VALUE;}if(action!=WorkspaceRequest.Action.VIEW)CommunityFx.sound(page.result.equals("ok")?"map_ok":"map_denied");}
+        else if(page.result.equals("permission")){page.state=new CompoundTag();page.project=null;if(action!=WorkspaceRequest.Action.VIEW)CommunityFx.sound("map_denied");}
     }
     @Override protected int reservedBottom(){return 34;}
     private void select(int next){drafts[tab]=draft;tab=next;input.setMaxLength(tab==2?96:200);input.setValue(drafts[tab]);input.setFocused(false);transition();}
@@ -47,6 +47,12 @@ public final class ProjectWorkspaceScreen extends CommunityPage {
         clip(g);int y=0;
         if(project==null){var r=row(0,80);text(g,Component.translatable("gui.createcityexpansioncore.projects.result."+result),r.x()+14,r.y()+24,r.width()-28,MUTED);}
         else if(tab==0){
+            if (state.getBoolean("CanWatch")) {
+                boolean watching = state.getBoolean("Watching");
+                button(g, row(y, 29), tr(watching ? "unwatch_project" : "watch_project"),
+                        () -> send(WorkspaceRequest.Action.WATCH, null, 0, !watching, ""), pending == null, watching);
+                y += 39;
+            }
             var r=row(y,66);card(g,r,ACCENT);person(g,project.author(),tr("author"),r.x()+12,r.y()+10,240);if(project.executor()!=null)person(g,project.executor().representative(),tr(project.executor().kind()==Project.ApplicantKind.CITY?"city_representative":"executor"),r.x()+295,r.y()+10,260);else text(g,tr("unassigned"),r.x()+300,r.y()+22,260,MUTED);y+=76;
             for(var line:font.split(Component.literal(project.description()),550)){r=row(y,14);g.drawString(font,line,r.x()+12,r.y(),TEXT,false);y+=14;}y+=10;
             if(!project.reviewNote().isBlank()){r=row(y,50);card(g,r,0xffd19478);text(g,tr("review_note"),r.x()+12,r.y()+8,550,ACCENT);text(g,Component.literal(project.reviewNote()),r.x()+12,r.y()+28,550,TEXT);hint(r,Component.literal(project.reviewNote()));y+=60;}

@@ -74,6 +74,7 @@ public final class CargoSchedules extends SavedData {
             if(train==null||registration==null||!registration.ownerId().equals(train.owner)||train.invalid||train.derailed||train.graph==null||!train.graph.id.equals(graphId))
                 throw new IllegalArgumentException("schedule_train_missing");
             if(!CenterOperations.access(actor,"train",id).owner().manages(server,actor.getUUID()))throw new IllegalArgumentException("schedule_permission");
+            if(com.example.examplemod.passenger.PassengerService.assigned(server,id))throw new IllegalArgumentException("shipment_in_use");
             if(!train.hasForwardConductor()&&!train.hasBackwardConductor())throw new IllegalArgumentException("schedule_conductor");
             var current=train.runtime.getSchedule();var tag=current==null?null:current.write(server.registryAccess());
             if(!CargoSchedulePlan.replaceable(tag,generated.get(id),train.runtime.isAutoSchedule))throw new IllegalArgumentException("schedule_existing");
@@ -96,7 +97,7 @@ public final class CargoSchedules extends SavedData {
         });
         setDirty();railway.setDirty();
     }
-    static Schedule build(HolderLookup.Provider lookup,List<String> route,int seconds) {
+    public static Schedule build(HolderLookup.Provider lookup,List<String> route,int seconds) {
         var schedule=new Schedule();schedule.cyclic=true;
         for(String name:route) {
             var destination=new DestinationInstruction();var data=new CompoundTag();data.putString("Text",CargoSchedulePlan.filter(name));destination.setData(lookup,data);

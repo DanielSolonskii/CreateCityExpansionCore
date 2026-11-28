@@ -14,11 +14,11 @@ public final class OnboardingHelpScreen extends Screen {
  private static Component tr(String key){return Component.translatable("gui.createcityexpansioncore.onboarding."+key);}
  @Override protected void init(){
   var r=OnboardingLayout.guide(width,height);int half=(r.width()-28)/2;
-  addRenderableWidget(Button.builder(Component.literal("‹"),b->{page=Math.floorMod(page-1,OnboardingProgress.COUNT);}).bounds(r.x()+12,r.y()+r.height()-79,36,20).build());
-  addRenderableWidget(Button.builder(Component.literal("›"),b->{page=(page+1)%OnboardingProgress.COUNT;}).bounds(r.x()+r.width()-48,r.y()+r.height()-79,36,20).build());
-  addRenderableWidget(Button.builder(tr("later"),b->{OnboardingClient.later();onClose();}).bounds(r.x()+12,r.y()+r.height()-54,half,20).build());
-  var skip=addRenderableWidget(Button.builder(tr("skip"),b->{OnboardingClient.skip();onClose();}).bounds(r.x()+16+half,r.y()+r.height()-54,half,20).build());skip.active=!OnboardingClient.skipped();
-  addRenderableWidget(Button.builder(tr("close"),b->onClose()).bounds(r.x()+12,r.y()+r.height()-29,r.width()-24,20).build());
+  addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal("‹"),b->{page=Math.floorMod(page-1,OnboardingProgress.COUNT);}).bounds(r.x()+12,r.y()+r.height()-79,36,20)));
+  addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.literal("›"),b->{page=(page+1)%OnboardingProgress.COUNT;}).bounds(r.x()+r.width()-48,r.y()+r.height()-79,36,20)));
+  addRenderableWidget(AtlasFormStyle.button(Button.builder(tr("later"),b->{OnboardingClient.later();onClose();}).bounds(r.x()+12,r.y()+r.height()-54,half,20)));
+  var skip=addRenderableWidget(AtlasFormStyle.button(Button.builder(tr("skip"),b->{OnboardingClient.skip();onClose();}).bounds(r.x()+16+half,r.y()+r.height()-54,half,20)));skip.active=!OnboardingClient.skipped();
+  addRenderableWidget(AtlasFormStyle.button(Button.builder(tr("close"),b->onClose()).bounds(r.x()+12,r.y()+r.height()-29,r.width()-24,20)));
  }
  @Override public void render(GuiGraphics g,int mx,int my,float partial){var r=OnboardingLayout.guide(width,height);WorldMapChrome.panel(g,r.x(),r.y(),r.width(),r.height());g.drawString(font,title,r.x()+14,r.y()+12,WorldMapChrome.ACCENT,false);
   g.drawString(font,OnboardingClient.title(page),r.x()+14,r.y()+36,WorldMapChrome.TEXT,false);int y=r.y()+55;for(var line:font.split(OnboardingClient.body(page),r.width()-28)){if(y>r.y()+r.height()-95)break;g.drawString(font,line,r.x()+14,y,WorldMapChrome.MUTED,false);y+=11;}

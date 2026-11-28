@@ -16,6 +16,7 @@ public final class JourneyCheck {
     public static void main(String[] args){
         JourneyAuthoringCheck.main(args);
         JourneyTrialCheck.run();
+        checkMapObjectiveReads();
         checkPylonEvidence();
         var d=new JourneyData();var spawn=new Marker("spawn",new Point("minecraft:overworld",0,64,0));spawn.newcomers=true;d.markers.put(spawn.id,spawn);
         var center=new Marker("center",new Point("minecraft:overworld",120,65,12));center.route.add(new Point("minecraft:overworld",5,64,0));center.route.add(new Point("minecraft:overworld",80,65,12));d.markers.put(center.id,center);
@@ -57,6 +58,50 @@ public final class JourneyCheck {
         var dispatcher=new com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack>();JourneyCommands.register(new net.neoforged.neoforge.event.RegisterCommandsEvent(dispatcher,net.minecraft.commands.Commands.CommandSelection.ALL,null));var root=dispatcher.getRoot().getChild("ccec");require(root.getChild("quests")!=null&&root.getChild("marker")!=null&&root.getChild("quest")!=null&&root.getChild("journey")!=null&&root.getChild("route")!=null,"all command roots registered together");
         require(root.getChild("marker").getChild("set").getChild("id").getChild("type").getChild("guide")!=null,"marker type command exists");
         System.out.println("PASS: "+checks+" journey progression, isolation, persistence, commands and network checks");
+    }
+
+    private static void checkMapObjectiveReads() {
+        UUID object = UUID.randomUUID();
+        for (var kind : NavigationLookup.Kind.values()) {
+            var request = new NavigationLookup(kind, object, -1);
+            require(request.token().length() <= 64 && request.equals(NavigationLookup.parse(request.token())),
+                    "scoped objective lookup fits the original STATE codec for " + kind);
+        }
+        require(NavigationLookup.parse("n/PLAYER/" + object + "/1") == null
+                && NavigationLookup.parse("n/STATION/" + object + "/1/2") == null
+                && NavigationLookup.parse("") == null, "unknown, malformed and legacy requests stay separate");
+        var wire = new RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(), RegistryAccess.EMPTY);
+        try {
+            var read = new JourneyRequestPayload(JourneyRequestPayload.Action.STATE,
+                    new NavigationLookup(NavigationLookup.Kind.WAREHOUSE, object, -1L).token());
+            JourneyRequestPayload.STREAM_CODEC.encode(wire, read);
+            require(wire.readEnum(JourneyRequestPayload.Action.class) == JourneyRequestPayload.Action.STATE
+                    && wire.readUtf(64).equals(read.id()) && !wire.isReadable(), "legacy server can decode the optional read");
+            wire.clear();
+            wire.writeEnum(JourneyRequestPayload.Action.STATE);
+            wire.writeUtf("",64);
+            var legacy = JourneyRequestPayload.STREAM_CODEC.decode(wire);
+            require(legacy.action() == JourneyRequestPayload.Action.STATE && NavigationLookup.parse(legacy.id()) == null,
+                    "legacy client still requests the complete normal Journey state");
+        } finally { wire.release(); }
+        var lease = new com.example.examplemod.client.journey.NavigationLease(NavigationLookup.Kind.STATION,object,0);
+        require(!lease.confirmed(0), "choosing a cached private object does not grant a new read lease");
+        String first = lease.poll(0, 1);
+        require(!lease.confirmed(100), "a pending first read cannot expose the destination");
+        require(lease.poll(4_999, 2).isEmpty(), "render and tick cannot double-send an objective read");
+        String retry = lease.poll(5_000, 3);
+        require(!retry.equals(first) && !lease.accept(first, 6_000, true), "late answer cannot renew a superseded read");
+        require(lease.poll(14_999, 4).isEmpty() && !lease.confirmed(15_000), "silence backs off and hides private data");
+        require(lease.accept(retry, 15_000, true) && lease.confirmed(19_999) && !lease.confirmed(20_000),
+                "network transit cannot make an old observation look newly authorized");
+        require(!lease.accept(retry, 16_000, true), "duplicate cannot renew the lease");
+        var replacement = new com.example.examplemod.client.journey.NavigationLease(NavigationLookup.Kind.STATION,object,20_000);
+        String selectedAgain = replacement.poll(20_000, 5);
+        require(!replacement.accept(retry, 21_000, true) && replacement.accept(selectedAgain, 21_000, false)
+                && !replacement.confirmed(21_000), "reselection isolates generations and revocation hides immediately");
+        String overdue = replacement.poll(26_100,6);
+        require(!replacement.accept(overdue,45_000,true) && !replacement.confirmed(45_000),
+                "client suspension cannot revive expired private data");
     }
 
     private static void checkPylonEvidence() {

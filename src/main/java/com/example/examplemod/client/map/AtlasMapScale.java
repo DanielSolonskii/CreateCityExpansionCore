@@ -17,6 +17,29 @@ public final class AtlasMapScale {
         return level;
     }
     public static int span(int level){return 32<<level;}
+
+    /** Hysteresis is per viewport. Memory bounds take precedence even during a resize. */
+    static int displayLevel(double zoom, int width, int height, double guiScale, int previous) {
+        if (previous < 0) return terrainLevel(zoom,width,height,guiScale);
+        double pixels = zoom * Math.max(1,guiScale);
+        int level = previous;
+        while (level < 7 && (pixels * (1 << level) < .68 || visibleCount(width,height,zoom,level) > ACTIVE_TILES)) level++;
+        while (level > 0 && pixels * (1 << (level - 1)) > .92
+                && visibleCount(width,height,zoom,level - 1) < ACTIVE_TILES * .9) level--;
+        return level;
+    }
+
+    private static double visibleCount(int width, int height, double zoom, int level) {
+        double tile = zoom * span(level);
+        return (Math.ceil(width / tile) + 4) * (Math.ceil(height / tile) + 4);
+    }
+    record ParentCrop(int x,int z,float u,float v,float size) {}
+    static ParentCrop ancestor(int x,int z,int levelDifference) {
+        int factor=1<<levelDifference;
+        float size=32f/factor;
+        return new ParentCrop(Math.floorDiv(x,factor),Math.floorDiv(z,factor),
+                Math.floorMod(x,factor)*size,Math.floorMod(z,factor)*size,size);
+    }
     private AtlasMapScale() {}
     public record Tiles(int minX,int maxX,int minZ,int maxZ) {
         public long count(){return (long)(maxX-minX+1)*(maxZ-minZ+1);}

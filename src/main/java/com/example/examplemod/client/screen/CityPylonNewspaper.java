@@ -1,5 +1,6 @@
 package com.example.examplemod.client.screen;
 
+import com.example.examplemod.city.CityGazette;
 import com.example.examplemod.client.CommunityFx;
 import com.example.examplemod.client.uiedit.UiEditLayout;
 import net.minecraft.ChatFormatting;
@@ -8,7 +9,11 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import java.util.List;
+import java.util.Locale;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 import static com.example.examplemod.client.screen.CityPylonTheme.*;
 
@@ -20,17 +25,29 @@ final class CityPylonNewspaper {
     private static final int INK = 0xFF392D24;
     private static final int PAPER = 0xFFE7D2AC;
     private static final int RULE = 0xFF937754;
-    private static final ResourceLocation LOCK = ResourceLocation.fromNamespaceAndPath(
-            "createcityexpansioncore", "textures/gui/community/center_lock.png");
-
     private final SocialHubIcons.HoverMotion hover = new SocialHubIcons.HoverMotion();
+    private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy").withZone(ZoneId.systemDefault());
+    private List<CityGazette.Story> stories = List.of();
+    private int offset, maxOffset;
+
+    void update(List<CityGazette.Story> next) {
+        if (!stories.equals(next)) offset = 0;
+        stories = next;
+    }
+
+    boolean scroll(CityPylonWorkspaceLayout city, int width, double x, double y, double dy) {
+        var paper = page(city,width);
+        if (!open || !paper.contains(x,y) || x >= paper.x()+visibleWidth(paper,width)) return false;
+        offset = Math.clamp(offset-(int)Math.signum(dy)*24,0,maxOffset);
+        return true;
+    }
     private boolean open;
     private float position;
     private float start;
     private long startedAt;
 
-    private static MutableComponent tr(String key) {
-        return Component.translatable("gui.createcityexpansioncore.workspace.center.newspaper." + key);
+    private static MutableComponent tr(String key, Object... args) {
+        return Component.translatable("gui.createcityexpansioncore.workspace.center.newspaper." + key,args);
     }
 
     private static int paperWidth(int screenWidth) {
@@ -56,6 +73,7 @@ final class CityPylonNewspaper {
 
     private void toggle() {
         open = !open;
+        if (open) offset = 0;
         start = position;
         startedAt = Util.getMillis();
     }
@@ -158,7 +176,7 @@ final class CityPylonNewspaper {
         Component titleTop = tr("title_top").withStyle(ChatFormatting.BOLD);
         Component titleBottom = tr("title_bottom").withStyle(ChatFormatting.BOLD);
         int titleWidth = Math.max(font.width(titleTop), font.width(titleBottom));
-        float titleScale = Math.min(2.2f, (right-left-4f) / Math.max(1, titleWidth));
+        float titleScale = Math.min(page.height() < 180 ? 1f : 2.2f, (right-left-4f) / Math.max(1, titleWidth));
         int lineHeight = (int) Math.ceil(font.lineHeight * titleScale);
         g.hLine(left,right,top+26,INK);
         g.hLine(left,right,top+28,RULE);
@@ -171,24 +189,37 @@ final class CityPylonNewspaper {
         int contentTop = mastheadBottom+9;
         int contentBottom = bottom-10;
         if (contentBottom <= contentTop) return;
-        int imageBottom = Math.min(contentTop+54,contentBottom);
-        g.fill(left,contentTop,middle-3,imageBottom,0xFFBEA581);
-        for (int row = contentTop, line = 0; row+2 < contentBottom; row += 8, line++) {
-            if (line % 5 == 4) continue;
-            g.fill(middle+3,row,right-(line%3)*2,row+2,RULE);
-            if (row >= imageBottom) g.fill(left,row,middle-3,row+2,RULE);
-        }
-        g.fill(left,contentTop,right,contentBottom,0x90534536);
-        Component status = tr("status");
-        float statusScale = Math.min(1.65f, (right-left-10f) / Math.max(1, font.width(status)));
-        int badgeHeight = 25 + (int) Math.ceil(font.lineHeight * statusScale);
-        int badgeY = Math.max(contentTop,(contentTop+contentBottom-badgeHeight)/2);
-        if (badgeY+badgeHeight > bottom-3) {
-            centered(g,font,status,middle,contentTop,statusScale,INK);
-        } else {
-            rounded(g,left+2,badgeY,right-left-4,badgeHeight,4,DEEP);
-            g.blit(LOCK,middle-8,badgeY+4,0,0,16,16,16,16);
-            centered(g,font,status,middle,badgeY+22,statusScale,0xFFEFD19A);
+        int column = right-left-4;
+        int y = contentTop-offset;
+        g.enableScissor(left,contentTop,right,contentBottom);
+        try {
+            if (stories.isEmpty()) {
+                g.drawWordWrap(font,tr("empty"),left,y,column,INK);
+            }
+            for (var story : stories) {
+                String kind = story.kind().name().toLowerCase(Locale.ROOT);
+                g.drawString(font,story.kind()==CityGazette.Kind.CITY_REGISTER ? tr("register_label").getString() : DATE.format(Instant.ofEpochMilli(story.time())),left,y,RULE,false);
+                y += font.lineHeight+3;
+                for (var line : font.split(tr(kind+".title").withStyle(ChatFormatting.BOLD),column)) {
+                    g.drawString(font,line,left,y,INK,false);
+                    y += font.lineHeight+1;
+                }
+                y += 3;
+                for (var line : font.split(tr(kind+".body",story.subject(),story.place(),story.detail()),column)) {
+                    g.drawString(font,line,left,y,INK,false);
+                    y += font.lineHeight+1;
+                }
+                g.hLine(left,right-4,y+4,RULE);
+                y += 14;
+            }
+        } finally { g.disableScissor(); }
+        maxOffset = Math.max(0,y+offset-contentBottom);
+        offset = Math.min(offset,maxOffset);
+        if (maxOffset > 0) {
+            int h = contentBottom-contentTop;
+            int thumb = Math.max(4,h*h/(h+maxOffset));
+            int topY = contentTop+(h-thumb)*offset/maxOffset;
+            g.fill(right-1,topY,right,topY+thumb,RULE);
         }
     }
 

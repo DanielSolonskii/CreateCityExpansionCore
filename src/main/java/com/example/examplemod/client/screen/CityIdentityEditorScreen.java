@@ -38,40 +38,48 @@ public final class CityIdentityEditorScreen extends Screen {
         span = Math.min(560, width - 16); left = (width - span) / 2;
         scale = Math.max(1, Math.min(4, (height - 112) / 32)); canvasX = left + 8; canvasY = 26;
         int fieldX = canvasX + scale * 32 + 16, fieldWidth = Math.max(60, left + span - 8 - fieldX);
-        descriptionBox = new EditBox(font, fieldX, 38, fieldWidth, 18, text("description"));
+        descriptionBox = AtlasFormStyle.field(font, fieldX, 38, fieldWidth, 18, text("description"));
         descriptionBox.setMaxLength(CityIdentity.MAX_DESCRIPTION); descriptionBox.setValue(description);
         descriptionBox.setResponder(value -> { description = value; discard = false; }); addRenderableWidget(descriptionBox);
         String[] keys = {"brush", "fill", "mirror", "undo", "redo", "template"};
         int toolWidth = (span - 16) / keys.length;
         for (int i = 0; i < keys.length; i++) { final int tool = i;
-            tools[i] = addRenderableWidget(Button.builder(text(keys[i]), b -> {
+            tools[i] = addRenderableWidget(AtlasFormStyle.button(Button.builder(text(keys[i]), b -> {
                 if (waiting) return;
                 switch (tool) { case 0 -> filling = false; case 1 -> filling = true; case 2 -> mirror = !mirror;
                     case 3 -> canvas.undo(); case 4 -> canvas.redo(); case 5 -> canvas.template(++variant); }
                 discard = false;
-            }).bounds(left + 8 + i * toolWidth, height - 54, toolWidth - 2, 18).build());
+            }).bounds(left + 8 + i * toolWidth, height - 54, toolWidth - 2, 18)));
         }
-        save = addRenderableWidget(Button.builder(text("save"), b -> {
+        save = addRenderableWidget(AtlasFormStyle.button(Button.builder(text("save"), b -> {
             canvas.end();
             if (waiting || !CityIdentity.valid(description, canvas.image())) { status = "invalid"; return; }
             waiting = true; waitTicks = 200; status = "saving"; descriptionBox.setEditable(false);
             requestId = java.util.UUID.randomUUID();
             PacketDistributor.sendToServer(new SetCityIdentityPayload(profile.id(), requestId, profile.revision(), colour, description, canvas.image()));
-        }).bounds(left + 8, height - 28, (span - 20) / 2, 20).build());
-        cancel = addRenderableWidget(Button.builder(text("cancel"), b -> onClose()).bounds(left + 12 + (span - 20) / 2, height - 28, (span - 20) / 2, 20).build());
+        }).bounds(left + 8, height - 28, (span - 20) / 2, 20)));
+        cancel = addRenderableWidget(AtlasFormStyle.button(Button.builder(text("cancel"), b -> onClose()).bounds(left + 12 + (span - 20) / 2, height - 28, (span - 20) / 2, 20)));
     }
     public static void accept(CityIdentityResultPayload result) {
         if (!(Minecraft.getInstance().screen instanceof CityIdentityEditorScreen screen) || !screen.profile.id().equals(result.city()) || !screen.waiting || !result.requestId().equals(screen.requestId)) return;
         screen.waiting = false; screen.status = result.result();
         screen.descriptionBox.setEditable(true);
-        if (result.result().equals("saved")) Minecraft.getInstance().setScreen(screen.parent);
+        boolean saved=result.result().equals("saved");
+        com.example.examplemod.client.CommunityFx.sound(saved?"map_ok":"map_denied");
+        if (saved) {
+            if (screen.parent instanceof PolishedWorldMapScreen atlas && atlas.validReturn()) atlas.showCardNotice("saved");
+            screen.returnToParent();
+        }
     }
     private boolean dirty() { return colour != profile.colour() || !description.equals(profile.identity().description()) || !canvas.image().equals(profile.identity().pixels()); }
     @Override public void onClose() {
         if (waiting) return;
         canvas.end();
         if (dirty() && !discard) { discard = true; status = "discard"; return; }
-        minecraft.setScreen(parent);
+        returnToParent();
+    }
+    private void returnToParent() {
+        minecraft.setScreen(parent instanceof PolishedWorldMapScreen atlas && !atlas.validReturn() ? null : parent);
     }
     @Override public boolean isPauseScreen() { return false; }
     @Override public void tick() {

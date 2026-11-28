@@ -88,7 +88,7 @@ public final class JourneyAtlasScreen extends Screen {
     @Override protected void init(){
         layout();labels.clear();formWidgets.clear();stepHits.clear();formBottom=0;
         if(confirmation!=null){button(width/2-112,height/2+12,108,"discard",()->{var action=confirmation;confirmation=null;action.run();});button(width/2+4,height/2+12,108,"cancel",()->{confirmation=null;rebuildWidgets();});return;}
-        if(choices!=null){var search=new EditBox(font,width/2-130,55,260,18,JourneyClient.tr("search"));search.setMaxLength(96);search.setValue(choiceFilter);search.setResponder(s->{choiceFilter=s;choiceScroll=0;});addRenderableWidget(search);button(width/2+60,height-35,70,"cancel",()->{choices=null;rebuildWidgets();});setInitialFocus(search);return;}
+        if(choices!=null){var search=com.example.examplemod.client.screen.AtlasFormStyle.field(font,width/2-130,55,260,18,JourneyClient.tr("search"));search.setMaxLength(96);search.setValue(choiceFilter);search.setResponder(s->{choiceFilter=s;choiceScroll=0;});addRenderableWidget(search);button(width/2+60,height-35,70,"cancel",()->{choices=null;rebuildWidgets();});setInitialFocus(search);return;}
         button(8,8,72,"close",this::onClose);
         if(JourneyClient.canEdit&&!editing){
             button(86,8,100,"route_editor.open",this::openRouteEditor);
@@ -163,7 +163,14 @@ public final class JourneyAtlasScreen extends Screen {
     private void save(){if(invalidFields.stream().anyMatch(k->k.startsWith(key()))){status="error.range";return;}submit("save");}
     private void submit(String action){if(draft()==null||!pending.isEmpty())return;if(action.equals("delete")&&!originals.containsKey(key())){revert();return;}String value=action.equals("save")?draft().toString():"";if(value.length()>24000||value.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>30000){status="error.limit";return;}pending=key();pendingAt=net.minecraft.Util.getMillis();status="saving";send(action,group,selected,revisions.getOrDefault(key(),""),value);rebuildWidgets();}
     private void confirm(String key,Runnable action){confirmationKey=key;confirmation=action;rebuildWidgets();}
-    @Override public void tick(){if(parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas)atlas.tickJourneyWorkspace();if(!pending.isEmpty()&&net.minecraft.Util.getMillis()-pendingAt>10000){pending="";status="error.timeout";rebuildWidgets();}}
+    boolean hasLiveMap() {
+        return !(parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas) || atlas.ownsJourneyPanel(map);
+    }
+    @Override public void tick(){
+        if (!hasLiveMap()) {minecraft.setScreen(null);return;}
+        if(parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas)atlas.tickJourneyWorkspace();
+        if(!pending.isEmpty()&&net.minecraft.Util.getMillis()-pendingAt>10000){pending="";status="error.timeout";rebuildWidgets();}
+    }
     private List<Choice> entries(){
         List<Choice> result;
         if(editing)result=named(group,false);
@@ -173,6 +180,8 @@ public final class JourneyAtlasScreen extends Screen {
     }
     private List<Choice> filteredChoices(){String query=choiceFilter.toLowerCase(Locale.ROOT);return choices.stream().filter(c->c.title.toLowerCase(Locale.ROOT).contains(query)||c.id.toLowerCase(Locale.ROOT).contains(query)).toList();}
     @Override public void render(GuiGraphics g,int mx,int my,float delta){
+        if (!hasLiveMap()) return;
+        map.setPrecisionInput(pickPosition || drawRoute);
         g.fill(0,0,width,height,0xff10171b);map.render(g,mapX,60,mapW,Math.max(20,height-84),mx,my);
         panel(g,rx,60,right,height-84);if(left>0)panel(g,0,60,left,height-84);
         g.fill(0,0,width,59,SURFACE);g.fill(0,58,width,59,BRASS);
@@ -207,18 +216,19 @@ public final class JourneyAtlasScreen extends Screen {
         if(button==0&&group.equals("chain")&&tab==1&&x>=rx)for(var hit:stepHits)if(y>=hit.y&&y<hit.y+20){dragStep=hit.index;return true;}
         if(super.mouseClicked(x,y,button))return true;
         if(x>=mapX&&x<rx&&y>=60&&y<height-24){
+            map.interruptCamera();
             if(button==0&&(pickPosition||drawRoute)&&draft()!=null&&group.equals("marker")){
                 var d=draft();if(!d.getString("Dimension").equals(map.dimensionId().toString())){status="error.dimension";return true;}
                 var p=new Point(map.dimensionId().toString(),(int)Math.floor(map.screenToWorldX(x)),d.getInt("Y"),(int)Math.floor(map.screenToWorldZ(y)));
                 if(pickPosition){d.merge(JourneyCodec.point(p));pickPosition=false;status="";}else{var points=d.getList("Route",10);if(points.size()<64){points.add(JourneyCodec.point(p));d.put("Route",points);}else status="error.limit";}rebuildWidgets();return true;
             }
             if(button==0&&JourneyMapLayer.click(map,x,y))return true;
-            if(button==0){dragging=true;return true;}
+            if(button==0){dragging=true;map.beginPan();return true;}
         }
         return false;
     }
-    @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){if(dragStep>=0)return true;if(dragging&&button==0){map.restoreView(map.centerX()-dx/map.zoom(),map.centerZ()-dy/map.zoom(),map.zoom());return true;}return super.mouseDragged(x,y,button,dx,dy);}
-    @Override public boolean mouseReleased(double x,double y,int button){dragging=false;if(dragStep>=0){int from=dragStep;dragStep=-1;for(var h:stepHits)if(y>=h.y&&y<h.y+44){moveStep(from,h.index);break;}return true;}return super.mouseReleased(x,y,button);}
+    @Override public boolean mouseDragged(double x,double y,int button,double dx,double dy){if(dragStep>=0)return true;if(dragging&&button==0)return map.mouseDragged(x,y,button,dx,dy);return super.mouseDragged(x,y,button,dx,dy);}
+    @Override public boolean mouseReleased(double x,double y,int button){if(dragging&&button==0){dragging=false;return map.mouseReleased(x,y,button);}if(dragStep>=0){int from=dragStep;dragStep=-1;for(var h:stepHits)if(y>=h.y&&y<h.y+44){moveStep(from,h.index);break;}return true;}return super.mouseReleased(x,y,button);}
     @Override public boolean mouseScrolled(double x,double y,double dx,double dy){
         if(confirmation!=null)return true;if(choices!=null){choiceScroll=Math.max(0,choiceScroll-(int)dy);return true;}
         if(x<left||showList&&x>=rx){listScroll=Math.max(0,listScroll-(int)dy);return true;}
@@ -227,7 +237,10 @@ public final class JourneyAtlasScreen extends Screen {
     }
     @Override public boolean keyPressed(int key,int scan,int mods){if(key==GLFW.GLFW_KEY_ESCAPE){if(confirmation!=null){confirmation=null;rebuildWidgets();return true;}if(choices!=null){choices=null;rebuildWidgets();return true;}if(pickPosition||drawRoute){pickPosition=drawRoute=false;status="";rebuildWidgets();return true;}}if(choices==null&&confirmation==null&&hasControlDown()&&key==GLFW.GLFW_KEY_S&&editing){save();return true;}return super.keyPressed(key,scan,mods);}
     @Override public void onClose(){if(!pending.isEmpty())return;if(dirty()){confirm("confirm_close",this::returnToMap);return;}returnToMap();}
-    private void returnToMap(){returning=true;minecraft.setScreen(parent);}
+    private void returnToMap(){
+        returning=!(parent instanceof com.example.examplemod.client.screen.PolishedWorldMapScreen atlas)||atlas.validReturn();
+        minecraft.setScreen(returning ? parent : null);
+    }
     private void openRouteEditor() {
         var next = new JourneyRouteEditorScreen(this, map);
         routeEditorOpen = true;

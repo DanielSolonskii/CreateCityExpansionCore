@@ -1,0 +1,110 @@
+/* The shared window uses the same graphite surfaces and brass selection as the in-game social hub. */
+#root .companion-shell {
+  --sidebar-width: clamp(172px, 17vw, 216px);
+  --window-header: 52px;
+  --launch-height: 84px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  animation: none;
+}
+.companion-shell .titlebar { height: var(--window-header); }
+.companion-shell main.companion-main {
+  position: absolute;
+  inset: var(--window-header) 0 var(--launch-height) var(--sidebar-width);
+  min-height: 0;
+  margin: 0;
+  padding: 24px clamp(20px, 3vw, 44px) 28px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.companion-shell .page-transition { max-width: 1340px; }
+.companion-sidebar { padding: 22px 14px 14px; }
+.companion-sidebar .brand { margin-bottom: 30px; }
+.companion-sidebar nav { position: relative; gap: 4px; }
+.companion-sidebar nav::before {
+  content: ""; pointer-events: none; position: absolute; z-index: 1;
+  top: 10px; left: 0; width: 3px; height: 24px; border-radius: 2px;
+  background: var(--ccec-accent);
+  transform: translateY(calc(var(--active-row) * 48px));
+  transition: transform 170ms ease-out;
+}
+.companion-sidebar nav > button { height: 44px; min-height: 44px; }
+.companion-sidebar nav > button.is-active { border-color: transparent; background: #343330; }
+.companion-sidebar__bottom { padding-top: 16px; }
+.companion-shell .companion-settings { margin-bottom: 0; }
+.companion-account { margin-top: 12px; }
+.world-cover {
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start;
+  min-height: clamp(176px, 26vh, 278px);
+  padding: 24px 30px;
+  background: linear-gradient(90deg, #0d191de8 0%, #102127aa 36%, transparent 83%),
+    linear-gradient(0deg, #07131585, transparent 70%), var(--hero-image) center 55% / cover;
+  border: 1px solid var(--ccec-edge); border-radius: 7px;
+}
+.world-cover > span { display: flex; align-items: center; gap: 9px; color: #edc598; font-size: 12px; font-weight: 700; }
+.world-cover > span i { width: 3px; height: 3px; background: currentColor; border-radius: 50%; }
+.companion-shell .world-cover h1 { color: #fff6e6; font-size: clamp(34px, 4.1vw, 60px); line-height: 1.12; margin: 9px 0; }
+.world-cover p { max-width: 440px; margin: 0; color: #d9dfd8; font-size: 14px; overflow-wrap: anywhere; }
+.world-overview { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr); gap: 14px; margin: 16px 0 24px; }
+.first-visit, .world-identity {
+  display: flex; align-items: center; gap: 14px; padding: 18px 20px;
+  background: var(--ccec-surface); border: 1px solid var(--ccec-edge); border-radius: 6px;
+}
+.first-visit > svg, .job-seal { flex: none; color: var(--ccec-accent); }
+.companion-shell .first-visit h2 { margin: 0; font-size: 17px; }
+.first-visit p, .world-identity small { margin: 5px 0; color: var(--ccec-muted); font-size: 13px; }
+.first-visit .text-button { margin-top: 5px; color: #e7bb86; }
+.world-identity { color: inherit; text-align: left; cursor: pointer; }
+.world-identity > span:nth-child(2) { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.world-identity > span:last-child { margin-left: auto; color: var(--ccec-accent); }
+.world-identity .player-avatar { width: 44px; height: 44px; flex: none; }
+.companion-shell .world-overview .server-card { margin: 0; padding: 15px 18px; position: static; max-width: none; }
+.companion-shell .world-overview .server-card__message { margin: 6px 0; padding: 3px 0; background: transparent; }
+.companion-shell .status-light--unknown { background: #93a1a6; animation: none; }
+.companion-shell .news-section { padding: 0; }
+.companion-shell .section-heading .eyebrow { color: var(--ccec-text); font-size: 17px; letter-spacing: 0; text-transform: none; }
+.companion-shell .news-section > p { color: var(--ccec-muted); font-size: 14px; }
+.companion-shell .news-card { min-height: 140px; }
+.companion-shell .community-launch { height: var(--launch-height); display: flex; gap: 14px; justify-content: flex-start; padding: 12px 24px; }
+.job-copy { flex: 1; display: grid; gap: 3px; min-width: 0; font-variant-numeric: tabular-nums; }
+.job-copy strong { font-size: 15px; }
+.job-copy small { color: var(--ccec-muted); font-size: 12px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.job-copy progress { width: 100%; max-width: 300px; height: 4px; accent-color: var(--ccec-accent); }
+.job-primary, .job-details {
+  flex: none; cursor: pointer; border-radius: 5px; min-height: 40px; padding: 8px 13px;
+  font-size: 13px; font-weight: 700; border: 1px solid var(--ccec-edge); color: var(--ccec-text); background: var(--ccec-raised);
+  transition: background-color 150ms, transform 120ms;
+}
+.job-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 116px; color: #251a0e; border-color: #d1a56c; background: #d9ad73; }
+.job-primary:hover:not(:disabled) { background: #edbf83; }
+.job-primary:active:not(:disabled) { transform: translateY(1px); }
+.job-primary:disabled { background: #34443e; border-color: #506258; color: #d4dfd8; cursor: default; }
+.job-details:hover { border-color: #899b9c; }
+.companion-shell .community-launch .launcher-update { position: relative; inset: auto; width: auto; display: flex; align-items: center; gap: 5px; border: 0; background: transparent; }
+.companion-shell .community-launch .launcher-update__summary { width: auto; white-space: nowrap; border: 1px solid var(--ccec-edge); border-radius: 5px; }
+.companion-shell .community-launch .launcher-update__summary > span:last-child { display: none; }
+.companion-shell .community-launch .launcher-update__body { top: auto; bottom: calc(100% + 12px); width: min(340px, 68vw); }
+.job-scrim { position: fixed; inset: 0; z-index: 45; background: #07101399; }
+.companion-shell .job-drawer { position: fixed; inset: 0 0 0 auto; width: min(465px, 95vw); max-width: none; max-height: none; margin: 0; overflow: auto; z-index: 46; padding: 26px; border-radius: 0; animation: drawer-enter 190ms ease-out; }
+@keyframes drawer-enter { from { transform: translateX(26px); opacity: .4; } to { transform: none; opacity: 1; } }
+.companion-shell .job-drawer .update-steps { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.companion-shell .job-drawer .update-steps li { padding: 9px 12px; }
+.companion-shell .settings-panel { overflow: auto; scrollbar-width: thin; }
+.settings-panel section > h3 { margin: 20px 0 8px; color: var(--ccec-accent); font-size: 15px; }
+.settings-panel .settings-group small { color: var(--ccec-muted); display: block; }
+.settings-panel .setting-row { min-height: 42px; }
+.settings-panel .settings-save { position: sticky; bottom: -1px; padding: 12px 0 0; background: var(--ccec-surface); }
+.settings-save .settings-note { margin: 6px 0 0; }
+.access-steps { display: flex; gap: 6px; list-style: none; padding: 0; margin: 8px 0 16px; }
+.access-steps li { flex: 1; padding: 5px 0; border-bottom: 2px solid var(--ccec-edge); color: var(--ccec-muted); font-size: 12px; }
+.access-steps li[aria-current] { border-color: var(--ccec-accent); color: #edc598; }
+.access-steps li.done { border-color: #7ca68b; }
+.code-lifetime { font-variant-numeric: tabular-nums; color: var(--ccec-accent); }
+.companion-shell .profile-studio:empty { display: none; }
+.companion-shell .login-modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+@media (max-width: 1100px) {
+  .companion-shell .community-launch { padding: 10px 16px; gap: 8px; }
+  .community-launch .job-seal { display: none; }
+  .community-launch .job-primary { min-width: 84px; }
+}

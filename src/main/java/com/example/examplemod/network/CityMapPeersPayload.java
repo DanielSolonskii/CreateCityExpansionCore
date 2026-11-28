@@ -41,8 +41,12 @@ import java.util.UUID;
 public record CityMapPeersPayload(
         BlockPos pylonPos,
         ResourceLocation dimensionId,
-        List<Peer> peers
+        List<Peer> peers, UUID viewId, UUID requestId, int containerId
 ) implements CustomPacketPayload {
+
+    public CityMapPeersPayload(BlockPos pos, ResourceLocation dimension, List<Peer> peers) {
+        this(pos,dimension,peers,RequestCityDirectoryPayload.NEW,RequestCityDirectoryPayload.NEW,-1);
+    }
 
     /**
      * Один город в виде, достаточном для карты.
@@ -100,6 +104,7 @@ public record CityMapPeersPayload(
                     (buffer, payload) -> {
                         BlockPos.STREAM_CODEC.encode(buffer, payload.pylonPos());
                         ResourceLocation.STREAM_CODEC.encode(buffer, payload.dimensionId());
+                        buffer.writeUUID(payload.viewId());buffer.writeUUID(payload.requestId());buffer.writeVarInt(payload.containerId());
                         buffer.writeVarInt(payload.peers().size());
                         for (Peer peer : payload.peers()) {
                             buffer.writeUUID(peer.cityId());
@@ -126,6 +131,7 @@ public record CityMapPeersPayload(
                         BlockPos pylonPos = BlockPos.STREAM_CODEC.decode(buffer);
                         ResourceLocation dimensionId =
                                 ResourceLocation.STREAM_CODEC.decode(buffer);
+                        UUID viewId=buffer.readUUID(), requestId=buffer.readUUID(); int containerId=buffer.readVarInt();
                         int size = Math.min(MAX_PEERS, Math.max(0, buffer.readVarInt()));
                         List<Peer> peers = new ArrayList<>(size);
                         for (int i = 0; i < size; i++) {
@@ -153,7 +159,7 @@ public record CityMapPeersPayload(
                             ));
                         }
                         return new CityMapPeersPayload(
-                                pylonPos, dimensionId, peers
+                                pylonPos, dimensionId, peers, viewId, requestId, containerId
                         );
                     }
             );

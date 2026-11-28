@@ -1,0 +1,62 @@
+// Only used when explicitly passed to Gradle. Each invocation owns its test world.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def industrial = p.hasProperty('mapIndustrialChecks')
+    def navigation = p.hasProperty('mapNavigationChecks')
+    def acceptance = p.hasProperty('mapAcceptanceChecks')
+    def session = p.hasProperty('mapSessionChecks')
+    def expected = acceptance || session ? 1 : navigation ? 4 : industrial ? 3 : 1
+    def runDirectory = p.layout.buildDirectory.dir("checks/terrain-server/${UUID.randomUUID()}").get().asFile
+    def fixture = p.sourceSets.create('foundationQa') {
+        java.srcDirs = [p.file('src/mineVisualTest/java')]
+        if (session) {
+            java.include('com/example/examplemod/navigation/TripReconnectGameTest.java')
+        } else if (navigation || acceptance) {
+            java.include('com/example/examplemod/navigation/JourneyTripGameTest.java',
+                         'com/example/examplemod/passenger/PassengerRestartCheck.java')
+            if (!acceptance) java.include('com/example/examplemod/navigation/ProjectRouteGameTest.java',
+                                          'com/example/examplemod/navigation/walk/WalkingGameTest.java',
+                                          'com/example/examplemod/places/AtlasPlaceGameTest.java')
+        } else java.include('com/example/examplemod/city/TerrainSurfaceGameTest.java')
+        if (industrial && !navigation && !acceptance && !session) {
+            java.include('com/example/examplemod/community/ProjectPlanGameTest.java',
+                         'com/example/examplemod/cargo/center/PublicTradeGameTest.java')
+        }
+        resources.srcDirs = [p.file('src/mineVisualTest/resources')]
+        resources.include('data/createcityexpansioncore/structure/auger_empty.nbt',
+                          'data/createcityexpansioncore/structure/atlas_interchange.nbt')
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += p.sourceSets.main.runtimeClasspath
+    }
+    // Freeze one coherent mod for the entire lifetime of the server, including its entry point.
+    p.tasks.named(fixture.processResourcesTaskName).configure { from(p.sourceSets.main.output) }
+    p.neoForge.mods.named(p.mod_id).configure { modSourceSets.set([fixture]) }
+    p.neoForge.runs.named('gameTestServer').configure {
+        gameDirectory = runDirectory
+        systemProperty 'ccec.map.diagnostics', 'true'
+    }
+    if (System.getProperty('os.name').startsWith('Windows')) {
+        p.configurations.named('gameTestServerLegacyClasspath').configure {
+            exclude group: 'io.netty', module: 'netty-transport-native-epoll'
+        }
+    }
+    def mods = p.tasks.register('prepareFoundationTestMods', Copy) {
+        from(p.configurations.devRuntimeMods)
+        from(p.configurations.tfmgDevMod) { rename { 'tfmg-1.2.0.jar' } }
+        from(p.file('libs/electroenergetics-1.21.1-1.1.2.jar'))
+        into(new File(runDirectory, 'mods'))
+        doLast {
+            new File(runDirectory,'server.properties').text = "server-ip=127.0.0.1\nserver-port=0\nenable-query=false\nenable-rcon=false\n"
+        }
+    }
+    p.tasks.named('runGameTestServer').configure {
+        dependsOn(mods)
+        doLast {
+            def log = new File(runDirectory, 'logs/latest.log')
+            if (!log.isFile() || !log.getText('UTF-8').contains("All ${expected} required tests passed")) {
+                throw new GradleException("Expected ${expected} map GameTests to pass. See ${runDirectory}/logs")
+            }
+            logger.lifecycle("${expected} map GameTests passed in ${runDirectory}")
+        }
+    }
+}

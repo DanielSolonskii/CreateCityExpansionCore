@@ -1,35 +1,36 @@
-import { AtSign, Building2, Check, Pencil, UserRound, X } from "lucide-react";
+import { Check, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { authGateway, type ProfileSettings } from "../services/authGateway";
+import { coverColours, readLook } from "../services/profileLook";
 import { useOverlay } from "./useOverlay";
 
 export function EditProfileModal({
   open,
   username,
+  account,
   initialSettings,
   onClose,
   onSaved,
 }: {
   open: boolean;
   username: string;
+  account: string;
   initialSettings: ProfileSettings;
   onClose: () => void;
   onSaved: (settings: ProfileSettings) => void;
 }) {
   const [displayName, setDisplayName] = useState(initialSettings.displayName);
   const overlay = useOverlay<HTMLDivElement>(open, onClose);
-  const [telegram, setTelegram] = useState(initialSettings.telegram);
-  const [city, setCity] = useState(initialSettings.city);
+  const [look, setLook] = useState(() => readLook(account));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setDisplayName(initialSettings.displayName);
-    setTelegram(initialSettings.telegram);
-    setCity(initialSettings.city);
+    setLook(readLook(account));
     setError("");
-  }, [open, initialSettings]);
+  }, [open, initialSettings, account]);
 
   const initials = useMemo(() => displayName.trim().slice(0, 2).toUpperCase() || "?", [displayName]);
 
@@ -41,9 +42,14 @@ export function EditProfileModal({
     }
     setSaving(true);
     setError("");
-    const saved = await authGateway.updateProfileSettings(username, { displayName, telegram, city });
-    setSaving(false);
-    onSaved(saved);
+    try {
+      const saved = await authGateway.updateProfileSettings(username, { ...initialSettings, displayName });
+      localStorage.setItem("recreated.profile-look.v1:" + account, JSON.stringify(look));
+      window.dispatchEvent(new Event("profile-appearance"));
+      onSaved(saved);
+    } catch {
+      setError("Не удалось сохранить все изменения. Проверьте доступ к хранилищу и повторите.");
+    } finally { setSaving(false); }
   }
 
   return (
@@ -53,21 +59,25 @@ export function EditProfileModal({
         <button className="login-close" onClick={onClose} aria-label="Закрыть"><X size={18} /></button>
         <div className="edit-profile-heading">
           <div className="edit-avatar">{initials}<span /></div>
-          <div><span className="eyebrow">НАСТРОЙКА ПРОФИЛЯ</span><h2>Имя в лаунчере</h2><p>Локальные настройки отображения. Telegram binding и город на сервере не меняются.</p></div>
+          <div><h2>Изменить профиль</h2><p>Оформление на этом устройстве</p></div>
         </div>
         <form onSubmit={submit}>
           <label>
             <span>ОТОБРАЖАЕМОЕ ИМЯ</span>
             <div><UserRound size={17} /><input autoFocus={open} value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Игровой ник" /><small>{displayName.length}/20</small></div>
           </label>
-          <p className="profile-official-note">Город, роль и привязка Telegram подтверждаются сервером. Здесь меняется только локальное отображаемое имя.</p>
+          <div className="profile-studio-fields">
+            <label>Цвет обложки<select value={look.colour} onChange={e => setLook({ ...look, colour: e.target.value })}>{coverColours.map((colour, i) => <option key={colour} value={colour}>{["Медь", "Шалфей", "Сталь", "Сирень"][i]}</option>)}</select></label>
+            <label>О себе<input maxLength={120} value={look.bio} onChange={e => setLook({ ...look, bio: e.target.value })}/></label>
+            <label>Интересы<input maxLength={80} value={look.interests} onChange={e => setLook({ ...look, interests: e.target.value })}/></label>
+          </div>
           <div className={`login-error ${error ? "is-visible" : ""}`}>{error || "Изменения сохранятся на этом устройстве"}</div>
           <button className="login-submit" disabled={saving || !displayName}>
             {saving ? <span className="login-spinner" /> : <Check size={18} />}
             {saving ? "Сохраняем…" : "Сохранить изменения"}
           </button>
         </form>
-        <div className="edit-profile-id"><Pencil size={12} /> ID аккаунта остаётся неизменным: <strong>{username}</strong></div>
+
       </section>
     </div>
   );

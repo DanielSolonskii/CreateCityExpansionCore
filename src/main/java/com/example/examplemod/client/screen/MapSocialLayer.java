@@ -1,5 +1,7 @@
 package com.example.examplemod.client.screen;
 import com.example.examplemod.client.map.CityMapPanel;
+import com.example.examplemod.client.map.MarkerGroups;
+import com.example.examplemod.client.map.MapLabelLayout;
 
 import com.example.examplemod.client.NearbySceneClient;
 import com.example.examplemod.client.screen.*;
@@ -16,7 +18,7 @@ public final class MapSocialLayer {
     private static final Map<CityMapPanel,List<Hit>> hits=new WeakHashMap<>();
     private MapSocialLayer(){}
     public static void render(GuiGraphics g,CityMapPanel map,int x,int y,int w,int h,int mx,int my){
-        var mc=Minecraft.getInstance();if(mc.player==null||mc.getConnection()==null)return;
+        var mc=Minecraft.getInstance();if(mc.player==null||mc.getConnection()==null){clear(map);return;}
         var next=new ArrayList<Hit>();long now=net.minecraft.Util.getMillis();
         for(var site:NearbySceneClient.projects()){
             if(!site.friendProject())continue;
@@ -32,24 +34,23 @@ public final class MapSocialLayer {
             var bounds=ProjectMapStyle.marker(sx,sy);WorldMapChrome.rounded(g,bounds.x(),bounds.y(),bounds.width(),bounds.height(),3,WorldMapChrome.SURFACE);
             g.renderOutline(bounds.x(),bounds.y(),bounds.width(),bounds.height(),color);g.drawCenteredString(mc.font,Component.literal("+"),sx,sy-3,color);
             next.add(new Hit(bounds,null,site));
-            if(bounds.contains(mx,my))g.drawString(mc.font,WorldMapChrome.fit(mc.font,Component.literal(site.title()),Math.max(20,x+w-sx-14)),sx+12,sy-3,color,false);
+            map.labels().reserve(bounds.x(),bounds.y(),bounds.width(),bounds.height());
+            if (bounds.contains(mx,my)) map.labels().offer("site/"+site.id(),site.title(),color,sx,sy,13,mc.font.width(site.title()),MapLabelLayout.Priority.HOVER);
         }
         // Group overlapping heads at small scales without hiding the individual profiles on click.
-        var groups=new ArrayList<List<NearbySceneClient.Friend>>();
+        var groups=new MarkerGroups<NearbySceneClient.Friend>();
         for(var friend:NearbySceneClient.friends()){
-            int sx=map.worldToScreenX(friend.x(now)),sy=map.worldToScreenY(friend.z(now));
-            if(sx<x+10||sx>x+w-10||sy<y+10||sy>y+h-10)continue;
-            List<NearbySceneClient.Friend> group=null;
-            for(var candidate:groups){var first=candidate.getFirst();if(Math.hypot(sx-map.worldToScreenX(first.x(now)),sy-map.worldToScreenY(first.z(now)))<18){group=candidate;break;}}
-            if(group==null){group=new ArrayList<>();groups.add(group);}group.add(friend);
+            int sx=map.worldToScreenX(map.reducedMotion()?friend.x():friend.x(now)),sy=map.worldToScreenY(map.reducedMotion()?friend.z():friend.z(now));
+            if(sx>=x+10 && sx<=x+w-10 && sy>=y+10 && sy<=y+h-10) groups.add(friend,sx,sy,9,0);
         }
-        for(var group:groups){var f=group.getFirst();var info=mc.getConnection().getPlayerInfo(f.id());if(info==null)continue;
-            int sx=map.worldToScreenX(f.x(now)),sy=map.worldToScreenY(f.z(now));var rect=ProjectMapStyle.marker(sx,sy);
+        for(var cluster:groups.visible()){var group=cluster.members();var f=group.getFirst();var info=mc.getConnection().getPlayerInfo(f.id());if(info==null)continue;
+            int sx=cluster.x(),sy=cluster.y();var rect=ProjectMapStyle.marker(sx,sy);
             WorldMapChrome.rounded(g,rect.x(),rect.y(),18,18,3,0xF0132329);g.renderOutline(rect.x(),rect.y(),18,18,0xFF78D7C1);
             PlayerFaceRenderer.draw(g,info.getSkin(),sx-6,sy-6,12);
-            if(group.size()>1)g.drawString(mc.font,"+"+(group.size()-1),sx+7,sy+5,0xFF78D7C1,true);
+            map.labels().reserve(rect.x(),rect.y(),18,18);
+            if(group.size()>1 && !rect.contains(mx,my)){String count="+"+(group.size()-1);map.labels().offer("friends/"+f.id(),count,0xFF78D7C1,sx,sy,12,mc.font.width(count),MapLabelLayout.Priority.NORMAL);}
             next.add(new Hit(rect,group.stream().map(NearbySceneClient.Friend::id).toList(),null));
-            if(rect.contains(mx,my))g.drawString(mc.font,info.getProfile().getName(),sx+13,sy-3,0xFF78D7C1,true);
+            if(rect.contains(mx,my)){String name=info.getProfile().getName();map.labels().offer("friend/"+f.id(),name,0xFF78D7C1,sx,sy,13,mc.font.width(name),MapLabelLayout.Priority.HOVER);}
         }
         hits.put(map,next);
     }

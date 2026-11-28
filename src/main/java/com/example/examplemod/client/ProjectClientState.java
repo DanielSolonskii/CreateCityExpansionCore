@@ -8,7 +8,7 @@ import java.util.*;
 
 /** Scoped map session. Older replies cannot overwrite a newer command or another connection. */
 public final class ProjectClientState {
-    public record Marker(UUID id,String title,Project.Scope scope,ProjectZone zone,Project.Status status,Project.Category category) {}
+    public record Marker(UUID id,String title,Project.Scope scope,ProjectZone zone,Project.Status status,Project.Category category,UUID city) {}
     public static List<Project> records=List.of();
     public static List<Marker> markers=List.of();
     public static UUID city,created;
@@ -22,19 +22,32 @@ public final class ProjectClientState {
     public static CompoundTag names=new CompoundTag();
     private static ProjectCommandPayload pending;
     private static int ticks;
+    private static long mapReceived, pendingMapEpoch, receivedMapEpoch, revoked;
+    public static long mapReceipt() { return mapReceived; }
+    public static long revocation() { return revoked; }
+    public static boolean recentReceipt(long receipt,long now) {return receipt!=0 && now-receipt>=0 && now-receipt<30_000_000_000L;}
+    public static boolean hasMapSnapshot() {
+        return receivedMapEpoch==CityPublicDirectory.accessEpoch() && recentReceipt(mapReceived,System.nanoTime());
+    }
+    public static List<Marker> mapMarkers() {return hasMapSnapshot()?markers:List.of();}
+    public static List<Project> mapRecords() {return hasMapSnapshot()?records:List.of();}
     private ProjectClientState(){}
     public static void begin(){clear();request(null);}
-    public static void clear(){records=List.of();markers=List.of();city=null;created=null;admin=op=cityRepresentative=false;finance=reviewer=false;serverLimit=serverAvailable=serverIssued=serverReserved=0;conflicts=new CompoundTag();cityMembers=Set.of();page=filter=total=0;wallet=treasury=maximum=0;names=new CompoundTag();result="loading";pending=null;ticks=0;serial++;}
+    public static void clear(){mapReceived=0;records=List.of();markers=List.of();city=null;created=null;admin=op=cityRepresentative=false;finance=reviewer=false;serverLimit=serverAvailable=serverIssued=serverReserved=0;conflicts=new CompoundTag();cityMembers=Set.of();page=filter=total=0;wallet=treasury=maximum=0;names=new CompoundTag();result="loading";pending=null;ticks=0;serial++;}
     public static boolean pending(){return pending!=null;}
     public static int typeFilter(){return filter/4;}
     public static int statusFilter(){return filter%4;}
     public static void setTypeFilter(int type){filter=type*4+statusFilter();page=0;}
-    public static void send(ProjectManager.Command c){if(pending!=null)return;pending=new ProjectCommandPayload(c,page,filter);ticks=0;result="loading";PacketDistributor.sendToServer(pending);}
+    public static void send(ProjectManager.Command c){if(pending!=null)return;pendingMapEpoch=CityPublicDirectory.accessEpoch();pending=new ProjectCommandPayload(c,page,filter);ticks=0;result="loading";PacketDistributor.sendToServer(pending);}
     public static void request(UUID selected){send(new ProjectManager.Command(UUID.randomUUID(),selected==null?new UUID(0,0):selected,0,ProjectManager.Action.REQUEST,new UUID(0,0),0,false,"",null));}
     public static void tick(){if(++ticks<100)return;ticks=0;if(pending!=null)PacketDistributor.sendToServer(pending);else request(null);}
     public static void accept(ProjectStatePayload payload) {
         var t=payload.data();if(pending==null||!t.hasUUID("Request")||!pending.command().request().equals(t.getUUID("Request")))return;
-        pending=null;result=t.getString("Result");if(t.getBoolean("KeepState")){if(t.contains("Op"))op=t.getBoolean("Op");serial++;return;}
+        pending=null;result=t.getString("Result");if(t.getBoolean("KeepState")){
+            if(t.contains("Op"))op=t.getBoolean("Op");
+            if("permission".equals(result)){mapReceived=0;revoked++;if(typeFilter()==3&&!op){filter=0;page=0;}}
+            serial++;return;
+        }
         city=t.hasUUID("City")?t.getUUID("City"):null;admin=t.getBoolean("Admin");finance=t.getBoolean("Finance");reviewer=t.getBoolean("Reviewer");created=t.hasUUID("Created")?t.getUUID("Created"):null;
         op=t.getBoolean("Op");cityRepresentative=t.getBoolean("CityRepresentative");conflicts=t.getCompound("Conflicts");
         Set<UUID> members=new HashSet<>();for(Tag raw:t.getList("CityMembers",Tag.TAG_STRING))members.add(UUID.fromString(raw.getAsString()));cityMembers=Set.copyOf(members);
@@ -42,7 +55,8 @@ public final class ProjectClientState {
         page=t.getInt("Page");filter=t.getInt("Filter");total=t.getInt("Total");wallet=t.getLong("Wallet");treasury=t.getLong("Treasury");maximum=t.getLong("Maximum");names=t.getCompound("Names");
         records=ProjectCodec.load(t.getCompound("Records"));List<Marker> list=new ArrayList<>();
         for(Tag raw:t.getList("Markers",Tag.TAG_COMPOUND)){CompoundTag m=(CompoundTag)raw,z=m.getCompound("Zone");
-            list.add(new Marker(m.getUUID("Id"),m.getString("Title"),Project.Scope.valueOf(m.getString("Scope")),new ProjectZone(net.minecraft.resources.ResourceLocation.parse(z.getString("Dimension")),ProjectZone.Shape.valueOf(z.getString("Shape")),z.getInt("X1"),z.getInt("Z1"),z.getInt("X2"),z.getInt("Z2")),Project.Status.valueOf(m.getString("Status")),Project.Category.valueOf(m.getString("Category"))));}
-        markers=List.copyOf(list);serial++;
+            list.add(new Marker(m.getUUID("Id"),m.getString("Title"),Project.Scope.valueOf(m.getString("Scope")),new ProjectZone(net.minecraft.resources.ResourceLocation.parse(z.getString("Dimension")),ProjectZone.Shape.valueOf(z.getString("Shape")),z.getInt("X1"),z.getInt("Z1"),z.getInt("X2"),z.getInt("Z2")),Project.Status.valueOf(m.getString("Status")),Project.Category.valueOf(m.getString("Category")),m.hasUUID("City")?m.getUUID("City"):null));}
+        markers=List.copyOf(list);receivedMapEpoch=pendingMapEpoch;mapReceived=System.nanoTime();serial++;
+        com.example.examplemod.client.map.MinimapClient.refreshFocusedProject();
     }
 }

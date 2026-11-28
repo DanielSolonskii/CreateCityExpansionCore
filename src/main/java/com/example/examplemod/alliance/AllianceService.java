@@ -33,6 +33,11 @@ public final class AllianceService {
             if(targetRequired&&c.target()==null)result="invalid";
             else if(c.action()==AllianceBook.Action.CHAT&&budget.getLong("CCECAllianceChatAfter")>now)result="busy";
             else {result=book.apply(c,p.getUUID(),own,cities,PlayerNames.name(p),now);if(result.equals("sent"))budget.putLong("CCECAllianceChatAfter",now+700);}
+            if (c.action()==AllianceBook.Action.ACCEPT && "ok".equals(result))
+                CityGazette.get(server).publish(CityGazette.Kind.ALLY,own.id(),p.getUUID(),own.name(),prior.name,
+                        Integer.toString(prior.cities.size()),now);
+            if ("created".equals(result)) CityGazette.get(server).publish(CityGazette.Kind.ALLIANCE, own.id(), p.getUUID(),
+                    book.city(own.id()).name, own.name(), now);
             if(Set.of("ok","created","sent","left","voted","proposed").contains(result))data.setDirty();
         }
         if(mutation&&Set.of("ok","proposed","voted","sent").contains(result)&&prior!=null){

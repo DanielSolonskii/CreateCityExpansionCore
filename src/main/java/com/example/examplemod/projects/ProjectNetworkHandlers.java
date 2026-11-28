@@ -19,18 +19,22 @@ public final class ProjectNetworkHandlers {
         budget.putInt("CCECProjectRequests",requests+1);return true;
     }
     public static ProjectManager.Actor actor(ServerPlayer player,CityManager cities,City city) {
-        return new ProjectManager.Actor(player.getUUID(),city==null?null:city.getId(),city!=null&&city.isAdmin(player.getUUID()),
+        return actor(player.getUUID(),player.hasPermissions(2),cities,city);
+    }
+    public static ProjectManager.Actor actor(UUID player,boolean op,CityManager cities,City city) {
+        return new ProjectManager.Actor(player,city==null?null:city.getId(),city!=null&&city.isAdmin(player),
                 id->city!=null&&city.hasMember(id),
                 zone->city!=null&&zone.dimension().equals(city.getPylonDimension())&&zone.plots().stream().allMatch(p->city==cities.getClaimOwner(p)),
-                player.hasPermissions(2),(id,representative)->{City represented=cities.getCity(id);return represented!=null&&represented.isAdmin(representative);},
+                op,(id,representative)->{City represented=cities.getCity(id);return represented!=null&&represented.isAdmin(representative);},
                 zone->zone.plots().stream().anyMatch(plot->cities.getClaimOwner(plot)!=null),
-                com.example.examplemod.community.CityAuthority.finance(city,player.getUUID()),
-                com.example.examplemod.community.CityAuthority.review(city,player.getUUID()));
+                com.example.examplemod.community.CityAuthority.finance(city,player),
+                com.example.examplemod.community.CityAuthority.review(city,player));
     }
     public static void handle(ServerPlayer player,ProjectCommandPayload payload) {
         CityManager cities=CityManager.get(player.getServer().overworld());City city=cities.getMemberCity(player.getUUID());
         CompoundTag out=new CompoundTag();out.putUUID("Request",payload.command().request());out.putInt("Filter",payload.filter());
         if(!consumeRequestBudget(player.getPersistentData(),net.minecraft.Util.getMillis())){reply(player,out,"busy",true);return;}
+        if(payload.command().action()!=ProjectManager.Action.REQUEST){reply(player,out,"retired",true);return;}
         var actor=actor(player,cities,city);out.putBoolean("Op",actor.op());
         int type=payload.filter()/4,statusFilter=payload.filter()%4;
         if(type==3&&!actor.op()){reply(player,out,"permission",true);return;}

@@ -25,15 +25,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import static com.example.examplemod.client.screen.WorldMapChrome.ACCENT;
-import static com.example.examplemod.client.screen.WorldMapChrome.INSET;
-import static com.example.examplemod.client.screen.WorldMapChrome.MUTED;
-import static com.example.examplemod.client.screen.WorldMapChrome.RAISED;
-import static com.example.examplemod.client.screen.WorldMapChrome.SURFACE;
-import static com.example.examplemod.client.screen.WorldMapChrome.TEXT;
+import static com.example.examplemod.client.screen.KnowledgeChrome.ACCENT;
+import static com.example.examplemod.client.screen.KnowledgeChrome.EDGE;
+import static com.example.examplemod.client.screen.KnowledgeChrome.GOLD;
+import static com.example.examplemod.client.screen.KnowledgeChrome.HIGHLIGHT;
+import static com.example.examplemod.client.screen.KnowledgeChrome.SURFACE;
+import static com.example.examplemod.client.screen.KnowledgeChrome.TEXT;
+import static com.example.examplemod.client.screen.KnowledgeChrome.stepped;
 import static com.example.examplemod.client.screen.WorldMapChrome.fit;
-import static com.example.examplemod.client.screen.WorldMapChrome.panel;
-import static com.example.examplemod.client.screen.WorldMapChrome.rounded;
 
 /**
  * Экран базы знаний: список материалов слева, тело материала справа.
@@ -53,9 +52,13 @@ public final class KnowledgeBaseScreen extends Screen {
     private static final int ROW = 22;
     private static final int LINE = 11;
     private static final int PADDING = 10;
+    private static final int MUTED = 0xFFB4A896;
+    private static final int RULE = 0xFF555765;
+    private static final int INSET = 0xFF101117;
 
     private final Screen parent;
     private final String initialPath;
+    private final KnowledgeHomeScreen.Topic topic;
     private KnowledgeBaseLayout layout;
     private String selected;
     private KnowledgeMarkdown.Document document;
@@ -97,16 +100,18 @@ public final class KnowledgeBaseScreen extends Screen {
     private record Scrollbar(KnowledgeBaseLayout.Rect track, KnowledgeBaseLayout.Rect thumb, int maxScroll) {
     }
 
-    private KnowledgeBaseScreen(Screen parent, String initialPath) {
+    KnowledgeBaseScreen(Screen parent, String initialPath, KnowledgeHomeScreen.Topic topic) {
         super(Component.translatable("gui.createcityexpansioncore.knowledge.title"));
         this.parent = parent;
+        this.topic = topic;
         this.initialPath = initialPath;
     }
 
     /** Открытие по клавише/тултипу: path — файл, который сразу открыть. */
     public static void open(Screen parent, String path) {
         if (!com.example.examplemod.knowledge.KnowledgeSyncClient.allowOpen()) return;
-        Minecraft.getInstance().setScreen(new KnowledgeBaseScreen(parent, path));
+        Minecraft.getInstance().setScreen(path == null ? new KnowledgeHomeScreen(parent)
+                : new KnowledgeBaseScreen(parent, path, null));
     }
 
     public static void open(Screen parent) {
@@ -168,26 +173,32 @@ public final class KnowledgeBaseScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         double mx = layout.localX(mouseX);
         double my = layout.localY(mouseY) - offset();
-        g.fill(0, 0, width, height, 0x88090E10);
+        g.fill(0, 0, width, height, KnowledgeChrome.BACKDROP);
         // Контент рисуется в локальных координатах через pose-масштаб (как Community/Map).
         g.pose().pushPose();
         g.pose().translate(layout.x(), layout.y(), 0);
         g.pose().scale(layout.scale(), layout.scale(), 1);
         g.pose().translate(0, offset(), 0);
-        panel(g, 0, 0, layout.width(), layout.height());
+        KnowledgeChrome.frame(g, 0, 0, layout.width(), layout.height());
         listHits.clear();
         contentHits.clear();
         headings.clear();
         outlineHits.clear();
 
         // Шапка
-        g.fill(16, 15, 18, 25, ACCENT);
-        g.drawString(font, fit(font, tr("title"), layout.width() - 170), 25, 17, ACCENT, false);
+        int titleX = KnowledgeChrome.headingMark(g, 16, 10, 24);
+        float titleScale = 2f;
+        int titleWidth = (int) ((layout.close().x() - titleX - PADDING) / titleScale);
+        g.pose().pushPose();
+        g.pose().translate(titleX, 14, 0);
+        g.pose().scale(titleScale, titleScale, 1);
+        g.drawString(font, fit(font, topic == null ? getTitle() : topic.label(), titleWidth), 0, 0, TEXT, false);
+        g.pose().popPose();
         drawCloseButton(g, mx, my);
 
         // Левый список
         var list = layout.list();
-        rounded(g, list.x(), list.y(), list.width(), list.height(), 5, SURFACE);
+        drawPane(g, list);
         var listClip = layout.screen(list, offset());
         g.flush();
         g.enableScissor(listClip.x(), listClip.y(), listClip.right(), listClip.bottom());
@@ -204,7 +215,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
         // Правый просмотр
         var viewer = layout.viewer();
-        rounded(g, viewer.x(), viewer.y(), viewer.width(), viewer.height(), 5, SURFACE);
+        drawPane(g, viewer);
         var viewerClip = layout.screen(viewer, offset());
         g.flush();
         g.enableScissor(viewerClip.x(), viewerClip.y(), viewerClip.right(), viewerClip.bottom());
@@ -228,15 +239,29 @@ public final class KnowledgeBaseScreen extends Screen {
 
     private void drawCloseButton(GuiGraphics g, double mx, double my) {
         var close = layout.close();
-        boolean hover = close.contains(mx, my);
-        WorldMapChrome.control(g, new WorldMapUiLayout.Rect(close.x(), close.y(), close.width(), close.height()),
-                false, hover, true, false);
-        g.drawString(font, "×", close.x() + close.width() / 2 - font.width("×") / 2,
-                close.y() + 8, hover ? ACCENT : MUTED, false);
+        if (close.contains(mx, my)) {
+            stepped(g, close.x(), close.y(), close.width(), close.height(), 3, HIGHLIGHT);
+        }
+        int size = Math.min(close.width(), close.height());
+        KnowledgeChrome.image(g, KnowledgeChrome.CLOSE, close.x() + (close.width() - size) / 2, close.y(), size, size);
         listHits.add(new Hit(close, () -> {
             if (parent != null) minecraft.setScreen(parent);
             else minecraft.setScreen(null);
         }));
+    }
+
+    private static void drawPane(GuiGraphics g, KnowledgeBaseLayout.Rect rect) {
+        stepped(g, rect.x(), rect.y(), rect.width(), rect.height(), 5, RULE);
+        stepped(g, rect.x() + 1, rect.y() + 1, rect.width() - 2, rect.height() - 2, 4, INSET);
+    }
+
+    private static void drawEntry(GuiGraphics g, KnowledgeBaseLayout.Rect rect, boolean hover, boolean active) {
+        stepped(g, rect.x(), rect.y(), rect.width(), rect.height(), 3, active || hover ? ACCENT : RULE);
+        stepped(g, rect.x() + 1, rect.y() + 1, rect.width() - 2, rect.height() - 2, 2,
+                active || hover ? HIGHLIGHT : SURFACE);
+        if (active) {
+            g.fill(rect.x() + 2, rect.y() + 4, rect.x() + 4, rect.bottom() - 4, GOLD);
+        }
     }
 
     // ======= Левый список =======
@@ -244,9 +269,10 @@ public final class KnowledgeBaseScreen extends Screen {
     /** Список: файлы корня + свёрнутые группы верхнего уровня; вложенность — рекурсивно. */
     private void renderList(GuiGraphics g, double mx, double my) {
         List<KnowledgeFileMeta> entries = KnowledgeBaseClient.visibleEntries();
+        if (topic != null) entries = entries.stream().filter(meta -> topic == KnowledgeHomeScreen.Topic.forPath(meta.path())).toList();
         if (entries.isEmpty()) {
             int y = layout.list().y() + PADDING;
-            for (var line : font.split(Component.translatable("gui.createcityexpansioncore.knowledge.empty_list"),
+            for (var line : font.split(tr(topic == null ? "empty_list" : "empty_section"),
                     layout.list().width() - 16)) {
                 g.drawString(font, line, layout.list().x() + 8, y, MUTED, false);
                 y += LINE;
@@ -278,8 +304,7 @@ public final class KnowledgeBaseScreen extends Screen {
         var rect = row(y, depth);
         boolean hover = rect.contains(mx, my);
         boolean active = meta.path().equals(selected);
-        rounded(g, rect.x(), rect.y(), rect.width(), ROW, 3, hover ? RAISED : INSET);
-        if (active) g.fill(rect.x() + 1, rect.y() + 4, rect.x() + 3, rect.bottom() - 4, ACCENT);
+        drawEntry(g, rect, hover, active);
         int textX = rect.x() + 9;
         ItemStack icon = iconItem(meta);
         if (icon != null) {
@@ -287,7 +312,7 @@ public final class KnowledgeBaseScreen extends Screen {
             textX = rect.x() + 24;
         }
         g.drawString(font, fit(font, Component.literal(meta.displayTitle()), rect.right() - textX - 6),
-                textX, rect.y() + (ROW - 9) / 2, active ? ACCENT : TEXT, false);
+                textX, rect.y() + (ROW - 9) / 2, active ? GOLD : TEXT, false);
         listHits.add(new Hit(rect, () -> {
             if (select(meta)) {
                 status = "opened";
@@ -309,9 +334,9 @@ public final class KnowledgeBaseScreen extends Screen {
         var rect = row(y, depth);
         boolean hover = rect.contains(mx, my);
         boolean open = expanded.contains(folder);
-        rounded(g, rect.x(), rect.y(), rect.width(), ROW, 3, hover ? RAISED : INSET);
+        drawEntry(g, rect, hover, false);
         int x = rect.x() + 9;
-        g.drawString(font, open ? "▾" : "▸", x, rect.y() + (ROW - 9) / 2, ACCENT, false);
+        g.drawString(font, open ? "▾" : "▸", x, rect.y() + (ROW - 9) / 2, GOLD, false);
         g.drawString(font, fit(font, Component.literal(folder.substring(folder.lastIndexOf('/') + 1)),
                 rect.right() - (x + 14) - 6), x + 14, rect.y() + (ROW - 9) / 2, TEXT, false);
         listHits.add(new Hit(rect, () -> {
@@ -387,8 +412,8 @@ public final class KnowledgeBaseScreen extends Screen {
         int y = viewer.y() + PADDING - contentScroll;
         int width = viewer.width() - PADDING * 2;
         g.drawString(font, fit(font, Component.literal(document.meta().displayTitle()), width),
-                viewer.x() + PADDING, y, ACCENT, false);
-        g.hLine(viewer.x() + PADDING, viewer.right() - PADDING, y + 12, WorldMapChrome.EDGE);
+                viewer.x() + PADDING, y, GOLD, false);
+        g.hLine(viewer.x() + PADDING, viewer.right() - PADDING, y + 12, RULE);
         y += 20;
         for (KnowledgeMarkdown.Block block : document.blocks()) {
             if (block instanceof KnowledgeMarkdown.Heading heading) {
@@ -406,9 +431,9 @@ public final class KnowledgeBaseScreen extends Screen {
 
     private void renderOutline(GuiGraphics g, double mx, double my) {
         var area = layout.outline();
-        rounded(g, area.x(), area.y(), area.width(), area.height(), 5, SURFACE);
-        g.drawString(font, tr("outline"), area.x() + 8, area.y() + 8, ACCENT, false);
-        g.hLine(area.x() + 8, area.right() - 8, area.y() + 20, WorldMapChrome.EDGE);
+        drawPane(g, area);
+        g.drawString(font, tr("outline"), area.x() + 8, area.y() + 8, GOLD, false);
+        g.hLine(area.x() + 8, area.right() - 8, area.y() + 20, RULE);
 
         var rows = outlineRows();
         int headingIndex = currentHeading();
@@ -432,12 +457,9 @@ public final class KnowledgeBaseScreen extends Screen {
                     var rect = new KnowledgeBaseLayout.Rect(rows.x() + 4 + indent, y, rows.width() - 12 - indent, ROW - 2);
                     boolean hover = rows.contains(mx, my) && rect.contains(mx, my);
                     boolean active = index == activeHeading;
-                    rounded(g, rect.x(), rect.y(), rect.width(), rect.height(), 3, active || hover ? RAISED : INSET);
-                    if (active) {
-                        g.fill(rect.x() + 1, rect.y() + 4, rect.x() + 3, rect.bottom() - 4, ACCENT);
-                    }
+                    drawEntry(g, rect, hover, active);
                     g.drawString(font, fit(font, Component.literal(anchor.heading().text()), rect.width() - 10),
-                            rect.x() + 5, rect.y() + 5, active || hover ? ACCENT : TEXT, false);
+                            rect.x() + 7, rect.y() + 5, active || hover ? GOLD : TEXT, false);
                     outlineHits.add(new Hit(rect, () -> {
                         contentScroll = Math.clamp(anchor.scroll(), 0, Math.max(0, contentHeight - layout.viewer().height()));
                         CommunityFx.sound("click");
@@ -471,7 +493,7 @@ public final class KnowledgeBaseScreen extends Screen {
         if (block instanceof KnowledgeMarkdown.Heading heading) {
             g.drawString(font, fit(font, Component.literal(heading.text()), width), x, y, TEXT, false);
             if (heading.level() == 1) {
-                g.hLine(x, x + width, y + LINE + 3, WorldMapChrome.EDGE);
+                g.hLine(x, x + width, y + LINE + 3, RULE);
                 return y + LINE + 9;
             }
             return y + LINE + 5;
@@ -497,7 +519,7 @@ public final class KnowledgeBaseScreen extends Screen {
         }
         int drawW = Math.min(320, availableWidth);
         int drawH = Math.max(1, (int) Math.round(drawW * size[1] / (float) size[0]));
-        rounded(g, x - 2, y - 2, drawW + 4, drawH + 4, 3, WorldMapChrome.EDGE);
+        stepped(g, x - 2, y - 2, drawW + 4, drawH + 4, 3, RULE);
         g.blit(texture, x, y, drawW, drawH, 0, 0, size[0], size[1], size[0], size[1]);
         return y + drawH + 12;
     }
@@ -516,7 +538,7 @@ public final class KnowledgeBaseScreen extends Screen {
                 cursorY += LINE;
             }
             boolean ponder = word.link() != null && word.link().type() == KnowledgeMarkdown.Link.Type.PONDER;
-            g.drawString(font, word.text(), cursorX, cursorY, ponder ? 0xFFC7772F : word.link() != null ? ACCENT : TEXT, false);
+            g.drawString(font, word.text(), cursorX, cursorY, ponder ? ACCENT : word.link() != null ? GOLD : TEXT, false);
             if (word.link() != null) {
                 contentHits.add(new LinkHit(cursorX, cursorX + wordWidth, cursorY, cursorY + LINE, word.link()));
             }
@@ -712,10 +734,10 @@ public final class KnowledgeBaseScreen extends Screen {
     private void drawScrollbar(GuiGraphics g, double mx, double my, Scrollbar bar, int areaId) {
         if (bar == null) return;
         var track = bar.track();
-        g.fill(track.x(), track.y(), track.right(), track.bottom(), INSET);
+        g.fill(track.x(), track.y(), track.right(), track.bottom(), RULE);
         var thumb = bar.thumb();
         boolean active = drag == areaId || thumb.contains(mx, my);
-        g.fill(thumb.x(), thumb.y(), thumb.right(), thumb.bottom(), active ? ACCENT : RAISED);
+        g.fill(thumb.x(), thumb.y(), thumb.right(), thumb.bottom(), active ? GOLD : EDGE);
     }
 
     /** Тянутый ползунок: 1 — список, 2 — просмотр, 3 — оглавление. */
@@ -735,7 +757,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
     private void drawDivider(GuiGraphics g) {
         var divider = layout.divider();
-        g.fill(divider.x(), divider.y(), divider.right(), divider.bottom(), WorldMapChrome.EDGE);
+        g.fill(divider.x(), divider.y(), divider.x() + 1, divider.bottom(), RULE);
     }
 
     private void renderFooter(GuiGraphics g) {
@@ -748,7 +770,7 @@ public final class KnowledgeBaseScreen extends Screen {
 
     @Override
     public void onClose() {
-        minecraft.setScreen(null);
+        minecraft.setScreen(topic == null ? null : parent);
     }
 
     @Override

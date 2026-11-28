@@ -1,0 +1,38 @@
+// Use with runServer, a disposable copy of the two-line QA world, and roles write then read.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def root = p.file(p.property('restartQaRoot')).canonicalFile
+    def role = p.property('restartQaRole')
+    if (root.parentFile != p.file('build/map-stage6').canonicalFile || !root.name.startsWith('restart-')
+            || !(role in ['write', 'read']) || !new File(root,'world/data/ccec_passenger_v1.dat').isFile())
+        throw new GradleException('Expected a disposable stage 6 copy of the two-line QA world')
+    def frozen = new File(root,'mod-snapshot')
+    def available = new File(frozen,'com/example/examplemod/passenger/PassengerService.class').isFile()
+    if (role == 'read' && !available) throw new GradleException('Missing first-process mod snapshot')
+    def freeze = available ? p.tasks.register('useRestartMod') :
+            p.tasks.register('freezeRestartMod',Copy) { from(p.sourceSets.main.output); into(frozen) }
+    def fixture = p.sourceSets.create('passengerRestartQa') {
+        java.srcDirs = [p.file('src/mineVisualTest/java')]
+        java.include('com/example/examplemod/passenger/PassengerProcessRestartCheck.java')
+        compileClasspath += p.files(frozen) + p.sourceSets.main.compileClasspath
+        runtimeClasspath += p.configurations.runtimeClasspath
+    }
+    p.tasks.named(fixture.compileJavaTaskName).configure { dependsOn freeze }
+    p.tasks.named(fixture.processResourcesTaskName).configure { dependsOn freeze; from(frozen) }
+    p.neoForge.mods.named(p.mod_id).configure { modSourceSets.set([fixture]) }
+    p.neoForge.runs.named('server').configure {
+        gameDirectory = root
+        systemProperty 'ccec.qa.restartRoot', root.absolutePath
+        systemProperty 'ccec.qa.restartRole', role
+    }
+    if (System.getProperty('os.name').startsWith('Windows'))
+        p.configurations.named('serverLegacyClasspath').configure { exclude group:'io.netty', module:'netty-transport-native-epoll' }
+    p.tasks.named('runServer').configure {
+        maxHeapSize = '1280m'
+        jvmArgs '-XX:ActiveProcessorCount=3'
+        doLast {
+            if (!new File(root,'logs/latest.log').getText('UTF-8').contains("PASS dedicated restart ${role} pid="))
+                throw new GradleException("Dedicated restart ${role} did not reach the assertions")
+        }
+    }
+}

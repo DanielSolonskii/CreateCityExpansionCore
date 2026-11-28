@@ -58,7 +58,12 @@ public final class OnboardingClient {
   }
   if(active<0&&now-joined>=12000&&now>=nextHint){for(int id=0;id<OnboardingProgress.COUNT;id++)if(progress.eligible(id)&&context(id,now)){active=id;displayed=0;break;}}
  }
- private static boolean context(int id,long now){var screen=Minecraft.getInstance().screen;return switch(id){
+ public static int inlineAtlasHint(){
+  return drawable() && Minecraft.getInstance().screen instanceof PolishedWorldMapScreen && context(active,net.minecraft.Util.getMillis()) ? active : -1;
+ }
+ private static boolean context(int id,long now){var screen=Minecraft.getInstance().screen;
+  if(screen instanceof PolishedWorldMapScreen atlas && !atlas.allowsInlineHint()) return false;
+  return switch(id){
   case 0->screen==null;
   case 1->screen instanceof PolishedWorldMapScreen&&now-screenSince>2500&&projectUntil<now;
   case 2->screen==null&&done(0);
@@ -72,9 +77,9 @@ public final class OnboardingClient {
  public static Component body(int id){if(id==4&&city.isBlank())return Component.translatable("gui.createcityexpansioncore.onboarding.no_city");return Component.translatable("gui.createcityexpansioncore.onboarding."+id+".body",key("key.createcityexpansioncore.open_world_map"),key("key.createcityexpansioncore.open_player_profile"),Component.literal(city),Component.translatable("gui.createcityexpansioncore.onboarding.role."+role.toLowerCase(Locale.ROOT)),key("key.createcityexpansioncore.city_boundaries"));}
  private static boolean drawable(){var mc=Minecraft.getInstance();return ready&&active>=0&&!progress.skipped()&&!mc.options.hideGui&&net.minecraft.Util.getMillis()>=dangerUntil&&!com.example.examplemod.client.journey.JourneyClient.showingGuidance();}
  @SubscribeEvent public static void hud(RenderGuiEvent.Post event){if(Minecraft.getInstance().screen==null&&drawable())OnboardingHelpScreen.renderCard(event.getGuiGraphics(),active,displayed,false);}
- @SubscribeEvent public static void screen(ScreenEvent.Render.Post event){if(!(event.getScreen() instanceof OnboardingHelpScreen)&&drawable()&&context(active,net.minecraft.Util.getMillis()))OnboardingHelpScreen.renderCard(event.getGuiGraphics(),active,displayed,true);}
+ @SubscribeEvent public static void screen(ScreenEvent.Render.Post event){if(!(event.getScreen() instanceof OnboardingHelpScreen)&&!(event.getScreen() instanceof PolishedWorldMapScreen)&&drawable()&&context(active,net.minecraft.Util.getMillis()))OnboardingHelpScreen.renderCard(event.getGuiGraphics(),active,displayed,true);}
  @SubscribeEvent public static void click(ScreenEvent.MouseButtonPressed.Pre event){
-  if(!drawable()||event.getScreen() instanceof OnboardingHelpScreen||!context(active,net.minecraft.Util.getMillis())||event.getButton()!=0)return;
+  if(!drawable()||event.getScreen() instanceof OnboardingHelpScreen||event.getScreen() instanceof PolishedWorldMapScreen||!context(active,net.minecraft.Util.getMillis())||event.getButton()!=0)return;
   int action=OnboardingHelpScreen.cardAction(active,displayed,event.getMouseX(),event.getMouseY());if(action<0)return;
   event.setCanceled(true);if(action==0)acknowledge();else if(action==1)later();else skip();
  }

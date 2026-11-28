@@ -20,6 +20,9 @@ public final class ProjectWorkspaceService {
     private record Presence(UUID project,boolean cursor,int x,int z,long until){}
     private static final Map<MinecraftServer,Map<UUID,Presence>> PRESENCE=new WeakHashMap<>();
     private static final Map<MinecraftServer,Long> POLL=new WeakHashMap<>();
+    private static final Map<ServerPlayer, Long> LOGIN = new WeakHashMap<>();
+    private static final Set<String> ANNOUNCED = Set.of("PUBLISH", "APPROVE", "APPLY", "APPLY_CITY",
+            "ASSIGN", "ASSIGN_CITY", "SUBMIT", "RETURN", "ACCEPT", "CANCEL");
     private ProjectWorkspaceService(){}
     public static boolean participant(Project project,ProjectManager.Actor actor){
         if(project.scope()==Project.Scope.CITY)return Objects.equals(project.city(),actor.city());
@@ -39,7 +42,12 @@ public final class ProjectWorkspaceService {
         }else{
             var project=r.project()==null?null:manager.get(r.project());if(project==null||!CommunityActions.visible(project,actor)){out.putString("Result","permission");reply(p,out);return;}
             boolean discuss=participant(project,actor),manage=manages(project,actor);var room=data.rooms.get(project.id());
-            if(r.action()==WorkspaceRequest.Action.PROJECT){try{String[] parts=r.text().split("\n",2);var action=ProjectManager.Action.valueOf(parts[0]);if(!Set.of(ProjectManager.Action.APPLY,ProjectManager.Action.APPLY_CITY,ProjectManager.Action.ASSIGN,ProjectManager.Action.ASSIGN_CITY,ProjectManager.Action.STAGE,ProjectManager.Action.SUBMIT,ProjectManager.Action.APPROVE,ProjectManager.Action.ACCEPT,ProjectManager.Action.RETURN).contains(action))result="permission";else result=manager.execute(actor,new ProjectManager.Command(r.request(),project.id(),r.revision(),action,r.target(),r.value(),r.flag(),parts.length>1?parts[1]:"",null));}catch(IllegalArgumentException e){result="invalid";}project=manager.get(project.id());discuss=participant(project,actor);manage=manages(project,actor);}
+            boolean canWatch = project.status() != Project.Status.DRAFT && !project.status().terminal();
+            if (r.action() == WorkspaceRequest.Action.WATCH) {
+                if (!canWatch) result = "permission";
+                else if (!data.watches.set(p.getUUID(), project.id(), project.revision(), r.flag())) result = "limit";
+                else data.setDirty();
+            } else if(r.action()==WorkspaceRequest.Action.PROJECT){try{String[] parts=r.text().split("\n",2);var action=ProjectManager.Action.valueOf(parts[0]);if(!Set.of(ProjectManager.Action.APPLY,ProjectManager.Action.APPLY_CITY,ProjectManager.Action.ASSIGN,ProjectManager.Action.ASSIGN_CITY,ProjectManager.Action.STAGE,ProjectManager.Action.SUBMIT,ProjectManager.Action.APPROVE,ProjectManager.Action.ACCEPT,ProjectManager.Action.RETURN).contains(action))result="permission";else result=manager.execute(actor,new ProjectManager.Command(r.request(),project.id(),r.revision(),action,r.target(),r.value(),r.flag(),parts.length>1?parts[1]:"",null));}catch(IllegalArgumentException e){result="invalid";}project=manager.get(project.id());discuss=participant(project,actor);manage=manages(project,actor);}
             else if(r.action()!=WorkspaceRequest.Action.VIEW){
                 if(!discuss||project.status().terminal())result="permission";
                 else {room=data.room(project.id());if(room.receipts.contains(r.request()))result="ok";
@@ -50,6 +58,8 @@ public final class ProjectWorkspaceService {
                 }
             }
             var conflicts=new ListTag();if(manage&&project.scope()==Project.Scope.SERVER)project.zone().plots().stream().map(cities::getClaimOwner).filter(Objects::nonNull).map(City::getName).distinct().sorted().forEach(name->conflicts.add(StringTag.valueOf(name)));out.put("Conflicts",conflicts);
+            out.putBoolean("CanWatch", project.status() != Project.Status.DRAFT && !project.status().terminal());
+            out.putBoolean("Watching", data.watches.contains(p.getUUID(), project.id()));
             out.putUUID("ProjectId",project.id());out.put("Project",ProjectCodec.write(project));out.putBoolean("CanDiscuss",discuss);out.putBoolean("CanManage",manage);out.putBoolean("CanApplyCity",own!=null&&actor.representsCity().test(own.getId(),p.getUUID()));out.putBoolean("CanFinance",actor.finance()&&project.status()==Project.Status.PENDING_FUNDING);out.putBoolean("CanReview",manage&&project.status()==Project.Status.REVIEW&&(project.executor()==null||!project.executor().representative().equals(p.getUUID())));out.putBoolean("Executor",project.executor()!=null&&project.executor().representative().equals(p.getUUID()));out.putString("Attention",CommunityActions.attention(project,actor));
             var names=new CompoundTag();names.putString(project.author().toString(),PlayerNames.name(s,project.author()));if(project.executor()!=null)names.putString(project.executor().representative().toString(),PlayerNames.name(s,project.executor().representative()));for(var a:project.applicants())names.putString(a.representative().toString(),PlayerNames.name(s,a.representative()));out.put("Names",names);
             var trace=manager.journal().trace(project.id());if(trace!=null){out.putLong("Created",trace.created);out.putLong("Completed",trace.completed);if(trace.acceptedBy!=null){out.putUUID("AcceptedBy",trace.acceptedBy);names.putString(trace.acceptedBy.toString(),PlayerNames.name(s,trace.acceptedBy));}var events=new ListTag();for(var e:trace.events){var t=new CompoundTag();t.putUUID("Id",e.id());t.putString("Action",e.action());t.putString("Actor",PlayerNames.name(s,e.actor()));t.putLong("Time",e.time());events.add(t);}out.put("Events",events);}
@@ -61,10 +71,74 @@ public final class ProjectWorkspaceService {
         out.putString("Result",result);reply(p,out);
     }
     private static void reply(ServerPlayer player,CompoundTag out){PacketDistributor.sendToPlayer(player,new WorkspaceState(out));}
-    @SubscribeEvent public static void logout(PlayerEvent.PlayerLoggedOutEvent e){if(e.getEntity() instanceof ServerPlayer p){var peers=PRESENCE.get(p.getServer());if(peers!=null)peers.remove(p.getUUID());}}
+    @SubscribeEvent public static void login(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) LOGIN.put(player, System.currentTimeMillis());
+    }
+    @SubscribeEvent public static void logout(PlayerEvent.PlayerLoggedOutEvent e){if(e.getEntity() instanceof ServerPlayer p){LOGIN.remove(p);var peers=PRESENCE.get(p.getServer());if(peers!=null)peers.remove(p.getUUID());}}
     @SubscribeEvent public static void stopped(ServerStoppedEvent e){PRESENCE.remove(e.getServer());POLL.remove(e.getServer());}
-    @SubscribeEvent public static void events(ServerTickEvent.Post e){var s=e.getServer();long now=net.minecraft.Util.getMillis();if(now<POLL.getOrDefault(s,0L))return;POLL.put(s,now+1000);var economy=EconomyManager.get(s.overworld());var manager=economy.projects();var cities=CityManager.get(s.overworld());for(var project:manager.all()){var trace=manager.journal().trace(project.id());if(trace==null||trace.events.isEmpty())continue;var event=trace.events.getLast();if(trace.announced>=event.revision())continue;if(Set.of("PUBLISH","APPROVE","APPLY","APPLY_CITY","ASSIGN","ASSIGN_CITY","SUBMIT","RETURN","ACCEPT","CANCEL").contains(event.action())){
-            var recipients=new HashSet<UUID>();recipients.add(project.author());if(project.executor()!=null)recipients.add(project.executor().representative());if(project.scope()==Project.Scope.CITY){var city=cities.getCity(project.city());if(city!=null)for(var member:city.getMembers())if(project.status()==Project.Status.PENDING_FUNDING?CityAuthority.finance(city,member.getPlayerId()):CityAuthority.review(city,member.getPlayerId()))recipients.add(member.getPlayerId());}
-            for(UUID owner:recipients)if(project.scope()==Project.Scope.SERVER||Objects.equals(cities.getMemberCity(owner)==null?null:cities.getMemberCity(owner).getId(),project.city()))CommunityInbox.get(s).addProject(owner,event.id(),project.id(),event.actor(),project.title());
-        }trace.announced=event.revision();economy.setDirty();}}
+    @SubscribeEvent public static void events(ServerTickEvent.Post tick) {
+        var server = tick.getServer();
+        long now = net.minecraft.Util.getMillis();
+        if (now < POLL.getOrDefault(server, 0L)) return;
+        POLL.put(server, now + 1000);
+        var economy = EconomyManager.get(server.overworld());
+        var manager = economy.projects();
+        var cities = CityManager.get(server.overworld());
+        var data = ProjectWorkspaceData.get(server);
+        for (var project : manager.all()) {
+            var trace = manager.journal().trace(project.id());
+            if (trace == null || trace.events.isEmpty() || trace.announced >= trace.events.getLast().revision()) continue;
+            for (var event : trace.events) {
+                if (event.revision() <= trace.announced) continue;
+                if (ANNOUNCED.contains(event.action())) announce(server, cities, data, project, event);
+                trace.announced = event.revision();
+            }
+            if (project.status().terminal()) {
+                data.watches.finish(project.id());
+                data.setDirty();
+            }
+            economy.setDirty();
+        }
+    }
+
+    static boolean liveNotice(ProjectJournal.Event event, long currentRevision, long connectedAt, long now) {
+        return event.revision() == currentRevision && event.time() > connectedAt
+                && event.time() <= now && now - event.time() <= 15_000;
+    }
+
+    private static void announce(MinecraftServer server, CityManager cities, ProjectWorkspaceData data,
+                                 Project project, ProjectJournal.Event event) {
+        var recipients = data.watches.recipients(project.id(), event.revision());
+        recipients.add(project.author());
+        if (project.executor() != null) recipients.add(project.executor().representative());
+        if (project.scope() == Project.Scope.CITY) {
+            var city = cities.getCity(project.city());
+            if (city != null) for (var member : city.getMembers()) {
+                var id = member.getPlayerId();
+                if (project.status() == Project.Status.PENDING_FUNDING ? CityAuthority.finance(city, id) : CityAuthority.review(city, id))
+                    recipients.add(id);
+            }
+        }
+        for (var owner : recipients) {
+            var city = cities.getMemberCity(owner);
+            if (project.scope() == Project.Scope.CITY && (city == null || !Objects.equals(city.getId(), project.city()))) {
+                if (data.watches.contains(owner, project.id())) {
+                    data.watches.set(owner, project.id(), 0, false);
+                    data.setDirty();
+                }
+                continue;
+            }
+            if (project.status() == Project.Status.DRAFT) continue;
+            boolean fresh = CommunityInbox.get(server).addProject(owner, event.id(), project.id(), event.actor(),
+                    project.title(), "project_" + event.action().toLowerCase(Locale.ROOT), event.time());
+            var player = server.getPlayerList().getPlayer(owner);
+            if (!fresh || player == null || owner.equals(event.actor()) || !liveNotice(event, project.revision(),
+                    LOGIN.getOrDefault(player, Long.MAX_VALUE), System.currentTimeMillis())) continue;
+            // The banner carries no project name, location or actor. Opening the journal checks visibility again.
+            var notice = new CompoundTag();
+            notice.putUUID("LiveProjectEvent", event.id());
+            notice.putBoolean("NeedsAttention", event.action().equals("RETURN"));
+            reply(player, notice);
+        }
+    }
 }

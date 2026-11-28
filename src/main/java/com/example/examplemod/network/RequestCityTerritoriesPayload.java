@@ -25,9 +25,10 @@ import net.minecraft.resources.ResourceLocation;
  * лимитами, что и при открытии, и игрок не может выбрать, какие города увидеть.
  */
 public record RequestCityTerritoriesPayload(
-        BlockPos pylonPos, BlockPos center, int range
+        BlockPos pylonPos, BlockPos center, int range, java.util.UUID viewId, java.util.UUID requestId
 ) implements CustomPacketPayload {
     public RequestCityTerritoriesPayload(BlockPos pylonPos){this(pylonPos,pylonPos,512);}
+    public RequestCityTerritoriesPayload(BlockPos pos,BlockPos center,int range){this(pos,center,range,RequestCityDirectoryPayload.NEW,RequestCityDirectoryPayload.NEW);}
     public RequestCityTerritoriesPayload {range=Math.clamp(range,128,32768);}
 
     public static final Type<RequestCityTerritoriesPayload> TYPE = new Type<>(
@@ -39,8 +40,8 @@ public record RequestCityTerritoriesPayload(
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RequestCityTerritoriesPayload> STREAM_CODEC =
             StreamCodec.of(
-                    (buffer, payload) -> {BlockPos.STREAM_CODEC.encode(buffer, payload.pylonPos());BlockPos.STREAM_CODEC.encode(buffer,payload.center());buffer.writeVarInt(payload.range());},
-                    buffer -> new RequestCityTerritoriesPayload(BlockPos.STREAM_CODEC.decode(buffer),BlockPos.STREAM_CODEC.decode(buffer),buffer.readVarInt())
+                    (buffer, payload) -> {BlockPos.STREAM_CODEC.encode(buffer, payload.pylonPos());BlockPos.STREAM_CODEC.encode(buffer,payload.center());buffer.writeVarInt(payload.range());buffer.writeUUID(payload.viewId());buffer.writeUUID(payload.requestId());},
+                    buffer -> new RequestCityTerritoriesPayload(BlockPos.STREAM_CODEC.decode(buffer),BlockPos.STREAM_CODEC.decode(buffer),buffer.readVarInt(),buffer.readUUID(),buffer.readUUID())
             );
 
     @Override

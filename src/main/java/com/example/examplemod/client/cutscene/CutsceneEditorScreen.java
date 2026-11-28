@@ -1,5 +1,7 @@
 package com.example.examplemod.client.cutscene;
 
+import com.example.examplemod.client.screen.AtlasFormStyle;
+
 import com.example.examplemod.cutscene.Cutscene;
 import com.example.examplemod.cutscene.CutsceneJson;
 import com.example.examplemod.cutscene.CutsceneNetwork;
@@ -580,7 +582,7 @@ public final class CutsceneEditorScreen extends Screen {
     }
 
     private EditBox input(String label, int x, int y, int width, String value) {
-        EditBox box = addRenderableWidget(new EditBox(font, x, y, width, BUTTON_HEIGHT, Component.literal(label)));
+        EditBox box = addRenderableWidget(AtlasFormStyle.field(font, x, y, width, BUTTON_HEIGHT, Component.literal(label)));
         box.setValue(value);
         return box;
     }

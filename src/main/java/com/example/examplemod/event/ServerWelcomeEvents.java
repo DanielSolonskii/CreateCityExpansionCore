@@ -52,6 +52,11 @@ public final class ServerWelcomeEvents {
 
         String name = com.example.examplemod.auth.PlayerNames.name(player);
 
+        if (firstJoin && !java.nio.file.Files.exists(player.server.getWorldPath(
+                net.minecraft.world.level.storage.LevelResource.PLAYER_DATA_DIR).resolve(player.getUUID() + ".dat"))) {
+            com.example.examplemod.city.CityGazette.get(player.server).newcomer(player.getUUID(), name, System.currentTimeMillis());
+        }
+
         var greeting = Component.translatable(
                 firstJoin ? "message.createcityexpansioncore.server.welcome"
                         : "message.createcityexpansioncore.server.welcome_back",

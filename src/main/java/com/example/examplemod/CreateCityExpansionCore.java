@@ -1,4 +1,5 @@
 package com.example.examplemod;
+import com.example.examplemod.city.CityGazette;
 import com.example.examplemod.city.City;
 import com.example.examplemod.city.CityInvite;
 import com.example.examplemod.city.CityManager;
@@ -88,6 +89,7 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -321,7 +323,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MinePowerPortBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0f)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_POWER_PORT)
                     )
             );
     public static final DeferredBlock<MineControllerBlock> MINE_CONTROLLER =
@@ -330,7 +332,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MineControllerBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_CONTROLLER)
                     )
             );
 
@@ -426,9 +428,8 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     "example_block",
                     BlockBehaviour.Properties
                             .of()
-                            .mapColor(
-                                    MapColor.STONE
-                            )
+                            .mapColor(MapColor.STONE)
+                            .sound(SoundType.STONE)
             );
 
     public static final DeferredItem<BlockItem>
@@ -460,6 +461,9 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
      * Пульт управления доступом: открывает один блок города для ПКМ
      * любого игрока. Выключатель — повторное использование закрывает блок.
      */
+    public static final DeferredItem<com.example.examplemod.passenger.RailwayBinder> RAILWAY_BINDER =
+            ITEMS.registerItem("railway_binder",com.example.examplemod.passenger.RailwayBinder::new,new Item.Properties().stacksTo(1));
+
     public static final DeferredItem<Item> ACCESS_CONTROL_REMOTE =
             ITEMS.registerItem(
                     "access_control_remote",
@@ -543,7 +547,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MineFrameBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_FRAME)
                     )
             );
     public static final DeferredBlock<DrillUnitBlock> DRILL_UNIT =
@@ -552,7 +556,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new DrillUnitBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(SoundType.ANVIL)
                     )
             );
     public static final DeferredBlock<TechnicalBlock> TECHNICAL_BLOCK =
@@ -561,7 +565,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new TechnicalBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_TECHNICAL_BLOCK)
                     )
             );
     public static final DeferredBlock<ControlBlock> CONTROL_BLOCK =
@@ -570,7 +574,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new ControlBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_CONTROL_BLOCK)
                     )
             );
 
@@ -592,7 +596,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                             .mapColor(MapColor.STONE)
                             .strength(2.0F)
                             .requiresCorrectToolForDrops()
-                            .sound(net.minecraft.world.level.block.SoundType.STONE)
+                            .sound(SoundType.STONE)
             );
     public static final DeferredItem<BlockItem> REINFORCED_CONCRETE_ITEM =
             ITEMS.registerSimpleBlockItem(
@@ -605,7 +609,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
                     () -> new MineGatewayBlock(
                             BlockBehaviour.Properties.of()
                                     .strength(3.0F)
-                                    .mapColor(MapColor.METAL)
+                                    .mapColor(MapColor.METAL).sound(ModSounds.PLACE_MINE_GATEWAY)
                     )
             );
 
@@ -627,7 +631,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
 
     public static final DeferredBlock<com.example.examplemod.machine.MachineDisplayBlock> TECHNICAL_SCREEN =
             BLOCKS.register("technical_screen", () -> new com.example.examplemod.machine.MachineDisplayBlock(
-                    BlockBehaviour.Properties.of().strength(3.0F).mapColor(MapColor.METAL)));
+                    BlockBehaviour.Properties.of().strength(3.0F).mapColor(MapColor.METAL).sound(ModSounds.PLACE_TECHNICAL_SCREEN)));
     public static final DeferredItem<Item> TECHNICAL_SCREEN_ITEM = ITEMS.registerItem("technical_screen",
             properties -> new BlockItem(TECHNICAL_SCREEN.get(), properties), new Item.Properties());
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.machine.MachineDisplayBlockEntity>> TECHNICAL_SCREEN_ENTITY =
@@ -636,7 +640,7 @@ public static PayloadHandler<CityInviteNotificationPayload> CITY_INVITE_NOTIFICA
 
     public static final DeferredBlock<com.example.examplemod.block.TransportRegistrationTerminalBlock> TRANSPORT_REGISTRATION_TERMINAL =
             BLOCKS.register("transport_registration_terminal", () -> new com.example.examplemod.block.TransportRegistrationTerminalBlock(
-                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL)));
+                    BlockBehaviour.Properties.of().strength(3.5F).mapColor(MapColor.METAL).sound(ModSounds.PLACE_TRANSPORT_REGISTRATION_TERMINAL)));
     public static final DeferredItem<BlockItem> TRANSPORT_REGISTRATION_TERMINAL_ITEM = ITEMS.registerSimpleBlockItem(
             "transport_registration_terminal", TRANSPORT_REGISTRATION_TERMINAL);
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.example.examplemod.block.TransportRegistrationTerminalBlockEntity>>
@@ -1003,7 +1007,7 @@ LOGGER.info(
     ) {
 
         PayloadRegistrar registrar =
-                event.registrar("3");
+                event.registrar("4");
         registrar.playToServer(com.example.examplemod.network.CommunityRequestPayload.TYPE,
                 com.example.examplemod.network.CommunityRequestPayload.STREAM_CODEC,
                 (p,c)->c.enqueueWork(()->{if(c.player() instanceof ServerPlayer player)com.example.examplemod.community.CommunityService.handle(player,p);}));
@@ -1012,7 +1016,10 @@ LOGGER.info(
                 (p,c)->c.enqueueWork(()->{com.example.examplemod.client.CommunityClient.accept(p);com.example.examplemod.client.screen.CommunityScreen.accept(p);}));
         registrar.playToClient(com.example.examplemod.network.CommunityNoticePayload.TYPE,
                 com.example.examplemod.network.CommunityNoticePayload.STREAM_CODEC,
-                (p,c)->c.enqueueWork(()->com.example.examplemod.client.screen.CommunityNoticeClient.accept(p)));
+                (p,c)->c.enqueueWork(()->{
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(c.connection()))
+                        com.example.examplemod.client.screen.CommunityNoticeClient.accept(p);
+                }));
         registrar.playToServer(com.example.examplemod.network.SocialRequestPayload.TYPE,
                 com.example.examplemod.network.SocialRequestPayload.STREAM_CODEC,
                 (payload,context)->context.enqueueWork(()->{
@@ -1085,13 +1092,35 @@ registrar.playToServer(com.example.examplemod.network.RequestCityDirectoryPayloa
                 }));
         registrar.playToClient(com.example.examplemod.network.MinimapDirectoryPayload.TYPE,
                 com.example.examplemod.network.MinimapDirectoryPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.map.MinimapClient.directory(payload.directory())));
+                (payload, context) -> context.enqueueWork(() -> { if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection())) com.example.examplemod.client.map.MinimapClient.directory(payload.directory()); }));
+        registrar.playToClient(com.example.examplemod.network.MapPrivateStatePayload.TYPE,
+                com.example.examplemod.network.MapPrivateStatePayload.STREAM_CODEC,
+                (payload,context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        com.example.examplemod.client.CityPublicDirectory.acceptPrivate(payload);
+                }));
+        registrar.playToClient(com.example.examplemod.network.TerrainInvalidatedPayload.TYPE,
+                com.example.examplemod.network.TerrainInvalidatedPayload.STREAM_CODEC,
+                (payload,context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        com.example.examplemod.client.map.CityMapPanel.invalidate(payload);
+                }));
+        registrar.playToServer(com.example.examplemod.network.CloseMapViewPayload.TYPE,
+                com.example.examplemod.network.CloseMapViewPayload.STREAM_CODEC,
+                (payload,context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player) com.example.examplemod.city.CityPublicAtlas.close(player,payload.viewId());
+                }));
         registrar.playToClient(com.example.examplemod.network.MapBorderPayload.TYPE,
                 com.example.examplemod.network.MapBorderPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.map.MapBorderLayer.accept(payload)));
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()) &&
+                            (com.example.examplemod.client.CityPublicDirectory.acceptsBorder(payload) ||
+                             com.example.examplemod.client.map.MinimapClient.acceptsBorder(payload)))
+                        com.example.examplemod.client.map.MapBorderLayer.accept(payload);
+                }));
         registrar.playToClient(com.example.examplemod.network.CityDirectoryPayload.TYPE,
                 com.example.examplemod.network.CityDirectoryPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.CityPublicDirectory.accept(payload)));
+                (payload, context) -> context.enqueueWork(() -> { if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection())) com.example.examplemod.client.CityPublicDirectory.accept(payload); }));
         registrar.playToClient(com.example.examplemod.network.CityIdentityResultPayload.TYPE,
                 com.example.examplemod.network.CityIdentityResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> com.example.examplemod.client.screen.CityIdentityEditorScreen.accept(payload)));
@@ -1112,8 +1141,7 @@ registrar.playToServer(
                 com.example.examplemod.network.CityRelationsStatePayload.TYPE,
                 com.example.examplemod.network.CityRelationsStatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    if (context.player().containerMenu instanceof CityPylonMenu menu) menu.applyRelationsState(payload);
-                    else CityWorldMapSession.INSTANCE.applyRelationsState(payload);
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()) && context.player().containerMenu instanceof CityPylonMenu menu) menu.applyRelationsState(payload);
                 })
         );
 
@@ -1170,10 +1198,8 @@ registrar.playToServer(
                 CityPylonStatePayload.TYPE,
                 CityPylonStatePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()) && context.player().containerMenu instanceof CityPylonMenu menu) {
                         menu.applyState(payload);
-                    } else {
-                        CityWorldMapSession.INSTANCE.applyState(payload);
                     }
                 })
         );
@@ -1182,13 +1208,8 @@ registrar.playToServer(
                 CityMapTilePayload.TYPE,
                 CityMapTilePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
-                    if (context.player().containerMenu instanceof CityPylonMenu menu) {
-                        com.example.examplemod.client.map.MinimapClient.tile(payload);
-                        menu.acceptMapTile(payload);
-                    } else {
-                        com.example.examplemod.client.map.MinimapClient.tile(payload);
-                        CityWorldMapSession.INSTANCE.acceptMapTile(payload);
-                    }
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        com.example.examplemod.client.map.CityMapPanel.acceptTerrain(payload);
                 })
         );
 
@@ -1415,6 +1436,8 @@ registrar.playToServer(
                          * пилона останутся тёмными до перезагрузки чанка.
                          */
                         if (city == null) { reply.accept("occupied"); return; }
+                        CityGazette.get(serverPlayer.server).publish(CityGazette.Kind.FOUNDED, city.getId(), playerId,
+                                com.example.examplemod.auth.PlayerNames.name(serverPlayer), city.getName(), System.currentTimeMillis());
                         reply.accept("created");
                         CityPylonBlock.refreshActive(
                                 pylonLevel,
@@ -1995,6 +2018,8 @@ registrar.playToServer(
                         );
 
                         cityManager.setDirty();
+                        CityGazette.get(player.server).publish(CityGazette.Kind.JOINED, city.getId(), player.getUUID(),
+                                com.example.examplemod.auth.PlayerNames.name(player), city.getName(), System.currentTimeMillis());
 
                         CityInviteDirectory.reportOutcome(
                                 player.server,
@@ -2106,7 +2131,10 @@ registrar.playToClient(
         registrar.playToClient(
                 CityMapPeersPayload.TYPE,
                 CityMapPeersPayload.STREAM_CODEC,
-                (payload, context) -> CITY_MAP_PEERS_HANDLER.handle(payload, context)
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (com.example.examplemod.client.CityPublicDirectory.currentConnection(context.connection()))
+                        CITY_MAP_PEERS_HANDLER.handle(payload, context);
+                })
         );
 
         /*
@@ -2166,16 +2194,9 @@ registrar.playToClient(
                 RequestCityWorldMapPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player) {
-                        com.example.examplemod.city.CityWorldMapHandlers.openForMember(player);
+                        com.example.examplemod.city.CityWorldMapHandlers.openForMember(player,payload);
                     }
                 })
-        );
-
-        registrar.playToClient(
-                com.example.examplemod.network.CityWorldMapDeniedPayload.TYPE,
-                com.example.examplemod.network.CityWorldMapDeniedPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(
-                        () -> com.example.examplemod.client.CityWorldMapSession.INSTANCE.deny())
         );
 
         registrar.playToClient(

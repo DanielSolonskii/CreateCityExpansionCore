@@ -8,7 +8,7 @@
 - Upper-right HUD minimap reuses CityMapPanel terrain, TerrainCache, TerrainTileStore and TerrainAtlas. No second tile engine, framebuffer or terrain-generation path. North remains up; player heading rotates. Movement smoothing is time based; teleports snap.
 - N opens local settings; both settings and hide/show shortcuts are remappable. Hide/show starts unbound. Options: enabled, size, zoom, brightness, top corner, cities, selected project. Settings survive restart in config/ccec-minimap.properties. Brightness dims the map; it does not make terrain transparent.
 - Selected project is the last project whose details were opened, held only for this connection and cleared on logout. Cities come from paginated public directory snapshots. No private profiles, wallets or message data are requested.
-- Minimap sleeps in screens, F1 and F3; releases panel textures into the shared pool. Directory lease refresh is once per five seconds; dedicated HUD response types prevent late minimap pages from resetting an opened full atlas. Background tile requests are at most two per 500ms, retaining existing timeout/retry and texture-upload budgets. Terrain cache remains scoped to server/player/dimension.
+- Updated in World Map Foundation. Temporary hiding suspends HUD work and retains the panel for 30 seconds. The HUD and atlas have separate directory views. The cache requires a confirmed terrain world ID. Current limits, compatibility and acceptance scenarios are in [World Map Foundation](WORLD_MAP_TERRAIN_CACHE_RU.md).
 
 ## Railway diagnosis and fix
 

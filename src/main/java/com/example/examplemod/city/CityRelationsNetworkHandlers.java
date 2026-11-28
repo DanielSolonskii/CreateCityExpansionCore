@@ -31,12 +31,16 @@ public final class CityRelationsNetworkHandlers {
     }
 
     private static void sendState(ServerPlayer player, CityManager manager, City city) {
+        PacketDistributor.sendToPlayer(player, state(player, manager, city));
+    }
+
+    static CityRelationsStatePayload state(ServerPlayer player, CityManager manager, City city) {
         var snapshots = manager.getCities().stream().filter(other -> !other.getId().equals(city.getId()))
                 .sorted(Comparator.comparing(City::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(other -> new CityRelationSnapshot(other.getId(), other.getName(), status(manager, city, other), manager.grantsTerritoryAccess(city.getId(),other.getId()),manager.grantsTerritoryAccess(other.getId(),city.getId())))
                 .toList();
-        PacketDistributor.sendToPlayer(player, new CityRelationsStatePayload(city.getPylonPos(), city.getId(),
-                city.isAdmin(player.getUUID()), snapshots));
+        return new CityRelationsStatePayload(city.getPylonPos(), city.getId(),
+                city.isAdmin(player.getUUID()), snapshots);
     }
 
     /**

@@ -11,10 +11,13 @@ public record RequestCityMapTilePayload(
         BlockPos pylonPos,
         ResourceLocation dimensionId,
         int tileX,
-        int tileZ, int level, long revision, java.util.UUID worldId
+        int tileZ, int level, long revision, java.util.UUID worldId, java.util.UUID viewId, java.util.UUID requestId
 ) implements CustomPacketPayload {
 
     public RequestCityMapTilePayload(BlockPos pos,ResourceLocation dimension,int x,int z){this(pos,dimension,x,z,0,0,new java.util.UUID(0,0));}
+    public RequestCityMapTilePayload(BlockPos pos, ResourceLocation dim, int x, int z, int level, long revision, java.util.UUID worldId) {
+        this(pos, dim, x, z, level, revision, worldId, RequestCityDirectoryPayload.NEW, RequestCityDirectoryPayload.NEW);
+    }
     public RequestCityMapTilePayload {if(level<0||level>7)throw new IllegalArgumentException("terrain level");}
     public static final Type<RequestCityMapTilePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(
@@ -30,12 +33,13 @@ public record RequestCityMapTilePayload(
                         buffer.writeResourceLocation(payload.dimensionId());
                         buffer.writeInt(payload.tileX());
                         buffer.writeInt(payload.tileZ());buffer.writeByte(payload.level());buffer.writeLong(payload.revision());buffer.writeUUID(payload.worldId());
+                        buffer.writeUUID(payload.viewId()); buffer.writeUUID(payload.requestId());
                     },
                     buffer -> new RequestCityMapTilePayload(
                             BlockPos.STREAM_CODEC.decode(buffer),
                             buffer.readResourceLocation(),
                             buffer.readInt(),
-                            buffer.readInt(),buffer.readUnsignedByte(),buffer.readLong(),buffer.readUUID()
+                            buffer.readInt(),buffer.readUnsignedByte(),buffer.readLong(),buffer.readUUID(),buffer.readUUID(),buffer.readUUID()
                     )
             );
 

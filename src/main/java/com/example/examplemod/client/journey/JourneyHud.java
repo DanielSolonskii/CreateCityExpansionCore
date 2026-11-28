@@ -1,6 +1,10 @@
 package com.example.examplemod.client.journey;
 
 import com.example.examplemod.journey.JourneyModel.Marker;
+import com.example.examplemod.client.CommunityFx;
+import com.example.examplemod.client.CommunityFeedbackSettings;
+import com.example.examplemod.client.map.MinimapClient;
+import com.example.examplemod.client.map.MinimapLayout;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -63,7 +67,13 @@ public final class JourneyHud {
             return;
         }
 
-        if (JourneyClient.paused) return;
+        if (JourneyClient.hasAtlasGoal()) {
+            drawCard(graphics, mc, marker, marker == null ? JourneyClient.tr("navigation_check") : Component.literal(marker.title),
+                    marker == null ? Component.empty() : bearing(mc, marker).append(JourneyClient.navigationDetail(marker)),
+                    JourneyClient.tr("hud_journal", JourneyClient.JOURNAL.getTranslatedKeyMessage()), now);
+            return;
+        }
+        if (JourneyClient.paused || JourneyClient.serverGuidanceHidden()) return;
         var quest = JourneyClient.quests.stream().filter(q -> q.getString("Id").equals(JourneyClient.activeQuest))
                 .findFirst().orElse(null);
         if (marker == null && quest == null) return;
@@ -79,6 +89,11 @@ public final class JourneyHud {
             int total = chain.get().getInt("Total");
             if (total > 0) footer = JourneyClient.tr("hud_step", Math.min(total, chain.get().getInt("Done") + 1), total,
                     JourneyClient.JOURNAL.getTranslatedKeyMessage());
+        }
+        if (marker != null && objective == null) {
+            hint = bearing(mc, marker).append(JourneyClient.navigationDetail(marker));
+        } else if (marker != null) {
+            footer = JourneyClient.navigationDetail(marker).copy().append(" · ").append(JourneyClient.JOURNAL.getTranslatedKeyMessage());
         }
         if (goalInFocus) {
             JourneyWaypointHint.draw(graphics, mc, focused, true, Component.literal(name), hint, footer, now);
@@ -138,11 +153,19 @@ public final class JourneyHud {
         return label;
     }
 
+    private static net.minecraft.network.chat.MutableComponent bearing(Minecraft mc, Marker marker) {
+        var point = JourneyClient.displayPath(marker).getFirst();
+        if (!point.dimension().equals(mc.player.level().dimension().location().toString())) return Component.empty();
+        double yaw = Math.toDegrees(Math.atan2(-(point.x() + .5 - mc.player.getX()), point.z() + .5 - mc.player.getZ()));
+        double angle = Mth.wrapDegrees(yaw - mc.player.getYRot());
+        return Component.literal(Math.abs(angle) < 25 ? "↑ " : angle > 0 ? "→ " : "← ");
+    }
+
     private static void drawCard(GuiGraphics g, Minecraft mc, Marker marker, Component title, Component hint,
                                  Component footer, long now) {
-        int width = Math.min(282, g.guiWidth() - 24);
-        int x = 12;
         int y = Math.max(18, g.guiHeight() - 108);
+        var bounds = besideMinimap(g, mc, 282, y, 50, false);
+        int x = bounds.x(), width = bounds.width();
         panel(g, x, y, width, 50);
         if (marker != null) mark(g, x + 19, y + 24, marker, true, false, now, JourneyClient.reduced(), false);
         int inset = marker == null ? 11 : 39;
@@ -152,14 +175,34 @@ public final class JourneyHud {
     }
 
     private static void toast(GuiGraphics g, Minecraft mc, Component title, long age) {
-        int width = Math.min(244, g.guiWidth() - 24);
-        int x = (g.guiWidth() - width) / 2;
+        CommunityFx.load();
+        if (CommunityFx.feedback.enabled(CommunityFeedbackSettings.Option.DO_NOT_DISTURB)
+                || CommunityFx.feedback.snoozed(System.currentTimeMillis())) return;
         int y = 26 - (int) ((1 - reveal(age, JourneyClient.reduced())) * 5);
+        var bounds = besideMinimap(g, mc, 244, y, 30, true);
+        int x = bounds.x(), width = bounds.width();
         panel(g, x, y, width, 30);
         for (var segment : glyph(7)) {
             line(g, x + 15 + segment[0], y + 15 + segment[1], x + 15 + segment[2], y + 15 + segment[3], BRASS);
         }
         drawLine(g, mc, title, x + 27, y + 11, width - 35, TEXT);
+    }
+
+    private record Bounds(int x, int width) {}
+
+    private static Bounds besideMinimap(GuiGraphics graphics, Minecraft client, int preferredWidth,
+                                        int top, int height, boolean centered) {
+        int left = 12, right = graphics.guiWidth() - 12;
+        var settings = MinimapClient.settings();
+        if (settings.enabled && !client.getDebugOverlay().showDebugScreen()) {
+            var view = MinimapLayout.view(graphics.guiWidth(), graphics.guiHeight(), settings.size, settings.corner);
+            if (view.size() >= 64 && top < view.frameY() + view.frameHeight() && top + height > view.frameY()) {
+                if (settings.corner == 0) right = Math.min(right, view.frameX() - 4);
+                else left = Math.max(left, view.frameX() + view.frameWidth() + 4);
+            }
+        }
+        int width = Math.min(preferredWidth, Math.max(1, right - left));
+        return new Bounds(centered ? left + (right - left - width) / 2 : left, width);
     }
 
     private static void drawLine(GuiGraphics g, Minecraft mc, Component text, int x, int y, int width, int color) {

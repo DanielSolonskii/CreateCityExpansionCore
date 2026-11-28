@@ -47,7 +47,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
          */
 
         this.addRenderableWidget(
-                Button.builder(
+                AtlasFormStyle.button(Button.builder(
                         Component.translatable("gui.createcityexpansioncore.common.cancel"),
                         button -> {
 
@@ -60,7 +60,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                         this.height / 2 + 55,
                         165,
                         26
-                ).build()
+                ))
         );
 
         /*
@@ -70,7 +70,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
          */
 
         this.addRenderableWidget(
-                Button.builder(
+                AtlasFormStyle.button(Button.builder(
                         Component.translatable("gui.createcityexpansioncore.city.remove_member.confirm"),
                         button -> {
 
@@ -99,7 +99,7 @@ public class CityRemoveMemberConfirmScreen extends ModalOverlayScreen {
                         this.height / 2 + 55,
                         165,
                         26
-                ).build()
+                ))
         );
     }
 

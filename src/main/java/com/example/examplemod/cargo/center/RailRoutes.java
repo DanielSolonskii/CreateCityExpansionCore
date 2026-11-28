@@ -90,7 +90,7 @@ public final class RailRoutes {
         var back=train.carriages.getLast().getTrailingPoint();if(train.doubleEnded&&train.hasBackwardConductor()&&back.edge!=null&&(corridor==null||corridor.backwards()))starts.add(new Start(back.node2,back.node1,back.edge.getLength()-back.position,true));
         return search(s,train.graph,starts,target.station(),train,payer,preference,carrierRate,corridor);
     }
-    private static Set<TrackType> types(Train train){if(train==null)return null;Set<TrackType> valid=null;
+    static Set<TrackType> types(Train train){if(train==null)return null;Set<TrackType> valid=null;
         for(var carriage:train.carriages)for(var bogey:new CarriageBogey[]{carriage.leadingBogey(),carriage.trailingBogey()}){if(bogey==null)continue;var found=((CarriageBogeyAccessor)bogey).ccec$getType().getValidPathfindingTypes(bogey.getStyle());if(valid==null)valid=new HashSet<>(found);else valid.retainAll(found);}return valid==null?Set.of():valid;
     }
     private static Optional<Path> search(MinecraftServer s,TrackGraph graph,List<Start> starts,GlobalStation target,Train train,OwnerRef payer,String preference,long carrierRate,Path corridor){

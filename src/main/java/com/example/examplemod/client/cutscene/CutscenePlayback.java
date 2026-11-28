@@ -2,6 +2,11 @@ package com.example.examplemod.client.cutscene;
 
 import com.example.examplemod.CreateCityExpansionCore;
 import com.example.examplemod.cutscene.Cutscene;
+import com.example.examplemod.cutscene.CutsceneChunkNetwork;
+import com.example.examplemod.cutscene.CutsceneJson;
+import com.example.examplemod.cutscene.CutscenePresentation;
+import java.util.UUID;
+import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.Util;
@@ -69,7 +74,10 @@ public final class CutscenePlayback {
             throw new IllegalStateException("Another screen prevented cutscene playback");
         }
         active = new Playback(scene, level, player, screen, startTick, completion);
-        active.playSounds(client, startTick);
+        active.beginChunks(client);
+        if (active.started) {
+            active.playSounds(client, startTick);
+        }
     }
 
     public static void stop() {
@@ -92,7 +100,23 @@ public final class CutscenePlayback {
             return;
         }
         double time = playback.time();
-        if (time >= playback.scene.durationTicks()) {
+        if (!playback.started) {
+            if (playback.chunksAccepted && playback.initialChunksLoaded()) {
+                playback.started = true;
+                playback.startTime = Util.getNanos();
+                playback.playSounds(client, playback.startTick);
+            } else if (Util.getNanos() - playback.createdAt > 60_000_000_000L) {
+                finish(true);
+                if (client.player != null) {
+                    client.player.displayClientMessage(Component.literal("Не удалось загрузить чанки кат-сцены."), false);
+                }
+            } else {
+                playback.sendProgress(playback.startTick);
+            }
+            return;
+        }
+        playback.sendProgress((int) time);
+        if (time >= CutscenePresentation.endTick(playback.scene)) {
             finish(true);
         } else {
             playback.playSounds(client, time);
@@ -128,6 +152,20 @@ public final class CutscenePlayback {
         return playback.cameraPose(playback.time());
     }
 
+    public static void capturePlayerView(Camera camera) {
+        Playback playback = current();
+        if (playback != null && camera == Minecraft.getInstance().gameRenderer.getMainCamera()) {
+            var position = camera.getPosition();
+            playback.playerView = new CameraPose(position.x, position.y, position.z, camera.getYRot(), camera.getXRot());
+        }
+    }
+
+    public static void acceptChunks(UUID session) {
+        if (active != null && active.session.equals(session)) {
+            active.chunksAccepted = true;
+        }
+    }
+
     private static @Nullable Playback current() {
         Playback playback = active;
         return playback != null && playback.isCurrent(Minecraft.getInstance()) ? playback : null;
@@ -154,6 +192,10 @@ public final class CutscenePlayback {
         Playback playback = active;
         if (playback != null) {
             active = null;
+            if (playback.streaming && Minecraft.getInstance().getConnection() != null
+                    && Minecraft.getInstance().level == playback.level) {
+                PacketDistributor.sendToServer(new CutsceneChunkNetwork.Request(playback.session, 2, 0, ""));
+            }
             playback.screen.restoreCursor();
             var soundManager = Minecraft.getInstance().getSoundManager();
             playback.sounds.forEach(soundManager::stop);
@@ -174,10 +216,18 @@ public final class CutscenePlayback {
         private final PlaybackScreen screen;
         private final int startTick;
         private final @Nullable Runnable onFinish;
-        private final long startTime = Util.getNanos();
+        private final UUID session = UUID.randomUUID();
+        private final long createdAt = Util.getNanos();
+        private long startTime = createdAt;
+        private long lastProgress;
+        private long chunksLoadedAt;
+        private boolean started = true;
+        private boolean streaming;
+        private boolean chunksAccepted;
         private final List<SoundInstance> sounds = new ArrayList<>();
         private int soundIndex;
         private int cameraIndex;
+        private CameraPose playerView;
 
         private Playback(Cutscene scene, ClientLevel level, LocalPlayer player, PlaybackScreen screen, int startTick,
                          @Nullable Runnable onFinish) {
@@ -187,6 +237,8 @@ public final class CutscenePlayback {
             this.screen = screen;
             this.startTick = startTick;
             this.onFinish = onFinish;
+            var eyes = player.getEyePosition();
+            playerView = new CameraPose(eyes.x, eyes.y, eyes.z, player.getYRot(), player.getXRot());
             while (soundIndex < scene.sounds().size() && scene.sounds().get(soundIndex).tick() < startTick) {
                 soundIndex++;
             }
@@ -197,7 +249,48 @@ public final class CutscenePlayback {
         }
 
         private double time() {
-            return startTick + (Util.getNanos() - startTime) / NANOS_PER_TICK;
+            return started ? startTick + (Util.getNanos() - startTime) / NANOS_PER_TICK : startTick;
+        }
+
+        private void beginChunks(Minecraft client) {
+            streaming = !scene.camera().isEmpty() && client.getConnection() != null
+                    && client.getConnection().hasChannel(CutsceneChunkNetwork.Request.TYPE)
+                    && client.getConnection().hasChannel(CutsceneChunkNetwork.Accept.TYPE);
+            if (streaming) {
+                started = false;
+                lastProgress = Util.getNanos();
+                PacketDistributor.sendToServer(new CutsceneChunkNetwork.Request(session, 0, startTick, CutsceneJson.encode(scene)));
+            }
+        }
+
+        private void sendProgress(int tick) {
+            long now = Util.getNanos();
+            if (streaming && now - lastProgress >= 100_000_000L) {
+                lastProgress = now;
+                PacketDistributor.sendToServer(new CutsceneChunkNetwork.Request(session, 1,
+                        Math.min(tick, CutscenePresentation.endTick(scene) - 1), ""));
+            }
+        }
+
+        private boolean initialChunksLoaded() {
+            var pose = cameraPose(startTick);
+            var center = new net.minecraft.world.level.ChunkPos((int) Math.floor(pose.x() / 16),
+                    (int) Math.floor(pose.z() / 16));
+            for (int x = -1; x <= 1; x++) {
+                for (int z = -1; z <= 1; z++) {
+                    if (!level.getChunkSource().hasChunk(center.x + x, center.z + z)) {
+                        chunksLoadedAt = 0;
+                        return false;
+                    }
+                }
+            }
+            if (chunksLoadedAt == 0) {
+                chunksLoadedAt = Util.getNanos();
+            }
+            // Let the moved section grid compile before revealing the first frame.
+            // Empty/void scenes still start even when there are no renderable sections.
+            return Minecraft.getInstance().levelRenderer.countRenderedSections() > 0
+                    || Util.getNanos() - chunksLoadedAt >= 3_000_000_000L;
         }
 
         private void playSounds(Minecraft client, double time) {
@@ -215,6 +308,14 @@ public final class CutscenePlayback {
 
         private CameraPose cameraPose(double time) {
             List<Cutscene.CameraKeyframe> frames = scene.camera();
+            var last = frames.getLast();
+            if (time >= last.tick()) {
+                double progress = CutscenePresentation.returnProgress(scene, time);
+                return new CameraPose(Mth.lerp(progress, last.x(), playerView.x()),
+                        Mth.lerp(progress, last.y(), playerView.y()), Mth.lerp(progress, last.z(), playerView.z()),
+                        last.yaw() + (float) progress * Mth.wrapDegrees(playerView.yaw() - last.yaw()),
+                        Mth.lerp((float) progress, last.pitch(), playerView.pitch()));
+            }
             while (cameraIndex + 1 < frames.size() && frames.get(cameraIndex + 1).tick() <= time) {
                 cameraIndex++;
             }
@@ -268,7 +369,9 @@ public final class CutscenePlayback {
         @Override
         public void onClose() {
             if (active != null && active.screen == this) {
-                stop();
+                if (!active.started || CutscenePresentation.canSkip(active.time() - active.startTick)) {
+                    stop();
+                }
             } else {
                 super.onClose();
             }
@@ -300,7 +403,17 @@ public final class CutscenePlayback {
                 return;
             }
             double time = playback.time();
-            int bottom = height - 28;
+            if (!playback.started) {
+                graphics.fill(0, 0, width, height, 0xFF121822);
+                graphics.drawCenteredString(font, Component.literal("Загрузка чанков кат-сцены…"),
+                        width / 2, height / 2, 0xFFF2F5F8);
+                graphics.drawCenteredString(font, SKIP, width / 2, height / 2 + 20, 0xFFACBACB);
+                return;
+            }
+            int barHeight = (int) Math.round(height * 0.12 * CutscenePresentation.barsAmount(playback.scene, time));
+            graphics.fill(0, 0, width, barHeight, 0xFF000000);
+            graphics.fill(0, height - barHeight, width, height, 0xFF000000);
+            int bottom = height - Math.max(28, barHeight + 10);
             int lineHeight = font.lineHeight + 3;
             int maxWidth = Math.max(1, Math.min(420, width - 40));
             List<Cutscene.TextCue> cues = playback.scene.texts();
@@ -327,9 +440,16 @@ public final class CutscenePlayback {
                 }
                 bottom = top - 6;
             }
-            int hintLeft = width - font.width(SKIP) - 12;
+            int fade = (int) Math.round(255 * CutscenePresentation.fadeAlpha(playback.scene, time));
+            if (fade > 0) {
+                graphics.fill(0, 0, width, height, fade << 24);
+            }
+            double elapsed = time - playback.startTick;
+            Component hint = CutscenePresentation.canSkip(elapsed) ? SKIP : Component.literal(
+                    "Пропуск через " + (int) Math.ceil((CutscenePresentation.SKIP_LOCK_TICKS - elapsed) / 20) + " с");
+            int hintLeft = width - font.width(hint) - 12;
             graphics.fill(hintLeft - 5, height - 21, width - 7, height - 6, 0x88000000);
-            graphics.drawString(font, SKIP, hintLeft, height - 18, 0xFFE3E9EF, false);
+            graphics.drawString(font, hint, hintLeft, height - 18, 0xFFE3E9EF, false);
         }
     }
 }

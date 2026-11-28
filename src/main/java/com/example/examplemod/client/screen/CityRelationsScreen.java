@@ -33,12 +33,12 @@ public final class CityRelationsScreen extends CityPylonPageScreen {
     }
 
     @Override protected void init() {
-        search = new EditBox(font, width / 2 - 150, 42, 220, 20,
+        search = AtlasFormStyle.field(font, width / 2 - 150, 42, 220, 20,
                 Component.translatable("gui.createcityexpansioncore.relations.search"));
         search.setHint(Component.translatable("gui.createcityexpansioncore.relations.search"));
         search.setResponder(ignored -> scroll = 0); addRenderableWidget(search);
-        addRenderableWidget(Button.builder(Component.translatable("gui.createcityexpansioncore.common.back"),
-                ignored -> onClose()).bounds(width / 2 + 80, 42, 70, 20).build());
+        addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.translatable("gui.createcityexpansioncore.common.back"),
+                ignored -> onClose()).bounds(width / 2 + 80, 42, 70, 20)));
         request(CityRelationsCommandPayload.Action.REQUEST_STATE, null);
     }
 

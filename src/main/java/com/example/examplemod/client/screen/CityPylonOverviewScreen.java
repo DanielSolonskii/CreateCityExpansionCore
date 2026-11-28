@@ -18,6 +18,7 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
             "createcityexpansioncore", "textures/gui/community/center_lock.png");
     private static final int BLUE = 0xFF84C3CC;
     private static final int COPPER = 0xFFBC8E69;
+    private static final int SHORTCUT_HEIGHT = 142;
     private static final String[] TASKS = {"resources", "build", "expand"};
 
     private final CityPylonScreen root;
@@ -38,13 +39,24 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
     }
 
     private WorldMapUiLayout.Rect tile(String key, int column, boolean lower) {
-        int usable = width - 2 * GAP;
-        int columnWidth = lower ? usable * 36 / 100 : usable / 3;
-        int topHeight = (height - GAP) * 43 / 100;
-        int x = column * (columnWidth + GAP);
-        int w = column < 2 ? columnWidth : width - x;
-        return CityPylonWorkspace.pageControl(this, "center." + key, x, lower ? topHeight + GAP : 0,
-                w, lower ? height - topHeight - GAP : topHeight, WorldMapUiLayout.Rect::new);
+        var bounds = overviewTile(width, height, column, lower);
+        return CityPylonWorkspace.pageControl(this, "center." + key, bounds.x(), bounds.y(),
+                bounds.width(), bounds.height(), WorldMapUiLayout.Rect::new);
+    }
+
+    static WorldMapUiLayout.Rect overviewTile(int width, int height, int column, boolean lower) {
+        int columnWidth = (width - 2 * GAP) / 3;
+        int cardHeight = (height - GAP) / 2;
+        int topHeight = column == 2 ? Math.min(SHORTCUT_HEIGHT, cardHeight) : cardHeight;
+        int y = lower ? topHeight + GAP : 0;
+        int tileHeight = lower && column == 2 ? cardHeight * 2 + GAP - y
+                : lower ? cardHeight : topHeight;
+        int left = (width - 3 * columnWidth - 2 * GAP) / 2;
+        return new WorldMapUiLayout.Rect(left + column * (columnWidth + GAP), y, columnWidth, tileHeight);
+    }
+
+    private int shortcutBottom(WorldMapUiLayout.Rect rect) {
+        return rect.y() + Math.min(rect.height(), SHORTCUT_HEIGHT);
     }
 
     @Override
@@ -70,12 +82,12 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
 
     private WorldMapUiLayout.Rect shortcutHeader(WorldMapUiLayout.Rect rect) {
         return new WorldMapUiLayout.Rect(rect.x()+8,rect.y()+8,Math.max(1,rect.width()-16),
-                Math.max(1,rect.height()-79));
+                Math.max(1,shortcutBottom(rect)-rect.y()-79));
     }
 
     private WorldMapUiLayout.Rect quick(WorldMapUiLayout.Rect tile, String key, int fromBottom) {
         return CityPylonWorkspace.pageControl(this,"center.quick."+key,tile.x()+9,
-                tile.bottom()-31-fromBottom*27,Math.max(1,tile.width()-18),23,WorldMapUiLayout.Rect::new);
+                shortcutBottom(tile)-31-fromBottom*27,Math.max(1,tile.width()-18),23,WorldMapUiLayout.Rect::new);
     }
 
     private void quickButton(GuiGraphics g, WorldMapUiLayout.Rect bounds, Component label, SocialHubIcons.Icon icon,
@@ -89,7 +101,7 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
         Component capacity = Component.literal(count + " / " + limit);
         int left = tile.x()+12;
         int right = tile.right()-12;
-        int y = tile.bottom()-59;
+        int y = shortcutBottom(tile)-59;
         int valueWidth = font.width(capacity);
         line(g,tr("project_capacity"),left,y,right-left-valueWidth-6,MUTED);
         g.drawString(font,capacity,right-valueWidth,y,COPPER,false);
@@ -169,13 +181,17 @@ public final class CityPylonOverviewScreen extends CityPylonPageScreen {
             line(g,tr("task."+task),x+17,y+6,width-20,0xFF718083);
             y += 25;
         }
-        g.fill(x,rect.y()+34,x+width,y-3,0x70151D21);
+        int lockHeight = 24;
+        int lockY = Math.min(y, rect.bottom() - lockHeight - 8);
+        g.fill(x, rect.y()+34, x+width, rect.bottom()-8, 0x70151D21);
         Component status = tr("in_progress");
-        int labelWidth = Math.min(font.width(status),Math.max(1,width-28));
-        int start = x+(width-labelWidth-20)/2;
-        int middle = rect.y()+60;
-        g.blit(LOCK,start,middle,0,0,16,16,16,16);
-        line(g,status,start+20,middle+4,labelWidth,BRASS_TEXT);
+        int labelWidth = Math.min(font.width(status), Math.max(1, width-34));
+        int badgeWidth = labelWidth+32;
+        int badgeX = x+(width-badgeWidth)/2;
+        rounded(g,badgeX,lockY,badgeWidth,lockHeight,4,BRASS);
+        rounded(g,badgeX+1,lockY+1,badgeWidth-2,lockHeight-2,3,DEEP);
+        g.blit(LOCK,badgeX+6,lockY+4,0,0,16,16,16,16);
+        line(g,status,badgeX+24,lockY+8,labelWidth,BRASS_TEXT);
     }
 
     private void drawMinimap(GuiGraphics g, WorldMapUiLayout.Rect rect, int mx, int my) {

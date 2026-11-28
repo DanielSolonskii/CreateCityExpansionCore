@@ -44,11 +44,11 @@ public final class PanelPainterScreen extends Screen {
     protected void init() {
         for (var color : DyeColor.values()) {
             var name = PanelPainterItem.colorName(color);
-            addRenderableWidget(Button.builder(Component.empty(), button -> {
+            addRenderableWidget(AtlasFormStyle.button(Button.builder(Component.empty(), button -> {
                 PacketDistributor.sendToServer(new PanelPainterItem.SelectColor(hand, color.getId()));
                 onClose();
             }).bounds(x(color), y(color), 22, 22).tooltip(Tooltip.create(name))
-                    .createNarration(ignored -> name.copy()).build());
+                    .createNarration(ignored -> name.copy())));
         }
     }
 

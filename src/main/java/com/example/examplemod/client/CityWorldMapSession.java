@@ -150,18 +150,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
      * чужого города переписал бы карту.
      */
     private boolean accepts(BlockPos pos) {
-        if (pos == null) {
-            return false;
-        }
-        if (this.pylonPos == null) {
-            if (!this.awaitingAnchor) {
-                return false;
-            }
-            this.pylonPos = pos;
-            this.awaitingAnchor = false;
-            return true;
-        }
-        return pos.equals(this.pylonPos);
+        return pos != null && pos.equals(pylonPos);
     }
 
     @Override
@@ -240,6 +229,7 @@ public final class CityWorldMapSession implements WorldMapDataSource {
         if (!accepts(payload.pylonPos())) {
             return;
         }
+        if (mapTiles.size() == 64) mapTiles.removeFirst();
         this.mapTiles.add(payload);
     }
 
