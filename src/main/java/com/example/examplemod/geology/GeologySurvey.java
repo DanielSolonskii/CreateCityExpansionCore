@@ -20,7 +20,7 @@ import java.util.Optional;
  *  INSIDE — игрок внутри месторождения. Прибор показывает
  *  ресурс, локальный production potential и класс размера.
  *  Максимум находится перемещением
- *  и сравнением local potential, а не по стрелке к ядру.
+ *  и по направлению роста локального потенциала.
  *
  * Координаты не передаются в сеть ни в одном из режимов.
  */
@@ -188,13 +188,25 @@ public record GeologySurvey(
             int remainingUses
     ) {
         double local = deposit.localPotentialPerHour(origin.getX(), origin.getZ());
+        int direction = -1;
+        double best = local + 1e-6;
+        for (int i = 0; i < DIRECTION_VECTORS.length / 2; i++) {
+            int dx = DIRECTION_VECTORS[i * 2];
+            int dz = DIRECTION_VECTORS[i * 2 + 1];
+            double scale = 4.0 / Math.hypot(dx, dz);
+            double potential = deposit.localPotentialPerHour(origin.getX() + dx * scale, origin.getZ() + dz * scale);
+            if (potential > best) {
+                best = potential;
+                direction = i;
+            }
+        }
         int roundedLocal = (int) (Math.round(local / 100.0) * 100.0);
         return new GeologySurvey(
                 Mode.INSIDE,
                 origin,
                 BlockPos.containing(deposit.getCenterX(), origin.getY(), deposit.getCenterZ()),
                 deposit.getResourceId(),
-                -1,
+                direction,
                 0,
                 0,
                 Math.max(0, roundedLocal),
