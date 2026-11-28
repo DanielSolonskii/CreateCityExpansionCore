@@ -1,4 +1,6 @@
 {
+  "gui.createcityexpansioncore.world_map.mode.geology": "Deposits",
+  "gui.createcityexpansioncore.world_map.legend.geology_empty": "No wide-scan data",
   "gui.createcityexpansioncore.blueprint.jade.projection": "Projection",
   "gui.createcityexpansioncore.blueprint.jade.required": "Required: %s",
   "gui.createcityexpansioncore.blueprint.jade.installed": "Installed: %s",

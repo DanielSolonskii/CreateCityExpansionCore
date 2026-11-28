@@ -1,4 +1,6 @@
 {
+  "gui.createcityexpansioncore.world_map.mode.geology": "Залежи",
+  "gui.createcityexpansioncore.world_map.legend.geology_empty": "Нет данных широкого скана",
   "gui.createcityexpansioncore.blueprint.jade.projection": "Проекция",
   "gui.createcityexpansioncore.blueprint.jade.required": "Требуется: %s",
   "gui.createcityexpansioncore.blueprint.jade.installed": "Установлено: %s",
