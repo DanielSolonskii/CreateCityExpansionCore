@@ -1,4 +1,6 @@
 {
+  "gui.createcityexpansioncore.world_map.mode.geology": "Deposits",
+  "gui.createcityexpansioncore.world_map.legend.geology_empty": "No wide-scan data",
   "gui.createcityexpansioncore.passenger_editor.all_lines": "All lines",
   "gui.createcityexpansioncore.passenger_editor.settings": "Line settings",
   "gui.createcityexpansioncore.passenger_editor.service": "Train service",

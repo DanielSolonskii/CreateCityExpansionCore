@@ -33,6 +33,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import com.example.examplemod.client.map.GeologyWideScanOverlay;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.lwjgl.glfw.GLFW;
@@ -236,6 +237,7 @@ public final class PolishedWorldMapScreen extends Screen {
     private int problemOffset;
     private int cardScroll, cardMaxScroll;
     private int guideScroll, guideMaxScroll;
+    private final java.util.Set<ResourceLocation> hiddenResources = new java.util.HashSet<>();
     private int layerScroll,legendScroll,mouseXNow,mouseYNow;
     /**
      * The logistics center owns its map and always needs the rail layer, but that must not rewrite
@@ -757,7 +759,10 @@ if (this.readOnly && privateAccessEpoch != com.example.examplemod.client.CityPub
         boolean overlaysInteractive = mode==Mode.CITIES && !modal && !layersOpen && !searchOpen && !projectWorkspace.open();
         ProjectWorkspaceClient.render(graphics,map,data.getDimensionId(),viewport,mapMouseX,mapMouseY,overlaysInteractive);
         com.example.examplemod.client.logistics.LogisticsMapOverlay.render(graphics,map,data.getDimensionId(),viewport.x(),viewport.y(),viewport.width(),viewport.height(),mapMouseX,mapMouseY,overlaysInteractive);
-        com.example.examplemod.client.map.GeologyWideScanOverlay.render(graphics,map,data.getDimensionId(),viewport.x(),viewport.y(),viewport.width(),viewport.height(),mapMouseX,mapMouseY,overlaysInteractive);
+        if (mode == Mode.GEOLOGY && !modal && !layersOpen && !searchOpen) {
+            GeologyWideScanOverlay.render(graphics, map, data.getDimensionId(), viewport.x(), viewport.y(),
+                    viewport.width(), viewport.height(), mapMouseX, mapMouseY, hiddenResources);
+        }
         if (surfaceAlpha[0]>0) reserveCaptionSpace(layersPopoverBounds());
         if (surfaceAlpha[1]>0) reserveCaptionSpace(WorldMapUiLayout.searchPopover(
                 width,modeLabelWidths,globalLabelWidths,visibleSearchResults().size(),228));
@@ -865,7 +870,7 @@ if (this.readOnly && privateAccessEpoch != com.example.examplemod.client.CityPub
             boolean hover = enabled && bounds.contains(mouseX, mouseY);
             paintControl(graphics,bounds,ControlGroup.MODE,index,hover && mainControls(),enabled,selected,false,false,false);
 
-            MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY; case ENERGY -> AtlasGlyph.ENERGY; }, bounds.x() + MICRO, bounds.y() + (bounds.height()-AtlasGlyph.SIZE)/2, !enabled ? MUTED : selected ? ACCENT : TEXT);
+            MapMarkerRenderer.drawGlyph(graphics, switch (value) { case CITIES -> AtlasGlyph.CITY; case ENERGY -> AtlasGlyph.ENERGY; case GEOLOGY -> AtlasGlyph.MINE; }, bounds.x() + MICRO, bounds.y() + (bounds.height()-AtlasGlyph.SIZE)/2, !enabled ? MUTED : selected ? ACCENT : TEXT);
             if (WorldMapUiLayout.modeTabsLabelled(this.width)) {
                 int labelColour = !enabled ? MUTED : selected ? ACCENT : TEXT;
                 graphics.drawString(this.font, value.label(), bounds.x() + MICRO + 16 + MICRO, bounds.y() + (bounds.height()-8)/2,
@@ -957,7 +962,7 @@ if (this.readOnly && privateAccessEpoch != com.example.examplemod.client.CityPub
             case CITIES -> List.of(CityMapPanel.Overlay.CITIES, CityMapPanel.Overlay.TERRITORIES,
                     CityMapPanel.Overlay.TRACKS, CityMapPanel.Overlay.RELATIONS, CityMapPanel.Overlay.PROJECTS);
 
-case ENERGY -> List.of();
+case ENERGY, GEOLOGY -> List.of();
         };
     }
 
@@ -1166,7 +1171,7 @@ private int layersRowCount() {
             List<CityMapPanel.Overlay> metrics=switch(this.mode) {
                 case CITIES->List.of(CityMapPanel.Overlay.CITIES,CityMapPanel.Overlay.TERRITORIES,CityMapPanel.Overlay.PROJECTS);
 
-case ENERGY->List.of();
+case ENERGY, GEOLOGY -> List.of();
             };
             g.enableScissor(panel.x()+1,bodyTop,panel.right()-1,panel.bottom()-1);
             for(var metric:metrics) {
@@ -1783,7 +1788,13 @@ case ENERGY->List.of();
         if (legend!=null && legend.contains(mouseX,mouseY)) {
             var rows=legendRows();
             for (int i=0;i<rows.size();i++) {
-                if (rows.get(i).key().equals("alliance") && legendRowHit(legend,i).contains(mouseX,mouseY)) {
+                if (!legendRowHit(legend,i).contains(mouseX,mouseY)) continue;
+                var resource = rows.get(i).resource();
+                if (resource != null) {
+                    if (!hiddenResources.remove(resource)) hiddenResources.add(resource);
+                    break;
+                }
+                if (rows.get(i).key().equals("alliance")) {
                     com.example.examplemod.client.AllianceClient.clearFocus();
                 }
             }
@@ -2228,6 +2239,7 @@ private boolean handleModalClick(double mouseX, double mouseY) {
      */
     private void applyMode(Mode mode) {
         if (this.map != null && this.preferences != null) rememberOverlays();
+        if (this.mode != mode) this.legendScroll = 0;
         this.mode = mode;
         /*
          * Панели может не быть ещё или не быть вовсе.
@@ -2247,10 +2259,10 @@ private boolean handleModalClick(double mouseX, double mouseY) {
         switch (mode) {
             case CITIES -> setOverlays(true,true);
 
-case ENERGY -> setOverlays(false,false);
+case ENERGY, GEOLOGY -> setOverlays(false,false);
         }
         this.map.setOverlay(CityMapPanel.Overlay.RELATIONS, mode == Mode.CITIES);
-        if (this.preferences != null && this.preferences.overlays[mode==Mode.CITIES?0:3] >= 0) {
+        if (mode != Mode.GEOLOGY && this.preferences != null && this.preferences.overlays[mode==Mode.CITIES?0:3] >= 0) {
             int mask = this.preferences.overlays[mode==Mode.CITIES?0:3];
             for (var layer : CityMapPanel.Overlay.values()) this.map.setOverlay(layer, (mask & (1 << layer.preferenceBit())) != 0);
         }
@@ -2383,6 +2395,7 @@ case ENERGY -> setOverlays(false,false);
         }
     }
     private void rememberOverlays() {
+        if (this.mode == Mode.GEOLOGY) return;
         int mask = 0; for (var layer : CityMapPanel.Overlay.values()) if (this.map.isOverlayEnabled(layer)) mask |= 1 << layer.preferenceBit();
         if (this.sessionForcedTracks) mask &= ~(1 << CityMapPanel.Overlay.TRACKS.preferenceBit());
         this.preferences.overlays[this.mode==Mode.CITIES?0:3] = mask;
@@ -2807,8 +2820,17 @@ case ENERGY -> setOverlays(false,false);
         }
     }
 
-    private record Legend(String key,int color,AtlasGlyph glyph) {}
+    private record Legend(String key, int color, AtlasGlyph glyph, ResourceLocation resource) {
+        Legend(String key, int color, AtlasGlyph glyph) { this(key, color, glyph, null); }
+    }
     private List<Legend> legendRows() {
+        if (this.mode == Mode.GEOLOGY) {
+            var resources = GeologyWideScanOverlay.resources(this.data.getDimensionId());
+            if (resources.isEmpty()) return List.of(new Legend("geology_empty", MapPalette.TEXT_FAINT, null));
+            return resources.stream()
+                    .map(id -> new Legend(id.getPath(), GeologyWideScanOverlay.resourceColor(id), null, id))
+                    .toList();
+        }
 
 if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEXT_FAINT,AtlasGlyph.ENERGY));
         return List.of(new Legend("own_city",MapPalette.OWN,AtlasGlyph.CITY),
@@ -2818,9 +2840,11 @@ if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEX
             new Legend("industry",MapPalette.OWN,AtlasGlyph.MINE),
             new Legend("partner",0xB365D8AF,null),
             new Legend("trusted",0xA06EAED0,null),
-            new Legend("pending",0x906F7596,null));
+            new Legend("pending",0x906F7596,null),
+            new Legend("social_friend",0xFF78D7C1,null), new Legend("social_project",0xFFE4B65B,null));
     }
     private boolean legendEnabled(Legend entry){
+        if (entry.resource() != null) return !hiddenResources.contains(entry.resource());
         if(entry.key().startsWith("social_"))return true;
         var layer=switch(entry.key()){
             case "own_city","other_city","alliance"->CityMapPanel.Overlay.CITIES;
@@ -2830,7 +2854,7 @@ if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEX
         };return this.mode.available()&&this.map.isOverlayEnabled(layer);
     }
     private void renderModeLegend(GuiGraphics g) {
-        var panel=workspace.legend();var rows=new java.util.ArrayList<>(legendRows());rows.add(new Legend("social_friend",0xFF78D7C1,null));
+        var panel = workspace.legend(); var rows = legendRows();
         int full=WorldMapUiLayout.legendHeader(panel)+rows.size()*WorldMapUiLayout.LEGEND_ROW;
         this.legendScroll=Math.min(this.legendScroll,Math.max(0,full-panel.height()));
         plate(g,panel.x(),panel.y(),panel.width(),panel.height());
@@ -2847,7 +2871,10 @@ if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEX
                 case "pending" -> com.example.examplemod.network.CityRelationSnapshot.Status.TRUSTS_US;
                 default -> com.example.examplemod.network.CityRelationSnapshot.Status.NONE;
             };
-            if (relation != com.example.examplemod.network.CityRelationSnapshot.Status.NONE) {
+            if (entry.resource() != null) {
+                g.fill(r.x()+1,r.y()+3,r.x()+16,r.y()+15,enabled ? entry.color() : WorldMapChrome.INSET);
+                g.renderOutline(r.x()+1,r.y()+3,15,12,enabled ? MUTED : MapPalette.TEXT_FAINT);
+            } else if (relation != com.example.examplemod.network.CityRelationSnapshot.Status.NONE) {
                 com.example.examplemod.client.map.CityRelationBadge.draw(g,r.x()+8,r.y()+8,relation,enabled);
             } else if(entry.glyph()!=null) {
                 MapMarkerRenderer.drawGlyph(g,entry.glyph(),r.x(),r.y(),enabled?TEXT:MapPalette.TEXT_FAINT);
@@ -2860,7 +2887,9 @@ if(this.mode==Mode.ENERGY)return List.of(new Legend("energy_soon",MapPalette.TEX
 else if(entry.key().equals("territory")){g.fill(r.x(),r.y()+3,r.x()+16,r.y()+14,0x1ED3A363);g.renderOutline(r.x(),r.y()+3,16,11,entry.color());}
 
 else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
-            Component label=Component.translatable("gui.createcityexpansioncore.world_map.legend."+entry.key());
+            Component label = entry.resource() == null
+                    ? Component.translatable("gui.createcityexpansioncore.world_map.legend." + entry.key())
+                    : Component.translatableWithFallback("resource.createcityexpansioncore." + entry.key(), entry.key());
             g.drawString(this.font,WorldMapChrome.fit(this.font,label,r.width()-24),r.x()+24,r.y()+5,enabled?TEXT:MapPalette.TEXT_FAINT,false);
             Component tooltip=enabled?label:label.copy().append(" · ").append(Component.translatable("gui.createcityexpansioncore.world_map.polish.layer_hidden"));
             if(entry.key().equals("alliance"))tooltip=AllianceScreen.tr("map_legend_hint");
@@ -2882,7 +2911,8 @@ else g.fill(r.x(),r.y()+8,r.x()+17,r.y()+9,entry.color());
         CITIES("minecraft:compass", "gui.createcityexpansioncore.world_map.mode.cities", CityMapPanel.Focus.WORLD, true),
         // The shipment seal, not an emerald: emerald reads as the vanilla villager currency, and a
 
-        ENERGY("minecraft:redstone", "gui.createcityexpansioncore.world_map.mode.energy", CityMapPanel.Focus.ENERGY, false);
+        ENERGY("minecraft:redstone", "gui.createcityexpansioncore.world_map.mode.energy", CityMapPanel.Focus.ENERGY, false),
+        GEOLOGY("minecraft:raw_iron", "gui.createcityexpansioncore.world_map.mode.geology", CityMapPanel.Focus.WORLD, true);
 
         private final ItemStack icon;
         private final String labelKey;

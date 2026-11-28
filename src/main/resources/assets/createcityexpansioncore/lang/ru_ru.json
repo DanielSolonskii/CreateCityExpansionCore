@@ -1,4 +1,6 @@
 {
+  "gui.createcityexpansioncore.world_map.mode.geology": "Залежи",
+  "gui.createcityexpansioncore.world_map.legend.geology_empty": "Нет данных широкого скана",
   "gui.createcityexpansioncore.passenger_editor.all_lines": "Все линии",
   "gui.createcityexpansioncore.passenger_editor.settings": "Настройки линии",
   "gui.createcityexpansioncore.passenger_editor.service": "Управление рейсом",

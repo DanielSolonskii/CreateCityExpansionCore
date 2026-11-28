@@ -6,7 +6,6 @@ import com.example.examplemod.network.GeologyWideScanPayload.Contour;
 
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -65,8 +64,6 @@ public final class GeologyWideScanOverlay {
     /** Ресурс вне палитры (например, цинк) — нейтральный слой. */
     private static final int OTHER_FILL = 0x4AD1A85A;
 
-    private static final int MUTED = 0xFF8A8F8F;
-
     /**
      * Цвет заливки по ресурсу. Собирается из FILL_ALPHA и
      * базового RGB один раз на ресурс; проблема «знать ID
@@ -78,6 +75,8 @@ public final class GeologyWideScanOverlay {
         fills.put("iron", FILL_ALPHA | IRON_RGB);
         fills.put("copper", FILL_ALPHA | COPPER_RGB);
         fills.put("limestone", LIMESTONE_FILL);
+        fills.put("gold", FILL_ALPHA | 0xFFD04D);
+        fills.put("zinc", FILL_ALPHA | 0xA892F0);
         return Map.copyOf(fills);
     }
 
@@ -85,7 +84,6 @@ public final class GeologyWideScanOverlay {
 
     private static ResourceLocation snapshotDimension;
     private static List<Contour> contours = List.of();
-    private static int foundTotal;
     private static long receivedAt;
 
     private GeologyWideScanOverlay() {
@@ -97,7 +95,6 @@ public final class GeologyWideScanOverlay {
      */
     public static void accept(GeologyWideScanPayload payload) {
         snapshotDimension = payload.dimension();
-        foundTotal = payload.foundTotal();
         receivedAt = Util.getMillis();
         contours = payload.contours();
     }
@@ -106,7 +103,6 @@ public final class GeologyWideScanOverlay {
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         snapshotDimension = null;
         contours = List.of();
-        foundTotal = 0;
         receivedAt = 0;
     }
 
@@ -115,6 +111,16 @@ public final class GeologyWideScanOverlay {
      * отрисовкой панели и версткой ограничений, с тем же
      * прямоугольником проёма, что и остальные слои карты.
      */
+    public static List<ResourceLocation> resources(ResourceLocation dimension) {
+        if (!dimension.equals(snapshotDimension) || receivedAt == 0
+                || Util.getMillis() - receivedAt > SNAPSHOT_LIFETIME_MILLIS) return List.of();
+        return contours.stream().map(Contour::resourceId).distinct().sorted().toList();
+    }
+
+    public static int resourceColor(ResourceLocation resource) {
+        return fillOf(resource) | 0xFF000000;
+    }
+
     public static void render(
             GuiGraphics graphics,
             CityMapPanel map,
@@ -125,9 +131,9 @@ public final class GeologyWideScanOverlay {
             int height,
             int mouseX,
             int mouseY,
-            boolean active
+            java.util.Set<ResourceLocation> hidden
     ) {
-        if (!active || contours.isEmpty() || receivedAt == 0) {
+        if (contours.isEmpty() || receivedAt == 0) {
             return;
         }
         if (!mapDimension.equals(snapshotDimension)) {
@@ -141,24 +147,9 @@ public final class GeologyWideScanOverlay {
         }
 
         for (Contour contour : contours) {
+            if (hidden.contains(contour.resourceId())) continue;
             fillDeposit(graphics, map, contour, limit(left, top, width, height));
         }
-
-        /*
-         * Подпись в углу видового окна: сколько залежей вошло
-         * в снимок и сколько снимку лет. Мутный тон поверх
-         * любой местности.
-         */
-        Component caption = Component.translatable(
-                "gui.createcityexpansioncore.magnetic_analyzer.map.caption",
-                contours.size(),
-                foundTotal
-        ).append(Component.translatable(
-                "gui.createcityexpansioncore.magnetic_analyzer.map.caption.age",
-                age / 1000
-        ));
-        map.labels().reserve(left+7,top+6,mapFont().width(caption)+2,12);
-        graphics.drawString(mapFont(), caption, left + 8, top + 8, MUTED, false);
     }
 
     /** Проём карты, расширенный на толщину краевого шума. */
@@ -176,13 +167,9 @@ public final class GeologyWideScanOverlay {
         }
     }
 
-    private static net.minecraft.client.gui.Font mapFont() {
-        return net.minecraft.client.Minecraft.getInstance().font;
-    }
-
-    private static int fillOf(Contour contour) {
+    private static int fillOf(ResourceLocation resource) {
         return FILLS_BY_RESOURCE.getOrDefault(
-                contour.resourceId().getPath(),
+                resource.getPath(),
                 OTHER_FILL
         );
     }
@@ -251,7 +238,7 @@ public final class GeologyWideScanOverlay {
             View view
     ) {
         if (contour.footprint() != null) {
-            fillFootprint(graphics, map, contour.footprint(), view, fillOf(contour));
+            fillFootprint(graphics, map, contour.footprint(), view, fillOf(contour.resourceId()));
             return;
         }
 
@@ -277,7 +264,7 @@ public final class GeologyWideScanOverlay {
             ys[index] = map.worldToScreenY(worldZ);
         }
 
-        int color = fillOf(contour);
+        int color = fillOf(contour.resourceId());
         int minY = Math.max(view.top(), minY(ys));
         int maxY = Math.min(view.bottom() - 1, maxY(ys));
         if (minY > maxY) {

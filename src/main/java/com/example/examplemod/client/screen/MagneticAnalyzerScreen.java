@@ -504,14 +504,9 @@ public final class MagneticAnalyzerScreen extends Screen {
             double phase = (time * (0.55 + strength * 1.5) + index * 0.37) % 1.0;
             double distance = radius * (0.25 + 0.65 * phase);
 
-            /*
-             * Вне залежи сигнал идёт в направлении аномалии,
-             * внутри — расходится симметрично, что и читается
-             * как устойчивый захват.
-             */
-            double offset = analysis.mode() == GeologySurvey.Mode.OUTSIDE
-                    ? 0.0
-                    : (index - (pulses - 1) / 2.0) * 0.45;
+            double offset = analysis.direction() < 0
+                    ? index * Math.PI * 2.0 / pulses
+                    : (index - (pulses - 1) / 2.0) * (analysis.mode() == GeologySurvey.Mode.INSIDE ? 0.12 : 0.0);
 
             double x = centreX + Math.cos(baseAngle + offset) * distance;
             double y = centreY + Math.sin(baseAngle + offset) * distance;
@@ -815,11 +810,18 @@ public final class MagneticAnalyzerScreen extends Screen {
      */
     private double bearingAngle() {
         int index = analysis.direction();
-        if (index < 0 || index >= GeologySurvey.DIRECTION_VECTORS.length) {
+        if (index < 0 || index >= GeologySurvey.DIRECTION_VECTORS.length / 2) {
             return 0.0;
         }
         double dx = GeologySurvey.DIRECTION_VECTORS[index * 2];
         double dz = GeologySurvey.DIRECTION_VECTORS[index * 2 + 1];
+        var player = Minecraft.getInstance().player;
+        if (analysis.mode() == GeologySurvey.Mode.INSIDE && player != null) {
+            double yaw = Math.toRadians(player.getYRot());
+            double right = -dx * Math.cos(yaw) - dz * Math.sin(yaw);
+            double forward = -dx * Math.sin(yaw) + dz * Math.cos(yaw);
+            return Math.atan2(-forward, right);
+        }
         if (dx == 0.0 && dz == 0.0) {
             return 0.0;
         }

@@ -21,7 +21,7 @@ public final class WorldMapUiLayoutCheck {
     private static final int SCREEN_HEIGHT = 380;
 
     /** Realistic measured widths: a short mode name and the longest global one, per language. */
-    private static int[] modeLabels() { return new int[] { 38, 58 }; }
+    private static int[] modeLabels() { return new int[] { 38, 58, 46 }; }
     private static int[] globalLabels() { return new int[] { 40, 44, 52, 50, 64, 72, 30, 50 }; }
 
     public static void main(String[] args) {
@@ -174,8 +174,8 @@ public final class WorldMapUiLayoutCheck {
                 "a short global action is narrower than a long one at 1280");
         require(WorldMapUiLayout.globalButtonWidth(854, modes, globals, 0) == WorldMapUiLayout.compactWidth(),
                 "a compact global action falls back to its glyph instead of truncating the label");
-        require(WorldMapUiLayout.MODE_COUNT == 2, "city mode and disabled energy mode remain");
-        require(WorldMapUiLayout.MODE_ENERGY == WorldMapUiLayout.MODE_COUNT - 1,
+        require(WorldMapUiLayout.MODE_COUNT == 3, "city, energy and geology tabs are present");
+        require(WorldMapUiLayout.MODE_ENERGY == 1,
                 "the disabled mode keeps its slot instead of vanishing");
         require(WorldMapUiLayout.GLOBAL_ACTIONS == 8,
                 "the toolbar holds exactly the global actions, no mode-specific extras");
